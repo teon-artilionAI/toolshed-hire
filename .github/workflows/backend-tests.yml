@@ -1,0 +1,225 @@
+# Backend continuous integration.
+#
+# CONTRACT WITH THE BACKEND
+# =========================
+# This workflow assumes four things about backend/. If any of them changes,
+# change it here in the same pull request, or the pipeline breaks in a way that
+# looks like an infrastructure fault and is not.
+#
+#   1. Dependencies are declared in backend/pyproject.toml, runtime under
+#      [project] dependencies and tooling under the "dev" optional group. Every
+#      version there is pinned exactly.
+#   2. The application package is backend/app and the ASGI application is
+#      app.main:app.
+#   3. Tests that need a real PostgreSQL carry the pytest marker "postgres".
+#      Everything without that marker must pass with no database at all. This
+#      is the split the two jobs below are built on: if an unmarked test opens
+#      a connection, the fast job fails for a reason that reads as flakiness.
+#   4. Configuration comes from ENVIRONMENT, DATABASE_URL, JWT_SECRET,
+#      JWT_ALGORITHM, ACCESS_TOKEN_MINUTES and CORS_ORIGINS, as documented in
+#      backend/.env.example. Alembic reads the same DATABASE_URL.
+
+name: Backend tests
+
+on:
+  # NO paths FILTER ON pull_request. THIS IS DELIBERATE.
+  #
+  # Adding "paths: [backend/**]" here looks like an obvious saving, and it is
+  # the single most expensive mistake available in this file. When a check is
+  # marked required in branch protection and a path filter stops it from
+  # running, GitHub does not treat it as passed. It waits for a result that
+  # will never arrive, and the pull request becomes permanently unmergeable
+  # with a status reading "Expected - Waiting for status to be reported". It
+  # looks like a broken runner rather than like a filter, so it costs an
+  # afternoon before anyone thinks to look here. A documentation-only pull
+  # request then cannot merge at all, and branch protection here does not allow
+  # an administrator bypass to rescue it.
+  #
+  # The correct way to keep a prose change out of the backend suite is a job
+  # that always starts, decides for itself that there is nothing to do and
+  # reports success. That is a later optimisation, taken only if the free
+  # Actions minutes actually run short. Until then this workflow runs on every
+  # pull request, which costs a few minutes and cannot deadlock a merge.
+  pull_request:
+  push:
+    branches:
+      # The two protected long lived branches. Feature branches are covered by
+      # the pull request trigger above, so pushing to one does not run the
+      # suite twice.
+      - main
+      - develop
+
+# Pushing three times in five minutes should run the checks once, against the
+# last commit, because that is the only commit whose result matters.
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+# The default token is read only. No job here writes to the repository.
+permissions:
+  contents: read
+
+env:
+  # Matches requires-python in pyproject.toml and the Dockerfile base image.
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  fast:
+    name: Lint, type check and database-free tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      # Third party actions are pinned by major version tag here. The DevOps
+      # section requires a commit SHA pin before the pipeline holds production
+      # credentials, and deploy.yml carries the same note. A SHA is not
+      # invented in this file, because a wrong SHA fails with a message that
+      # explains nothing. Resolve the real ones with, for example:
+      #   gh api repos/actions/checkout/git/ref/tags/v4 --jq .object.sha
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      # Installed editable so that tracebacks and coverage point at the source
+      # tree rather than at a copy in site-packages. pip itself is not upgraded,
+      # so this workflow contains no unpinned install step.
+      - name: Install the backend and its development dependencies
+        run: pip install --editable ".[dev]"
+
+      # Import ordering is covered here rather than separately, because the
+      # ruff configuration in pyproject.toml selects the "I" rules.
+      #
+      # "ruff format --check" is deliberately not run. The project configures
+      # the linter but has not adopted the formatter, and turning it on as a
+      # gate would fail every existing file for a reason unrelated to the
+      # change under review. Adopting it is a single formatting commit followed
+      # by adding the step, not a decision to make inside a test workflow.
+      - name: Lint
+        run: ruff check .
+
+      # No arguments beyond the package. pyproject.toml already sets strict
+      # mode plus disallow_any_explicit, and passing --strict here would read
+      # as if the config were weaker than it is.
+      - name: Type check
+        run: mypy app
+
+      - name: Run database-free tests
+        run: pytest tests -m "not postgres"
+        env:
+          ENVIRONMENT: test
+
+  postgres:
+    name: Migrations and PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Gated on the fast job. A change that fails lint or type checking will be
+    # pushed again regardless, so starting a database container for it spends
+    # free Actions minutes to learn nothing. Nothing merges past this, because
+    # the pull request is already blocked by the fast job's failure.
+    needs: fast
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        # Pinned to the same major version as production. Neon runs
+        # PostgreSQL 16 and so does the local Docker database in
+        # infra/SETUP.md. The Debian based image is used rather than Alpine
+        # because Alpine links against musl and gives different collation
+        # behaviour, and an ordering test that passes in CI and fails in
+        # production is not a trade worth 60 MB of image.
+        image: postgres:16
+        env:
+          # Throwaway credentials for a container that lives for the length of
+          # one job and is reachable only from this runner. This is not a
+          # secret, it is not a real password, and it must never be reused for
+          # anything that outlives the job.
+          POSTGRES_USER: toolshed
+          POSTGRES_PASSWORD: toolshed_ci_local_only
+          POSTGRES_DB: toolshed_test
+        ports:
+          - 5432:5432
+        # Without this health check the first step races the database and fails
+        # intermittently with "connection refused", which reads as flakiness.
+        # pg_isready names the user and database explicitly, because its
+        # defaults would report ready against a database the tests do not use.
+        options: >-
+          --health-cmd "pg_isready --username=toolshed --dbname=toolshed_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test
+      # The driver prefix is required by the settings validator in
+      # app/config.py. There is no connection pooler in front of this
+      # container, so migrations and tests share one URL. In a deployed
+      # environment they do not, and the reason is in infra/SETUP.md.
+      DATABASE_URL: postgresql+psycopg://toolshed:toolshed_ci_local_only@localhost:5432/toolshed_test
+      # Long enough to satisfy the minimum length the settings validator
+      # enforces. Used by one job, on one runner, and nowhere else ever.
+      JWT_SECRET: ci_only_jwt_secret_value_not_used_outside_this_job
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install the backend and its development dependencies
+        run: pip install --editable ".[dev]"
+
+      # Every run migrates an empty database forward, so the migrations are
+      # exercised by every execution of this job rather than by a separate
+      # exercise somebody has to remember to run. This is also the step that
+      # proves btree_gist is created by a migration and not by hand.
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      # Asserted directly, because without the extension the exclusion
+      # constraint cannot exist and the failure surfaces later as a constraint
+      # error that says nothing about a missing extension.
+      - name: Verify the btree_gist extension exists
+        run: |
+          python - <<'PYTHON'
+          import sys
+
+          from sqlalchemy import create_engine, text
+
+          from app.config import settings
+
+          REQUIRED_EXTENSION = "btree_gist"
+
+          engine = create_engine(settings.database_url)
+          with engine.connect() as connection:
+              found = connection.execute(
+                  text("SELECT 1 FROM pg_extension WHERE extname = :name"),
+                  {"name": REQUIRED_EXTENSION},
+              ).scalar()
+          if found is None:
+              sys.exit(
+                  f"Migrations completed but the {REQUIRED_EXTENSION} extension is "
+                  "absent. The daterange exclusion constraint cannot be created "
+                  "without it, so a migration is missing "
+                  f'"CREATE EXTENSION IF NOT EXISTS {REQUIRED_EXTENSION}".'
+              )
+          print(f"{REQUIRED_EXTENSION} extension present.")
+          PYTHON
+
+      - name: Run PostgreSQL integration tests
+        run: pytest tests -m "postgres"

@@ -1,0 +1,112 @@
+[build-system]
+requires = ["setuptools==75.6.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toolshed-hire-backend"
+version = "0.1.0"
+description = "Toolshed Hire rental system backend, FastAPI and PostgreSQL walking skeleton"
+readme = "README.md"
+# Cloud Run and CI both run 3.12. The upper bound is left open so a developer
+# on 3.13 is not blocked, but 3.12 is the version the deployment image pins.
+requires-python = ">=3.12"
+license = { text = "UNLICENSED" }
+authors = [{ name = "Teon Kleynhans" }]
+
+# Every version is pinned exactly. An unpinned dependency is an unreviewed
+# change that arrives on the next clean install.
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "sqlmodel==0.0.22",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "psycopg[binary]==3.2.3",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "pyjwt==2.10.1",
+    "passlib[bcrypt]==1.7.4",
+    # passlib 1.7.4 reads bcrypt.__about__, which bcrypt 4.1 removed. 4.0.1 is
+    # the last release passlib can introspect without emitting a spurious
+    # version warning on every hash call.
+    "bcrypt==4.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "httpx==0.28.1",
+    "ruff==0.8.4",
+    "mypy==1.14.0",
+]
+
+[tool.setuptools]
+packages = ["app", "app.api", "app.api.routers", "app.application", "app.domain", "app.infrastructure"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning:app.*"]
+# --strict-markers turns a misspelled marker into a failure rather than a test
+# that silently stops being selected by `-m postgres` and silently starts being
+# selected by `-m "not postgres"`, which is the worst of both.
+addopts = ["--strict-markers"]
+markers = [
+    "postgres: requires a real PostgreSQL reached through DATABASE_URL. The pipeline runs these in a separate job, so every test without this marker must pass with no database at all.",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "ANN", "D"]
+# D203 and D213 conflict with the docstring style used throughout.
+# N818 is ignored deliberately: the domain errors are named in the vocabulary of
+# the business, AssetUnavailableConflict and NotFound, and an Error suffix on
+# every one of them would make the call sites read worse, not better.
+# UP042 is ignored because the enumerations inherit str and Enum rather than
+# StrEnum, which keeps `.value` the explicit way a stored value is read.
+ignore = ["D203", "D213", "N818", "UP042"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*" = ["D103", "ANN"]
+# A test's name is its documentation. Every test in the suite is named for the
+# behaviour it protects, for example
+# `test_a_hire_ending_on_the_twelfth_does_not_overlap_one_starting_on_the_twelfth`,
+# and a docstring underneath repeating that sentence in prose would be noise
+# that goes stale. D102 and D103 are therefore off for test cases, while the
+# modules, the classes and every helper in tests/support still carry docstrings,
+# because those say why the test exists rather than what it asserts. The pattern
+# is "tests/**" rather than "tests/*" so that it reaches the subdirectories.
+"tests/**" = ["D102", "D103", "ANN"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = []
+disallow_any_explicit = true
+warn_unreachable = true
+
+# passlib publishes no type information and no stub package exists on PyPI, so
+# the import is untyped. The two call sites in app/infrastructure/security.py
+# wrap their results in str() and bool(), which is what stops the Any spreading
+# past that module boundary.
+[[tool.mypy.overrides]]
+module = ["passlib.*"]
+ignore_missing_imports = true
+
+# disallow_any_explicit is left on everywhere else, and off in exactly the two
+# modules that declare pydantic models. The Any it objects to is not in this
+# source. pydantic marks BaseModel with @dataclass_transform, and for every
+# such class mypy synthesises a hidden "__mypy-replace" member whose keyword
+# parameters are typed Any. The flag then reports that synthesised member
+# against the class statement itself, so the only ways to satisfy it are to
+# stop using pydantic or to switch the flag off for the file. Narrowing it to
+# these two modules keeps the check live across the domain, the application
+# layer and the routers, which is where an Any written by hand would actually
+# do damage.
+[[tool.mypy.overrides]]
+module = ["app.api.schemas", "app.config"]
+disallow_any_explicit = false

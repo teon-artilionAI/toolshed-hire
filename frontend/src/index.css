@@ -1,0 +1,154 @@
+/* Fonts are self hosted rather than loaded from a CDN, so the deployed
+   application makes no third party request on the critical path and the
+   cloud architecture diagram has no external font dependency to draw. */
+@import '@fontsource/fira-sans/300.css';
+@import '@fontsource/fira-sans/400.css';
+@import '@fontsource/fira-sans/500.css';
+@import '@fontsource/fira-sans/600.css';
+@import '@fontsource/fira-sans/700.css';
+@import '@fontsource/fira-code/400.css';
+@import '@fontsource/fira-code/500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans text-base antialiased;
+  }
+
+  /* Digits that sit in a column line up. Applies to money, quantities,
+     asset counts and every table figure. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A visible focus ring is an accessibility requirement, not a style
+     preference. Never remove it; only replace it with something clearer. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-paper;
+  }
+
+  /* Skip link, revealed on focus. First tab stop on every page. */
+  .skip-link {
+    @apply sr-only;
+  }
+  .skip-link:focus {
+    @apply not-sr-only fixed left-md top-md z-50 rounded bg-ink px-md py-sm
+           text-sm font-medium text-white shadow-pop;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-sm
+           rounded px-md py-sm text-sm font-medium
+           transition-colors
+           disabled:cursor-not-allowed disabled:opacity-50;
+    /* 44px minimum touch target in BOTH dimensions. Height alone is not
+       enough: an icon-only button with tight horizontal padding is 32px
+       wide and misses on a phone at a counter, which is exactly where this
+       application is used. */
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-accent-ink hover:bg-accent-hover;
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-surface text-ink hover:bg-muted;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-soft hover:bg-muted hover:text-ink;
+  }
+
+  .btn-danger {
+    @apply btn bg-status-overdue text-white hover:brightness-110;
+  }
+
+  .card {
+    @apply rounded-lg border border-line bg-surface shadow-card;
+  }
+
+  .field-label {
+    @apply mb-xs block text-sm font-medium text-slate;
+  }
+
+  /* The browser default outline is replaced here, never removed: the
+     focus-visible ring below is the replacement and it is more visible
+     than what it stands in for. */
+  .field-input {
+    @apply w-full rounded border border-line bg-surface px-md py-sm text-base
+           text-ink placeholder:text-slate-faint
+           focus:border-accent
+           focus-visible:outline-none focus-visible:ring-2
+           focus-visible:ring-accent focus-visible:ring-offset-2
+           focus-visible:ring-offset-paper;
+    min-height: 2.75rem;
+  }
+
+  /* Checkboxes and radios are 20px by design, which is smaller than the
+     44px target rule allows. The rule is met by the label that wraps them:
+     this gives every such row the full target height and makes the whole
+     row clickable, so the small control is never the only thing to hit. */
+  .choice-row {
+    @apply flex cursor-pointer items-start gap-sm rounded border border-line
+           p-sm transition-colors hover:bg-muted;
+    min-height: 2.75rem;
+  }
+
+  .field-error {
+    @apply mt-xs flex items-start gap-xs text-sm text-status-overdue;
+  }
+
+  .field-help {
+    @apply mt-xs text-sm text-slate-soft;
+  }
+
+  /* Status pill. Colour is never the only carrier of meaning, so every
+     pill shows its label and, where space allows, an icon. */
+  .pill {
+    @apply inline-flex items-center gap-xs whitespace-nowrap rounded px-sm py-xs
+           text-xs font-medium;
+  }
+
+  /* Every table lives in one of these, so a wide table scrolls inside its
+     own box instead of pushing the page sideways.
+     `relative` is load bearing, not decoration. Visually hidden text inside
+     the table is absolutely positioned, and an absolutely positioned box
+     escapes the overflow clipping of any ancestor that is not itself
+     positioned. Without it the hidden text is laid out at its static
+     position, hundreds of pixels off to the right of a 375px phone, and
+     the whole document scrolls sideways. */
+  .table-wrap {
+    @apply relative overflow-x-auto rounded-lg border border-line bg-surface;
+  }
+
+  .th {
+    @apply whitespace-nowrap px-md py-sm text-left text-xs font-semibold
+           uppercase tracking-wide text-slate-soft;
+  }
+
+  .td {
+    @apply px-md py-sm align-top text-sm;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,75 @@
+# Build context exclusions for the API image.
+#
+# The build context for this image is the backend directory. Everything listed
+# here is either a secret, a build artifact, or code that has no business
+# running in production. Two of the entries below are load bearing rather than
+# tidy-minded:
+#
+#   .env  A local environment file copied into an image is a credential baked
+#         into a layer, readable by anyone who can pull the image. The
+#         Dockerfile never copies it, and this makes that a guarantee rather
+#         than an assumption about a future edit.
+#
+#   tests, alembic
+#         Kept out so the image carries only what serves requests. Migrations
+#         are applied by the pipeline before the revision is deployed, so
+#         shipping them would add weight and imply a start-up path that does
+#         not exist.
+
+# Secrets. Nothing in this group may ever enter a layer.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+gcp-credentials*.json
+
+# Version control and editor state
+.git
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+
+# Python bytecode and virtual environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Tooling caches. These are large, machine specific and useless in an image.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Tests and their fixtures. Not served, not shipped. The dev dependency group
+# in pyproject.toml is not installed by the image either, so nothing here has
+# anything to run against.
+tests/
+conftest.py
+pytest.ini
+
+# Migrations. Applied by the pipeline, never from container start-up.
+alembic/
+alembic.ini
+
+# Development utilities. Seeding is run from a developer machine or from the
+# pipeline, against a database, and has no business inside the serving image.
+seed.py
+
+# Container files, which would only invalidate cache layers
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Documentation, with one exception. README.md must stay in the context because
+# pyproject.toml names it in its "readme" field, and the install fails with a
+# confusing packaging error if it is absent.
+*.md
+!README.md

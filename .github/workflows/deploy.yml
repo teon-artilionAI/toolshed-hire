@@ -1,0 +1,288 @@
+# Production deployment.
+#
+# Push to main, build the image, apply migrations, deploy Cloud Run, then prove
+# the deployed revision is genuinely healthy before the run is allowed to go
+# green. The setup this depends on is written out command by command in
+# infra/SETUP.md and infra/WORKLOAD-IDENTITY-FEDERATION.md.
+#
+# The longer shell steps live in infra/scripts so that each one is readable,
+# runnable outside Actions and testable on its own.
+#
+# WORKLOAD IDENTITY FEDERATION, AND THE DAY IT COSTS YOU
+# ======================================================
+# There is no service account key in this repository and there must never be
+# one. The runner proves its identity with the short lived OIDC token GitHub
+# mints for the job, and Google exchanges that for a short lived access token.
+# Setting that up needs five separate things, and missing any one of them
+# produces the same opaque credentials error, some variant of "unable to
+# acquire impersonated credentials" or "the caller does not have permission",
+# which names none of the five.
+#
+#   1. A workload identity POOL in the project.
+#   2. An OIDC PROVIDER in that pool, issuer
+#      https://token.actions.githubusercontent.com
+#   3. An ATTRIBUTE MAPPING on the provider. At minimum
+#      google.subject=assertion.sub and
+#      attribute.repository=assertion.repository, because the binding in 5a
+#      refers to attribute.repository and cannot be written against an
+#      attribute the provider never produced.
+#   4. An ATTRIBUTE CONDITION on the provider. This is MANDATORY on a GitHub
+#      provider. Google refuses to create one without it, because a provider
+#      with no condition trusts every GitHub Actions job on the platform,
+#      including jobs in repositories nobody here owns. Use the form
+#      assertion.repository_owner == 'your-org'
+#   5. THREE IAM BINDINGS, each separately load bearing:
+#        a. roles/iam.workloadIdentityUser on the deploy service account for
+#           this repository's principalSet. Without it the token exchange
+#           succeeds and the impersonation fails.
+#        b. roles/run.admin on the project, to create a revision.
+#        c. roles/artifactregistry.writer on the project, to push the image.
+#      Two further bindings are needed in practice and are covered in the
+#      setup guide: roles/iam.serviceAccountUser on the Cloud Run RUNTIME
+#      service account, which is what lets the deployer set the identity a
+#      revision runs as and is the most commonly missed of the lot, and
+#      roles/secretmanager.secretAccessor on the secrets this job reads.
+#
+# Work through the setup guide in order rather than guessing which of the five
+# is wrong, because the error message will not tell you.
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  # For redeploying the current main after a configuration change that did not
+  # touch the code.
+  workflow_dispatch:
+
+# Two deployments must never run at once, and a queued deployment must never be
+# cancelled part way through a migration. cancel-in-progress is false for that
+# reason, which is the opposite of the setting the test workflows use.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for Workload Identity Federation. Without it the runner cannot
+  # mint the OIDC token and the auth step fails immediately.
+  id-token: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  IMAGE_NAME: toolshed-hire-api
+  # Served under /api so the same path works through the Vercel rewrite and
+  # directly against Cloud Run.
+  HEALTH_PATH: /api/health
+  # Cloud Run shape. The instance cap is the figure NFR-15's connection
+  # arithmetic depends on: 4 instances at a pool of 5 is 20 connections at
+  # peak. Raising it here without raising the database allowance is how the
+  # service starts refusing connections under load.
+  CLOUD_RUN_MAX_INSTANCES: "4"
+  CLOUD_RUN_MIN_INSTANCES: "0"
+  CLOUD_RUN_CPU: "1"
+  CLOUD_RUN_MEMORY: 512Mi
+  CLOUD_RUN_CONCURRENCY: "80"
+  CLOUD_RUN_REQUEST_TIMEOUT: 60s
+  CLOUD_RUN_PORT: "8080"
+  # Smoke test retry budget, sized to allow for a cold start on a service that
+  # scales to zero. Twelve attempts ten seconds apart is about two minutes.
+  SMOKE_TEST_MAX_ATTEMPTS: "12"
+  SMOKE_TEST_RETRY_DELAY_SECONDS: "10"
+  SMOKE_TEST_REQUEST_TIMEOUT_SECONDS: "20"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Guard. The repository must not be permanently red because the cloud
+  # accounts do not exist yet, so an unconfigured repository reports a green run
+  # with a clear notice instead of a failure nobody can act on.
+  #
+  # This is a separate job because the secrets context is not available in a job
+  # level "if" expression. Reading the secrets into step environment variables
+  # and publishing a plain output is the way around that.
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: Check deployment configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Check that every required secret and variable is present
+        id: check
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.GCP_ARTIFACT_REGISTRY_REPOSITORY }}
+          SERVICE_NAME: ${{ vars.CLOUD_RUN_SERVICE }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
+          DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET_NAME }}
+          DATABASE_MIGRATION_URL_SECRET: ${{ vars.DATABASE_MIGRATION_URL_SECRET_NAME }}
+          JWT_SECRET_NAME: ${{ vars.JWT_SECRET_NAME }}
+        run: bash infra/scripts/check-deploy-config.sh
+
+  # ---------------------------------------------------------------------------
+  # Deploy.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Build, migrate, deploy and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: preflight
+    if: needs.preflight.outputs.configured == 'true'
+    # The deployment secrets belong to this environment, not to the repository,
+    # so a workflow triggered from a branch cannot reach production
+    # credentials. The environment also carries the manual approval gate, which
+    # the DevOps section describes as a deliberate pause rather than as peer
+    # review, because there is nobody to review it.
+    environment:
+      name: production
+      url: ${{ steps.deploy_revision.outputs.service_url }}
+
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.GCP_ARTIFACT_REGISTRY_REPOSITORY }}
+      SERVICE_NAME: ${{ vars.CLOUD_RUN_SERVICE }}
+      RUNTIME_SERVICE_ACCOUNT: ${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
+      DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET_NAME }}
+      DATABASE_MIGRATION_URL_SECRET: ${{ vars.DATABASE_MIGRATION_URL_SECRET_NAME }}
+      JWT_SECRET_NAME: ${{ vars.JWT_SECRET_NAME }}
+
+    steps:
+      # Third party actions are pinned by major version tag. Before this
+      # pipeline is trusted with production credentials they must be pinned by
+      # commit SHA, because a mutable tag on a third party action that can read
+      # those credentials is a supply chain hole. A SHA is not invented here,
+      # because a wrong one fails with a message that explains nothing. Resolve
+      # the real ones with, for example:
+      #   gh api repos/google-github-actions/auth/git/ref/tags/v2 --jq .object.sha
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # This is the step that fails opaquely when any of the five Workload
+      # Identity Federation pieces described at the top of this file is wrong.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up the gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push the image
+        id: build
+        run: bash infra/scripts/build-and-push-image.sh
+
+      - name: Set up Python for the migration step
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      # Runtime dependencies only, which is where Alembic lives. The dev group
+      # is not installed, because nothing in this job runs a test.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install .
+
+      # Migrations run here, from the runner, before any new revision exists.
+      # If this step fails, production is completely untouched.
+      - name: Apply database migrations
+        run: bash infra/scripts/apply-migrations.sh
+
+      - name: Deploy the revision to Cloud Run
+        id: deploy_revision
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+
+          echo "Deploying ${IMAGE_DIGEST} to ${SERVICE_NAME} in ${REGION}."
+
+          # Secrets are mounted from Secret Manager into the revision, so no
+          # secret value passes through this workflow or its log. The runtime
+          # service account is a distinct, least privileged identity from the
+          # deploy service account running this job. The revision suffix
+          # includes the run number so that redeploying the same commit does
+          # not collide with an existing revision name.
+          gcloud run deploy "${SERVICE_NAME}" \
+            --image="${IMAGE_DIGEST}" \
+            --region="${REGION}" \
+            --platform=managed \
+            --service-account="${RUNTIME_SERVICE_ACCOUNT}" \
+            --port="${CLOUD_RUN_PORT}" \
+            --cpu="${CLOUD_RUN_CPU}" \
+            --memory="${CLOUD_RUN_MEMORY}" \
+            --concurrency="${CLOUD_RUN_CONCURRENCY}" \
+            --timeout="${CLOUD_RUN_REQUEST_TIMEOUT}" \
+            --min-instances="${CLOUD_RUN_MIN_INSTANCES}" \
+            --max-instances="${CLOUD_RUN_MAX_INSTANCES}" \
+            --allow-unauthenticated \
+            --set-env-vars="ENVIRONMENT=production" \
+            --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_NAME}:latest" \
+            --revision-suffix="${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}" \
+            --quiet
+
+          service_url="$(gcloud run services describe "${SERVICE_NAME}" \
+            --region="${REGION}" \
+            --format='value(status.url)')"
+
+          if [ -z "${service_url}" ]; then
+            echo "::error title=No service URL::Cloud Run reported no URL for ${SERVICE_NAME} after a successful deploy, so the smoke test has nothing to call."
+            exit 1
+          fi
+
+          echo "Service URL: ${service_url}"
+          echo "service_url=${service_url}" >> "${GITHUB_OUTPUT}"
+
+      # Without this, a green run would mean only that gcloud accepted the
+      # request, which is a much weaker claim than it looks.
+      - name: Smoke test the deployed health endpoint
+        env:
+          SERVICE_URL: ${{ steps.deploy_revision.outputs.service_url }}
+        run: bash infra/scripts/smoke-test.sh
+
+      - name: Record the deployment in the run summary
+        if: always()
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+          SERVICE_URL: ${{ steps.deploy_revision.outputs.service_url }}
+        run: |
+          {
+            echo "### Deployment"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Image | \`${IMAGE_DIGEST:-not built}\` |"
+            echo "| Service | \`${SERVICE_NAME}\` in \`${REGION}\` |"
+            echo "| URL | ${SERVICE_URL:-not deployed} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+# HARDENING STILL TO COME, recorded so it is not lost.
+#
+# The DevOps section describes a production job that deploys a candidate
+# revision carrying no traffic, runs the browser smoke suite against that
+# candidate's own tagged URL, and only then shifts traffic to it. That is
+# strictly safer than what this file does today, because a failed smoke test
+# would never have been visible to a real user at all. It is left out of the
+# walking skeleton, which exists to prove the deployment path works end to end
+# rather than to be the finished release process. The change is to add
+# --no-traffic and --tag=candidate to the deploy command, point the smoke test
+# at the tagged URL, and finish with
+# gcloud run services update-traffic --to-latest.

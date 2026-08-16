@@ -1,0 +1,89 @@
+# Frontend continuous integration.
+#
+# Lint, type check and build the Vite application. The build is the check that
+# matters most here: the type checker runs against the source, but only the
+# build proves that the bundle the browser will actually receive can be
+# produced from that source.
+
+name: Frontend tests
+
+on:
+  # As in backend-tests.yml, there is no paths filter on pull_request. A
+  # required check that a path filter prevents from running leaves the pull
+  # request waiting forever for a status that will never be reported, and the
+  # only way out is an administrator bypass, which branch protection here does
+  # not allow. The full reasoning is written out in backend-tests.yml.
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: frontend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned to the active Node LTS line. Vercel builds the production bundle
+  # with its own configured Node version, so this and the Vercel project
+  # setting are two places that must be kept in step.
+  NODE_VERSION: "22"
+
+jobs:
+  checks:
+    name: Lint, type check and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      # Pinned by major version tag. The commit SHA pin required by the DevOps
+      # section is a follow-up, and the reasoning for not inventing a SHA is
+      # recorded in backend-tests.yml.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci rather than npm install. It installs exactly what the lock file
+      # records and fails if package.json and the lock file disagree, which is
+      # the behaviour a pipeline wants. npm install would quietly resolve a
+      # newer version and produce a green build for a dependency tree that no
+      # developer has on their machine.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # The project uses TypeScript project references, so the type check is a
+      # build of the reference graph. tsconfig.app.json sets noEmit, so this
+      # writes no JavaScript. --force skips the incremental build info, which
+      # would otherwise let a cached tsbuildinfo from a restored npm cache
+      # report success without checking anything.
+      - name: Type check
+        run: npx tsc --build --force
+
+      # vite build is invoked directly rather than through "npm run build",
+      # because that script runs tsc again and the type check above has already
+      # done it. Running the compiler twice in a job budgeted at a few minutes
+      # is waste with no extra signal.
+      - name: Build the production bundle
+        run: npx vite build
+
+      # Kept for the moment a size regression matters. The bundle is served
+      # from the Vercel edge and its size is the first thing a slow first paint
+      # points at, so having the number in the log costs nothing and saves a
+      # local reproduction later.
+      - name: Report bundle size
+        run: du -sh dist && ls -lh dist/assets

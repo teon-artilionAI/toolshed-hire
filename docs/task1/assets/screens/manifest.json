@@ -1,0 +1,338 @@
+[
+  {
+    "id": "SC-01",
+    "name": "Catalogue Home",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-01-desktop.png"
+  },
+  {
+    "id": "SC-02",
+    "name": "Availability Search Results",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-02-desktop.png"
+  },
+  {
+    "id": "SC-03",
+    "name": "Product Model Detail",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-03-desktop.png"
+  },
+  {
+    "id": "SC-04",
+    "name": "Hire Basket and Booking Review",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-04-desktop.png"
+  },
+  {
+    "id": "SC-05",
+    "name": "Register",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-05-desktop.png"
+  },
+  {
+    "id": "SC-06",
+    "name": "Sign In and Password Reset",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-06-desktop.png"
+  },
+  {
+    "id": "SC-07",
+    "name": "My Reservations",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-07-desktop.png"
+  },
+  {
+    "id": "SC-08",
+    "name": "Reservation Detail and Cancellation",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-08-desktop.png"
+  },
+  {
+    "id": "SC-09",
+    "name": "My Account and Hire History",
+    "role": "customer",
+    "viewport": "desktop",
+    "file": "SC-09-desktop.png"
+  },
+  {
+    "id": "SC-10",
+    "name": "Counter Dashboard",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-10-desktop.png"
+  },
+  {
+    "id": "SC-11",
+    "name": "Branch Diary",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-11-desktop.png"
+  },
+  {
+    "id": "SC-12",
+    "name": "Customer Lookup and Walk-in Registration",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-12-desktop.png"
+  },
+  {
+    "id": "SC-13",
+    "name": "New Booking and Asset Allocation",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-13-desktop.png"
+  },
+  {
+    "id": "SC-14",
+    "name": "Checkout and Deposit",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-14-desktop.png"
+  },
+  {
+    "id": "SC-15",
+    "name": "Return and Condition Inspection",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-15-desktop.png"
+  },
+  {
+    "id": "SC-16",
+    "name": "Damage Report Capture",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-16-desktop.png"
+  },
+  {
+    "id": "SC-17",
+    "name": "Asset Locator",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-17-desktop.png"
+  },
+  {
+    "id": "SC-18",
+    "name": "Overdue and Late Fee Worklist",
+    "role": "counter",
+    "viewport": "desktop",
+    "file": "SC-18-desktop.png"
+  },
+  {
+    "id": "SC-19",
+    "name": "Admin Dashboard",
+    "role": "admin",
+    "viewport": "desktop",
+    "file": "SC-19-desktop.png"
+  },
+  {
+    "id": "SC-20",
+    "name": "Catalogue and Pricing Management",
+    "role": "admin",
+    "viewport": "desktop",
+    "file": "SC-20-desktop.png"
+  },
+  {
+    "id": "SC-21",
+    "name": "Asset Register and Lifecycle",
+    "role": "admin",
+    "viewport": "desktop",
+    "file": "SC-21-desktop.png"
+  },
+  {
+    "id": "SC-22",
+    "name": "Utilisation and Gross Contribution Report",
+    "role": "admin",
+    "viewport": "desktop",
+    "file": "SC-22-desktop.png"
+  },
+  {
+    "id": "SC-23",
+    "name": "User and Role Management",
+    "role": "admin",
+    "viewport": "desktop",
+    "file": "SC-23-desktop.png"
+  },
+  {
+    "id": "SC-24",
+    "name": "Audit and Notification Log",
+    "role": "admin",
+    "viewport": "desktop",
+    "file": "SC-24-desktop.png"
+  },
+  {
+    "id": "SC-01",
+    "name": "Catalogue Home",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-01-mobile.png"
+  },
+  {
+    "id": "SC-02",
+    "name": "Availability Search Results",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-02-mobile.png"
+  },
+  {
+    "id": "SC-03",
+    "name": "Product Model Detail",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-03-mobile.png"
+  },
+  {
+    "id": "SC-04",
+    "name": "Hire Basket and Booking Review",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-04-mobile.png"
+  },
+  {
+    "id": "SC-05",
+    "name": "Register",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-05-mobile.png"
+  },
+  {
+    "id": "SC-06",
+    "name": "Sign In and Password Reset",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-06-mobile.png"
+  },
+  {
+    "id": "SC-07",
+    "name": "My Reservations",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-07-mobile.png"
+  },
+  {
+    "id": "SC-08",
+    "name": "Reservation Detail and Cancellation",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-08-mobile.png"
+  },
+  {
+    "id": "SC-09",
+    "name": "My Account and Hire History",
+    "role": "customer",
+    "viewport": "mobile",
+    "file": "SC-09-mobile.png"
+  },
+  {
+    "id": "SC-10",
+    "name": "Counter Dashboard",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-10-mobile.png"
+  },
+  {
+    "id": "SC-11",
+    "name": "Branch Diary",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-11-mobile.png"
+  },
+  {
+    "id": "SC-12",
+    "name": "Customer Lookup and Walk-in Registration",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-12-mobile.png"
+  },
+  {
+    "id": "SC-13",
+    "name": "New Booking and Asset Allocation",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-13-mobile.png"
+  },
+  {
+    "id": "SC-14",
+    "name": "Checkout and Deposit",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-14-mobile.png"
+  },
+  {
+    "id": "SC-15",
+    "name": "Return and Condition Inspection",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-15-mobile.png"
+  },
+  {
+    "id": "SC-16",
+    "name": "Damage Report Capture",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-16-mobile.png"
+  },
+  {
+    "id": "SC-17",
+    "name": "Asset Locator",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-17-mobile.png"
+  },
+  {
+    "id": "SC-18",
+    "name": "Overdue and Late Fee Worklist",
+    "role": "counter",
+    "viewport": "mobile",
+    "file": "SC-18-mobile.png"
+  },
+  {
+    "id": "SC-19",
+    "name": "Admin Dashboard",
+    "role": "admin",
+    "viewport": "mobile",
+    "file": "SC-19-mobile.png"
+  },
+  {
+    "id": "SC-20",
+    "name": "Catalogue and Pricing Management",
+    "role": "admin",
+    "viewport": "mobile",
+    "file": "SC-20-mobile.png"
+  },
+  {
+    "id": "SC-21",
+    "name": "Asset Register and Lifecycle",
+    "role": "admin",
+    "viewport": "mobile",
+    "file": "SC-21-mobile.png"
+  },
+  {
+    "id": "SC-22",
+    "name": "Utilisation and Gross Contribution Report",
+    "role": "admin",
+    "viewport": "mobile",
+    "file": "SC-22-mobile.png"
+  },
+  {
+    "id": "SC-23",
+    "name": "User and Role Management",
+    "role": "admin",
+    "viewport": "mobile",
+    "file": "SC-23-mobile.png"
+  },
+  {
+    "id": "SC-24",
+    "name": "Audit and Notification Log",
+    "role": "admin",
+    "viewport": "mobile",
+    "file": "SC-24-mobile.png"
+  }
+]
