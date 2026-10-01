@@ -6,8 +6,10 @@ first pass at the whole application.
 
 ## What it proves
 
-1. A migration creates the core tables in real PostgreSQL, including the
-   `btree_gist` extension.
+1. A migration creates the seventeen tables of the documented schema in real
+   PostgreSQL, with the `btree_gist`, `citext` and `pg_trgm` extensions, and a
+   test reads the catalogue to confirm that what was built is what was
+   designed.
 2. A `daterange` GiST exclusion constraint rejects an overlapping allocation of
    the same physical asset.
 3. Two genuinely concurrent transactions cannot double book one unit, because
@@ -23,8 +25,33 @@ first pass at the whole application.
 | `app/domain` | Domain | `BookingPeriod`, enumerations, errors. No database access. |
 | `app/application` | Application | Use cases and transaction boundaries. |
 | `app/infrastructure` | Infrastructure | Engine, SQLModel tables, hashing, tokens. |
+| `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/api` | API | Routers, dependencies, problem responses. |
-| `alembic` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
+| `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
+| `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
+
+## The schema
+
+Migration `0001` is the baseline. It creates seventeen tables with singular
+snake_case names, which are the sixteen domain tables and `rate_limit_counter`.
+
+| Subject area | Tables |
+|---|---|
+| Identity and access | `branch`, `user_account`, `customer_profile`, `refresh_session` |
+| Catalogue and fleet | `category`, `product_model`, `asset` |
+| Booking and allocation | `reservation`, `reservation_line`, `asset_allocation` |
+| Hire and money | `rental`, `rental_item`, `damage_report`, `charge` |
+| Evidence and supporting | `audit_event`, `notification`, `rate_limit_counter` |
+
+The same five subject areas name the modules in `app/infrastructure/models`
+and in `alembic/baseline`. The two are kept apart on purpose. The models change
+as the application grows. The baseline is a snapshot that imports nothing from
+`app`, so an edit to a model can never change what an already released
+migration creates. A later change to the schema is a new revision.
+
+The migration is the one authoritative listing of the check constraints, the
+exclusion constraint and the indexes. The models declare columns and keys and
+do not repeat them.
 
 ## Running it locally
 
@@ -57,8 +84,8 @@ Every other endpoint added later must declare its roles. The default is deny
 ## The constraint
 
 ```sql
-ALTER TABLE asset_allocations
-ADD CONSTRAINT ex_asset_allocations_no_active_overlap
+ALTER TABLE asset_allocation
+ADD CONSTRAINT asset_allocation_no_overlap
 EXCLUDE USING gist (
     asset_id WITH =,
     daterange(start_date, end_date, '[)') WITH &&
@@ -68,6 +95,10 @@ EXCLUDE USING gist (
 Periods are half open. A return on the twelfth frees the twelfth. The same rule
 is implemented once in the domain, in `BookingPeriod`, and once in the
 database, here. The two must never drift apart.
+
+An allocation is active exactly while `released_at` is null. Releasing one
+stamps `released_at` and `release_reason` together, which a check constraint
+enforces, and the row drops out of the constraint without being deleted.
 
 A violation arrives as SQLSTATE `23P01`. The allocation use case matches on the
 code and the constraint name reported in the driver diagnostics, never on the
@@ -126,7 +157,7 @@ two halves as separate jobs.
 
 ```bash
 pytest tests -m "not postgres"   # unit, component and API tests, no database
-pytest tests -m postgres         # the exclusion constraint and concurrency
+pytest tests -m postgres         # the schema, the exclusion constraint and concurrency
 ```
 
 Everything without the marker runs against an in memory SQLite engine and must
@@ -139,6 +170,14 @@ what to set rather than failing.
 The marked tests migrate the database to head themselves and truncate every
 table between cases, so point them at a database you are willing to lose. They
 refuse to run at all unless `ENVIRONMENT` is `development` or `test`.
+
+`tests/integration/test_schema_baseline.py` runs before every other test. It
+reads the PostgreSQL catalogue and asserts that the three extensions, the
+seventeen tables, the seventeen enumerated types, the exclusion constraint with
+its exact definition and the partial indexes all exist. Every other integration
+test assumes that schema, so a broken migration is reported once at the top
+instead of as a page of unrelated failures. The order is set by the collection
+hook in `tests/integration/conftest.py`, which needs no plugin.
 
 ### The postgres suite and your seed data cannot share a database
 
