@@ -29,6 +29,10 @@ first pass at the whole application.
 | `app/api` | API | Routers, dependencies, problem responses. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
+| `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
+| `seed_data` | Tooling | The catalogue and the fleet as plain data. It opens no file and no connection. |
+| `seeding`, `seed.py` | Tooling | The loader for that data, and its entry point. |
+| `scripts` | Tooling | `provision_roles.py`, which creates the two database roles. |
 
 ## The schema
 
@@ -52,6 +56,61 @@ migration creates. A later change to the schema is a new revision.
 The migration is the one authoritative listing of the check constraints, the
 exclusion constraint and the indexes. The models declare columns and keys and
 do not repeat them.
+
+## The seed and the two database roles
+
+`python seed.py` gives a database a fleet worth looking at, so the system has
+real data from its first deployment. In one transaction it loads the three
+branches, fourteen categories, 120 published product models, 400 physical
+units (171 at CBD, 125 at BLV, 104 at SMW), five accounts with verified email
+addresses and a profile for each of the two customers, and the worked example
+from the design document as a hire that is already closed.
+
+Thirty four units keep the tags the prototype showed. The other 366 are tagged
+`TSH-<prefix>-<number>`, numbered upward within each prefix in SKU order and
+then branch order, stepping over any number a pinned unit carries, so the same
+data always gives the same tags. Stock bought after the first load belongs in
+`seed_data/pinned_assets.py` with the tag it was given, because a new product
+model can renumber the generated units that sort after it.
+
+Every row is matched on its natural key, and a row that is already there is
+left exactly as it is. A second run changes nothing and logs
+`seed.nothing_to_do`, and a run against a database in use never resets a
+status, a price or a password. Every account the seed creates gets the
+password in `SEED_PASSWORD`. Outside development and test the script refuses to
+run without it. The data lives in `seed_data` and the loading in `seeding`.
+
+The design document splits database authority between two roles, so the
+running application can neither change the schema nor rewrite its audit trail.
+
+| Role | Used by | May do |
+|---|---|---|
+| `toolshed_migrate` | `alembic upgrade head` | Create objects in this database and in the `public` schema. |
+| `toolshed_app` | The running API | Select, insert and update on every table. On `audit_event`, select and insert only. Delete on `rate_limit_counter` alone, where expired windows are removed. |
+
+The owner of the database creates the roles once, before the first migration.
+Revision `0002` then gives `toolshed_app` its privileges on the tables.
+
+```bash
+DATABASE_OWNER_URL=postgresql://owner:...@host:5432/toolshed APP_ROLE_PASSWORD=... MIGRATE_ROLE_PASSWORD=...   python scripts/provision_roles.py
+
+DATABASE_URL=postgresql+psycopg://toolshed_migrate:...@host:5432/toolshed alembic upgrade head
+DATABASE_URL=postgresql+psycopg://toolshed_migrate:...@host:5432/toolshed python seed.py
+```
+
+The API is then started with a `DATABASE_URL` that names `toolshed_app`. The
+script is safe to run again, which is also how a password is rotated, and it
+never logs a password.
+
+A plain local database with one owner needs none of this. If `toolshed_app`
+does not exist when revision `0002` runs, the revision logs that it skipped the
+grants and the migration still succeeds. To restrict a database migrated that
+way, I provision the roles and run `alembic downgrade 0001` and then
+`alembic upgrade head`. The downgrade only revokes, so no data is touched.
+
+Any later migration that creates a table or a sequence has to grant on it in
+the same revision. A new object inherits no privileges, so a table added
+without its grant is one the application cannot read.
 
 ## Running it locally
 
@@ -157,7 +216,7 @@ two halves as separate jobs.
 
 ```bash
 pytest tests -m "not postgres"   # unit, component and API tests, no database
-pytest tests -m postgres         # the schema, the exclusion constraint and concurrency
+pytest tests -m postgres         # the schema, the constraint, concurrency, the seed and the roles
 ```
 
 Everything without the marker runs against an in memory SQLite engine and must
@@ -170,6 +229,13 @@ what to set rather than failing.
 The marked tests migrate the database to head themselves and truncate every
 table between cases, so point them at a database you are willing to lose. They
 refuse to run at all unless `ENVIRONMENT` is `development` or `test`.
+
+The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
+through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as
+the owner, and apply the grants through the function revision `0002` calls. The
+passwords they set are throwaway values in `tests/support/roles.py`. Roles
+belong to the cluster and not to one database, so the two roles stay behind
+after the run.
 
 `tests/integration/test_schema_baseline.py` runs before every other test. It
 reads the PostgreSQL catalogue and asserts that the three extensions, the
@@ -184,7 +250,7 @@ hook in `tests/integration/conftest.py`, which needs no plugin.
 `pytest -m postgres` truncates every table in the schema before and after each
 test case. It is not selective, and it does not restore anything afterwards. If
 `DATABASE_URL` points at the database you ran `python seed.py` against, the
-branches, the catalogue, the assets and the three accounts are gone the moment
+branches, the catalogue, the assets and the seeded accounts are gone the moment
 the suite runs, and the next sign in from the running application fails with
 credentials that were correct five minutes earlier. That has already happened
 twice. It is not a bug in the tests. Emptying the tables is what makes a
