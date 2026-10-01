@@ -1,0 +1,200 @@
+# Production deployment.
+#
+# The only thing that starts this is a release tag of the form vX.Y.Z on main.
+# A merge into main does not deploy, and neither does a submission tag such as
+# task2-v1.0, so marking a submission can never push something live by
+# accident.
+#
+# The run checks the tag, then waits at the production environment for my
+# approval. After that it builds the image, migrates the database, deploys the
+# new revision as a candidate that takes no traffic, smoke tests the candidate
+# on its own URL, and only then shifts traffic to it and deploys the frontend.
+# A candidate that fails its smoke test never reaches a user, because the
+# previous revision is still serving every request at that point.
+#
+# If a run fails and the source has not changed, I run the same run again. Tags
+# are never moved. A fix to the source gets a new patch version.
+
+name: Deploy to production
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  IMAGE_NAME: api
+  HEALTH_PATH: /api/health
+  ENVIRONMENT_NAME: production
+  # The instance cap is the figure the connection arithmetic in NFR-15 depends
+  # on. Four instances at a pool of five is twenty connections at peak. Raising
+  # it here without raising the database allowance is how the service starts
+  # refusing connections under load.
+  CLOUD_RUN_MAX_INSTANCES: "4"
+
+jobs:
+  # This job needs no credentials, so it runs before the approval. A tag that
+  # is malformed or not on main is refused without anyone being asked to
+  # approve it.
+  verify:
+    name: Check the release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository with full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag format and that it is on main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash infra/scripts/verify-release-tag.sh
+
+  deploy:
+    name: Build, migrate, deploy a candidate, smoke test and promote
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+    # The environment holds the production secrets and the approval. I am the
+    # only person on the project, so the approval is a deliberate pause before
+    # a release and not a second pair of eyes.
+    environment:
+      name: production
+      url: ${{ vars.FRONTEND_ORIGIN }}
+
+    permissions:
+      contents: read
+      # Required for Workload Identity Federation.
+      id-token: write
+
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.GCP_ARTIFACT_REGISTRY_REPOSITORY }}
+      SERVICE_NAME: ${{ vars.CLOUD_RUN_SERVICE }}
+      RUNTIME_SERVICE_ACCOUNT: ${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
+      DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET_NAME }}
+      DATABASE_MIGRATION_URL_SECRET: ${{ vars.DATABASE_MIGRATION_URL_SECRET_NAME }}
+      JWT_SECRET_NAME: ${{ vars.JWT_SECRET_NAME }}
+      RESEND_API_KEY_SECRET: ${{ vars.RESEND_API_KEY_SECRET_NAME }}
+      FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      RELEASE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check that every required secret and variable is present
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+        run: bash infra/scripts/check-deploy-config.sh
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up the gcloud CLI
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push the image
+        id: build
+        run: bash infra/scripts/build-and-push-image.sh
+
+      - name: Set up Python for the migration and seed steps
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install .
+
+      # Migrations run before the new revision exists and are written to stay
+      # compatible with the revision that is still serving. If this step fails
+      # no new code is running, but the database may already have changed.
+      - name: Apply database migrations
+        run: bash infra/scripts/apply-migrations.sh
+
+      - name: Seed the reference fleet and demonstration accounts
+        env:
+          SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+        run: bash infra/scripts/seed-database.sh
+
+      - name: Deploy the candidate revision to Cloud Run
+        id: api
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+          EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+          USE_CANDIDATE: "true"
+        run: bash infra/scripts/deploy-api.sh
+
+      - name: Smoke test the candidate revision
+        env:
+          SERVICE_URL: ${{ steps.api.outputs.check_url }}
+        run: bash infra/scripts/smoke-test.sh
+
+      - name: Shift traffic to the candidate revision
+        if: steps.api.outputs.used_candidate == 'true'
+        run: bash infra/scripts/promote-api.sh
+
+      - name: Set up Node for the frontend build
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build and deploy the frontend
+        id: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bash infra/scripts/deploy-frontend.sh
+
+      - name: Smoke test the API through the frontend domain
+        env:
+          SERVICE_URL: ${{ env.FRONTEND_ORIGIN }}
+        run: bash infra/scripts/smoke-test.sh
+
+      - name: Record the deployment in the run summary
+        if: always()
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+          DEPLOYMENT_URL: ${{ steps.frontend.outputs.deployment_url }}
+        run: |
+          {
+            echo "### Production deployment of ${RELEASE_TAG}"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Release | \`${RELEASE_TAG}\` |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Image | \`${IMAGE_DIGEST:-not built}\` |"
+            echo "| Service | \`${SERVICE_NAME}\` in \`${REGION}\` |"
+            echo "| Frontend | ${FRONTEND_ORIGIN} |"
+            echo "| Vercel deployment | ${DEPLOYMENT_URL:-not deployed} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
