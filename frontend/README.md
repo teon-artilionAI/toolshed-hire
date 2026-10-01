@@ -37,5 +37,49 @@ the interface to distinguish expected conflicts from server failures.
 npm install
 npm run dev
 npm run lint
+npm run typecheck
 npm run build
 ```
+
+## Tests
+
+I test the frontend at two levels. Both run with no backend, because the
+numbered screens draw from fixtures.
+
+```bash
+npm run test          # unit and component tests, one pass
+npm run test:watch    # the same tests, rerun as files change
+npm run test:e2e      # browser and accessibility tests
+```
+
+### Unit and component tests
+
+Vitest runs every `src/**/*.test.ts` and `src/**/*.test.tsx` file in a jsdom
+environment. I keep each test file beside the module it covers. Component
+tests use Testing Library and find elements by role, label and visible text,
+the way a person or a screen reader would. `src/test/setup.ts` registers the
+jest-dom matchers and unmounts each rendered component after its test.
+
+I pin the time zone to `Africa/Johannesburg` in `vitest.config.ts`, so dates
+format the same way on any machine.
+
+### Browser and accessibility tests
+
+Playwright runs the files in `e2e/` against the production build. It builds
+the bundle, serves it with `vite preview` on `http://127.0.0.1:4173`, and runs
+every test twice. One pass uses desktop Chromium and the other uses a phone
+viewport 390 pixels wide. Port 4173 must be free when the run starts.
+
+The browser is a separate download. Install it once before the first run.
+
+```bash
+npx playwright install chromium
+```
+
+`e2e/accessibility.spec.ts` scans the public screens with axe against the WCAG
+2.2 level AA rules and fails on any serious or critical violation. An automated
+scan cannot judge everything, so it supports manual keyboard and screen reader
+checks and does not replace them.
+
+After a run, the HTML report is in `playwright-report/`. It does not open by
+itself. To read it, run `npx playwright show-report`.
