@@ -1,0 +1,39 @@
+# Local PostgreSQL for Toolshed Hire.
+#
+# I use this for local development and for the integration tests that need a
+# real PostgreSQL 16, because the exclusion constraint and the concurrency
+# tests have no SQLite equivalent. It is never used by a deployed environment.
+#
+#   docker compose up -d --wait     start it and wait for the healthcheck
+#   docker compose stop             stop it and keep the data
+#   docker compose down -v          remove it together with its volume
+#
+# The password below is a local throwaway and not a secret. The port is bound
+# to 127.0.0.1 so the database is not reachable from the rest of the network.
+# I set TOOLSHED_DB_PORT when 5432 is already taken on my machine.
+#
+# The integration tests truncate every table, so this database is disposable.
+# Seed data that has to survive a test run belongs in a different database.
+
+name: toolshed-hire
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: toolshed_test
+      POSTGRES_USER: toolshed
+      POSTGRES_PASSWORD: toolshed_local_only
+    ports:
+      - "127.0.0.1:${TOOLSHED_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toolshed -d toolshed_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - toolshed_pgdata:/var/lib/postgresql/data
+
+volumes:
+  toolshed_pgdata:

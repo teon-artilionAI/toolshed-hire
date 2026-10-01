@@ -16,7 +16,10 @@ authors = [{ name = "Teon Kleynhans" }]
 # Every version is pinned exactly. An unpinned dependency is an unreviewed
 # change that arrives on the next clean install.
 dependencies = [
-    "fastapi==0.115.6",
+    "fastapi==0.142.2",
+    # FastAPI only sets a floor for Starlette. I pin it so the version that
+    # serves requests is one I chose, and so the audit sees a fixed target.
+    "starlette==1.7.0",
     "uvicorn[standard]==0.34.0",
     "sqlmodel==0.0.22",
     "sqlalchemy==2.0.36",
@@ -24,7 +27,7 @@ dependencies = [
     "psycopg[binary]==3.2.3",
     "pydantic==2.10.4",
     "pydantic-settings==2.7.0",
-    "pyjwt==2.10.1",
+    "pyjwt==2.15.1",
     "passlib[bcrypt]==1.7.4",
     # passlib 1.7.4 reads bcrypt.__about__, which bcrypt 4.1 removed. 4.0.1 is
     # the last release passlib can introspect without emitting a spurious
@@ -34,11 +37,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==8.3.4",
-    "pytest-asyncio==0.25.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
     "httpx==0.28.1",
     "ruff==0.8.4",
     "mypy==1.14.0",
+    # Coverage for the gated run, the layer contract and the dependency audit.
+    # None of the three is imported by the application.
+    "pytest-cov==7.1.0",
+    "import-linter==2.15",
+    "pip-audit==2.10.1",
 ]
 
 [tool.setuptools]
@@ -56,12 +64,58 @@ markers = [
     "postgres: requires a real PostgreSQL reached through DATABASE_URL. The pipeline runs these in a separate job, so every test without this marker must pass with no database at all.",
 ]
 
+# Coverage is measured over the two layers that hold the business rules. The
+# routers and the infrastructure are exercised by the API and integration tests,
+# but a percentage over them would mostly count framework wiring.
+#
+# I keep --cov out of addopts on purpose. The fast run without PostgreSQL
+# deselects the integration tests, so it has to pass or fail on its tests alone
+# and must not be gated by a threshold measured over part of the suite. The
+# gated command is
+# `pytest tests --cov --cov-report=term-missing --cov-report=xml`, and I run it
+# with a real PostgreSQL behind DATABASE_URL.
+[tool.coverage.run]
+source = ["app/domain", "app/application"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+
+# The layer contract, checked by `lint-imports` from this directory. The
+# documented rule is that the domain imports nothing from the other layers, and
+# nothing below the API reaches up into it.
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "The domain layer imports nothing from the other layers"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = ["app.application", "app.infrastructure", "app.api"]
+
+# This contract does not yet forbid app.application importing
+# app.infrastructure, because the use cases still import the SQLModel tables
+# directly. I tighten it when the repositories land.
+[[tool.importlinter.contracts]]
+name = "The application layer does not import the API layer"
+type = "forbidden"
+source_modules = ["app.application"]
+forbidden_modules = ["app.api"]
+
+[[tool.importlinter.contracts]]
+name = "The infrastructure layer does not import the API layer"
+type = "forbidden"
+source_modules = ["app.infrastructure"]
+forbidden_modules = ["app.api"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "ANN", "D"]
+# S608 flags SQL assembled from strings, which is how an injection gets written.
+# C901 fails a function whose cyclomatic complexity passes the limit below.
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "ANN", "D", "S608", "C901"]
 # D203 and D213 conflict with the docstring style used throughout.
 # N818 is ignored deliberately: the domain errors are named in the vocabulary of
 # the business, AssetUnavailableConflict and NotFound, and an Error suffix on
@@ -69,6 +123,9 @@ select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "ANN", "D"]
 # UP042 is ignored because the enumerations inherit str and Enum rather than
 # StrEnum, which keeps `.value` the explicit way a stored value is read.
 ignore = ["D203", "D213", "N818", "UP042"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*" = ["D103", "ANN"]
