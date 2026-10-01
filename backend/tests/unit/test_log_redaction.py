@@ -32,14 +32,17 @@ from tests.support.log_capture import LogCapture
 
 logger = logging.getLogger("app.tests.log_scrub")
 
+# Every value below is made up for this test and opens nothing. They are kept
+# plainly fake on purpose, because a value shaped like a real token or key trips
+# the secret scan, and rightly so.
 PASSWORD: Final[str] = "correct-horse-battery-staple-9431"
-BEARER_TOKEN: Final[str] = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzY3J1YiJ9.c2lnbmF0dXJlLXZhbHVl"
+BEARER_TOKEN: Final[str] = "made-up-bearer-token-for-the-scrub-test"
 REFRESH_COOKIE: Final[str] = "rc_7Qd1mXv0pZk2LwYh8uT4sNe6"
 DATABASE_PASSWORD: Final[str] = "npg_Zx81kQwLm3TrVb"
 DATABASE_URL: Final[str] = (
     f"postgresql+psycopg://toolshed_app:{DATABASE_PASSWORD}@ep-example-pooler.example.test/toolshed"
 )
-API_KEY: Final[str] = "sk_live_4f9a2c7d1e8b"
+API_KEY: Final[str] = "made-up-api-key-for-the-scrub-test"
 ALL_SECRETS: Final[list[str]] = [
     PASSWORD,
     BEARER_TOKEN,
