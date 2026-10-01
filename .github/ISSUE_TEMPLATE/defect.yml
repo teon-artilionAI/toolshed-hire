@@ -1,0 +1,36 @@
+name: Defect
+description: Something that does not behave the way the design document says it should
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Severity 1 stops a hire from being booked, collected or returned. Severity 3 is cosmetic.
+      options:
+        - "1, blocks a core journey"
+        - "2, wrong result with a workaround"
+        - "3, minor or cosmetic"
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Environment, screen identifier and any reservation or rental reference.
+      placeholder: staging, SC-15, TSH-H-26-000098
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual
+      description: What should have happened, and what happened instead.
+    validations:
+      required: true
