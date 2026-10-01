@@ -26,6 +26,15 @@ updates:
     labels:
       - "area: frontend"
 
+  - package-ecosystem: docker
+    directory: /backend
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    labels:
+      - "area: infra"
+
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop
