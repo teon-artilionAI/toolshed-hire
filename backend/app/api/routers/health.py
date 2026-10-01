@@ -5,6 +5,11 @@ shallow availability check runs from Cloud Scheduler with no credential. It
 reports what it actually verified rather than a bare "ok": whether the database
 answered, and whether `btree_gist` is installed, since the exclusion constraint
 that prevents double booking cannot exist without it.
+
+It also names the revision that answered. Cloud Run sets `K_REVISION` on every
+instance, so after a deployment I can ask the service which revision is serving
+and compare it with the one I just released. Away from Cloud Run it says
+`local`.
 """
 
 from __future__ import annotations
@@ -54,4 +59,5 @@ def read_health(session: SessionDependency, response: Response) -> HealthRespons
         environment=settings.environment.value,
         database_reachable=database_reachable,
         btree_gist_installed=extension_installed,
+        revision=settings.revision,
     )

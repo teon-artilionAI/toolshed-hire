@@ -28,6 +28,8 @@ MAXIMUM_ACCESS_TOKEN_MINUTES = 60
 SUPPORTED_JWT_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
 REQUIRED_DRIVER_PREFIX = "postgresql+psycopg://"
 BARE_POSTGRES_PREFIXES = ("postgres://", "postgresql://")
+# Reported as the revision when the process is not running on Cloud Run.
+LOCAL_REVISION = "local"
 
 
 class Environment(str, Enum):
@@ -40,7 +42,12 @@ class Environment(str, Enum):
 
     @property
     def is_relaxed(self) -> bool:
-        """Return True when placeholder secrets are tolerated."""
+        """Return True when placeholder secrets are tolerated.
+
+        This is the one question every start-up check asks. Staging answers it
+        the same way production does, so a check written against it cannot
+        treat the two differently by accident.
+        """
         return self in (Environment.DEVELOPMENT, Environment.TEST)
 
 
@@ -88,6 +95,11 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGINS",
         description="Comma separated list of browser origins allowed to call the API",
     )
+    revision: str = Field(
+        default=LOCAL_REVISION,
+        validation_alias="K_REVISION",
+        description="The Cloud Run revision name, set by the platform and never by hand",
+    )
 
     @field_validator("database_url")
     @classmethod
@@ -100,11 +112,21 @@ class Settings(BaseSettings):
             if candidate.startswith(prefix):
                 return REQUIRED_DRIVER_PREFIX + candidate[len(prefix) :]
         if not candidate.startswith(REQUIRED_DRIVER_PREFIX):
+            # Only the scheme is repeated. The rest of the value holds the
+            # credentials, and this message ends up in the start-up log.
+            scheme, separator, _rest = candidate.partition("://")
+            found = f"the scheme {scheme!r}" if separator else "a value with no scheme"
             raise ValueError(
                 "DATABASE_URL must be a PostgreSQL DSN. Expected a value starting with "
-                f"{REQUIRED_DRIVER_PREFIX!r}, postgres:// or postgresql://, got {candidate[:24]!r}."
+                f"{REQUIRED_DRIVER_PREFIX!r}, postgres:// or postgresql://, got {found}."
             )
         return candidate
+
+    @field_validator("revision")
+    @classmethod
+    def default_blank_revision(cls, value: str) -> str:
+        """Report a blank revision as the local one rather than as nothing."""
+        return value.strip() or LOCAL_REVISION
 
     @field_validator("jwt_algorithm")
     @classmethod
@@ -161,13 +183,19 @@ class Settings(BaseSettings):
 
         Used by the startup log so an operator can confirm what the process
         actually loaded without the log becoming a credential leak.
+
+        Two keys are named with care. The log redaction filter replaces the
+        value of any key whose name contains `secret` or `token`, which would
+        turn "set" and the lifetime in minutes into the placeholder and lose
+        the two facts this record exists to show.
         """
         return {
             "environment": self.environment.value,
+            "revision": self.revision,
             "database_host": _host_of(self.database_url),
             "jwt_algorithm": self.jwt_algorithm,
-            "jwt_secret": "set" if self.jwt_secret else "missing",
-            "access_token_minutes": self.access_token_minutes,
+            "jwt_signing_key": "set" if self.jwt_secret else "missing",
+            "access_lifetime_minutes": self.access_token_minutes,
             "cors_origins": self.cors_origins,
         }
 
@@ -178,16 +206,39 @@ def _host_of(database_url: str) -> str:
     return without_scheme.rsplit("@", 1)[-1] if "@" in without_scheme else without_scheme
 
 
-def _load_settings() -> Settings:
-    """Build the settings object or fail with a message naming what is wrong."""
+def _describe(failure: ValidationError) -> str:
+    """Say what each failed check said, without the value that failed it.
+
+    The text pydantic renders for a failure quotes the input it rejected, and
+    here the input is the signing key and the connection string. So the
+    message is rebuilt from the name of each setting and the reason alone.
+    """
+    reasons = failure.errors(include_url=False, include_context=False, include_input=False)
+    return "; ".join(
+        f"{'.'.join(str(part) for part in reason['loc']) or 'settings'}: {reason['msg']}"
+        for reason in reasons
+    )
+
+
+def load_settings() -> Settings:
+    """Build the settings object or fail with a message naming what is wrong.
+
+    Raises:
+        ConfigurationError: If a value is missing or fails a check. The
+            original exception is deliberately not chained, because its text
+            quotes the rejected values and a failed start is written to the
+            log in full.
+
+    """
     try:
         return Settings()
     except ValidationError as exc:
         raise ConfigurationError(
             "Failed to load backend configuration from the environment. "
-            f"Attempted to read DATABASE_URL, JWT_SECRET, JWT_ALGORITHM, "
-            f"ACCESS_TOKEN_MINUTES, ENVIRONMENT and CORS_ORIGINS. Cause: {exc}"
-        ) from exc
+            "Attempted to read DATABASE_URL, JWT_SECRET, JWT_ALGORITHM, "
+            "ACCESS_TOKEN_MINUTES, ENVIRONMENT, CORS_ORIGINS and K_REVISION. "
+            f"Cause: {_describe(exc)}"
+        ) from None
 
 
-settings: Settings = _load_settings()
+settings: Settings = load_settings()
