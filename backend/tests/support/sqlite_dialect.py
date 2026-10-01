@@ -1,6 +1,6 @@
 """SQLite compatibility for the fast, database free test engine.
 
-The schema is PostgreSQL specific on purpose, so three pieces of it have to be
+The schema is PostgreSQL specific on purpose, so six pieces of it have to be
 taught to SQLite before an in memory engine can create the tables at all.
 
 1. `postgresql.UUID` renders as `UUID`, which SQLite does not know. It is
@@ -12,6 +12,16 @@ taught to SQLite before an in memory engine can create the tables at all.
    capitalisation of an email address.
 3. The native enum types render as `VARCHAR`. The application already binds
    them with `create_type=False`, so nothing tries to issue `CREATE TYPE`.
+4. `JSONB` renders as `JSON`, which SQLite stores as text and SQLAlchemy
+   serialises the same way on both sides.
+5. `INET` renders as a `VARCHAR` wide enough for an IPv6 address.
+6. `BIGINT` renders as `INTEGER`. SQLite only numbers a primary key by itself
+   when the column is declared with exactly that word, so the two BIGSERIAL
+   keys would otherwise have to be supplied by hand.
+
+The check constraints, the exclusion constraint and the indexes are created by
+the migration and not by the models, so none of them exist here. That is the
+intended division. Everything that depends on one of them is marked `postgres`.
 
 A default rendering is registered alongside every SQLite rendering. Registering
 a dialect specific compiler for a class that does not declare its own
@@ -34,8 +44,8 @@ import sqlite3
 from collections.abc import Iterator
 from typing import Final
 
-from sqlalchemy import Engine, event
-from sqlalchemy.dialects.postgresql import CITEXT, ENUM
+from sqlalchemy import BigInteger, Engine, event
+from sqlalchemy.dialects.postgresql import CITEXT, ENUM, INET, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import StaticPool
@@ -54,6 +64,10 @@ SQLITE_MEMORY_URL: Final[str] = "sqlite://"
 UUID_SQLITE_TYPE: Final[str] = "CHAR(32)"
 CITEXT_SQLITE_TYPE: Final[str] = "TEXT COLLATE NOCASE"
 ENUM_SQLITE_TYPE: Final[str] = "VARCHAR(32)"
+JSONB_SQLITE_TYPE: Final[str] = "JSON"
+# The longest textual form of an IPv6 address, including a mapped IPv4 tail.
+INET_SQLITE_TYPE: Final[str] = "VARCHAR(45)"
+ROWID_SQLITE_TYPE: Final[str] = "INTEGER"
 SEQUENCE_FUNCTION_NAME: Final[str] = "nextval"
 SEQUENCE_FUNCTION_ARGUMENT_COUNT: Final[int] = 1
 
@@ -102,6 +116,46 @@ def render_enum_for_sqlite(
 ) -> str:
     """Render a native enum column as plain text, which is all SQLite offers."""
     return ENUM_SQLITE_TYPE
+
+
+@compiles(JSONB)
+def render_jsonb_default(type_: JSONB, compiler: GenericTypeCompiler, **kw: object) -> str:
+    """Render a JSONB column by delegating to the dialect's own compiler."""
+    return compiler.visit_JSONB(type_, **kw)
+
+
+@compiles(JSONB, "sqlite")
+def render_jsonb_for_sqlite(type_: JSONB, compiler: GenericTypeCompiler, **kw: object) -> str:
+    """Render a JSONB column as SQLite's JSON, which is stored as text."""
+    return JSONB_SQLITE_TYPE
+
+
+@compiles(INET)
+def render_inet_default(type_: INET, compiler: GenericTypeCompiler, **kw: object) -> str:
+    """Render a network address column for every dialect other than SQLite."""
+    return "INET"
+
+
+@compiles(INET, "sqlite")
+def render_inet_for_sqlite(type_: INET, compiler: GenericTypeCompiler, **kw: object) -> str:
+    """Render a network address column as text, which is all SQLite offers."""
+    return INET_SQLITE_TYPE
+
+
+@compiles(BigInteger)
+def render_big_integer_default(
+    type_: BigInteger, compiler: GenericTypeCompiler, **kw: object
+) -> str:
+    """Render a BIGINT column by delegating to the dialect's own compiler."""
+    return compiler.visit_big_integer(type_, **kw)
+
+
+@compiles(BigInteger, "sqlite")
+def render_big_integer_for_sqlite(
+    type_: BigInteger, compiler: GenericTypeCompiler, **kw: object
+) -> str:
+    """Render a BIGINT column as INTEGER, the one type SQLite will number itself."""
+    return ROWID_SQLITE_TYPE
 
 
 def _install_connection_shims(engine: Engine) -> None:

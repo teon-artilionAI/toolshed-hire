@@ -43,7 +43,7 @@ from app.config import settings
 from app.infrastructure.database import get_session
 from app.main import app as production_app
 from tests.support.factories import Factory
-from tests.support.pg import truncate_skeleton_tables
+from tests.support.pg import truncate_schema_tables
 from tests.support.probe_app import build_role_probe_app
 from tests.support.sqlite_dialect import build_sqlite_engine
 
@@ -243,13 +243,13 @@ def postgres_session(postgres_engine: Engine) -> Iterator[Session]:
     Truncating before as well as after means a test still starts clean when the
     previous run was killed part way through.
     """
-    truncate_skeleton_tables(postgres_engine)
+    truncate_schema_tables(postgres_engine)
     open_session = Session(postgres_engine)
     try:
         yield open_session
     finally:
         open_session.close()
-        truncate_skeleton_tables(postgres_engine)
+        truncate_schema_tables(postgres_engine)
 
 
 @pytest.fixture

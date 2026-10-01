@@ -19,6 +19,8 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
+from app.infrastructure.schema_ddl import TABLE_NAMES
+
 logger = logging.getLogger(__name__)
 
 # PostgreSQL exclusion_violation.
@@ -29,18 +31,12 @@ EXCLUSION_CONSTRAINT_TYPE: Final[str] = "x"
 # leaked one is reported rather than waited on.
 TRUNCATE_LOCK_TIMEOUT_SECONDS: Final[int] = 20
 
-# Truncated in dependency order, although CASCADE makes the order cosmetic. It
-# is written out anyway so a reader can see exactly which tables the suite
-# considers disposable.
-SKELETON_TABLES: Final[tuple[str, ...]] = (
-    "asset_allocations",
-    "reservation_lines",
-    "reservations",
-    "assets",
-    "product_models",
-    "user_accounts",
-    "branches",
-)
+ENUM_TYPE_KIND: Final[str] = "e"
+BASE_TABLE_KIND: Final[str] = "BASE TABLE"
+
+# Every table of the documented schema is disposable to this suite. They are
+# truncated children first, although CASCADE makes the order cosmetic.
+SCHEMA_TABLES: Final[tuple[str, ...]] = tuple(reversed(TABLE_NAMES))
 
 
 def sqlstate_of(error: IntegrityError) -> str | None:
@@ -100,6 +96,107 @@ def exclusion_constraint_names(session: Session, table_name: str) -> set[str]:
     return {str(row) for row in rows}
 
 
+def constraint_definition(session: Session, table_name: str, constraint_name: str) -> str | None:
+    """Return a constraint as PostgreSQL itself prints it back, or None if absent.
+
+    `pg_get_constraintdef` is the catalogue's own rendering, so the comparison
+    is against what the database is enforcing and not against the text the
+    migration happened to send.
+    """
+    logger.debug(
+        "test.constraint_definition_query_started",
+        extra={"table": table_name, "constraint": constraint_name},
+    )
+    definition = session.execute(
+        text(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conrelid = to_regclass(:table) AND conname = :name"
+        ),
+        {"table": table_name, "name": constraint_name},
+    ).scalar_one_or_none()
+    logger.debug(
+        "test.constraint_definition_query_finished",
+        extra={"constraint": constraint_name, "found": definition is not None},
+    )
+    return str(definition) if definition is not None else None
+
+
+def table_names(session: Session) -> set[str]:
+    """Return the name of every ordinary table in the connected schema."""
+    logger.debug("test.table_query_started")
+    rows = (
+        session.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = current_schema() AND table_type = :kind"
+            ),
+            {"kind": BASE_TABLE_KIND},
+        )
+        .scalars()
+        .all()
+    )
+    logger.debug("test.table_query_finished", extra={"table_count": len(rows)})
+    return {str(row) for row in rows}
+
+
+def column_nullability(session: Session, table_name: str) -> dict[str, bool]:
+    """Return every column of a table with whether it accepts NULL."""
+    logger.debug("test.column_query_started", extra={"table": table_name})
+    rows = session.execute(
+        text(
+            "SELECT column_name, is_nullable = 'YES' FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = :table"
+        ),
+        {"table": table_name},
+    ).all()
+    logger.debug(
+        "test.column_query_finished", extra={"table": table_name, "column_count": len(rows)}
+    )
+    return {str(name): bool(nullable) for name, nullable in rows}
+
+
+def partial_index_predicates(session: Session) -> dict[str, str]:
+    """Return every partial index in the connected schema with its predicate.
+
+    Read from `pg_index.indpred`, which is null for an ordinary index. An index
+    that kept its name and lost its WHERE clause is therefore absent from the
+    result, which is exactly the failure worth catching.
+    """
+    logger.debug("test.partial_index_query_started")
+    rows = session.execute(
+        text(
+            "SELECT c.relname, pg_get_expr(i.indpred, i.indrelid) "
+            "FROM pg_index i "
+            "JOIN pg_class c ON c.oid = i.indexrelid "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = current_schema() AND i.indpred IS NOT NULL"
+        )
+    ).all()
+    logger.debug("test.partial_index_query_finished", extra={"index_count": len(rows)})
+    return {str(name): str(predicate) for name, predicate in rows}
+
+
+def enum_type_labels(session: Session) -> dict[str, tuple[str, ...]]:
+    """Return every native enumerated type with its labels in their stored order."""
+    logger.debug("test.enum_query_started")
+    rows = session.execute(
+        text(
+            "SELECT t.typname, e.enumlabel "
+            "FROM pg_type t "
+            "JOIN pg_enum e ON e.enumtypid = t.oid "
+            "JOIN pg_namespace n ON n.oid = t.typnamespace "
+            "WHERE n.nspname = current_schema() AND t.typtype = :kind "
+            "ORDER BY t.typname, e.enumsortorder"
+        ),
+        {"kind": ENUM_TYPE_KIND},
+    ).all()
+    labels: dict[str, list[str]] = {}
+    for type_name, label in rows:
+        labels.setdefault(str(type_name), []).append(str(label))
+    logger.debug("test.enum_query_finished", extra={"type_count": len(labels)})
+    return {type_name: tuple(values) for type_name, values in labels.items()}
+
+
 def count_active_allocations(session: Session, asset_id: UUID) -> int:
     """Return how many unreleased allocations the database holds for one asset.
 
@@ -108,7 +205,7 @@ def count_active_allocations(session: Session, asset_id: UUID) -> int:
     """
     result = session.execute(
         text(
-            "SELECT count(*) FROM asset_allocations "
+            "SELECT count(*) FROM asset_allocation "
             "WHERE asset_id = :asset_id AND released_at IS NULL"
         ),
         {"asset_id": asset_id},
@@ -116,7 +213,7 @@ def count_active_allocations(session: Session, asset_id: UUID) -> int:
     return int(result)
 
 
-def truncate_skeleton_tables(engine: Engine) -> None:
+def truncate_schema_tables(engine: Engine) -> None:
     """Empty every table the suite writes to, in one statement.
 
     TRUNCATE with CASCADE is used rather than DELETE because it is one round
@@ -135,22 +232,27 @@ def truncate_skeleton_tables(engine: Engine) -> None:
         engine: The engine pointing at the test database.
 
     """
-    statement = f"TRUNCATE TABLE {', '.join(SKELETON_TABLES)} RESTART IDENTITY CASCADE"
-    logger.debug("test.truncate_started", extra={"table_count": len(SKELETON_TABLES)})
+    statement = f"TRUNCATE TABLE {', '.join(SCHEMA_TABLES)} RESTART IDENTITY CASCADE"
+    logger.debug("test.truncate_started", extra={"table_count": len(SCHEMA_TABLES)})
     with engine.begin() as connection:
         connection.execute(text(f"SET LOCAL lock_timeout = '{TRUNCATE_LOCK_TIMEOUT_SECONDS}s'"))
         connection.execute(text(statement))
-    logger.debug("test.truncate_finished", extra={"table_count": len(SKELETON_TABLES)})
+    logger.debug("test.truncate_finished", extra={"table_count": len(SCHEMA_TABLES)})
 
 
 __all__ = [
     "CHECK_VIOLATION_SQLSTATE",
     "EXCLUSION_VIOLATION_SQLSTATE",
-    "SKELETON_TABLES",
+    "SCHEMA_TABLES",
+    "column_nullability",
+    "constraint_definition",
     "constraint_name_of",
     "count_active_allocations",
+    "enum_type_labels",
     "exclusion_constraint_names",
     "installed_extensions",
+    "partial_index_predicates",
     "sqlstate_of",
-    "truncate_skeleton_tables",
+    "table_names",
+    "truncate_schema_tables",
 ]
