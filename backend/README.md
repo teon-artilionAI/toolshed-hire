@@ -81,6 +81,44 @@ development and test the process refuses to start while `JWT_SECRET` is still
 the placeholder or `DATABASE_URL` still points at localhost, because a
 deployment that boots on a known secret is a hole nobody notices.
 
+## Checks
+
+I run these from this directory before I publish a change. The pipeline runs
+the same commands.
+
+```bash
+ruff check .                     # lint, including S608 and C901 at complexity 10
+mypy app                         # strict type check
+lint-imports                     # the layer contract
+pytest tests -m "not postgres"   # unit, component and API tests, no database
+pip-audit                        # known vulnerabilities in the installed packages
+```
+
+`lint-imports` reads its contracts from `pyproject.toml`. It fails when
+`app.domain` imports `app.application`, `app.infrastructure` or `app.api`, and
+when `app.application` or `app.infrastructure` imports `app.api`. It does not
+yet stop `app.application` importing `app.infrastructure`. I tighten that
+contract when the repositories land.
+
+The full run needs a real PostgreSQL 16. I start the one described by
+`docker-compose.yml` at the repository root, which holds a single disposable
+database called `toolshed_test`, and I stop it afterwards.
+
+```bash
+docker compose up -d --wait
+
+ENVIRONMENT=test DATABASE_URL=postgresql+psycopg://toolshed:toolshed_local_only@localhost:5432/toolshed_test \
+  pytest tests --cov --cov-report=term-missing --cov-report=xml
+
+docker compose stop
+```
+
+That run is the only one gated on coverage. It measures `app/domain` and
+`app/application` and fails below 70 percent. The run without PostgreSQL
+carries no `--cov` flag, so it is never held to the threshold. The password in
+the compose file is a local throwaway and the port is bound to 127.0.0.1. I set
+`TOOLSHED_DB_PORT` when 5432 is already taken.
+
 ## Tests
 
 The suite is split in two by the `postgres` marker, and the pipeline runs the
@@ -117,14 +155,17 @@ Use two databases. One holds seed data and serves the application, the other is
 disposable and belongs to the suite.
 
 ```bash
+# The seeded one, which serves the running application.
 docker run --name tsh-pg -e POSTGRES_USER=toolshed -e POSTGRES_PASSWORD=toolshed \
   -e POSTGRES_DB=toolshed -p 5432:5432 -d postgres:16
 
-# The disposable one, created once.
-docker exec tsh-pg psql -U toolshed -d postgres -c "CREATE DATABASE toolshed_test"
+# The disposable one, from docker-compose.yml at the repository root. I move it
+# to 5433 here because the seeded database already holds 5432.
+TOOLSHED_DB_PORT=5433 docker compose up -d --wait
 
-# The suite. Note the database name, and note that it is not the seeded one.
-ENVIRONMENT=test DATABASE_URL=postgresql+psycopg://toolshed:toolshed@localhost:5432/toolshed_test \
+# The suite. Note the port and the database name, and note that it is not the
+# seeded one.
+ENVIRONMENT=test DATABASE_URL=postgresql+psycopg://toolshed:toolshed_local_only@localhost:5433/toolshed_test \
   pytest tests -m postgres
 ```
 
