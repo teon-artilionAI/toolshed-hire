@@ -16,7 +16,10 @@ authors = [{ name = "Teon Kleynhans" }]
 # Every version is pinned exactly. An unpinned dependency is an unreviewed
 # change that arrives on the next clean install.
 dependencies = [
-    "fastapi==0.115.6",
+    "fastapi==0.142.2",
+    # FastAPI only sets a floor for Starlette. I pin it so the version that
+    # serves requests is one I chose, and so the audit sees a fixed target.
+    "starlette==1.7.0",
     "uvicorn[standard]==0.34.0",
     "sqlmodel==0.0.22",
     "sqlalchemy==2.0.36",
@@ -24,7 +27,7 @@ dependencies = [
     "psycopg[binary]==3.2.3",
     "pydantic==2.10.4",
     "pydantic-settings==2.7.0",
-    "pyjwt==2.10.1",
+    "pyjwt==2.15.1",
     "passlib[bcrypt]==1.7.4",
     # passlib 1.7.4 reads bcrypt.__about__, which bcrypt 4.1 removed. 4.0.1 is
     # the last release passlib can introspect without emitting a spurious
@@ -34,8 +37,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==8.3.4",
-    "pytest-asyncio==0.25.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
     "httpx==0.28.1",
     "ruff==0.8.4",
     "mypy==1.14.0",
