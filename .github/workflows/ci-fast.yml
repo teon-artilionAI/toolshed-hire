@@ -65,8 +65,12 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      # The application is checked first, then the seed and provisioning tools,
+      # which are run from this directory and are not part of the image.
       - name: Type check
-        run: mypy app
+        run: |
+          mypy app
+          mypy seed.py seeding seed_data scripts
 
       # The domain layer may not import from the layers around it. This is the
       # check that keeps that true as the code grows.

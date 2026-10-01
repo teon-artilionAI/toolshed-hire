@@ -49,6 +49,10 @@ dev = [
     "pip-audit==2.10.1",
 ]
 
+# Only what the running application imports is packaged. seed.py, seed_data,
+# seeding and scripts are tools I run from this directory against a database.
+# They are linted by `ruff check .` like everything else here, and they are
+# left out of the list below and out of the image on purpose.
 [tool.setuptools]
 packages = [
     "app",
