@@ -17,6 +17,13 @@ the whole design document.
   and browser and accessibility tests.
 - First unit, component and browser tests for the frontend.
 - A local PostgreSQL service for development and integration tests.
+- A seed that loads three branches, 120 product models, 400 tagged assets,
+  demonstration accounts and the worked example from the design document. It is
+  safe to run more than once.
+- A restricted database role for the running application. It can select and
+  insert on the audit table and nothing else, so the audit trail cannot be
+  rewritten by the application that writes it.
+- Reference sequences for rentals and damage reports.
 
 ### Changed
 
