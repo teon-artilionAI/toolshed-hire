@@ -59,9 +59,13 @@ pytest.ini
 alembic/
 alembic.ini
 
-# Development utilities. Seeding is run from a developer machine or from the
-# pipeline, against a database, and has no business inside the serving image.
+# Development utilities. Seeding and role provisioning are run from a developer
+# machine or from the pipeline, against a database, and have no business inside
+# the serving image.
 seed.py
+seed_data/
+seeding/
+scripts/
 
 # Container files, which would only invalidate cache layers
 Dockerfile
