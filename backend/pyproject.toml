@@ -50,7 +50,15 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["app", "app.api", "app.api.routers", "app.application", "app.domain", "app.infrastructure"]
+packages = [
+    "app",
+    "app.api",
+    "app.api.routers",
+    "app.application",
+    "app.domain",
+    "app.infrastructure",
+    "app.infrastructure.models",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

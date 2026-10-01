@@ -1,10 +1,10 @@
 """The smallest world in which an allocation means anything.
 
-An allocation cannot exist on its own. It needs a branch to be at, a product
-model to realise, a physical asset to be, a customer to belong to, a reservation
-to hang from and a line inside that reservation. Six rows, in that order, every
-time, in a dozen tests. Built here once so that a test about overlapping dates
-is about overlapping dates.
+An allocation cannot exist on its own. It needs a branch to be at, a category
+and a product model to realise, a physical asset to be, a customer account and
+the profile that owns the booking, a reservation to hang from and a line inside
+that reservation. Eight rows, in that order, every time, in a dozen tests. Built
+here once so that a test about overlapping dates is about overlapping dates.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from app.domain.period import BookingPeriod
 from app.infrastructure.models import (
     Asset,
     Branch,
+    CustomerProfile,
     ProductModel,
     Reservation,
     ReservationLine,
@@ -37,6 +38,7 @@ class AllocationScenario:
     product_model: ProductModel
     assets: list[Asset]
     customer: UserAccount
+    profile: CustomerProfile
     reservation: Reservation
     line: ReservationLine
 
@@ -62,6 +64,9 @@ def build_allocation_scenario(
 ) -> AllocationScenario:
     """Create a branch, a catalogue entry, its units, a customer and a booking line.
 
+    The customer is an account with a profile, and the reservation belongs to
+    the profile. `customer` is the account, which is what a token is minted for.
+
     Args:
         factory: The factory bound to the session under test.
         period: The period the reservation covers.
@@ -77,7 +82,10 @@ def build_allocation_scenario(
     model = factory.product_model()
     assets = [factory.asset(product_model=model, branch=branch) for _ in range(asset_count)]
     customer = factory.user(role=UserRole.CUSTOMER)
-    reservation = factory.reservation(customer=customer, branch=branch, period=period)
+    profile = factory.customer_profile(branch=branch, account=customer)
+    reservation = factory.reservation(
+        profile=profile, created_by=customer, branch=branch, period=period
+    )
     line = factory.reservation_line(reservation=reservation, product_model=model)
     logger.debug(
         "test.allocation_scenario_built",
@@ -93,6 +101,7 @@ def build_allocation_scenario(
         product_model=model,
         assets=assets,
         customer=customer,
+        profile=profile,
         reservation=reservation,
         line=line,
     )

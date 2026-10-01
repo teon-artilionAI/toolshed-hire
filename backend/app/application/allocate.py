@@ -9,7 +9,7 @@ LOCKED is what makes two simultaneous bookings pick two different units instead
 of queueing on the same one, which is throughput, not correctness.
 
 Correctness comes from the database. The exclusion constraint on
-`asset_allocations` is the final defence and the only authority on whether a
+`asset_allocation` is the final defence and the only authority on whether a
 unit is free. The pre check exists to produce a friendly message, not to prevent
 the conflict, because between any pre check and any insert another transaction
 can commit.
@@ -32,7 +32,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col
 
-from app.domain.enums import AllocationStatus, AssetStatus
+from app.domain.enums import AssetStatus
 from app.domain.errors import AssetUnavailableConflict, ValidationFailure
 from app.domain.period import BookingPeriod
 from app.infrastructure.models import Asset, AssetAllocation
@@ -133,9 +133,10 @@ def allocate_assets(session: Session, command: AllocationCommand) -> list[Alloca
             branch_id=asset.branch_id,
             start_date=command.period.start,
             end_date=command.period.end,
-            status=AllocationStatus.ACTIVE,
             allocated_at=datetime.now(UTC),
+            # Active. The reason and the timestamp are only ever set together.
             released_at=None,
+            release_reason=None,
         )
         for asset in candidates
     ]
@@ -253,7 +254,7 @@ def _raise_conflict_or_reraise(
                 "sqlstate": sqlstate,
                 "constraint": constraint_name,
                 "reservation_line_id": str(command.reservation_line_id),
-                "attempted": "insert asset_allocations rows",
+                "attempted": "insert asset_allocation rows",
             },
         )
         raise exc

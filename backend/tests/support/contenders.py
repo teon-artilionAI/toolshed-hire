@@ -24,7 +24,6 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session
 
 from app.application.allocate import AllocationCommand, allocate_assets
-from app.domain.enums import AllocationStatus
 from app.domain.errors import AssetUnavailableConflict
 from app.domain.period import BookingPeriod
 from app.infrastructure.models import AssetAllocation
@@ -64,9 +63,9 @@ class AllocationTarget:
             branch_id=self.branch_id,
             start_date=self.period.start,
             end_date=self.period.end,
-            status=AllocationStatus.ACTIVE,
             allocated_at=datetime.now(UTC),
             released_at=None,
+            release_reason=None,
         )
 
     def as_command(self, product_model_id: UUID) -> AllocationCommand:

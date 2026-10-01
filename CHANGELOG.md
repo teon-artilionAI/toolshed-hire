@@ -22,6 +22,10 @@ the whole design document.
 
 - The two original test workflows are replaced by `ci-fast.yml` and
   `ci-integration.yml`.
+- The database schema is now the documented baseline of seventeen tables with
+  singular names. The first migration was rewritten in place, because no
+  database outside CI and local containers had run it. A local database that
+  ran the old one has to be recreated with `docker compose down -v`.
 
 ## Baseline, 16 August 2026
 
