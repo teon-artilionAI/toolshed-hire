@@ -1,0 +1,226 @@
+# Integration checks.
+#
+# These run on every pull request into develop or main. They are the slower
+# checks: migrations and tests against a real PostgreSQL, the coverage gate,
+# dependency audits, the production build of the frontend and the browser
+# tests. A pull request cannot merge until the outcome job at the bottom passes.
+
+name: Integration checks
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+
+concurrency:
+  group: ci-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  # What may merge where. A pull request into main has to come from a release
+  # or hotfix branch. Everything else goes into develop first.
+  branch-policy:
+    name: Branch policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check the source branch is allowed for this target
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          echo "Pull request from ${HEAD_REF} into ${BASE_REF}."
+
+          case "${BASE_REF}" in
+            main)
+              allowed='^(release|hotfix)/.+$'
+              ;;
+            develop)
+              allowed='^((feature|docs|test|hotfix|dependabot)/.+|main)$'
+              ;;
+            *)
+              echo "::error title=Unexpected target::Pull requests target develop or main."
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "${HEAD_REF}" =~ ${allowed} ]]; then
+            echo "::error title=Branch policy::${HEAD_REF} may not merge into ${BASE_REF}. See CONTRIBUTING.md."
+            exit 1
+          fi
+
+  backend:
+    name: Migrations, PostgreSQL tests and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: toolshed
+          POSTGRES_PASSWORD: toolshed_ci_local_only
+          POSTGRES_DB: toolshed_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=toolshed --dbname=toolshed_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ENVIRONMENT: test
+      # Throwaway values for the service container above. They exist only for
+      # the life of this job and open nothing outside it.
+      DATABASE_URL: postgresql+psycopg://toolshed:toolshed_ci_local_only@localhost:5432/toolshed_test
+      JWT_SECRET: ci_only_jwt_secret_value_not_used_outside_this_job
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install the backend and its development dependencies
+        run: pip install --editable ".[dev]"
+
+      # Every migration is applied to an empty database on every run, so a
+      # migration that only works on my machine is caught here.
+      - name: Apply migrations from empty
+        run: alembic upgrade head
+
+      # The whole suite runs here, with and without the database marker, so the
+      # coverage figure is for everything. The floor is set in pyproject.toml.
+      - name: Run all tests with the coverage gate
+        run: pytest tests --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  audits:
+    name: Dependency audits
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      # pip-audit checks everything installed, including pip itself, so pip is
+      # brought up to date first. Otherwise the runner's own pip can fail the
+      # audit for a reason that has nothing to do with this project.
+      - name: Install the backend and its development dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install --editable ".[dev]"
+
+      - name: Audit Python dependencies
+        working-directory: backend
+        run: pip-audit
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # High and critical findings block the merge. Lower ones are reported.
+      - name: Audit Node dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  frontend:
+    name: Frontend build, browser and accessibility tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the production bundle
+        run: npm run build
+
+      - name: Report bundle size
+        run: du -sh dist && ls -lh dist/assets
+
+      - name: Install the browser for the tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser and accessibility tests
+        run: npm run test:e2e
+
+      - name: Keep the browser test report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The single required check for a pull request. See the note on the matching
+  # job in ci-fast.yml.
+  outcome:
+    name: Integration outcome
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: always()
+    needs: [branch-policy, backend, audits, frontend]
+    steps:
+      - name: Fail unless every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "::error title=Integration checks failed::At least one job did not succeed."
+              exit 1
+            fi
+          done
