@@ -35,6 +35,18 @@ logger = logging.getLogger("alembic.baseline")
 # charge points at the report behind it. Dropped in reverse.
 TABLES: Final[tuple[str, ...]] = ("rental", "rental_item", "damage_report", "charge")
 
+# Rental and damage report references are drawn from sequences, the same way
+# reservation references are. The worked example in the design document is
+# rental TSH-H-26-000098, so the rental sequence starts at the next number.
+RENTAL_REFERENCE_SEQUENCE: Final[str] = "rental_reference_seq"
+RENTAL_REFERENCE_SEQUENCE_START: Final[int] = 99
+DAMAGE_REPORT_REFERENCE_SEQUENCE: Final[str] = "damage_report_reference_seq"
+DAMAGE_REPORT_REFERENCE_SEQUENCE_START: Final[int] = 1
+REFERENCE_SEQUENCES: Final[tuple[tuple[str, int], ...]] = (
+    (RENTAL_REFERENCE_SEQUENCE, RENTAL_REFERENCE_SEQUENCE_START),
+    (DAMAGE_REPORT_REFERENCE_SEQUENCE, DAMAGE_REPORT_REFERENCE_SEQUENCE_START),
+)
+
 DEPOSIT_CHARGE_TYPES: Final[str] = "'DEPOSIT_HOLD', 'DEPOSIT_RELEASE', 'DEPOSIT_FORFEIT'"
 
 
@@ -44,11 +56,15 @@ def create() -> None:
     _create_rental_item()
     _create_damage_report()
     _create_charge()
+    for name, start in REFERENCE_SEQUENCES:
+        op.execute(f"CREATE SEQUENCE {name} START {start}")
     logger.info("Created hire and money tables: %s", ", ".join(TABLES))
 
 
 def drop() -> None:
-    """Drop the hire and money tables, children first."""
+    """Drop the reference sequences and the hire and money tables, children first."""
+    for name, _start in REFERENCE_SEQUENCES:
+        op.execute(f"DROP SEQUENCE IF EXISTS {name}")
     for table in reversed(TABLES):
         op.drop_table(table)
     logger.info("Dropped hire and money tables: %s", ", ".join(reversed(TABLES)))
