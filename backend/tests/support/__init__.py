@@ -22,4 +22,10 @@ of work, so a use case can be tested with no database behind it.
 `catalogue` gives the public read side a visitor's client and a few builders,
 and `statements` counts what an engine is asked to run, for the tests that
 prove a query does not loop.
+
+`memory_identity` extends the in memory unit of work with accounts, refresh
+sessions and throttle counters, and holds the two fakes that stand in for
+bcrypt and the token signer. `identity_desk` wires the three session use cases
+over it. `sessions` gives the session routes a client on a clock that stands
+still, and reads and presents the refresh cookie.
 """

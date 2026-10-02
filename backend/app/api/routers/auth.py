@@ -1,113 +1,162 @@
-"""Sign in endpoint.
+"""The three session endpoints, which are sign in, refresh and sign out.
 
-Public by declaration, because a caller cannot present a token before they have
-one. Everything else about it is deliberately conservative.
+`POST /api/auth/login` is public by declaration, because a caller cannot
+present a token before they have one. It answers a wrong password, an unknown
+address, a locked account and a deactivated account with the same 401, and it
+answers a caller who has tried too often with a 429 and a `Retry-After`.
 
-A wrong email and a wrong password return the same message, so the endpoint
-cannot be used to enumerate which addresses hold accounts. The password
-comparison runs even when no account was found, so the response time does not
-disclose the answer either.
+`POST /api/auth/refresh` and `POST /api/auth/logout` take no body. They are
+authenticated by the refresh cookie alone, so both check the `Origin` of the
+request before anything else.
+
+The access token is returned in the response body and never set as a cookie.
+The refresh token is set as a cookie and never returned in a body. A refresh
+that is refused clears the cookie on its way out, which the error handler sees
+to, so a browser does not keep presenting a token that no longer works.
+
+The routers do no work of their own beyond the HTTP boundary. Each hands a
+command to a use case that arrives already wired, and shapes what comes back.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 
-from fastapi import APIRouter, status
-from sqlmodel import select
+from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import SessionDependency, branch_code_of
-from app.api.schemas import SignInRequest, TokenResponse, UserResponse, wire_role
-from app.domain.errors import AuthenticationFailure, InactiveAccount
-from app.infrastructure.models import UserAccount
-from app.infrastructure.security import create_access_token, hash_password, verify_password
+from app.api.deps import public_access
+from app.api.identity_deps import (
+    ClientDetailsDependency,
+    PresentedRefreshToken,
+    RefreshCookieDependency,
+    RefreshSession,
+    SignIn,
+    SignOut,
+    never_store,
+    refresh_cookie_access,
+)
+from app.api.schemas import LoginRequest, TokenResponse, UserResponse, wire_role
+from app.application.identity.refresh_session import RefreshSessionCommand
+from app.application.identity.sessions import SessionGrant
+from app.application.identity.sign_in import SignInCommand
+from app.application.identity.sign_out import SignOutCommand
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(never_store)])
 
-# A bcrypt hash of an unusable password, compared against when no account
-# matched so that the failure path costs the same as the success path.
-_TIMING_EQUALISER_HASH = hash_password("not-a-real-password-timing-equaliser")
-INVALID_CREDENTIALS_MESSAGE = (
-    "Sign in failed. The email address or the password is wrong. "
-    "No further detail is given deliberately."
-)
+INVALID_CREDENTIALS_RESPONSE: dict[str, str] = {
+    "description": "The sign in was refused. The body is the same whatever the reason."
+}
+TOO_MANY_ATTEMPTS_RESPONSE: dict[str, str] = {
+    "description": "Too many attempts. `Retry-After` carries the wait in seconds."
+}
+SESSION_EXPIRED_RESPONSE: dict[str, str] = {
+    "description": "The refresh cookie is missing, unknown, expired, revoked or already used."
+}
+ORIGIN_REFUSED_RESPONSE: dict[str, str] = {
+    "description": "The request named an origin that is not one of the configured ones."
+}
 
 
 @router.post(
-    "/sign-in",
+    "/login",
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
-    summary="Exchange credentials for an access token",
+    summary="Exchange credentials for an access token and a refresh cookie",
+    dependencies=[Depends(public_access)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: INVALID_CREDENTIALS_RESPONSE,
+        status.HTTP_429_TOO_MANY_REQUESTS: TOO_MANY_ATTEMPTS_RESPONSE,
+    },
 )
-def post_sign_in(payload: SignInRequest, session: SessionDependency) -> TokenResponse:
-    """Verify credentials and issue an access token.
-
-    Args:
-        payload: The email address and password as typed.
-        session: The request scoped database session.
-
-    Returns:
-        The access token, its lifetime and the account it belongs to.
+def post_login(
+    payload: LoginRequest,
+    response: Response,
+    use_case: SignIn,
+    client: ClientDetailsDependency,
+    cookie: RefreshCookieDependency,
+) -> TokenResponse:
+    """Verify credentials, open a session and issue both tokens.
 
     Raises:
-        AuthenticationFailure: If no account matches or the password is wrong.
-        InactiveAccount: If the credentials are right but the account is
-            deactivated. Reported separately from a wrong password because the
-            holder needs to know to contact an administrator.
+        InvalidCredentials: If the sign in was refused. Mapped to HTTP 401.
+        TooManyAttempts: If the caller is throttled. Mapped to HTTP 429.
 
     """
-    email = payload.email.strip().lower()
-    logger.info("auth.sign_in_started", extra={"email": email})
-
-    statement = select(UserAccount).where(UserAccount.email == email)
-    account = session.exec(statement).first()
-
-    stored_hash = account.password_hash if account else _TIMING_EQUALISER_HASH
-    password_matches = verify_password(payload.password, stored_hash)
-
-    if account is None or not password_matches:
-        logger.warning(
-            "auth.sign_in_rejected",
-            extra={
-                "email": email,
-                "reason": "unknown-account" if account is None else "bad-password",
-            },
-        )
-        raise AuthenticationFailure(INVALID_CREDENTIALS_MESSAGE, {"reason": "invalid-credentials"})
-
-    if not account.is_active:
-        logger.warning(
-            "auth.sign_in_rejected_inactive",
-            extra={"email": email, "user_id": str(account.id)},
-        )
-        raise InactiveAccount(
-            f"Account {email} is deactivated and cannot sign in. "
-            "An administrator can reactivate it.",
-            {"reason": "account-deactivated"},
-        )
-
-    token, expires_in = create_access_token(account.id)
-    account.last_login_at = datetime.now(UTC)
-    session.add(account)
-    session.commit()
-    session.refresh(account)
-
-    logger.info(
-        "auth.sign_in_succeeded",
-        extra={"user_id": str(account.id), "role": account.role.value, "expires_in": expires_in},
+    grant = use_case.execute(
+        SignInCommand(email=payload.email, password=payload.password, client=client)
     )
+    cookie.set_on(response, grant.refresh_token, grant.refresh_max_age_seconds)
+    return _token_response(grant)
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Exchange the refresh cookie for a new access token and a new cookie",
+    dependencies=[Depends(refresh_cookie_access)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: SESSION_EXPIRED_RESPONSE,
+        status.HTTP_403_FORBIDDEN: ORIGIN_REFUSED_RESPONSE,
+    },
+)
+def post_refresh(
+    response: Response,
+    use_case: RefreshSession,
+    presented_token: PresentedRefreshToken,
+    client: ClientDetailsDependency,
+    cookie: RefreshCookieDependency,
+) -> TokenResponse:
+    """Rotate the refresh token and issue a new access token.
+
+    Raises:
+        SessionExpired: If the cookie is missing or no longer good. Mapped to
+            HTTP 401, with the cookie cleared.
+
+    """
+    grant = use_case.execute(
+        RefreshSessionCommand(presented_token=presented_token, client=client)
+    )
+    cookie.set_on(response, grant.refresh_token, grant.refresh_max_age_seconds)
+    return _token_response(grant)
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke the session of the refresh cookie and clear the cookie",
+    dependencies=[Depends(refresh_cookie_access)],
+    responses={status.HTTP_403_FORBIDDEN: ORIGIN_REFUSED_RESPONSE},
+)
+def post_logout(
+    response: Response,
+    use_case: SignOut,
+    presented_token: PresentedRefreshToken,
+    cookie: RefreshCookieDependency,
+) -> None:
+    """Revoke the session the cookie names, if any, and clear the cookie.
+
+    The answer is 204 whether or not there was a cookie and whether or not it
+    named a live session.
+    """
+    use_case.execute(SignOutCommand(presented_token=presented_token))
+    cookie.clear_on(response)
+
+
+def _token_response(grant: SessionGrant) -> TokenResponse:
+    """Shape a session grant as the body of a sign in or a refresh."""
+    account = grant.account
     return TokenResponse(
-        access_token=token,
-        expires_in=expires_in,
+        access_token=grant.access_token,
+        expires_in=grant.expires_in,
         user=UserResponse(
             id=account.id,
-            name=account.full_name,
             email=account.email,
+            full_name=account.full_name,
             role=wire_role(account.role),
-            branch_code=branch_code_of(session, account),
-            active=account.is_active,
+            branch_code=account.branch_code,
+            email_verified=account.email_verified,
         ),
     )

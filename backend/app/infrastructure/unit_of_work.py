@@ -26,14 +26,22 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.ports import ProductModelRepository
-from app.application.identity.ports import BranchRepository, CustomerRepository
+from app.application.identity.ports import (
+    AccountRepository,
+    BranchRepository,
+    CustomerRepository,
+    SessionRepository,
+)
 from app.application.notification.ports import NotificationOutbox
+from app.application.throttle import RateLimitStore
 from app.infrastructure.audit import SqlAuditLog
 from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
 from app.infrastructure.identity import SqlBranchRepository, SqlCustomerRepository
+from app.infrastructure.identity_accounts import SqlAccountRepository, SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
+from app.infrastructure.rate_limit import SqlRateLimitStore
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,9 @@ class SqlAlchemyUnitOfWork:
     branches: BranchRepository
     product_models: ProductModelRepository
     customers: CustomerRepository
+    accounts: AccountRepository
+    sessions: SessionRepository
+    rate_limits: RateLimitStore
     notifications: NotificationOutbox
     audit: AuditLog
 
@@ -85,6 +96,9 @@ class SqlAlchemyUnitOfWork:
         self.branches = SqlBranchRepository(session)
         self.product_models = SqlProductModelRepository(session)
         self.customers = SqlCustomerRepository(session)
+        self.accounts = SqlAccountRepository(session)
+        self.sessions = SqlSessionRepository(session)
+        self.rate_limits = SqlRateLimitStore(session)
         self.notifications = SqlNotificationOutbox(session)
         self.audit = SqlAuditLog(session)
         logger.debug("unit_of_work.opened", extra={"owns_session": self._close_on_exit})

@@ -41,6 +41,8 @@ EMAIL_MIN_LENGTH = 5
 # which is the one place a password is chosen rather than merely presented.
 MAXIMUM_PASSWORD_LENGTH = 72
 MINIMUM_QUANTITY = 1
+# How the client is told to present the access token.
+BEARER_TOKEN_TYPE = "Bearer"
 MAXIMUM_QUANTITY = 10
 
 
@@ -61,7 +63,7 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
 
-class SignInRequest(BaseModel):
+class LoginRequest(BaseModel):
     """Credentials posted to the sign in endpoint.
 
     The address is checked structurally rather than with a full RFC 5322
@@ -100,21 +102,28 @@ class SignInRequest(BaseModel):
 
 
 class UserResponse(CamelModel):
-    """The signed in account, shaped like the frontend UserAccount type."""
+    """The signed in account, as every session response and `/api/me` return it.
+
+    `branchCode` is null unless the account is counter staff.
+    """
 
     id: UUID
-    name: str
     email: str
+    full_name: str = Field(serialization_alias="fullName")
     role: str
     branch_code: str | None = Field(default=None, serialization_alias="branchCode")
-    active: bool
+    email_verified: bool = Field(serialization_alias="emailVerified")
 
 
 class TokenResponse(CamelModel):
-    """The access token and the account it belongs to."""
+    """The access token and the account it belongs to.
+
+    Signing in and refreshing both return this. The refresh token is not in
+    it. That travels in a cookie the page cannot read.
+    """
 
     access_token: str = Field(serialization_alias="accessToken")
-    token_type: str = Field(default="bearer", serialization_alias="tokenType")
+    token_type: str = Field(default=BEARER_TOKEN_TYPE, serialization_alias="tokenType")
     expires_in: int = Field(serialization_alias="expiresIn")
     user: UserResponse
 

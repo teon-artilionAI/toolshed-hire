@@ -20,8 +20,14 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.ports import ProductModelRepository
-from app.application.identity.ports import BranchRepository, CustomerRepository
+from app.application.identity.ports import (
+    AccountRepository,
+    BranchRepository,
+    CustomerRepository,
+    SessionRepository,
+)
 from app.application.notification.ports import NotificationOutbox
+from app.application.throttle import RateLimitStore
 
 
 class UnitOfWork(Protocol):
@@ -55,6 +61,21 @@ class UnitOfWork(Protocol):
     @property
     def customers(self) -> CustomerRepository:
         """Return the customer repository of this transaction."""
+        ...
+
+    @property
+    def accounts(self) -> AccountRepository:
+        """Return the account repository of this transaction."""
+        ...
+
+    @property
+    def sessions(self) -> SessionRepository:
+        """Return the refresh session repository of this transaction."""
+        ...
+
+    @property
+    def rate_limits(self) -> RateLimitStore:
+        """Return the throttle counters of this transaction."""
         ...
 
     @property

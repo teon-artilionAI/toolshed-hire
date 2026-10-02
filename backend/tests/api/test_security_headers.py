@@ -39,7 +39,7 @@ from tests.support.tokens import authorization_header, mint_access_token
 
 HEALTH_PATH: Final[str] = "/api/health"
 ME_PATH: Final[str] = "/api/me"
-SIGN_IN_PATH: Final[str] = "/api/auth/sign-in"
+SIGN_IN_PATH: Final[str] = "/api/auth/login"
 UNKNOWN_PATH: Final[str] = "/api/no-such-endpoint"
 RESERVATION_PATH: Final[str] = f"{PROBE_PREFIX}/reservations/RES-000123"
 FAULT_PATH: Final[str] = f"{PROBE_PREFIX}/faults/F-1"

@@ -7,15 +7,17 @@ Four layers, each building on the one before it.
 3. `get_active_user` refuses a deactivated account.
 4. `require_roles` refuses an account whose role is not in the allowed set.
 
-The role is read from the database row on every request, never from a token
-claim. An access token minted before a demotion therefore stops granting the
-old permissions the moment the row changes, rather than at expiry.
+The token carries the role and the branch as claims, and this chain does not
+rely on them. It reads the role from the database row on every request, so an
+access token minted before a demotion stops granting the old permissions the
+moment the row changes and not fifteen minutes later. An action that must not
+run on a stale row even within one request uses `require_fresh_roles` from
+`app/api/identity_deps.py`.
 
 Every endpoint must depend on one of the role dependencies, or on
-`public_access` when it admits a caller with no account. An endpoint with no
-declared policy is a defect (BR-41). Nothing enforces that yet. No test walks
-the route table to check it, so today the rule holds because I read each router
-before I publish it. A later change adds that test with the authorisation model.
+`public_access` when it admits a caller with no account (BR-41). Each of them
+is registered as a policy in `app/api/access_policy.py`, and the application
+refuses to start while any route depends on none of them.
 
 The second layer also records the role of the account it loaded against the
 current request. The access log reads it from there, which is how one line per
@@ -39,6 +41,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlmodel import Session
 
+from app.api.access_policy import PUBLIC_POLICY, declare_policy, role_policy
 from app.application.booking.create_reservation import CreateReservationUseCase
 from app.application.clock import Clock
 from app.application.notification.dispatcher import NotificationDispatcher
@@ -48,8 +51,8 @@ from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, AuthorisationFailure, InactiveAccount
 from app.infrastructure.clock import SystemClock
 from app.infrastructure.database import get_session
-from app.infrastructure.models import Branch, UserAccount
-from app.infrastructure.security import read_subject
+from app.infrastructure.models import UserAccount
+from app.infrastructure.security import read_access_claims
 from app.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from app.request_context import record_actor_role
 
@@ -64,6 +67,14 @@ NOTIFICATION_GATEWAY_STATE_KEY = "notification_gateway"
 _SYSTEM_CLOCK = SystemClock()
 
 SessionDependency = Annotated[Session, Depends(get_session)]
+
+
+def get_clock() -> Clock:
+    """Return the system clock. A test overrides this to hold the time still."""
+    return _SYSTEM_CLOCK
+
+
+ClockDependency = Annotated[Clock, Depends(get_clock)]
 
 
 def get_bearer_token(request: Request) -> str:
@@ -97,7 +108,9 @@ def get_bearer_token(request: Request) -> str:
 TokenDependency = Annotated[str, Depends(get_bearer_token)]
 
 
-def get_authenticated_user(token: TokenDependency, session: SessionDependency) -> UserAccount:
+def get_authenticated_user(
+    token: TokenDependency, session: SessionDependency, clock: ClockDependency
+) -> UserAccount:
     """Verify the token and load the account it identifies.
 
     Raises:
@@ -106,7 +119,7 @@ def get_authenticated_user(token: TokenDependency, session: SessionDependency) -
             answered identically, so a caller cannot probe for valid ids.
 
     """
-    user_id = read_subject(token)
+    user_id = read_access_claims(token, now=clock.now()).subject
     account = session.get(UserAccount, user_id)
     if account is None:
         logger.warning(
@@ -188,6 +201,7 @@ def require_roles(*allowed: UserRole) -> Callable[[UserAccount], UserAccount]:
             )
         return user
 
+    declare_policy(dependency, role_policy(permitted))
     return dependency
 
 
@@ -210,40 +224,13 @@ def public_access() -> None:
     """
 
 
-def branch_code_of(session: Session, user: UserAccount) -> str | None:
-    """Return the branch code of a branch scoped account, or None.
-
-    Counter staff carry a branch. Customers and administrators do not, so the
-    absence of a code is a fact about the role rather than missing data.
-    """
-    if user.branch_id is None:
-        return None
-    branch = session.get(Branch, user.branch_id)
-    if branch is None:
-        logger.error(
-            "auth.branch_missing_for_account",
-            extra={
-                "user_id": str(user.id),
-                "branch_id": str(user.branch_id),
-                "attempted": "resolve branch code for a branch scoped account",
-            },
-        )
-        return None
-    return branch.code
+declare_policy(public_access, PUBLIC_POLICY)
 
 
 # ---------------------------------------------------------------------------
 # The composition root. Each function returns a port, and the body chooses the
 # implementation behind it.
 # ---------------------------------------------------------------------------
-
-
-def get_clock() -> Clock:
-    """Return the system clock. A test overrides this to hold the time still."""
-    return _SYSTEM_CLOCK
-
-
-ClockDependency = Annotated[Clock, Depends(get_clock)]
 
 
 def get_unit_of_work(session: SessionDependency) -> UnitOfWork:

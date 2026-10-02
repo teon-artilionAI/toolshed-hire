@@ -46,8 +46,8 @@ from tests.support.tokens import (
 
 ME_PATH: Final[str] = "/api/me"
 ME_ROUTE_TEMPLATE: Final[str] = "/api/me"
-SIGN_IN_PATH: Final[str] = "/api/auth/sign-in"
-SIGN_IN_ROUTE_TEMPLATE: Final[str] = "/api/auth/sign-in"
+SIGN_IN_PATH: Final[str] = "/api/auth/login"
+SIGN_IN_ROUTE_TEMPLATE: Final[str] = "/api/auth/login"
 HEALTH_PATH: Final[str] = "/api/health"
 HEALTH_ROUTE_TEMPLATE: Final[str] = "/api/health"
 RESERVATION_IDENTIFIER: Final[str] = "RES-000123"

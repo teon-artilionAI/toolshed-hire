@@ -61,9 +61,55 @@ class AuthorisationFailure(DomainError):
 
 
 class InactiveAccount(DomainError):
-    """The account exists and the password matched, but the account is deactivated."""
+    """A token named an account that has since been deactivated."""
 
     code = "inactive-account"
+
+
+class InvalidCredentials(DomainError):
+    """A sign in was refused, and the caller is not told which part was wrong.
+
+    A wrong password, an unknown address, a locked account and a deactivated
+    account all raise this with the same message and no detail, so the four
+    cannot be told apart from outside (BR-46). The reason is written to the
+    log and to the audit trail on the server. The API maps this to HTTP 401.
+    """
+
+    code = "invalid-credentials"
+
+
+class SessionExpired(DomainError):
+    """A refresh token was absent, unknown, expired, revoked or already used.
+
+    The five cases are answered alike, because a caller holding a token that
+    no longer works needs one instruction, which is to sign in again. The API
+    maps this to HTTP 401.
+    """
+
+    code = "session-expired"
+
+
+class TooManyAttempts(DomainError):
+    """A caller exceeded a rate limit and must wait for the window to end.
+
+    The API maps this to HTTP 429 and sends the wait as `Retry-After`.
+    """
+
+    code = "too-many-attempts"
+
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        """Build the refusal with the number of seconds until the window ends."""
+        super().__init__(message, {"retry_after_seconds": retry_after_seconds})
+        self.retry_after_seconds = retry_after_seconds
+
+
+class OriginNotAllowed(DomainError):
+    """A request authenticated by a cookie came from an origin that is not this site.
+
+    The API maps this to HTTP 403.
+    """
+
+    code = "origin-not-allowed"
 
 
 class AllocationConflictError(DomainError):

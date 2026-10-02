@@ -26,6 +26,13 @@ anyone who asks has done an attacker's reconnaissance for them.
 The email gateway is chosen here as well, from the configuration. With no API
 key the application still starts. It logs one warning, and every booking
 confirmation is then recorded as not sent.
+
+The application refuses to start while any route has not declared who may call
+it (BR-41). The route table is walked when the application is built and again
+when it starts serving, so a route mounted after the factory returned is caught
+as well. The refresh cookie and the origins it may be used from are set here
+too, from the configuration, so an application built for production marks the
+cookie `Secure` whatever the process around it is configured as.
 """
 
 from __future__ import annotations
@@ -38,8 +45,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
+from app.api.access_policy import enforce_declared_policies
 from app.api.deps import NOTIFICATION_GATEWAY_STATE_KEY
 from app.api.errors import register_exception_handlers
+from app.api.identity_deps import ALLOWED_ORIGINS_STATE_KEY, normalise_origin
+from app.api.refresh_cookie import REFRESH_COOKIE_STATE_KEY, RefreshCookie
 from app.api.request_middleware import RequestContextMiddleware
 from app.api.routers import api_router
 from app.api.security_headers import SecurityHeadersMiddleware
@@ -70,6 +80,12 @@ OPENAPI_PATH = "/openapi.json"
 # The two documentation pages are HTML that loads a script, which the JSON only
 # content security policy would block. They are answered without it.
 DOCUMENTATION_PAGE_PATHS = frozenset({DOCS_PATH, REDOC_PATH})
+# Every path the framework serves by itself. None of them has a dependency
+# tree to carry a policy, so the route table check is told they are public.
+# They exist in development and test only.
+FRAMEWORK_ROUTE_PATHS = frozenset(
+    {DOCS_PATH, f"{DOCS_PATH}/oauth2-redirect", REDOC_PATH, OPENAPI_PATH}
+)
 
 
 def run_startup_checks() -> None:
@@ -105,7 +121,12 @@ def run_startup_checks() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Run the startup checks once, then dispose the pool on shutdown."""
+    """Run the startup checks once, then dispose the pool on shutdown.
+
+    The route table is checked first and without a database, so a route with
+    no declared policy stops the process before it opens a connection.
+    """
+    enforce_declared_policies(app, framework_paths=FRAMEWORK_ROUTE_PATHS)
     run_startup_checks()
     logger.info(
         "startup.application_ready",
@@ -151,6 +172,13 @@ def create_app(configuration: Settings = settings) -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(api_router)
+    enforce_declared_policies(app, framework_paths=FRAMEWORK_ROUTE_PATHS)
+    setattr(app.state, REFRESH_COOKIE_STATE_KEY, RefreshCookie(secure=not relaxed))
+    setattr(
+        app.state,
+        ALLOWED_ORIGINS_STATE_KEY,
+        frozenset(normalise_origin(origin) for origin in configuration.cors_origins),
+    )
     # Chosen once, here, so a missing API key is reported once at start-up and
     # every request is served by the same gateway.
     setattr(
@@ -170,6 +198,7 @@ def create_app(configuration: Settings = settings) -> FastAPI:
             "environment": configuration.environment.value,
             "api_documentation_served": relaxed,
             "strict_transport_security": not relaxed,
+            "refresh_credential_secure": not relaxed,
             "cors_origins": configuration.cors_origins,
         },
     )
