@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import string
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
@@ -64,6 +65,9 @@ OPENS_AT: Final[time] = time(7, 0)
 CLOSES_AT: Final[time] = time(17, 0)
 # The factories price nothing. A test that cares about a total sets it.
 NO_CHARGE: Final[Decimal] = Decimal("0.00")
+BRANCH_CODE_PREFIX: Final[str] = "B"
+BRANCH_CODE_DIGITS: Final[int] = 3
+BRANCH_CODE_ALPHABET: Final[str] = string.digits + string.ascii_uppercase
 
 _counter: Final[itertools.count[int]] = itertools.count(1)
 _password_hash_cache: dict[str, str] = {}
@@ -72,6 +76,22 @@ _password_hash_cache: dict[str, str] = {}
 def _next_index() -> int:
     """Return a process unique integer, used to keep natural keys distinct."""
     return next(_counter)
+
+
+def _next_branch_code() -> str:
+    """Return a process unique branch code that fits the four character column.
+
+    The index is written in base 36. Three decimal digits ran out at 999, which
+    one full run of the suite now passes, and PostgreSQL refuses a fifth
+    character where SQLite did not notice it. Three base 36 digits carry 46,656
+    values.
+    """
+    index = _next_index()
+    digits = ""
+    for _ in range(BRANCH_CODE_DIGITS):
+        index, remainder = divmod(index, len(BRANCH_CODE_ALPHABET))
+        digits = BRANCH_CODE_ALPHABET[remainder] + digits
+    return f"{BRANCH_CODE_PREFIX}{digits}"
 
 
 def cached_password_hash(plain_password: str = TEST_PASSWORD) -> str:
@@ -111,7 +131,7 @@ class Factory:
 
         """
         branch = Branch(
-            code=code or f"B{_next_index():03d}",
+            code=code or _next_branch_code(),
             name=name,
             street_address="14 Albert Road",
             suburb="Woodstock",

@@ -18,4 +18,8 @@ the request middleware to aim at.
 
 `clock` holds the clock that stands still, and `memory` holds an in memory unit
 of work, so a use case can be tested with no database behind it.
+
+`catalogue` gives the public read side a visitor's client and a few builders,
+and `statements` counts what an engine is asked to run, for the tests that
+prove a query does not loop.
 """

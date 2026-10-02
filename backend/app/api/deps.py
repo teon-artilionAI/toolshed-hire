@@ -11,7 +11,8 @@ The role is read from the database row on every request, never from a token
 claim. An access token minted before a demotion therefore stops granting the
 old permissions the moment the row changes, rather than at expiry.
 
-Every endpoint must depend on one of the role dependencies. An endpoint with no
+Every endpoint must depend on one of the role dependencies, or on
+`public_access` when it admits a caller with no account. An endpoint with no
 declared policy is a defect (BR-41). Nothing enforces that yet. No test walks
 the route table to check it, so today the rule holds because I read each router
 before I publish it. A later change adds that test with the authorisation model.
@@ -25,7 +26,8 @@ ports and imports nothing from the infrastructure layer, so something has to
 choose the implementations, and that happens in the dependencies at the foot of
 this file. A use case reaches a router already holding the SQL unit of work,
 the system clock and the email gateway, and the router never learns which
-classes those are.
+classes those are. The query objects of the public read side are wired the same
+way in `app/api/catalogue_deps.py`.
 """
 
 from __future__ import annotations
@@ -196,6 +198,16 @@ AnyRoleUser = Annotated[
     UserAccount,
     Depends(require_roles(UserRole.CUSTOMER, UserRole.COUNTER_STAFF, UserRole.ADMIN)),
 ]
+
+
+def public_access() -> None:
+    """Declare that an endpoint admits a caller with no account.
+
+    It checks nothing, because there is nothing to check. It exists so that a
+    public endpoint states its policy in its route, the same way a protected
+    one names its roles, and is never public merely because nobody declared
+    anything (BR-41).
+    """
 
 
 def branch_code_of(session: Session, user: UserAccount) -> str | None:
