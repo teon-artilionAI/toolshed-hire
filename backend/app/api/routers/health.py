@@ -1,8 +1,8 @@
 """Health endpoint.
 
 Deliberately public. It is the one endpoint with no role policy, because the
-shallow availability check runs from Cloud Scheduler with no credential. It
-reports what it actually verified rather than a bare "ok": whether the database
+smoke test in each deployment and any uptime check call it with no credential.
+It reports what it actually verified rather than a bare "ok": whether the database
 answered, and whether `btree_gist` is installed, since the exclusion constraint
 that prevents double booking cannot exist without it.
 
