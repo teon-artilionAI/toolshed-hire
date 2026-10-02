@@ -10,8 +10,8 @@
  * you bring it back" means at the counter.
  *
  * Nothing here knows what day it is. Every function that needs today is given
- * it, so a screen on the API passes the real date in branch time, the basket
- * passes the fixture date until it moves over, and a test passes its own.
+ * it, so a screen passes the real date in branch time and a test passes its
+ * own.
  */
 
 import { daysBetween, formatDate } from '../../shared/format'

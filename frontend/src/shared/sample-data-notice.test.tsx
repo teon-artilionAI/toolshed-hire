@@ -14,8 +14,9 @@ import type { ScreenDef } from './navigation'
 import { SAMPLE_DATA_TITLE, SampleDataNotice } from './sample-data-notice'
 
 /** The screens that read from the API today. */
-const LIVE_SCREEN_IDS = ['SC-01', 'SC-02', 'SC-03', 'SC-06', 'DEV-01']
+const LIVE_SCREEN_IDS = ['SC-01', 'SC-02', 'SC-03', 'SC-04', 'SC-06', 'SC-07', 'SC-08', 'DEV-01']
 
+/** Any screen will do. The tests set the flag themselves on a copy of it. */
 function basket(): ScreenDef {
   const found = screenById('SC-04')
   if (!found) throw new Error('The inventory has no SC-04.')

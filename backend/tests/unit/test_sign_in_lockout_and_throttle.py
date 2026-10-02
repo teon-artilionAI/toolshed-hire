@@ -1,8 +1,9 @@
 """The lockout and the two throttles of a sign in, with no database (BR-46, C-17).
 
 Five failures lock an account for fifteen minutes. Ten attempts on one address
-and thirty from one client are all a window allows. The clock stands still
-until a test moves it, so a lock and a window are run out without waiting.
+and thirty from one client are all a window allows, unless the use case is
+handed other limits. The clock stands still until a test moves it, so a lock
+and a window are run out without waiting.
 
 A refusal raises, and what it changed is kept all the same. That is pinned
 here as well, because a lockout that rolled back with its own refusal would
@@ -19,12 +20,14 @@ import pytest
 
 from app.application.identity.sessions import ClientDetails
 from app.application.identity.sign_in import (
+    DEFAULT_LOGIN_RULES,
     LOGIN_ADDRESS_RULE,
     LOGIN_ATTEMPTS_PER_ADDRESS,
     LOGIN_ATTEMPTS_PER_EMAIL,
     LOGIN_EMAIL_RULE,
     LOGIN_FAILED_ACTION,
     LOGIN_WINDOW,
+    LoginThrottleRules,
 )
 from app.domain.account import LOCKOUT_DURATION, MAXIMUM_FAILED_LOGINS, Account
 from app.domain.errors import InvalidCredentials, TooManyAttempts
@@ -32,6 +35,19 @@ from tests.support.identity_desk import CLIENT, UNKNOWN_EMAIL, Desk
 from tests.support.memory_identity import KNOWN_EMAIL, KNOWN_PASSWORD
 
 ONE_SECOND: Final[timedelta] = timedelta(seconds=1)
+# Limits a configuration could hand the use case, one stricter than each
+# default and one looser. The looser pair is what development and test allow.
+STRICTER_EMAIL_LIMIT: Final[int] = 3
+LOOSER_EMAIL_LIMIT: Final[int] = LOGIN_ATTEMPTS_PER_EMAIL + 2
+STRICTER_ADDRESS_LIMIT: Final[int] = 4
+LOOSER_ADDRESS_LIMIT: Final[int] = LOGIN_ATTEMPTS_PER_ADDRESS + 2
+
+
+def desk_with_limits(
+    *, per_email: int = LOGIN_ATTEMPTS_PER_EMAIL, per_address: int = LOGIN_ATTEMPTS_PER_ADDRESS
+) -> Desk:
+    """Return a desk whose sign in use case is handed these two limits."""
+    return Desk(rules=LoginThrottleRules.with_limits(per_email=per_email, per_address=per_address))
 
 
 @pytest.fixture
@@ -148,3 +164,52 @@ class TestTheTwoThrottles:
         keys = "".join(key for key, _window in desk.identity.committed.counters)
         assert KNOWN_EMAIL not in keys
         assert str(CLIENT.address) not in keys
+
+
+class TestTheLimitsTheUseCaseIsHanded:
+    """The use case throttles at the limits it is given. The documented ones are defaults."""
+
+    def test_the_default_rules_are_the_documented_ones(self) -> None:
+        assert (DEFAULT_LOGIN_RULES.email, DEFAULT_LOGIN_RULES.address) == (
+            LOGIN_EMAIL_RULE,
+            LOGIN_ADDRESS_RULE,
+        )
+
+    @pytest.mark.parametrize("limit", [STRICTER_EMAIL_LIMIT, LOOSER_EMAIL_LIMIT])
+    def test_one_address_is_told_to_wait_after_the_limit_it_was_handed(self, limit: int) -> None:
+        desk = desk_with_limits(per_email=limit)
+        for _ in range(limit):
+            desk.sign_in_refused(email=UNKNOWN_EMAIL)
+        with pytest.raises(TooManyAttempts):
+            desk.sign_in(email=UNKNOWN_EMAIL)
+
+    @pytest.mark.parametrize("limit", [STRICTER_ADDRESS_LIMIT, LOOSER_ADDRESS_LIMIT])
+    def test_one_client_is_told_to_wait_after_the_limit_it_was_handed(self, limit: int) -> None:
+        desk = desk_with_limits(per_address=limit)
+        for number in range(limit):
+            desk.sign_in_refused(email=f"guess{number}@example.co.za")
+        with pytest.raises(TooManyAttempts):
+            desk.sign_in(email="one.more@example.co.za")
+
+    def test_other_limits_keep_the_name_and_the_window_of_each_rule(self) -> None:
+        # The name of a rule is part of the key of its counters, so a window
+        # that is already running goes on being counted under a new limit.
+        rules = LoginThrottleRules.with_limits(
+            per_email=STRICTER_EMAIL_LIMIT, per_address=STRICTER_ADDRESS_LIMIT
+        )
+        assert (rules.email.limit, rules.address.limit) == (
+            STRICTER_EMAIL_LIMIT,
+            STRICTER_ADDRESS_LIMIT,
+        )
+        assert (rules.email.name, rules.address.name) == (
+            LOGIN_EMAIL_RULE.name,
+            LOGIN_ADDRESS_RULE.name,
+        )
+        assert rules.email.window == rules.address.window == LOGIN_WINDOW
+
+    @pytest.mark.parametrize(("per_email", "per_address"), [(0, 30), (10, 0), (-1, 30)])
+    def test_a_limit_below_one_cannot_be_handed_over(
+        self, per_email: int, per_address: int
+    ) -> None:
+        with pytest.raises(ValueError, match="a limit of at least 1"):
+            LoginThrottleRules.with_limits(per_email=per_email, per_address=per_address)

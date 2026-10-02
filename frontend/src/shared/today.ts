@@ -36,3 +36,51 @@ export function todayInBranchTime(now: Date = new Date()): string {
   const parts = new Map(BRANCH_DATE_PARTS.formatToParts(now).map((part) => [part.type, part.value]))
   return `${parts.get('year')}-${parts.get('month')}-${parts.get('day')}`
 }
+
+const BRANCH_CLOCK = new Intl.DateTimeFormat('en-ZA', {
+  timeZone: BRANCH_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+const BRANCH_DAY = new Intl.DateTimeFormat('en-ZA', {
+  timeZone: BRANCH_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+
+function instantOf(timestamp: string): Date {
+  const instant = new Date(timestamp)
+  if (Number.isNaN(instant.getTime())) {
+    throw new RangeError(`Cannot read "${timestamp}" as an instant. Expected ISO 8601 with an offset.`)
+  }
+  return instant
+}
+
+/**
+ * The time of day at the branches for an instant the API sent, as `HH:MM`.
+ *
+ * A hold runs out at a moment, and the branch and the customer have to mean
+ * the same one, so it is always written in branch time.
+ *
+ * @param timestamp An ISO 8601 instant with an offset.
+ * @throws RangeError when the string is not an instant.
+ */
+export function branchClockTime(timestamp: string): string {
+  const parts = new Map(
+    BRANCH_CLOCK.formatToParts(instantOf(timestamp)).map((part) => [part.type, part.value]),
+  )
+  return `${parts.get('hour')}:${parts.get('minute')}`
+}
+
+/**
+ * The day and the time of day at the branches for an instant the API sent,
+ * for example "2 Oct 2026 at 15:30".
+ *
+ * @throws RangeError when the string is not an instant.
+ */
+export function branchDateTime(timestamp: string): string {
+  return `${BRANCH_DAY.format(instantOf(timestamp))} at ${branchClockTime(timestamp)}`
+}

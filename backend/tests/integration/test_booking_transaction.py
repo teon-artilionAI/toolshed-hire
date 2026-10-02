@@ -1,18 +1,20 @@
-"""One booking, one transaction, proved from a second connection.
+"""Each move of a reservation is one transaction, proved from a second connection.
 
-A booking writes a reservation, a line, an allocation for every unit, an audit
-event and a queued notification. BR-09 and BR-49 say those commit together or
-not at all.
+A draft writes a reservation, its lines and an audit event. A hold writes an
+allocation for every unit and an audit event. A confirmation writes an audit
+event and a queued notification. BR-09 and BR-49 say the rows of one move
+commit together or not at all. A cancellation is held to the same promise in
+test_cancellation_transaction.py.
 
 An in memory test can show that the code asks for that. Only a real database
 can show that it happens, because the claim is about what another connection
-can see. So the use case here runs in a unit of work that opens its own
-connection, and every assertion is made through a different one. A row that
+can see. So the use cases here run in units of work that open their own
+connections, and every assertion is made through a different one. A row that
 connection can read has been committed. A row it cannot read never was.
 
 The audit failure in this file is a genuine one. The audit log is handed an
-action name longer than the column, PostgreSQL refuses the insert, and the
-booking that was already written in the same transaction goes with it.
+action name longer than the column, PostgreSQL refuses the insert, and whatever
+the move had already written in the same transaction goes with it.
 
 What happens to the notification after the commit is in
 test_notification_outbox.py.
@@ -21,7 +23,7 @@ test_notification_outbox.py.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from ipaddress import ip_address
 from typing import Final, Self
 from uuid import UUID
@@ -29,12 +31,11 @@ from uuid import UUID
 import pytest
 from sqlalchemy import Engine, func
 from sqlalchemy.exc import DataError
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.domain.audit import AuditEvent as DomainAuditEvent
-from app.domain.enums import UserRole
-from app.domain.identity import Actor
-from app.domain.period import BookingPeriod
+from app.domain.enums import ReservationStatus, UserRole
+from app.domain.errors import AllocationConflictError
 from app.infrastructure.audit import SqlAuditLog
 from app.infrastructure.models import (
     AssetAllocation,
@@ -48,28 +49,30 @@ from app.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from app.request_context import RequestContext, bind_request_context, release_request_context
 from tests.support.booking import (
     CommitFailed,
+    SqlDesk,
     UnitOfWorkThatCannotCommit,
-    command_for,
+    actor_of,
+    customer_of,
+    draft_command,
+    move_on,
     opening,
-    sql_use_case,
+    sql_desk,
 )
+from tests.support.booking_api import BookingWorld, build_booking_world
 from tests.support.clock import FixedClock
 from tests.support.factories import Factory
-from tests.support.pg import count_active_allocations
-from tests.support.scenarios import AllocationScenario, build_allocation_scenario
 
 pytestmark = pytest.mark.postgres
 
-FIRST_HIRE: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 9), date(2026, 3, 12))
 REQUEST_ID: Final[str] = "6f1c2b9e-3d4a-4c5b-8e7f-0a1b2c3d4e5f"
 # From the block reserved for documentation, so it is nobody's real address.
 CLIENT_ADDRESS: Final[str] = "203.0.113.9"
 ACTION_COLUMN_WIDTH: Final[int] = 60
 OCCURRED_AT: Final[datetime] = datetime(2026, 3, 2, 8, 0, tzinfo=UTC)
-# The tables a booking writes to, with the rows the scenario itself puts in each.
-ROWS_BEFORE_ANY_BOOKING: Final[dict[str, int]] = {
-    "reservation": 1,
-    "reservation_line": 1,
+UNITS: Final[int] = 3
+NOTHING: Final[dict[str, int]] = {
+    "reservation": 0,
+    "reservation_line": 0,
     "asset_allocation": 0,
     "audit_event": 0,
     "notification": 0,
@@ -95,15 +98,26 @@ class UnitOfWorkWhoseAuditInsertIsRefused(SqlAlchemyUnitOfWork):
 
 
 @pytest.fixture
-def scenario(postgres_session: Session, postgres_factory: Factory) -> AllocationScenario:
-    """Return a committed branch, product model, unit and customer."""
-    built = build_allocation_scenario(postgres_factory, FIRST_HIRE)
+def world(postgres_session: Session, postgres_factory: Factory) -> BookingWorld:
+    """Return a committed branch, a model with three units and a customer."""
+    built = build_booking_world(postgres_factory, asset_count=UNITS)
     postgres_session.commit()
     return built
 
 
+@pytest.fixture
+def desk(postgres_engine: Engine) -> SqlDesk:
+    """Return the booking use cases, each on a connection of its own."""
+    return sql_desk(opening(postgres_engine), FakeEmailGateway(), FixedClock())
+
+
+def desk_on(engine: Engine, unit_of_work: type[SqlAlchemyUnitOfWork]) -> SqlDesk:
+    """Return the booking use cases over a unit of work that fails in a chosen way."""
+    return sql_desk(opening(engine, unit_of_work), FakeEmailGateway(), FixedClock())
+
+
 def row_counts(session: Session) -> dict[str, int]:
-    """Return how many committed rows each table a booking writes to holds."""
+    """Return how many committed rows each table a move writes to holds."""
     session.rollback()
     tables = (Reservation, ReservationLine, AssetAllocation, AuditEvent, Notification)
     return {
@@ -112,123 +126,163 @@ def row_counts(session: Session) -> dict[str, int]:
     }
 
 
-class TestABookingCommitsEverythingTogether:
-    """The reservation, its line, its allocation, its audit event and its notification."""
+def active_allocations(session: Session) -> list[AssetAllocation]:
+    """Return every allocation another connection can see that still holds a unit."""
+    session.rollback()
+    return list(
+        session.exec(select(AssetAllocation).where(col(AssetAllocation.released_at).is_(None)))
+    )
 
-    def test_one_booking_adds_one_row_to_each_table_it_writes(
-        self, postgres_engine: Engine, postgres_session: Session, scenario: AllocationScenario
+
+class TestEachMoveCommitsItsRowsTogether:
+    """What each move adds, counted from a connection that did not write it."""
+
+    def test_a_draft_adds_a_reservation_a_line_and_an_event_and_holds_nothing(
+        self, postgres_session: Session, world: BookingWorld, desk: SqlDesk
     ) -> None:
-        use_case = sql_use_case(opening(postgres_engine), FakeEmailGateway(), FixedClock())
-        use_case.execute(command_for(scenario, FIRST_HIRE))
+        desk.drafted(draft_command(world, quantity=UNITS))
         assert row_counts(postgres_session) == {
-            table: count + 1 for table, count in ROWS_BEFORE_ANY_BOOKING.items()
+            **NOTHING,
+            "reservation": 1,
+            "reservation_line": 1,
+            "audit_event": 1,
         }
+
+    def test_a_hold_of_three_units_allocates_three_specific_assets_in_one_transaction(
+        self, postgres_session: Session, world: BookingWorld, desk: SqlDesk
+    ) -> None:
+        """US-12. One line, three named units, one commit."""
+        asset_ids = {asset.id for asset in world.assets}
+        held = desk.held(draft_command(world, quantity=UNITS))
+        allocations = active_allocations(postgres_session)
+        assert {allocation.asset_id for allocation in allocations} == asset_ids
+        assert len({allocation.reservation_line_id for allocation in allocations}) == 1
+        assert held.detail.lines[0].allocated_count == UNITS
+        assert row_counts(postgres_session)["audit_event"] == 2
+
+    def test_with_only_two_units_free_nothing_is_allocated(
+        self, postgres_session: Session, world: BookingWorld, desk: SqlDesk
+    ) -> None:
+        """US-12. Two of three is none of three (BR-09)."""
+        customer = customer_of(world)
+        desk.held(draft_command(world, quantity=1))
+        wanted = desk.drafted(draft_command(world, quantity=UNITS))
+        with pytest.raises(AllocationConflictError):
+            desk.hold.execute(move_on(wanted, customer))
+        assert len(active_allocations(postgres_session)) == 1
+        stored = postgres_session.get(Reservation, wanted.detail.id)
+        assert stored is not None
+        assert stored.status is ReservationStatus.DRAFT
+
+    def test_a_confirmation_adds_an_event_and_exactly_one_notification(
+        self, postgres_session: Session, world: BookingWorld, desk: SqlDesk
+    ) -> None:
+        customer = customer_of(world)
+        held = desk.held(draft_command(world))
+        assert row_counts(postgres_session)["notification"] == 0
+        desk.confirm.execute(move_on(held, customer))
+        counts = row_counts(postgres_session)
+        assert counts["notification"] == 1
+        assert counts["audit_event"] == 3
 
     def test_the_audit_event_is_stored_with_the_actor_the_role_the_request_and_the_address(
         self,
-        postgres_engine: Engine,
         postgres_session: Session,
         postgres_factory: Factory,
-        scenario: AllocationScenario,
+        world: BookingWorld,
+        desk: SqlDesk,
     ) -> None:
-        assistant = postgres_factory.user(role=UserRole.COUNTER_STAFF, branch=scenario.branch)
+        assistant = postgres_factory.user(role=UserRole.COUNTER_STAFF, branch=world.branch)
         postgres_session.commit()
-        actor = Actor(user_id=assistant.id, role=UserRole.COUNTER_STAFF)
-        use_case = sql_use_case(opening(postgres_engine), FakeEmailGateway(), FixedClock())
+        actor = actor_of(assistant)
+        tag = world.assets[0].asset_tag
+        draft = desk.drafted(
+            draft_command(world, actor=actor, customer_profile_id=world.profile.id)
+        )
 
         token = bind_request_context(
             RequestContext(request_id=REQUEST_ID, client_address=ip_address(CLIENT_ADDRESS))
         )
         try:
-            view = use_case.execute(command_for(scenario, FIRST_HIRE, actor=actor))
+            held = desk.hold.execute(move_on(draft, actor))
         finally:
             release_request_context(token)
 
-        (event,) = postgres_session.exec(select(AuditEvent)).all()
+        postgres_session.rollback()
+        event = postgres_session.exec(select(AuditEvent).order_by(col(AuditEvent.id))).all()[-1]
         assert event.action == "reservation.held"
         assert event.entity_type == "reservation"
-        assert event.entity_id == view.reservation_id
-        assert event.actor_user_id == assistant.id
+        assert event.entity_id == held.detail.id
+        assert event.actor_user_id == actor.user_id
         assert event.actor_role is UserRole.COUNTER_STAFF
         assert event.request_id == UUID(REQUEST_ID)
         assert event.ip_address == ip_address(CLIENT_ADDRESS)
-        assert event.before_state is None
+        assert event.before_state == {
+            "status": "DRAFT",
+            "hold_expires_at": None,
+            "active_allocation_count": 0,
+        }
         assert event.after_state == {
+            "reference": held.detail.reference,
             "status": "HELD",
-            "reference": view.reference,
-            "customer_profile_id": str(scenario.profile.id),
-            "branch_id": str(scenario.branch.id),
-            "start_date": "2026-03-09",
-            "end_date": "2026-03-12",
-            "product_model_id": str(scenario.product_model.id),
-            "quantity": 1,
-            "asset_tags": [scenario.asset.asset_tag],
+            "hold_expires_at": "2026-03-02T08:30:00+00:00",
+            "active_allocation_count": 1,
+            "asset_tags": [tag],
         }
 
     def test_the_event_is_timed_by_the_clock_the_use_case_was_given(
-        self, postgres_engine: Engine, postgres_session: Session, scenario: AllocationScenario
+        self, postgres_engine: Engine, postgres_session: Session, world: BookingWorld
     ) -> None:
         clock = FixedClock(OCCURRED_AT)
-        use_case = sql_use_case(opening(postgres_engine), FakeEmailGateway(), clock)
-        use_case.execute(command_for(scenario, FIRST_HIRE))
+        sql_desk(opening(postgres_engine), FakeEmailGateway(), clock).drafted(
+            draft_command(world)
+        )
         (event,) = postgres_session.exec(select(AuditEvent)).all()
         assert event.occurred_at == OCCURRED_AT
 
 
-class TestABookingThatFailsLeavesNothingBehind:
+class TestAMoveThatFailsLeavesNothingBehind:
     """Whatever was written before the failure is rolled back with it."""
 
-    def test_an_audit_insert_the_database_refuses_rolls_the_whole_booking_back(
-        self, postgres_engine: Engine, postgres_session: Session, scenario: AllocationScenario
+    def test_a_refused_audit_insert_rolls_the_whole_hold_back(
+        self, postgres_engine: Engine, postgres_session: Session, world: BookingWorld, desk: SqlDesk
     ) -> None:
-        use_case = sql_use_case(
-            opening(postgres_engine, UnitOfWorkWhoseAuditInsertIsRefused),
-            FakeEmailGateway(),
-            FixedClock(),
-        )
+        customer = customer_of(world)
+        draft = desk.drafted(draft_command(world, quantity=UNITS))
+        before = row_counts(postgres_session)
+        broken = desk_on(postgres_engine, UnitOfWorkWhoseAuditInsertIsRefused)
         with pytest.raises(DataError):
-            use_case.execute(command_for(scenario, FIRST_HIRE))
-        assert row_counts(postgres_session) == ROWS_BEFORE_ANY_BOOKING
+            broken.hold.execute(move_on(draft, customer))
+        assert row_counts(postgres_session) == before
+        assert active_allocations(postgres_session) == []
 
-    def test_a_refused_audit_insert_sends_no_email(
-        self, postgres_engine: Engine, scenario: AllocationScenario
+    def test_the_units_are_free_again_once_the_failed_hold_has_rolled_back(
+        self, postgres_engine: Engine, postgres_session: Session, world: BookingWorld, desk: SqlDesk
     ) -> None:
+        """The row locks and the allocations both go with the transaction."""
+        customer = customer_of(world)
+        draft = desk.drafted(draft_command(world, quantity=UNITS))
+        broken = desk_on(postgres_engine, UnitOfWorkWhoseAuditInsertIsRefused)
+        with pytest.raises(DataError):
+            broken.hold.execute(move_on(draft, customer))
+        held = desk.hold.execute(move_on(draft, customer))
+        assert held.detail.lines[0].allocated_count == UNITS
+        assert len(active_allocations(postgres_session)) == UNITS
+
+    def test_a_confirmation_that_cannot_commit_keeps_neither_it_nor_its_notification(
+        self, postgres_engine: Engine, postgres_session: Session, world: BookingWorld, desk: SqlDesk
+    ) -> None:
+        """The outbox row is in the confirmation's transaction, so it shares its fate."""
+        customer = customer_of(world)
+        held = desk.held(draft_command(world))
         gateway = FakeEmailGateway()
-        use_case = sql_use_case(
-            opening(postgres_engine, UnitOfWorkWhoseAuditInsertIsRefused),
-            gateway,
-            FixedClock(),
-        )
-        with pytest.raises(DataError):
-            use_case.execute(command_for(scenario, FIRST_HIRE))
-        assert gateway.sent == []
-
-    def test_the_unit_is_free_again_once_the_failed_booking_has_rolled_back(
-        self, postgres_engine: Engine, postgres_session: Session, scenario: AllocationScenario
-    ) -> None:
-        """The row lock and the allocation both go with the transaction."""
-        broken = sql_use_case(
-            opening(postgres_engine, UnitOfWorkWhoseAuditInsertIsRefused),
-            FakeEmailGateway(),
-            FixedClock(),
-        )
-        with pytest.raises(DataError):
-            broken.execute(command_for(scenario, FIRST_HIRE))
-        assert count_active_allocations(postgres_session, scenario.asset.id) == 0
-
-        working = sql_use_case(opening(postgres_engine), FakeEmailGateway(), FixedClock())
-        view = working.execute(command_for(scenario, FIRST_HIRE))
-        assert [item.asset_tag for item in view.allocated] == [scenario.asset.asset_tag]
-
-    def test_a_failure_after_the_notification_was_queued_keeps_neither_it_nor_the_booking(
-        self, postgres_engine: Engine, postgres_session: Session, scenario: AllocationScenario
-    ) -> None:
-        """The outbox row is in the booking's transaction, so it shares the booking's fate."""
-        gateway = FakeEmailGateway()
-        use_case = sql_use_case(
+        broken = sql_desk(
             opening(postgres_engine, UnitOfWorkThatCannotCommit), gateway, FixedClock()
         )
         with pytest.raises(CommitFailed):
-            use_case.execute(command_for(scenario, FIRST_HIRE))
-        assert row_counts(postgres_session) == ROWS_BEFORE_ANY_BOOKING
+            broken.confirm.execute(move_on(held, customer))
+        assert row_counts(postgres_session)["notification"] == 0
+        stored = postgres_session.get(Reservation, held.detail.id)
+        assert stored is not None
+        assert stored.status is ReservationStatus.HELD
         assert gateway.sent == []

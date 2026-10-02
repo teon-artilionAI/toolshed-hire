@@ -126,7 +126,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/allocations": {
+    "/api/reservations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List reservations, newest first
+         * @description Return one page of the reservations the caller may see.
+         *
+         *     Raises:
+         *         AuthorisationFailure: If a customer narrows the list to another
+         *             customer or to a branch. Mapped to HTTP 403.
+         *         ValidationFailure: If the branch code is not the code of a trading
+         *             branch. Mapped to HTTP 422, naming `branch`.
+         */
+        get: operations["list_reservations_api_reservations_get"];
+        put?: never;
+        /**
+         * Create a draft reservation
+         * @description Create a priced draft. Nothing is held until it is put on hold.
+         *
+         *     Raises:
+         *         AuthorisationFailure: If a customer names a customer profile. HTTP 403.
+         *         BranchScopeError: If counter staff book at another branch. HTTP 403.
+         *         AccountOnHoldError: If the customer's account is on hold. HTTP 403.
+         *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
+         */
+        post: operations["post_reservation_api_reservations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}/hold": {
         parameters: {
             query?: never;
             header?: never;
@@ -136,25 +172,90 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Hold specific assets for a hire period
-         * @description Create a held reservation and allocate specific assets to it.
-         *
-         *     Args:
-         *         payload: The product model, branch, half open period and quantity.
-         *         user: The active account making the request.
-         *         use_case: The reservation use case. It owns the commit.
-         *
-         *     Returns:
-         *         The committed reservation with the tagged units held.
+         * Put a draft on hold, taking named units for thirty minutes
+         * @description Hold every unit the reservation asks for, or none of them (BR-09).
          *
          *     Raises:
-         *         ValidationFailure: If the period is not a valid hire period.
-         *         AuthorisationFailure: If a customer tries to book on someone else's behalf.
-         *         BranchScopeError: If counter staff try to book at a branch that is not
-         *             their own. Mapped to HTTP 403.
-         *         AllocationConflictError: If no free unit exists. Mapped to HTTP 409.
+         *         NotFound: If there is no such reservation for this caller. HTTP 404.
+         *         AllocationConflictError: If a line cannot be fully allocated. HTTP 409.
+         *         StateTransitionError: If the reservation is not a draft. HTTP 409.
          */
-        post: operations["post_allocation_api_allocations_post"];
+        post: operations["post_hold_api_reservations__id__hold_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a held reservation
+         * @description Confirm inside the hold, and send the booking confirmation (BR-19).
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation for this caller. HTTP 404.
+         *         StateTransitionError: If the hold has run out or the move is not
+         *             permitted. HTTP 409.
+         *         EmailNotVerifiedError: If the customer's address is not verified.
+         *             HTTP 403.
+         */
+        post: operations["post_confirmation_api_reservations__id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a reservation and release its units
+         * @description Cancel the reservation. Nothing is deleted and nothing is charged.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation for this caller. HTTP 404.
+         *         StateTransitionError: If it can no longer be cancelled. HTTP 409.
+         */
+        post: operations["post_cancellation_api_reservations__id__cancellation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one reservation, by its key or its reference
+         * @description Return the reservation, or 404 when it does not exist or is not the caller's.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation for this caller. Mapped to
+         *             HTTP 404.
+         */
+        get: operations["read_reservation_api_reservations__id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -329,92 +430,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * AllocatedAssetResponse
-         * @description One physical unit held by the booking.
-         */
-        AllocatedAssetResponse: {
-            /**
-             * Allocationid
-             * Format: uuid
-             */
-            allocationId: string;
-            /**
-             * Assetid
-             * Format: uuid
-             */
-            assetId: string;
-            /** Assettag */
-            assetTag: string;
-        };
-        /**
-         * AllocationRequest
-         * @description A booking request posted by the client.
-         *
-         *     The period is half open. `endDate` is the day the unit comes back and is
-         *     not charged, which is the same rule the exclusion constraint enforces.
-         */
-        AllocationRequest: {
-            /**
-             * Productmodelid
-             * Format: uuid
-             */
-            productModelId: string;
-            /**
-             * Branchid
-             * Format: uuid
-             */
-            branchId: string;
-            /**
-             * Startdate
-             * Format: date
-             */
-            startDate: string;
-            /**
-             * Enddate
-             * Format: date
-             */
-            endDate: string;
-            /**
-             * Quantity
-             * @default 1
-             */
-            quantity: number;
-            /** Customeruserid */
-            customerUserId?: string | null;
-        };
-        /**
-         * AllocationResponse
-         * @description The committed booking returned to the client.
-         */
-        AllocationResponse: {
-            /**
-             * Reservationid
-             * Format: uuid
-             */
-            reservationId: string;
-            /** Reference */
-            reference: string;
-            /**
-             * Reservationlineid
-             * Format: uuid
-             */
-            reservationLineId: string;
-            /** Status */
-            status: string;
-            /**
-             * Startdate
-             * Format: date
-             */
-            startDate: string;
-            /**
-             * Enddate
-             * Format: date
-             */
-            endDate: string;
-            /** Allocated */
-            allocated: components["schemas"]["AllocatedAssetResponse"][];
-        };
-        /**
          * AvailabilityPageResponse
          * @description One page of an availability search.
          *
@@ -484,6 +499,14 @@ export interface components {
             closesAt: string;
         };
         /**
+         * CancellationRequest
+         * @description Why a reservation is being cancelled, when the caller wants to say.
+         */
+        CancellationRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
          * CategoryListResponse
          * @description The active categories, each parent followed by its children.
          */
@@ -510,6 +533,34 @@ export interface components {
             sortOrder: number;
             /** Modelcount */
             modelCount: number;
+        };
+        /**
+         * CreateReservationRequest
+         * @description A request for a draft reservation.
+         *
+         *     The period is half open. `to` is the day the equipment comes back and is
+         *     not charged. `customerProfileId` is for staff, who book for a named
+         *     customer. A customer leaves it null and books for themselves.
+         */
+        CreateReservationRequest: {
+            /** Branchcode */
+            branchCode: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Lines */
+            lines: components["schemas"]["ReservationLineRequest"][];
+            /** Customerprofileid */
+            customerProfileId?: string | null;
+            /** Notes */
+            notes?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -760,6 +811,124 @@ export interface components {
             lateFeePerDay: string;
         };
         /**
+         * ReservationLineRequest
+         * @description One model and how many of it.
+         */
+        ReservationLineRequest: {
+            /** Modelslug */
+            modelSlug: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /**
+         * ReservationLineResponse
+         * @description One line of a reservation, with the rates it was priced at.
+         */
+        ReservationLineResponse: {
+            /** Modelslug */
+            modelSlug: string;
+            /** Modelname */
+            modelName: string;
+            /** Quantity */
+            quantity: number;
+            /** Dailyrate */
+            dailyRate: string;
+            /** Weeklyrate */
+            weeklyRate: string;
+            /** Depositperunit */
+            depositPerUnit: string;
+            /** Linesubtotalexvat */
+            lineSubtotalExVat: string;
+            /** Allocatedcount */
+            allocatedCount: number;
+            /** Assettags */
+            assetTags: string[];
+        };
+        /**
+         * ReservationPageResponse
+         * @description One page of reservations, newest first.
+         */
+        ReservationPageResponse: {
+            /** Items */
+            items: components["schemas"]["ReservationResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * ReservationResponse
+         * @description One reservation, as the caller is allowed to see it.
+         *
+         *     `subtotalExVat` is the hire after the trade discount, and `vatAmount` is
+         *     worked out on it, so the two add up to `estimatedTotalIncVat`. The deposit
+         *     is not in that total, because a deposit is held and given back.
+         */
+        ReservationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["ReservationStatus"];
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Hiredays */
+            hireDays: number;
+            /** Lines */
+            lines: components["schemas"]["ReservationLineResponse"][];
+            /** Subtotalexvat */
+            subtotalExVat: string;
+            /** Discountpercent */
+            discountPercent: string;
+            /** Vatamount */
+            vatAmount: string;
+            /** Estimatedtotalincvat */
+            estimatedTotalIncVat: string;
+            /** Deposittotal */
+            depositTotal: string;
+            /** Holdexpiresat */
+            holdExpiresAt: string | null;
+            /** Confirmedat */
+            confirmedAt: string | null;
+            /** Cancelledat */
+            cancelledAt: string | null;
+            /** Cancellationreason */
+            cancellationReason: string | null;
+            /** Canhold */
+            canHold: boolean;
+            /** Canconfirm */
+            canConfirm: boolean;
+            /** Cancancel */
+            canCancel: boolean;
+            /** Customername */
+            customerName: string;
+            /** Createdat */
+            createdAt: string;
+        };
+        /**
+         * ReservationStatus
+         * @description Reservation lifecycle status, governed by the State pattern in the domain.
+         * @enum {string}
+         */
+        ReservationStatus: "DRAFT" | "HELD" | "CONFIRMED" | "COLLECTED" | "RETURNED" | "CANCELLED" | "NO_SHOW" | "EXPIRED";
+        /**
          * TokenResponse
          * @description The access token and the account it belongs to.
          *
@@ -990,7 +1159,56 @@ export interface operations {
             };
         };
     };
-    post_allocation_api_allocations_post: {
+    list_reservations_api_reservations_get: {
+        parameters: {
+            query?: {
+                /** @description Only reservations in this status. */
+                status?: components["schemas"]["ReservationStatus"] | null;
+                /** @description Only this customer's. Staff only. */
+                customerProfileId?: string | null;
+                /** @description A branch code. Only reservations collected there. Staff only. */
+                branch?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many reservations a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationPageResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_reservation_api_reservations_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -999,7 +1217,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AllocationRequest"];
+                "application/json": components["schemas"]["CreateReservationRequest"];
             };
         };
         responses: {
@@ -1009,15 +1227,239 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AllocationResponse"];
+                    "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description No free unit exists for the requested period. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_hold_api_reservations__id__hold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The dates of the draft can no longer be booked. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_confirmation_api_reservations__id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_cancellation_api_reservations__id__cancellation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancellationRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_reservation_api_reservations__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
             };
             /** @description Validation Error */
             422: {

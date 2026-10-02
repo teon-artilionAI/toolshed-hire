@@ -23,18 +23,15 @@ export interface Session {
   endedBecause: 'expired' | null
   /** True from the moment the person asks to sign out until they are. */
   signingOut: boolean
-  /** Items in the hire basket. The basket screen owns the contents, and the
-   *  shell only needs the count for its indicator. */
-  basketCount: number
   /**
    * Sign in with the email address and password that were typed.
    *
    * @throws ApiError when the sign in is refused or the API cannot be reached.
    */
   signIn: (email: string, password: string) => Promise<SessionUser>
-  /** Sign out, drop everything cached from the server, and go to the catalogue. */
+  /** Sign out, drop everything cached from the server, empty the hire basket,
+   *  and go to the catalogue. */
   signOut: () => void
-  setBasketCount: (count: number) => void
 }
 
 export const SessionContext = createContext<Session | undefined>(undefined)

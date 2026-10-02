@@ -10,6 +10,10 @@ route for every refusal it can give, and it fails if any sentence carries the
 mark of a log line. It also checks the route table, so a route added under
 `/api/catalogue` without a case here fails it.
 
+The reservation routes are held to the same guard in
+tests/api/test_reservation_refusals.py, which reads the forbidden marks from
+this file.
+
 The rule and the values that were tried are still wanted, by whoever reads the
 log. tests/api/test_refusal_rules_in_the_log.py reads the log the application
 really wrote and finds them there.

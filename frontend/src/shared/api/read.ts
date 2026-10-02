@@ -11,13 +11,16 @@
  */
 
 import { asRecord, malformedResponse, requireField } from '../api-problem'
-import type { Money } from './contract'
+import type { IsoDate, IsoTimestamp, Money } from './contract'
 
 /** Money on the wire. Digits, a point, and exactly two decimals. */
 const MONEY_PATTERN = /^\d+\.\d{2}$/
 
 /** A percentage on the wire. Digits, a point, and exactly two decimals. */
 const PERCENT_PATTERN = /^\d+\.\d{2}$/
+
+/** The shape of a calendar date on the wire. */
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 /** Read a value that must be a JSON object. */
 export function readObject(
@@ -84,6 +87,40 @@ export function readPercent(source: Record<string, unknown>, key: string, reques
       requestPath,
       `Expected field ${key} in the response from ${requestPath} to be a percentage written as ` +
         `a string with two decimals, for example "15.00", got "${value}".`,
+    )
+  }
+  return value
+}
+
+/** Read a calendar date, and refuse anything that is not written `YYYY-MM-DD`
+ *  or cannot be read as a date. A screen formats what this returns, and a date
+ *  it cannot format would take the whole screen down. */
+export function readDate(source: Record<string, unknown>, key: string, requestPath: string): IsoDate {
+  const value = readText(source, key, requestPath)
+  if (!DATE_PATTERN.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    throw malformedResponse(
+      requestPath,
+      `Expected field ${key} in the response from ${requestPath} to be a date written as ` +
+        `YYYY-MM-DD, got "${value}".`,
+    )
+  }
+  return value
+}
+
+/** Read an instant the contract allows to be null, and refuse a string that
+ *  is not one. A missing field is not null. */
+export function readNullableTimestamp(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+): IsoTimestamp | null {
+  if (source[key] === null) return null
+  const value = readText(source, key, requestPath)
+  if (Number.isNaN(Date.parse(value))) {
+    throw malformedResponse(
+      requestPath,
+      `Expected field ${key} in the response from ${requestPath} to be an ISO 8601 instant, ` +
+        `got "${value}".`,
     )
   }
   return value

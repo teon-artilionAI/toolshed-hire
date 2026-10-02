@@ -13,10 +13,11 @@ still stored and compared in UTC.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Final, Protocol
-from zoneinfo import ZoneInfo
+from typing import Protocol
 
-BUSINESS_TIME_ZONE: Final[str] = "Africa/Johannesburg"
+from app.domain.business_time import BUSINESS_TIME_ZONE, in_business_time
+
+__all__ = ["BUSINESS_TIME_ZONE", "Clock", "business_day"]
 
 
 class Clock(Protocol):
@@ -50,4 +51,4 @@ def business_day(instant: datetime) -> date:
             f"Attempted to work out the business day of {instant.isoformat()}, which has no "
             "time zone. Pass a time zone aware datetime."
         )
-    return instant.astimezone(ZoneInfo(BUSINESS_TIME_ZONE)).date()
+    return in_business_time(instant).date()

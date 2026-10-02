@@ -12,33 +12,30 @@
  * enough would lock the seeded customer out of the specs beside it. The
  * component tests cover every refusal with the network replaced.
  *
- * A run signs the customer in four times, twice in each browser project. The
- * API counts every attempt for an address, the ones that succeed as well, and
- * allows ten in a fixed window of fifteen minutes. So a third run inside one
+ * This file signs the customer in four times in a run, twice in each browser
+ * project, and reservation.spec.ts signs them in twice more. The API counts
+ * every attempt for an email address, the ones that succeed as well, and
+ * allows ten in a fixed window of fifteen minutes. So a second run inside one
  * window is answered 429, and the sign in here then never leaves its screen.
+ * The reservation specs sign the other seeded customer in four times, which
+ * is counted against that address and not this one.
  *
  * These specs skip themselves when the backend is not there or does not have
  * the session routes, so the run still passes. `e2e/backend.ts` asks one of
  * those routes by name, because a healthy backend is not proof that it has
  * them.
  *
- * The password is never written here. It comes from `E2E_CUSTOMER_PASSWORD`,
- * and falls back to the password the development seed uses.
+ * The customer and the password are in `e2e/customer.ts`. The password is
+ * never written down. It comes from `E2E_CUSTOMER_PASSWORD`, and falls back to
+ * the password the development seed uses.
  */
 
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { SESSION_ROUTES_NEEDED, sessionRoutesArePresent } from './backend.ts'
+import { signInAsCustomer, submitCustomerSignIn } from './customer.ts'
 import { CATALOGUE_HOME, SIGN_IN } from './routes.ts'
-
-/** The customer `backend/seed.py` creates. */
-const CUSTOMER_EMAIL = 'w.adonis@buildright.co.za'
-
-/** The password the seed gives every account when `SEED_PASSWORD` is unset.
- *  It exists in development only. */
-const DEVELOPMENT_SEED_PASSWORD = 'toolshed-dev-password'
-const CUSTOMER_PASSWORD = process.env.E2E_CUSTOMER_PASSWORD ?? DEVELOPMENT_SEED_PASSWORD
 
 const MY_HIRES = { path: '/reservations', heading: 'My hires' }
 const COUNTER = { path: '/counter', heading: 'Today at the counter' }
@@ -60,14 +57,6 @@ async function expectHeading(page: Page, name: string): Promise<void> {
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
-async function signIn(page: Page): Promise<void> {
-  await page.goto(SIGN_IN.path)
-  await expectHeading(page, SIGN_IN.heading)
-  await page.getByLabel('Email address').fill(CUSTOMER_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(CUSTOMER_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-}
-
 test.describe('the session against the real backend', () => {
   test.beforeEach(async ({ request }) => {
     test.skip(!(await sessionRoutesArePresent(request)), SESSION_ROUTES_NEEDED)
@@ -76,7 +65,7 @@ test.describe('the session against the real backend', () => {
   test('a customer signs in, survives a reload, is refused the counter, and signs out', async ({
     page,
   }) => {
-    await signIn(page)
+    await signInAsCustomer(page)
 
     // A customer lands on the catalogue, and the header offers the way out.
     await expect(page).toHaveURL(/\/$/)
@@ -127,9 +116,7 @@ test.describe('the session against the real backend', () => {
 
     await expectHeading(page, SIGN_IN.heading)
     await expect(page).toHaveURL(/\/signin\?next=%2Freservations$/)
-    await page.getByLabel('Email address').fill(CUSTOMER_EMAIL)
-    await page.getByLabel('Password', { exact: true }).fill(CUSTOMER_PASSWORD)
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await submitCustomerSignIn(page)
 
     await expectHeading(page, MY_HIRES.heading)
     await expect(page).toHaveURL(new RegExp(`${MY_HIRES.path}$`))

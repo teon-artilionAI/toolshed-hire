@@ -7,9 +7,8 @@
  * home page, the search results and the basket. A customer who sees "free at
  * Bellville" in three different wordings stops believing any of them.
  *
- * Nothing here fetches or imports data. Each piece is handed what it shows, so
- * the screens on the API pass what the API sent and the basket passes its
- * fixtures until it moves over.
+ * Nothing here fetches or imports data. Each piece is handed what it shows,
+ * and every screen that uses one passes what the API sent.
  *
  * The picture of a model, and what stands in for it when there is no
  * photograph, is in model-picture.tsx.

@@ -11,6 +11,11 @@ and the applications are entered without their lifespan.
 `still_clock` and `auth_client` serve the session tests. They put the real
 application on the in memory database with a clock the test moves, so a lock
 or a lifetime can be run out without waiting for it.
+
+`booking` serves the reservation tests the same way. It drives the six
+reservation routes on that clock, so a hold can be run out in a line, and it
+sends through the fake gateway of the `email_gateway` fixture, so a test can
+read what was sent.
 """
 
 from __future__ import annotations
@@ -22,7 +27,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app.api.deps import get_notification_gateway
 from app.config import Environment
+from app.infrastructure.notification import FakeEmailGateway
+from app.main import app as production_app
+from tests.support.booking_api import BookingClient
 from tests.support.clock import FixedClock
 from tests.support.request_probe import build_request_probe_app, settings_for
 from tests.support.sessions import session_client
@@ -73,3 +82,13 @@ def auth_client(session: Session, still_clock: FixedClock) -> Iterator[TestClien
     """Yield a client for the real application, on the in memory database and the still clock."""
     with session_client(session, still_clock) as client:
         yield client
+
+
+@pytest.fixture
+def booking(
+    session: Session, still_clock: FixedClock, email_gateway: FakeEmailGateway
+) -> Iterator[BookingClient]:
+    """Yield the reservation routes on the in memory database and the still clock."""
+    with session_client(session, still_clock) as client:
+        production_app.dependency_overrides[get_notification_gateway] = lambda: email_gateway
+        yield BookingClient(client, still_clock)

@@ -25,7 +25,6 @@ import {
   DATED,
   MODEL_ROUTE,
   QUOTE_ROUTE,
-  SLUG,
   WORKING,
   lastQuestion,
   openModel,
@@ -114,15 +113,13 @@ describe('once the model has loaded', () => {
     expect(within(picture).queryByRole('img')).not.toBeInTheDocument()
   })
 
-  it('offers the basket for the first branch when it is free there', async () => {
+  it('offers the basket for the first branch when it is free there and priced', async () => {
     mockApi(WORKING)
     openModel()
 
     await screen.findByText('Free at Cape Town CBD')
-    expect(screen.getByRole('link', { name: 'Add to my hire basket' })).toHaveAttribute(
-      'href',
-      `/basket?add=${SLUG}&qty=1&from=${TEST_TODAY}&to=${TEST_DEFAULT_RETURN}&branch=CBD`,
-    )
+    await screen.findByRole('group', { name: 'Price for these dates' })
+    expect(screen.getByRole('button', { name: 'Add to my hire basket' })).toBeEnabled()
   })
 
   it('asks again when the quantity changes', async () => {
@@ -175,7 +172,7 @@ describe('when the chosen branch cannot supply it', () => {
 
     expect(await screen.findByText('Free at Cape Town CBD')).toBeVisible()
     expect(screen.getByLabelText('Collect from')).toHaveDisplayValue('Cape Town CBD')
-    expect(screen.getByRole('link', { name: 'Add to my hire basket' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add to my hire basket' })).toBeEnabled()
   })
 
   it('says so plainly when no branch has it free', async () => {

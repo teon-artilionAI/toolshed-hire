@@ -52,8 +52,10 @@ HIRE: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 9), date(2026, 3, 12))
 PERIOD: Final[dict[str, object]] = {"from": "2026-03-09", "to": "2026-03-12"}
 AVAILABLE_UNIT_INDEX: Final[str] = "ix_asset_available"
 SEARCH_FINISHED: Final[str] = "availability.search_finished"
-# The count and the page, plus one lookup each for a category and a branch.
-MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = 4
+# The sweep that lapses expired holds, the count and the page (BR-13).
+STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 3
+# A category and a branch each add one lookup.
+MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = STATEMENTS_OF_A_PLAIN_SEARCH + 2
 LARGEST_PAGE: Final[int] = 50
 
 
@@ -249,7 +251,11 @@ class TestTheList:
 
 @pytest.mark.usefixtures("yard")
 class TestAPageCostsAFixedNumberOfStatements:
-    """One statement answers the page, however many models are on it."""
+    """One statement answers the page, however many models are on it.
+
+    A search also runs the sweep before it answers, which is one statement
+    more when no hold is due and does not grow with the page either.
+    """
 
     def test_the_count_does_not_grow_with_the_models_on_the_page(
         self,
@@ -268,7 +274,7 @@ class TestAPageCostsAFixedNumberOfStatements:
         with recorded_statements(postgres_engine) as many_models:
             assert len(listed(visitor, pageSize=LARGEST_PAGE)["items"]) == 24
 
-        assert len(many_models) == len(few_models) == 2
+        assert len(many_models) == len(few_models) == STATEMENTS_OF_A_PLAIN_SEARCH
 
     def test_a_category_and_a_branch_add_one_lookup_each_and_nothing_per_model(
         self, visitor: TestClient, postgres_engine: Engine

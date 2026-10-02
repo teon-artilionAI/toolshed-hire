@@ -28,8 +28,9 @@ ports and imports nothing from the infrastructure layer, so something has to
 choose the implementations, and that happens in the dependencies at the foot of
 this file. A use case reaches a router already holding the SQL unit of work,
 the system clock and the email gateway, and the router never learns which
-classes those are. The query objects of the public read side are wired the same
-way in `app/api/catalogue_deps.py`.
+classes those are. The booking use cases are wired from these parts in
+`app/api/booking_deps.py`, and the query objects of the public read side in
+`app/api/catalogue_deps.py`.
 """
 
 from __future__ import annotations
@@ -42,7 +43,6 @@ from fastapi import Depends, Request
 from sqlmodel import Session
 
 from app.api.access_policy import PUBLIC_POLICY, declare_policy, role_policy
-from app.application.booking.create_reservation import CreateReservationUseCase
 from app.application.clock import Clock
 from app.application.notification.dispatcher import NotificationDispatcher
 from app.application.notification.ports import NotificationGateway
@@ -278,15 +278,3 @@ def get_notification_dispatcher(
 NotificationDispatcherDependency = Annotated[
     NotificationDispatcher, Depends(get_notification_dispatcher)
 ]
-
-
-def get_create_reservation_use_case(
-    uow: UnitOfWorkDependency,
-    clock: ClockDependency,
-    dispatcher: NotificationDispatcherDependency,
-) -> CreateReservationUseCase:
-    """Return the reservation use case, wired to its unit of work, clock and dispatcher."""
-    return CreateReservationUseCase(uow, clock, dispatcher)
-
-
-CreateReservation = Annotated[CreateReservationUseCase, Depends(get_create_reservation_use_case)]

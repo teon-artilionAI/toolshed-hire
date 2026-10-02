@@ -2,14 +2,17 @@
  * The wire types, all of them, in one place.
  *
  * Every type that mirrors a body the API sends or a query it accepts is
- * exported from here and from nowhere else. The shapes are not written by
- * hand. They come from schema.d.ts, which `npm run api:types` generates from
- * the OpenAPI document the backend commits. When the backend changes a route,
- * a field or a query parameter, the generated file changes with it, and
- * whatever in the application no longer fits stops compiling.
+ * exported from here, and the application imports a wire type from nowhere
+ * else. The shapes are not written by hand. They come from schema.d.ts, which
+ * `npm run api:types` generates from the OpenAPI document the backend commits.
+ * When the backend changes a route, a field or a query parameter, the
+ * generated file changes with it, and whatever in the application no longer
+ * fits stops compiling.
  *
- * Nothing else imports schema.d.ts. Its names follow the backend's class and
- * function names, and a screen should not have to know those.
+ * The generated file is read through contract-kit.ts, which also holds the
+ * type tools used below. Its names follow the backend's class and function
+ * names, and a screen should not have to know those. The reservation types
+ * are in contract-booking.ts and are passed on from here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -20,54 +23,19 @@
  * beside the endpoint that uses it, because generated types carry no values.
  */
 
-import type { components, paths } from './schema'
+import type { BodyOf, ClockTime, IsoDate, JsonOf, Money, Paths, QueryOf, Refine, Schemas } from './contract-kit'
 
-type Schemas = components['schemas']
-
-/** The JSON body of the 200 answer of one operation. An operation that has
- *  lost its 200 answer does not satisfy the constraint and stops compiling. */
-type JsonOf<Operation extends { responses: { 200: { content: { 'application/json': unknown } } } }> =
-  Operation['responses'][200]['content']['application/json']
-
-/** The JSON body one operation accepts. */
-type BodyOf<Operation extends { requestBody: { content: { 'application/json': unknown } } }> =
-  Operation['requestBody']['content']['application/json']
-
-/** The query one operation accepts. */
-type QueryOf<Operation extends { parameters: { query?: object } }> = NonNullable<
-  Operation['parameters']['query']
->
-
-/** Writes an intersection out as one plain object type, so an editor shows the
- *  members and not the arithmetic that produced them. */
-type Simplify<Shape> = { [Name in keyof Shape]: Shape[Name] }
-
-/**
- * A generated type with some members replaced by more precise ones.
- *
- * The constraint is what keeps this honest. Each member of `Precise` must
- * exist on `Wire` and must be assignable to what `Wire` says it is.
- */
-type Refine<
-  Wire,
-  Precise extends { [Name in keyof Precise]: Name extends keyof Wire ? Wire[Name] : never },
-> = Simplify<Omit<Wire, keyof Precise> & Precise>
-
-/**
- * An amount in rand as the API writes it, for example "280.00".
- *
- * The generated type is a plain `string`, because the document cannot say
- * "two decimals". I keep the name so a money member reads as money. It stays a
- * string all the way to the screen, so no float ever gets a chance to change
- * the figure a customer is shown. `readMoney` checks the two decimals.
- */
-export type Money = string
-
-/** A calendar date as the API writes it, `YYYY-MM-DD`. Generated as `string`. */
-export type IsoDate = string
-
-/** A time of day as the API writes it, `HH:MM`. Generated as `string`. */
-export type ClockTime = string
+export type { ClockTime, IsoDate, IsoTimestamp, Money } from './contract-kit'
+export type {
+  CancelReservationRequest,
+  CreateReservationRequest,
+  Reservation,
+  ReservationLine,
+  ReservationLineRequest,
+  ReservationListQuery,
+  ReservationPage,
+  ReservationStatus,
+} from './contract-booking'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.
@@ -97,7 +65,7 @@ export type ProblemDocument = Refine<
 export type UserRole = 'customer' | 'counter' | 'admin'
 
 /** What `GET /api/health` reports about its own dependencies. */
-export type HealthReport = JsonOf<paths['/api/health']['get']>
+export type HealthReport = JsonOf<Paths['/api/health']['get']>
 
 /**
  * The signed in account. `GET /api/me`, and the `user` member of what login
@@ -110,12 +78,12 @@ export type HealthReport = JsonOf<paths['/api/health']['get']>
  * is always present.
  */
 export type SessionUser = Refine<
-  JsonOf<paths['/api/me']['get']>,
+  JsonOf<Paths['/api/me']['get']>,
   { role: UserRole; branchCode: string | null }
 >
 
 /** The body `POST /api/auth/login` accepts. */
-export type LoginRequest = BodyOf<paths['/api/auth/login']['post']>
+export type LoginRequest = BodyOf<Paths['/api/auth/login']['post']>
 
 /** The one token type the API issues. The generated type is a plain `string`,
  *  and the client only knows how to send this one. */
@@ -132,7 +100,7 @@ export type AccessTokenType = 'Bearer'
  * no type here.
  */
 export type SessionGrant = Refine<
-  JsonOf<paths['/api/auth/login']['post']> & JsonOf<paths['/api/auth/refresh']['post']>,
+  JsonOf<Paths['/api/auth/login']['post']> & JsonOf<Paths['/api/auth/refresh']['post']>,
   { tokenType: AccessTokenType; user: SessionUser }
 >
 
@@ -140,7 +108,7 @@ export type SessionGrant = Refine<
 export type Branch = Refine<Schemas['BranchResponse'], { opensAt: ClockTime; closesAt: ClockTime }>
 
 /** `GET /api/branches`. */
-export type BranchList = Refine<JsonOf<paths['/api/branches']['get']>, { items: Branch[] }>
+export type BranchList = Refine<JsonOf<Paths['/api/branches']['get']>, { items: Branch[] }>
 
 /**
  * One catalogue category. `parentCode` is null for a top level category.
@@ -151,7 +119,7 @@ export type BranchList = Refine<JsonOf<paths['/api/branches']['get']>, { items: 
 export type Category = Schemas['CategoryResponse']
 
 /** `GET /api/catalogue/categories`. Each parent arrives before its children. */
-export type CategoryList = JsonOf<paths['/api/catalogue/categories']['get']>
+export type CategoryList = JsonOf<Paths['/api/catalogue/categories']['get']>
 
 /** The orders a model list can be asked for. */
 export type ModelSort = Schemas['ModelSortParameter']
@@ -165,7 +133,7 @@ export type ModelSummary = Refine<
 
 /** `GET /api/catalogue/models/{slug}`. */
 export type ModelDetail = Refine<
-  JsonOf<paths['/api/catalogue/models/{slug}']['get']>,
+  JsonOf<Paths['/api/catalogue/models/{slug}']['get']>,
   { dailyRate: Money; weeklyRate: Money; depositAmount: Money; lateFeePerDay: Money }
 >
 
@@ -176,11 +144,11 @@ export type ModelDetail = Refine<
  * `q` is two characters or more. `page` counts from 1. `pageSize` is 1 to 50,
  * and the API uses 24 when it is left out.
  */
-export type ModelListQuery = QueryOf<paths['/api/catalogue/models']['get']>
+export type ModelListQuery = QueryOf<Paths['/api/catalogue/models']['get']>
 
 /** `GET /api/catalogue/models`. */
 export type ModelPage = Refine<
-  JsonOf<paths['/api/catalogue/models']['get']>,
+  JsonOf<Paths['/api/catalogue/models']['get']>,
   { items: ModelSummary[] }
 >
 
@@ -202,13 +170,13 @@ export type ModelAvailabilityRow = Refine<
  * the hire limits of each model. The single model route applies those.
  */
 export type AvailabilityQuery = Refine<
-  QueryOf<paths['/api/catalogue/availability']['get']>,
+  QueryOf<Paths['/api/catalogue/availability']['get']>,
   { from: IsoDate; to: IsoDate }
 >
 
 /** `GET /api/catalogue/availability`. */
 export type AvailabilityPage = Refine<
-  JsonOf<paths['/api/catalogue/availability']['get']>,
+  JsonOf<Paths['/api/catalogue/availability']['get']>,
   { from: IsoDate; to: IsoDate; items: ModelAvailabilityRow[] }
 >
 
@@ -219,13 +187,13 @@ export type AvailabilityPage = Refine<
  * also applies the shortest and longest hire of the model itself.
  */
 export type ModelAvailabilityQuery = Refine<
-  QueryOf<paths['/api/catalogue/models/{slug}/availability']['get']>,
+  QueryOf<Paths['/api/catalogue/models/{slug}/availability']['get']>,
   { from: IsoDate; to: IsoDate }
 >
 
 /** `GET /api/catalogue/models/{slug}/availability`. */
 export type ModelAvailability = Refine<
-  JsonOf<paths['/api/catalogue/models/{slug}/availability']['get']>,
+  JsonOf<Paths['/api/catalogue/models/{slug}/availability']['get']>,
   { from: IsoDate; to: IsoDate }
 >
 
@@ -251,7 +219,7 @@ export type UnitQuote = Refine<
  * uses 1 when it is left out.
  */
 export type ModelQuoteQuery = Refine<
-  QueryOf<paths['/api/catalogue/models/{slug}/quote']['get']>,
+  QueryOf<Paths['/api/catalogue/models/{slug}/quote']['get']>,
   { from: IsoDate; to: IsoDate }
 >
 
@@ -265,7 +233,7 @@ export type ModelQuoteQuery = Refine<
  * "15.00".
  */
 export type ModelQuote = Refine<
-  JsonOf<paths['/api/catalogue/models/{slug}/quote']['get']>,
+  JsonOf<Paths['/api/catalogue/models/{slug}/quote']['get']>,
   {
     from: IsoDate
     to: IsoDate

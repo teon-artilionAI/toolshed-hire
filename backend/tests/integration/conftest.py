@@ -12,9 +12,13 @@ collection hook, which needs no plugin and leaves the file with the name that
 says what it holds. A numeric prefix on the file name would do the same job
 only until somebody added a file that sorted ahead of it.
 
-The two fixtures at the foot of the file serve the seed tests. The database is
-emptied and seeded once for each module that asks, because loading four hundred
-units for every assertion would only make the suite slower.
+`seeded` and `reader` serve the seed tests. The database is emptied and seeded
+once for each module that asks, because loading four hundred units for every
+assertion would only make the suite slower.
+
+`booking` at the foot of the file serves the reservation tests. It drives the
+six reservation routes of the real application on the real database, on a
+clock that stands still.
 """
 
 from __future__ import annotations
@@ -28,8 +32,11 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from seeding import SeedTally, seed_database
+from tests.support.booking_api import BookingClient
+from tests.support.clock import FixedClock
 from tests.support.factories import TEST_PASSWORD
 from tests.support.pg import truncate_schema_tables
+from tests.support.sessions import session_client
 
 logger = logging.getLogger(__name__)
 
@@ -78,3 +85,16 @@ def reader(postgres_engine: Engine, seeded: SeedTally) -> Iterator[Session]:
     """Yield a fresh session on the seeded database."""
     with Session(postgres_engine) as session:
         yield session
+
+
+@pytest.fixture
+def still_clock() -> FixedClock:
+    """Return a clock that stands still until the test moves it."""
+    return FixedClock()
+
+
+@pytest.fixture
+def booking(postgres_session: Session, still_clock: FixedClock) -> Iterator[BookingClient]:
+    """Yield the reservation routes on the real database and the still clock."""
+    with session_client(postgres_session, still_clock) as client:
+        yield BookingClient(client, still_clock)

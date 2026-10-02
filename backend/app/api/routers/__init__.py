@@ -10,7 +10,6 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.routers import (
-    allocations,
     auth,
     availability,
     branches,
@@ -18,6 +17,8 @@ from app.api.routers import (
     health,
     me,
     quote,
+    reservation_reads,
+    reservations,
 )
 
 API_PREFIX = "/api"
@@ -26,7 +27,8 @@ api_router = APIRouter(prefix=API_PREFIX)
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(me.router)
-api_router.include_router(allocations.router)
+api_router.include_router(reservations.router)
+api_router.include_router(reservation_reads.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)

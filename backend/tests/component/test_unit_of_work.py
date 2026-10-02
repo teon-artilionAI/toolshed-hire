@@ -50,8 +50,8 @@ def scenario(session: Session, factory: Factory) -> AllocationScenario:
 
 
 def a_reservation_for(scenario: AllocationScenario, reference: str) -> domain.Reservation:
-    """Return a held reservation aggregate with no lines, not yet stored."""
-    return domain.Reservation.held(
+    """Return a draft reservation aggregate with no lines, not yet stored."""
+    return domain.Reservation.draft(
         reference=reference,
         customer_profile_id=scenario.profile.id,
         branch_id=scenario.branch.id,

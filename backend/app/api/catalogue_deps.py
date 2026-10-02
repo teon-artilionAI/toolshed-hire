@@ -7,7 +7,9 @@ wires the use cases that write. This module wires the query objects that read,
 and it is the only place that knows `SqlCatalogueQuery`, `SqlBranchDirectory`
 and `SearchAvailabilityQuery` stand behind the three read ports. A read needs
 no unit of work, because it writes nothing, so each query object is handed the
-request scoped session and the request closes it.
+request scoped session and the request closes it. The availability search is
+also handed the sweep that lapses expired holds, from `app/api/sweep_deps.py`,
+and runs it before it answers (BR-13).
 
 The second is the query string of a model search, which the model list and the
 availability search share. The parameter names are the ones the contract uses,
@@ -35,6 +37,7 @@ from pydantic import StringConstraints
 from app.api.catalogue_schemas import SORT_FROM_WIRE, ModelSortParameter
 from app.api.deps import ClockDependency, SessionDependency
 from app.api.security_headers import CACHE_CONTROL_HEADER, CACHE_CONTROL_NO_STORE_VALUE
+from app.api.sweep_deps import ExpiredHoldSweeper
 from app.application.availability.ports import AvailabilityQuery
 from app.application.availability.search import SearchAvailability
 from app.application.catalogue.browse import BrowseCatalogue
@@ -168,9 +171,10 @@ def get_search_availability(
     catalogue: CatalogueQueryDependency,
     branches: BranchDirectoryDependency,
     clock: ClockDependency,
+    lapse_expired_holds: ExpiredHoldSweeper,
 ) -> SearchAvailability:
-    """Return the availability search, wired to its query objects and its clock."""
-    return SearchAvailability(availability, catalogue, branches, clock)
+    """Return the availability search, wired to its query objects, its clock and the sweep."""
+    return SearchAvailability(availability, catalogue, branches, clock, lapse_expired_holds)
 
 
 SearchAvailabilityDependency = Annotated[SearchAvailability, Depends(get_search_availability)]

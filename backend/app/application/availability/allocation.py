@@ -32,13 +32,17 @@ from uuid import UUID
 from app.application.availability.ports import AssetRepository
 from app.application.clock import Clock
 from app.domain.availability import AssetAllocation
+from app.domain.booking_line import MAXIMUM_LINE_QUANTITY
 from app.domain.errors import AllocationConflictError, ValidationFailure
 from app.domain.period import BookingPeriod
+from app.domain.policies.pricing import MINIMUM_LINE_QUANTITY
 
 logger = logging.getLogger(__name__)
 
-MINIMUM_QUANTITY: Final[int] = 1
-MAXIMUM_QUANTITY: Final[int] = 10
+# The range a reservation line may carry. The domain owns the two figures, and
+# they are named here as well because every flow that allocates reads them.
+MINIMUM_QUANTITY: Final[int] = MINIMUM_LINE_QUANTITY
+MAXIMUM_QUANTITY: Final[int] = MAXIMUM_LINE_QUANTITY
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,16 +68,6 @@ class AllocatedAsset:
 
     allocation: AssetAllocation
     asset_tag: str
-
-    @property
-    def allocation_id(self) -> UUID:
-        """Return the key of the allocation."""
-        return self.allocation.id
-
-    @property
-    def asset_id(self) -> UUID:
-        """Return the key of the unit that was held."""
-        return self.allocation.asset_id
 
 
 def allocate_assets(

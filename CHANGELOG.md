@@ -35,12 +35,18 @@ the whole design document.
   guarded by role.
 - A notice on every screen that is not connected to the API yet, saying that it
   still shows sample data.
+- Reservations. A customer builds a basket, sees the server's figures, holds
+  named units for thirty minutes, confirms, and can cancel. Every change of
+  status goes through one set of state rules, an expired hold releases its
+  units, and a confirmation email is queued when the booking is confirmed.
 - A pricing policy and a quote. A hire is charged by whole weeks plus the
   remaining days, or by the day, whichever is lower, with VAT on top and the
   deposit shown separately. The price is calculated in one place.
 
 ### Removed
 
+- `POST /api/allocations`, the walking skeleton's single route for holding one
+  line. The reservation routes replace it.
 - The demonstration role switcher and the on screen list of sample accounts.
 
 ### Changed

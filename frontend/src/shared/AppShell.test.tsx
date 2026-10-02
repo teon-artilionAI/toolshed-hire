@@ -117,14 +117,11 @@ describe('the menu and the layout', () => {
 })
 
 describe('the sample data notice in the shell', () => {
-  it.each([
-    ['/basket', 'Your hire basket'],
-    ['/register', 'Create your hire account'],
-  ])('is above %s, which is not connected yet', async (opened, heading) => {
+  it('is above a public screen that is not connected yet', async () => {
     mockApi(SIGNED_OUT)
 
-    renderApp(opened)
-    const title = await findScreenHeading(heading)
+    renderApp('/register')
+    const title = await findScreenHeading('Create your hire account')
 
     const notice = screen.getByText(SAMPLE_DATA_TITLE)
     expect(notice).toBeVisible()
@@ -142,11 +139,26 @@ describe('the sample data notice in the shell', () => {
     expect(screen.getByText(SAMPLE_DATA_TITLE)).toBeVisible()
   })
 
-  it('is not on a screen that reads from the API', async () => {
+  it.each([
+    ['/signin', 'Sign in to Toolshed Hire'],
+    ['/basket', 'Your hire basket'],
+  ])('is not on %s, which reads from the API', async (opened, heading) => {
     mockApi(SIGNED_OUT)
 
-    renderApp('/signin')
-    await findScreenHeading('Sign in to Toolshed Hire')
+    renderApp(opened)
+    await findScreenHeading(heading)
+
+    expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['/reservations', 'My hires'],
+    ['/reservations/TSH-R-26-000124', 'Booking detail'],
+  ])('is not on %s, a protected screen that reads from the API', async (opened, heading) => {
+    mockApi(signedInAs(CUSTOMER))
+
+    renderApp(opened)
+    await findScreenHeading(heading)
 
     expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
   })

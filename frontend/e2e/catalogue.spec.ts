@@ -18,11 +18,9 @@ import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { BACKEND_NEEDED, backendIsReachable } from './backend.ts'
+import { dateFromToday } from './hire-dates.ts'
 import { asShown, quoteFromTheApi } from './quote.ts'
 import { CATALOGUE_HOME, SEARCH } from './routes.ts'
-
-/** The time zone the branches trade in. "Today" for a hire means today there. */
-const BRANCH_TIME_ZONE = 'Africa/Johannesburg'
 
 /** I book a week out, so the journey never trips over a hire that starts today. */
 const COLLECT_IN_DAYS = 7
@@ -54,23 +52,6 @@ interface CategoryOnTheWire {
   name: string
   parentCode: string | null
   modelCount: number
-}
-
-/** A date some days from today in branch time, as `YYYY-MM-DD`. */
-function dateFromToday(days: number): string {
-  const parts = new Map(
-    new Intl.DateTimeFormat('en-ZA', {
-      timeZone: BRANCH_TIME_ZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(new Date())
-      .map((part) => [part.type, part.value]),
-  )
-  const date = new Date(`${parts.get('year')}-${parts.get('month')}-${parts.get('day')}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
 }
 
 const COLLECT_ON = dateFromToday(COLLECT_IN_DAYS)

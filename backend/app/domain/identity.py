@@ -15,10 +15,24 @@ sign in account and its lockout rule are in `app.domain.account`.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
+from typing import Final
 from uuid import UUID
 
 from app.domain.enums import AccountStatus, UserRole
-from app.domain.errors import BranchScopeError
+from app.domain.errors import AccountOnHoldError, BranchScopeError
+
+NO_TRADE_DISCOUNT: Final[Decimal] = Decimal("0.00")
+ACCOUNT_STANDING_RULE: Final[str] = "BR-18"
+BRANCH_SCOPE_RULE: Final[str] = "BR-43"
+BRANCH_SCOPE_MESSAGE: Final[str] = (
+    "Counter staff can only work on bookings at their own branch. This one is at another "
+    "branch."
+)
+ACCOUNT_ON_HOLD_MESSAGE: Final[str] = (
+    "This customer account is on hold, so it cannot make a reservation at the moment. "
+    "Please speak to the branch."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,9 +77,7 @@ def ensure_branch_scope(actor: Actor, branch_id: UUID) -> None:
     if actor.role is not UserRole.COUNTER_STAFF or actor.branch_id == branch_id:
         return
     raise BranchScopeError(
-        f"Counter account {actor.user_id} attempted to write to branch {branch_id}, and is "
-        f"assigned to branch {actor.branch_id}. Counter staff act for their own branch only.",
-        {"branch_id": str(branch_id)},
+        BRANCH_SCOPE_MESSAGE, {"branch_id": str(branch_id)}, rule=BRANCH_SCOPE_RULE
     )
 
 
@@ -96,6 +108,10 @@ class CustomerProfile:
         account_status: The standing of the customer (BR-18).
         email: The address of the sign in account, or None for a walk-in. A
             booking confirmation can only be sent when there is one.
+        trade_discount_percent: The discount a trade customer is given, which
+            the pricing policy takes as an input (BR-21).
+        email_verified: True when the holder of the account has proved the
+            address. A walk-in has no account, so this is False (BR-47).
 
     """
 
@@ -104,3 +120,23 @@ class CustomerProfile:
     display_name: str
     account_status: AccountStatus
     email: str | None
+    trade_discount_percent: Decimal = NO_TRADE_DISCOUNT
+    email_verified: bool = False
+
+    def ensure_may_book(self) -> None:
+        """Refuse a customer whose account is not in good standing (BR-18).
+
+        An account on hold and a blacklisted one are both refused. Only an
+        active account may create a reservation or put one on hold.
+
+        Raises:
+            AccountOnHoldError: If the account status is anything but ACTIVE.
+
+        """
+        if self.account_status is AccountStatus.ACTIVE:
+            return
+        raise AccountOnHoldError(
+            ACCOUNT_ON_HOLD_MESSAGE,
+            {"account_status": self.account_status.value},
+            rule=ACCOUNT_STANDING_RULE,
+        )
