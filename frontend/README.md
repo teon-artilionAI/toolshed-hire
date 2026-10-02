@@ -11,8 +11,9 @@ The screens are moving from sample data to the API one group at a time.
 | Screens | Where the data comes from |
 |---|---|
 | `SC-01` Catalogue Home, `SC-02` Availability Search Results, `SC-03` Product Model Detail | The API, through the data layer described below |
+| `SC-04` Hire Basket and Booking Review, `SC-07` My Reservations, `SC-08` Reservation Detail and Cancellation | The API, through the reservation routes described under Booking a hire |
 | `SC-06` Sign In | The API, through the session described below |
-| `SC-04`, `SC-05` and `SC-07` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-05` and `SC-09` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -38,13 +39,21 @@ session routes are `POST /api/auth/login`, `POST /api/auth/refresh` and
 - The access token is held in memory only, in a variable inside
   `src/shared/session-store.ts`. It is never written to `localStorage`,
   `sessionStorage`, a cookie or a log, and no screen can read it.
-- Web storage holds two markers at most and nothing else. Both are the fixed
+- For the session, web storage holds two markers at most. Both are the fixed
   word `yes` in `localStorage`, and neither names an account or holds a token.
   `toolshed.session-hint` says this browser may hold a session.
   `toolshed.sign-out-owed` says a sign out never reached the server.
-  `src/shared/session-markers.ts` is the only file that touches web storage. A
-  test in `session-store.lifecycle.test.ts` proves that only those two keys are
-  ever written, and only with that word.
+  `src/shared/session-markers.ts` is the only file that touches `localStorage`.
+- The one other thing in web storage is the hire basket, under
+  `toolshed.basket` in `sessionStorage`. It is described under Hire basket
+  below. It holds dates, a branch code, model slugs, quantities and the id of a
+  booking that is under way, and no name, address or token.
+  `src/shared/basket-storage.ts` is the only file that touches
+  `sessionStorage`.
+- `src/shared/web-storage.test.ts` runs every path that handles a token with a
+  basket and a booking beside it. It proves that `localStorage` is only ever
+  written under the two marker keys with the fixed word, that `sessionStorage`
+  is only ever written under the basket key, and that no write holds a token.
 - The refresh token is an HttpOnly cookie the server sets. JavaScript cannot
   read it and does not try. The browser sends it back by itself, because every
   request includes credentials and stays on the same origin as the page.
@@ -58,7 +67,7 @@ session routes are `POST /api/auth/login`, `POST /api/auth/refresh` and
 | Sign in | Sends what was typed. A refusal shows one generic message whatever the reason. A 429 shows the wait from `Retry-After`. A failure to reach the API shows the shared error state. The button is disabled while the request is in flight |
 | A request answered 401 | When the problem type ends `session-expired` or `authentication-failure`, and the person is signed in, the client refreshes once and repeats the request once. Requests refused together share one refresh |
 | The refresh fails | The person is signed out, the cache is cleared, and they are sent to sign in with a short message. Signing in takes them back to where they were |
-| Sign out | Goes to the catalogue, calls logout, drops the token, removes the session hint and clears the cache |
+| Sign out | Goes to the catalogue, calls logout, drops the token, removes the session hint, clears the cache and empties the hire basket |
 | The logout call fails | The person is still signed out of the page. The refresh cookie is still set, so the sign out owed marker is left. While it is there, start-up sends logout again and does not call refresh, so a reload cannot sign the person back in |
 
 The pieces are small and each has one job.
@@ -183,11 +192,18 @@ commits as `../backend/openapi.json`.
 - `api/schema.d.ts` is generated from that document by `openapi-typescript`. I
   commit it and never edit it by hand. It is the one file the 300 line guide
   does not apply to.
-- `api/contract.ts` is the only module that imports the generated file, and the
-  only module the rest of the application imports a wire type from. It gives
-  each type the name the screens use. Where the generated type says less than
-  the screens rely on, such as money typed as a plain `string` or a role typed
-  as any `string`, it keeps a more precise type and says why.
+- `api/contract-kit.ts` is the only module that imports the generated file. It
+  passes the generated shapes on to the contract modules, with the type tools
+  that read one operation out of them.
+- `api/contract.ts` is the only module the rest of the application imports a
+  wire type from. It gives each type the name the screens use. Where the
+  generated type says less than the screens rely on, such as money typed as a
+  plain `string` or a role typed as any `string`, it keeps a more precise type
+  and says why.
+- The six reservation routes are in the document, and their types are built
+  from the generated file like every other. They sit in
+  `api/contract-booking.ts` to keep each file short, and `contract.ts` passes
+  them on. No wire type is written by hand.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -220,10 +236,18 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   used, and a failed refetch is shown as a failure.
 - A quote is never fresh either, for the same reason. An old price must never
   be read as the price.
+- A reservation is never fresh. A hold lapses by itself and the counter can
+  move a booking on, so a status read a while ago may no longer be the status.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
 uses the query and does not call the route function directly.
+
+`api/reservations.ts` has one function per reservation route, and
+`api/reservation-queries.ts` wraps the two reads as queries. The four writes
+are called directly, one request for each press of a button. After a write the
+screen hands the answer to `rememberReservation`, which keeps it in the cache
+under its id and its reference and marks every list as out of date.
 
 ### Prices
 
@@ -243,6 +267,127 @@ While a new quote is on its way the old one is taken down, so a price never
 sits beside a quantity it was not worked out for. When the API refuses the
 dates or the quantity, each message goes under the field it is about and no
 price is shown.
+
+`SC-04` and `SC-08` show what a reservation costs. Those figures are the ones
+the reservation routes send. Each line with its rates and what it comes to,
+the subtotal, the VAT, the total, and the deposit apart from them. They are
+written out by `src/features/customer/reservation-figures.tsx`. The basket
+itself shows no price, because nothing has been priced until the server makes
+the reservation.
+
+### Hire basket
+
+A reservation is one period at one collection branch with one or more models,
+so that is what the basket holds. A period, a branch, and a line for each
+model with how many are wanted. A visitor may fill it without an account.
+
+- `src/shared/basket-store.ts` holds the basket in memory, outside React, and
+  has every rule about it. `src/shared/use-basket.ts` is the hook a component
+  reads it through. The count beside the basket in the header is the number of
+  units in it, read from the same place.
+- `src/shared/basket-storage.ts` copies the basket to `sessionStorage` on every
+  change, so it survives a reload and is gone when the tab closes. What is
+  read back is checked by `src/shared/basket-stored-shape.ts` before it is
+  believed, because storage can be edited by hand. An empty basket leaves
+  nothing in storage.
+- `SC-03` adds a model with its "Add to my hire basket" button and says what
+  went in. The button works only once the quote and the availability have both
+  answered for the dates, the branch and the quantity on the card, and the
+  branch is free. A price that failed to load holds the basket back.
+- A basket never mixes periods or branches. Adding a model for other dates or
+  another branch adds nothing and asks the person which to keep. They can put
+  the card on the basket's dates and branch and check the model again, move
+  the whole basket to the new dates and branch, or leave it.
+- Signing out empties the basket. A session that ends by itself leaves it, so
+  the same person can sign in again and carry on.
+
+### Booking a hire
+
+`SC-04` shows the basket and then a booking in three steps on the one screen.
+Each step is one request, and the screen shows what the server answered.
+
+| Step | Request | What the screen shows |
+|---|---|---|
+| Review | `POST /api/reservations` | The draft the server priced. Every line, the subtotal, the VAT and the total, and the deposit apart from them with the sentence that it is held at collection and returned |
+| Hold | `POST /api/reservations/{id}/hold` | That the equipment is held and until when, with a countdown |
+| Confirm | `POST /api/reservations/{id}/confirm` | The reference, and that a confirmation email is on its way, only when the answer says the reservation is confirmed |
+
+The rules of a reservation are the server's. Every answer carries `canHold`,
+`canConfirm` and `canCancel`, and a button is offered from its flag and from
+nothing else. The steps are in `src/features/customer/use-booking.ts`.
+
+- Only one request runs at a time. Every button is disabled while one is in
+  flight, and a write is never repeated by itself.
+- A visitor who wants to review is sent to sign in and brought back to the
+  basket. Staff are told to book at the counter.
+- A 409 on a hold shows the server's own sentence, which names the model and
+  the dates, and offers the basket to change.
+- A 403 whose type ends `account-on-hold` shows the server's sentence and takes
+  the booking buttons away for as long as the screen is open.
+- A 403 whose type ends `email-not-verified` on a confirmation is said plainly,
+  and the hold is kept. The same is said when a held reservation cannot be
+  confirmed and the account's email address is unverified.
+- A 422 puts each message under the date, the branch or the line it is about.
+- A hold ends when the countdown reaches zero, when a confirmation is answered
+  with a 409, or when a reload finds the reservation expired. The screen says
+  the hold has run out and offers to hold again. A lapsed hold cannot be held
+  again, so that makes a new reservation from the same basket and holds it.
+- Going back to change the basket from a hold cancels the held reservation
+  first, when the server says it can be cancelled, so the equipment is free for
+  the next attempt.
+- The basket remembers the id of the reservation made from it. A reload in the
+  middle of a booking reads that reservation back and carries on from where it
+  stands, and does not make a second one.
+- A review makes a draft on the server, and a draft is not left behind for
+  every change of mind. Going back to the basket from the review sets the
+  draft aside, and so does any change to the basket while a reservation is
+  under way, because the reservation was priced for the basket as it was. The
+  next review settles it first, in
+  `src/features/customer/booking-set-aside.ts`. A basket that did not change
+  carries on with the draft it has. A basket that did change has the old
+  reservation cancelled through the cancellation route, and only then is a new
+  one made. If the old one was holding equipment, that also frees its units.
+  A conflict or a 404 on that cancellation means there was nothing left to
+  cancel. Any other failure is shown, and nothing new is made until it works.
+- A draft the customer walks away from stays on the server. So does one whose
+  basket was emptied or signed out of, because an empty basket remembers
+  nothing.
+
+Accessibility is part of each step. When the view changes, focus moves to the
+heading of the new view, and a polite status says what the last request did.
+The countdown is a `timer` with `aria-live="off"`, so a screen reader can read
+it on request and never reads it by itself. What is spoken is a separate
+polite status that changes five times in the half hour, at ten, five, two and
+one minute and when the hold runs out. Nothing takes focus while the time runs.
+
+### My reservations
+
+`SC-07` lists the signed in customer's own reservations from
+`GET /api/reservations`, newest first, with the reference, the dates, the
+branch, the status and the total of each. The status filter and the page live
+in the address, so a reload brings the same list back, and the server does the
+filtering and the paging. It has the shared loading, failed and empty states.
+
+A draft is a basket that was priced and never held, and a customer reads its
+status as "Not finished". The list leaves drafts out until the filter asks for
+them. The API filters by one status or by none, so with no status chosen the
+screen asks for every status and leaves the draft rows of the page out itself.
+It also asks for a page of one draft and reads its total, so it can count the
+bookings without them and say how many it left out, with a button that shows
+them. What this costs is exact paging. The pages are still the server's, so a
+page can show fewer than twenty rows, and one that holds only drafts says so
+and keeps the page controls. A reservation that was cancelled while it was
+still a draft has the status "Cancelled" like any other, and the list shows it.
+
+`SC-08` reads one reservation by the reference in its address. Cancelling is
+offered only when `canCancel` is true. It asks first, takes an optional reason
+of up to 200 characters, and then shows the reservation the server answered
+with. A refusal shows the server's sentence, and the reservation is read again
+so the screen stops offering what is no longer possible. A reference that is
+not the caller's is a 404 from the API, and the screen shows one plain not
+found state for that and for a reference that does not exist. The charges card
+shows no figure. It says that charges appear once the equipment has been
+collected, because hires and charges are a later change.
 
 ### Model pictures
 
@@ -271,7 +416,8 @@ throws while rendering shows the error state and the navigation stays up.
 
 - `src/shared/today.ts` returns today's date in `Africa/Johannesburg` as
   `YYYY-MM-DD`. A screen on the API uses it for "today". A test passes its own
-  date in.
+  date in. It also writes an instant the API sent as a time of day at the
+  branches, which is how the end of a hold is shown.
 - `money` in `src/shared/format.ts` accepts the strings the API sends, such as
   `"280.00"`, and never passes them through a float. `percent` writes a rate
   the API sends, such as `"15.00"`, as `15%`. `isNoMoney` says whether an
@@ -362,15 +508,51 @@ is not there, and the spec skips itself. The customer is
 `w.adonis@buildright.co.za`. The password comes from `E2E_CUSTOMER_PASSWORD`
 and falls back to the development seed password.
 
-One run signs that customer in four times, twice in each browser project. The
-API allows ten sign in attempts for one email address in a fixed window of
-fifteen minutes and counts the ones that succeed. A third run inside the same
-window is therefore answered 429 and fails. Wait for the next quarter hour, or
-start the backend on a fresh database.
+`e2e/reservation.spec.ts` has two journeys. In the first a visitor adds a
+model to the basket from the catalogue, finds it still there after a reload,
+and is sent to sign in when they want to review it. That needs the catalogue
+routes and nobody signs in. In the second the seeded customer signs in, adds a
+model, reviews the cost, holds the equipment, confirms the hire, finds it
+under My Hires, opens it and cancels it. Then the other seeded customer signs
+in, opens that reference and is shown the not found state. That needs the
+reservation routes, so the spec also asks `GET /api/reservations` with no
+token. A 404 or a 405 there means the routes are not there, and the journey
+skips itself.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn both skips into failures. The pipeline sets
-it, because there the backend is started for these tests and a skipped spec
-would hide that it did not come up.
+`e2e/reservation-changes.spec.ts` is the basket that changes on the way. The
+other seeded customer puts two models in one basket and sees them priced as
+one reservation with two lines. Going back and reviewing the same basket makes
+no second draft. Asking for ten of a model the branch cannot supply ten of is
+refused when the hold is asked for, the screen shows the sentence the API sent,
+and the basket is changed and held. A reload in the middle of the hold picks
+the same reservation up. The hold is released, a review is left unfinished,
+and My Hires leaves that one out until the filter asks for it.
+
+Neither spec names a tool or a branch, and neither needs a clean database.
+They narrow the search to the first branch the API lists, which leaves only
+the models that are free there for the dates. Each journey books its own dates
+in each browser project, so none competes with another for a unit. Each finds
+its own reservations by the references the API answered with. Each cancels or
+releases what it made, so the units are free for the next run. A journey that
+fails half way leaves what it had made, and the next run books whichever model
+is still free. What the two specs share is in `e2e/booking.ts`.
+
+The customers, the password rule and the sign in are in `e2e/customer.ts`, and
+the dates are counted from today at the branches by `e2e/hire-dates.ts`.
+
+One run makes ten sign ins. `session.spec.ts` signs the first customer in four
+times, twice in each browser project, and the booking journey twice more. The
+second customer is signed in four times, twice by each reservation spec. The
+API allows ten sign in attempts for one email address in a fixed window of
+fifteen minutes, and thirty for one client address, and counts the ones that
+succeed. So a second run inside the same window takes the first customer past
+ten, is answered 429 and fails. Wait for the next quarter hour, or raise
+`LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
+pipeline does.
+
+Set `E2E_REQUIRE_BACKEND=1` to turn all three skips into failures. The pipeline
+sets it, because there the backend is started for these tests and a skipped
+spec would hide that it did not come up.
 
 The scans use axe against the WCAG 2.2 level AA rules and fail on any serious
 or critical violation. An automated scan cannot judge everything, so it
