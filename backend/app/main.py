@@ -27,6 +27,9 @@ The email gateway is chosen here as well, from the configuration. With no API
 key the application still starts. It logs one warning, and every booking
 confirmation is then recorded as not sent.
 
+The account messages link to the frontend, so the origin they point at is read
+from the configuration here as well and kept on the application state.
+
 The application refuses to start while any route has not declared who may call
 it (BR-41). The route table is walked when the application is built and again
 when it starts serving, so a route mounted after the factory returned is caught
@@ -46,6 +49,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
 from app.api.access_policy import enforce_declared_policies
+from app.api.account_deps import FRONTEND_ORIGIN_STATE_KEY
 from app.api.deps import NOTIFICATION_GATEWAY_STATE_KEY
 from app.api.errors import register_exception_handlers
 from app.api.identity_deps import ALLOWED_ORIGINS_STATE_KEY, normalise_origin
@@ -179,6 +183,7 @@ def create_app(configuration: Settings = settings) -> FastAPI:
         ALLOWED_ORIGINS_STATE_KEY,
         frozenset(normalise_origin(origin) for origin in configuration.cors_origins),
     )
+    setattr(app.state, FRONTEND_ORIGIN_STATE_KEY, configuration.frontend_origin)
     # Chosen once, here, so a missing API key is reported once at start-up and
     # every request is served by the same gateway.
     setattr(
@@ -200,6 +205,7 @@ def create_app(configuration: Settings = settings) -> FastAPI:
             "strict_transport_security": not relaxed,
             "refresh_credential_secure": not relaxed,
             "cors_origins": configuration.cors_origins,
+            "frontend_origin": configuration.frontend_origin,
         },
     )
     return app

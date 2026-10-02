@@ -12,6 +12,10 @@ Signing in, staying signed in and signing out need four more. The account
 repository and the session repository are storage. The password verifier and
 the access token issuer are the two pieces of cryptography, kept behind ports
 so the use cases can be tested without a work factor and without a signing key.
+
+Registration, the two single use tokens and the customer's own profile write
+through the same repositories, and the password hasher is the third piece of
+cryptography behind a port.
 """
 
 from __future__ import annotations
@@ -23,9 +27,20 @@ from uuid import UUID
 
 from app.application.identity.read_models import BranchListing
 from app.domain.account import Account
+from app.domain.customer_account import CustomerDetails, NewCustomer
 from app.domain.enums import RevokeReason
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.session import RefreshSession
+
+
+class EmailAlreadyRegistered(Exception):
+    """Raised by the account repository when an address was taken a moment earlier.
+
+    A registration looks the address up before it writes. Two registrations
+    for one new address can both find nothing, and the database then lets one
+    of them in. The other is told with this, so it can answer as it would have
+    for an address that already had an account.
+    """
 
 
 class BranchDirectory(Protocol):
@@ -81,6 +96,33 @@ class CustomerRepository(Protocol):
         """
         ...
 
+    def add_registered(
+        self, *, user_account_id: UUID, registered_branch_id: UUID, customer: NewCustomer
+    ) -> UUID:
+        """Write the profile of somebody who has just registered and return its key."""
+        ...
+
+    def details_for_account(
+        self, user_account_id: UUID, *, for_update: bool = False
+    ) -> CustomerDetails | None:
+        """Return a customer's own details, or None when the account has no profile.
+
+        Args:
+            user_account_id: The sign in account the profile belongs to.
+            for_update: True to lock the profile and the account for the rest
+                of the transaction, which an edit asks for.
+
+        """
+        ...
+
+    def save_details(self, details: CustomerDetails) -> None:
+        """Write the contact and billing fields of a customer, on both rows.
+
+        The name and the phone number are kept on the account and on the
+        profile, and both copies are written here so they cannot drift apart.
+        """
+        ...
+
 
 class AccountRepository(Protocol):
     """Where sign in accounts are read, and where the lockout state is written."""
@@ -97,8 +139,34 @@ class AccountRepository(Protocol):
         """Return the account with this key as it is stored now, or None."""
         ...
 
+    def get_for_update(self, account_id: UUID) -> Account | None:
+        """Return the account with this key, locked for the rest of the transaction."""
+        ...
+
+    def find_by_email_verification_hash_for_update(self, token_hash: str) -> Account | None:
+        """Return the account holding this verification token hash, locked, or None."""
+        ...
+
+    def find_by_password_reset_hash_for_update(self, token_hash: str) -> Account | None:
+        """Return the account holding this reset token hash, locked, or None."""
+        ...
+
+    def add(self, account: Account) -> None:
+        """Write a new account inside the current transaction.
+
+        Raises:
+            EmailAlreadyRegistered: If another transaction took the address
+                between the lookup and this write.
+
+        """
+        ...
+
     def save_login_state(self, account: Account) -> None:
         """Write the failure count, the lock and the last sign in of an account."""
+        ...
+
+    def save_security_state(self, account: Account) -> None:
+        """Write the password hash, the verification, the two tokens and the lockout."""
         ...
 
 
@@ -127,6 +195,12 @@ class SessionRepository(Protocol):
         """Revoke every live session of a family and return how many there were."""
         ...
 
+    def revoke_all_for_account(
+        self, *, user_account_id: UUID, reason: RevokeReason, at: datetime
+    ) -> int:
+        """Revoke every live session of an account, whatever its family, and return how many."""
+        ...
+
 
 class PasswordVerifier(Protocol):
     """Checks a presented password against a stored hash."""
@@ -142,6 +216,14 @@ class PasswordVerifier(Protocol):
                 time a refusal takes says nothing about why (BR-46).
 
         """
+        ...
+
+
+class PasswordHasher(Protocol):
+    """Turns a chosen password into the hash that is stored."""
+
+    def hash(self, plain_password: str) -> str:
+        """Return the hash of a password. The password itself is never kept."""
         ...
 
 

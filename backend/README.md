@@ -24,6 +24,9 @@ first pass at the whole application.
    builds a priced draft, holds named units for thirty minutes, confirms, reads
    and cancels, and twenty hold requests at once for five units give exactly
    five holds and fifteen clean refusals.
+8. A customer can register, prove their email address, reset a forgotten
+   password and edit their own details, and no public account route says
+   whether an address has an account.
 
 ## Layout
 
@@ -36,7 +39,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases and `sweep_deps.py` wires the sweep that lapses expired holds. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases and `sweep_deps.py` wires the sweep that lapses expired holds. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -54,7 +57,7 @@ keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
-| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `AccountRepository`, `SessionRepository`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlAccountRepository`, `SqlSessionRepository` |
+| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
 | `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue` | `SqlProductModelRepository`, `SqlCatalogueQuery` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
@@ -271,8 +274,8 @@ only.
 ## Sessions and authorisation
 
 This is the session model of the security section of the design document
-(BR-41 to BR-46, BR-48, C-13 to C-25). Registration, email verification and
-password reset are not built yet.
+(BR-41 to BR-46, BR-48, C-13 to C-25). Registration, email verification, the
+password reset and the profile are in the section after this one.
 
 ### The two tokens
 
@@ -329,11 +332,24 @@ to check, so the time the answer takes does not give the reason away. The
 reason goes to the audit event `auth.login_failed` and to the log. A success
 writes `auth.login_succeeded`.
 
-Five failures lock the account for fifteen minutes, in `failed_login_count`
-and `locked_until`. A success sets the count back to zero. I count failures in
-a row and not failures inside a fifteen minute window, because the two columns
-hold no time for the first failure. That locks an account in every case the
-design document describes and in a few it does not.
+Five failures inside fifteen minutes lock the account for fifteen minutes
+(BR-46). The window slides with the clock. Each wrong password is counted in
+`rate_limit_counter`, in the second it happened in, under a salted SHA-256 of
+the account key, and the account is told how many failures the fifteen minutes
+that end now hold. It keeps the smaller of that number and its own
+`failed_login_count` plus one, and on the fifth it writes `locked_until`. Its
+own count goes back to zero on a success, on a password reset and when a lock
+has run out, so a failure from before any of those is never counted again,
+even while its fifteen minutes are still running. That needed no new table and
+no new column.
+
+A failure is timed to the second. One that is less than a second older than
+the window is still counted, which errs towards locking. An attempt refused
+because the account is already locked is not a failure of its own, so knocking
+on a locked account does not keep it locked. The unknown address and the wrong
+password still get the same answer after the same single bcrypt verification.
+The failure counters are written for a known account only, which costs two
+short statements and no hash.
 
 ### Throttling
 
@@ -356,9 +372,9 @@ committed before the password check starts, so the lock on a counter row lasts
 one statement and not one bcrypt. Windows older than a day are deleted, at
 most once every fifteen minutes by each process.
 
-`Throttle` in `app/application/throttle.py` is the reusable piece.
-Registration, the verification email and the password reset will use it with
-rules of their own.
+`Throttle` in `app/application/throttle.py` is the reusable piece. The account
+routes use it with seven rules of their own, listed in the next section, and
+the lockout uses its sliding count.
 
 Clients whose address the server cannot work out share one window. The limit
 of 30 only means what it says when the platform forwards the real client
@@ -405,6 +421,133 @@ staff to a branch that is not their own with `BranchScopeError`, which is a 403
 (BR-43). Creating a reservation checks the branch it is for, and holding,
 confirming and cancelling check the branch of the reservation. Staff reads are
 not restricted by branch.
+
+## Registration and account security
+
+This is FR-01 and US-01 to US-05 of the design document, with BR-45 to BR-47,
+C-13, C-14, C-17, C-18 and C-26.
+
+### Registering
+
+`POST /api/auth/register` writes a `user_account` with the role `CUSTOMER`
+and no verified address, and a `customer_profile` of type `INDIVIDUAL` and
+status `ACTIVE` with no discount, registered at the branch the person chose.
+The two rows and the audit event `auth.registered` are one transaction, so
+there is never an account without its profile. The password has to be twelve
+characters or more and is hashed with bcrypt at work factor 12 before the
+transaction opens. It is never logged and never returned. The request body
+names every field it accepts, so a submitted `accountStatus`, `role` or
+`tradeDiscountPercent` is a 422 that names the field and never reaches a row.
+
+### No answer says whether an address has an account
+
+Registration and the reset request answer 202 with the same body for every
+address (R-13, C-14). The body is `{"emailDeliverable": ...}`, which says
+whether this environment would hand a message for that address to the email
+provider at all. It comes from the gateway and depends on the configuration
+and the address only.
+
+The work is the same as well. A registration hashes the password and mints a
+token on both paths, writes one audit event and sends one message. A new
+address is sent the verification link. An address that already has an account
+gets no new account, nothing about the old one changes, the attempt is written
+as `auth.registration_repeated`, and its holder is sent a short note saying
+somebody tried to register with it and that they can sign in or reset their
+password there. The note carries no token. What still differs is two inserts,
+a millisecond or so beside a hash of a quarter of a second.
+
+A reset request mints and hashes a token for every address and writes one
+audit event, `auth.password_reset_requested`. Only an address with an active
+account has the token stored and is sent the link. An address with no account
+is sent nothing, because writing to strangers is worse than what it would
+hide. So one timing difference remains, and I state it plainly. When the
+address is unknown no call is made to the email provider, and the answer comes
+back sooner by however long that call takes for a known address. That is
+usually a few hundred milliseconds and at most the five second timeout of the
+adapter. Someone timing reset requests can therefore tell a known address from
+an unknown one where mail is delivered. The throttles below limit how fast
+anybody can ask. Where mail is not delivered to the address, which is what
+`emailDeliverable: false` says, no call is made on either path and the
+difference is gone.
+
+### The two links
+
+A verification link is `{FRONTEND_ORIGIN}/register#verify=<token>` and a reset
+link is `{FRONTEND_ORIGIN}/signin#reset=<token>`. The token rides in the
+fragment, so it never reaches a server log or a `Referer` header. A token is
+32 random bytes. It is sent once, in the message, and only its SHA-256 is
+stored, in the four columns `user_account` already had. A verification token
+lasts 24 hours and a reset token 60 minutes, `EMAIL_VERIFICATION_LIFETIME` and
+`PASSWORD_RESET_LIFETIME` in `app/domain/account_tokens.py`. Each works once,
+because redeeming it clears it, and a new one replaces the old one. A token
+that is unknown, already used or out of time is a 400 with the problem type
+`verification-link-invalid` or `reset-link-invalid`, in one sentence for all
+three. The reason goes to the log.
+
+`POST /api/auth/email-verification/resend` is for any signed in account. It
+sends a new link and does nothing for an account that is already verified,
+with the same answer.
+
+### Completing a reset
+
+`POST /api/auth/password-reset/complete` sets the new hash, clears the token,
+lifts any lock and revokes every refresh session of the account, in one
+transaction with the audit event `auth.password_reset_completed`. A browser
+that was signed in with the old password is signed out at its next refresh.
+The sessions are revoked with the reason `LOGOUT`. No reason is added to the
+enumeration, and of the four it has `LOGOUT` is the nearest, because the
+holder of the account ended the sessions and no administrator did. The audit
+event says exactly why. A new password under twelve characters is a 422 that
+names `newPassword`.
+
+### The messages
+
+The three messages go through the `NotificationGateway` port, so the Resend
+adapter and the fake both carry them. None of them writes a `notification`
+row, because that table records the booking confirmation and nothing else.
+Each is sent inside the request, after the commit and with no transaction
+open, with the five second timeout the adapter already has. A message that
+cannot be sent never fails the request. It is logged as
+`account_mail.send_finished` or `account_mail.gateway_fault`, with the kind of
+message and never the address or the token.
+
+### The throttles of the account routes
+
+Every account route is counted before it does any work, in `rate_limit_counter`
+through the same `Throttle` as signing in. One attempt over a limit is a 429
+with `Retry-After`.
+
+| Variable | Default | Counted for | Window |
+|---|---|---|---|
+| `REGISTER_ATTEMPTS_PER_EMAIL` | 5 | the address being registered | 1 hour |
+| `REGISTER_ATTEMPTS_PER_ADDRESS` | 10 | the client address | 15 minutes |
+| `VERIFICATION_ATTEMPTS_PER_ADDRESS` | 20 | the client address | 15 minutes |
+| `VERIFICATION_RESENDS_PER_ACCOUNT` | 5 | the signed in account | 1 hour |
+| `RESET_REQUESTS_PER_EMAIL` | 5 | the address a link is asked for | 1 hour |
+| `RESET_REQUESTS_PER_ADDRESS` | 10 | the client address | 15 minutes |
+| `RESET_COMPLETIONS_PER_ADDRESS` | 10 | the client address | 15 minutes |
+
+The two that send a message to an address somebody typed are counted for that
+address in an hour, so one mailbox cannot be filled by asking again and again.
+The limits follow the rules of the two sign in limits. None may be below 1,
+development and test accept any value from 1 up, and staging and production
+accept a value at or below the default only. The windows are not settings. The
+design document sets no numbers for these seven, so the defaults are mine.
+
+### The profile
+
+`GET /api/me/profile` and `PATCH /api/me/profile` are for a customer and for
+nobody else. The profile is found by the account that is signed in, so there
+is no key to guess, and an account with no profile is a 404. An edit takes any
+of `fullName`, `phone`, `billingAddressLine1`, `billingSuburb`, `billingCity`,
+`billingPostalCode`, `companyName` and `vatNumber`, all of them or none, and
+refuses any other field with a 422 that names it. `fullName` changes the name
+on the account and the display name on the profile, and `phone` changes the
+phone on the account and the contact phone on the profile. A trade customer
+cannot clear the company name. An edit that changes something writes
+`customer.profile_updated`, whose `after_state` names the fields that changed
+and not their values, because a log that can never be rewritten is the wrong
+place to keep every address a customer has had.
 
 ## The reservation lifecycle
 
@@ -589,7 +732,14 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/auth/login` | Public by declaration, it issues the credentials. |
 | POST | `/api/auth/refresh` | The holder of the refresh cookie. |
 | POST | `/api/auth/logout` | The holder of the refresh cookie. Always 204. |
+| POST | `/api/auth/register` | Public by declaration. Always 202. |
+| POST | `/api/auth/email-verification` | Public by declaration, the token is the credential. |
+| POST | `/api/auth/email-verification/resend` | Any active account. |
+| POST | `/api/auth/password-reset/request` | Public by declaration. Always 202. |
+| POST | `/api/auth/password-reset/complete` | Public by declaration, the token is the credential. |
 | GET | `/api/me` | Any active account. |
+| GET | `/api/me/profile` | A customer. |
+| PATCH | `/api/me/profile` | A customer. |
 | POST | `/api/reservations` | Any active account. A customer books for themselves, staff name the customer. |
 | POST | `/api/reservations/{id}/hold` | Any active account. The owner, an administrator, or counter staff of the branch. |
 | POST | `/api/reservations/{id}/confirm` | Any active account, as above. |
@@ -622,6 +772,26 @@ answer errors as `application/problem+json`.
 `user` is `id`, `email`, `fullName`, `role`, `branchCode` and `emailVerified`,
 and `GET /api/me` returns the same object. `role` is `customer`, `counter` or
 `admin`. `branchCode` is null unless the account is counter staff.
+
+### The account routes
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/auth/register` | `email`, `password`, `fullName`, `phone`, `idDocumentType`, `idDocumentLast4`, `billingAddressLine1`, `billingSuburb`, `billingCity`, `billingPostalCode`, `homeBranchCode`, `acceptsPrivacyNotice` | 202 with `emailDeliverable`. 422 naming the field. 429 `too-many-attempts`. |
+| `POST /api/auth/email-verification` | `token` | 204. 400 `verification-link-invalid`. 429. |
+| `POST /api/auth/email-verification/resend` | none | 202 with `emailDeliverable`. 401 with no credential. 429. |
+| `POST /api/auth/password-reset/request` | `email` | 202 with `emailDeliverable`. 429. |
+| `POST /api/auth/password-reset/complete` | `token`, `newPassword` | 204. 400 `reset-link-invalid`. 422 naming `newPassword`. 429. |
+| `GET /api/me/profile` | none | 200 with the profile. 404 with no profile. 403 for staff. |
+| `PATCH /api/me/profile` | any of the eight editable fields | 200 with the profile. 422 naming the field. 404 with no profile. |
+
+`idDocumentType` is `SA_ID`, `PASSPORT` or `DRIVING_LICENCE`, and
+`idDocumentLast4` is exactly four letters or digits. The full document number
+is never sent. The profile carries `fullName`, `email`, `emailVerified`,
+`phone`, `customerType`, `companyName`, `vatNumber`, `idDocumentType`,
+`idDocumentLast4`, the four billing fields, `accountStatus`,
+`tradeDiscountPercent` as a string with two decimals, `noShowCount`,
+`homeBranchCode` and `memberSince`, which is the day the profile was opened.
 
 ### The reservation routes
 
@@ -755,6 +925,10 @@ redirecting standard output, because the application logs to standard output.
 ENVIRONMENT=test python -c "import json, pathlib; from app.main import create_app; pathlib.Path('openapi.json').write_text(json.dumps(create_app().openapi(), indent=2) + '\\n', encoding='utf-8')"
 ```
 
+`tests/api/test_openapi_document.py` fails when the committed file differs
+from what the application generates, and its message carries the command
+above.
+
 `/docs`, `/redoc` and `/openapi.json` are served in development and test only.
 In staging and production they answer 404.
 
@@ -845,7 +1019,20 @@ not affected, so a client refreshes once and carries on.
 
 `LOGIN_ATTEMPTS_PER_EMAIL` and `LOGIN_ATTEMPTS_PER_ADDRESS` are the two sign
 in limits, 10 and 30 by default and never below 1. Outside development and
-test they can only be lowered. See Throttling above.
+test they can only be lowered. See Throttling above. The seven limits of the
+account routes follow the same rules and are listed under Registration and
+account security.
+
+`FRONTEND_ORIGIN` is where the links in the account messages point, for
+example `https://www.example.co.za`, with no path. Left unset it is the one
+origin in `CORS_ORIGINS`, and in development, when that list holds more than
+one, it is `http://localhost:5173`. Staging and production refuse to start
+when it cannot be worked out, when it is not `https` or when it names this
+machine. The deploy script sets the address of the site as `CORS_ORIGINS` on
+the service and does not pass `FRONTEND_ORIGIN` itself, so the deployed
+services use that fallback today. Passing `FRONTEND_ORIGIN` to the service as
+well would make the setting explicit. The start-up log shows the origin in use
+as `frontend_origin`.
 
 Three settings control email.
 
@@ -949,6 +1136,18 @@ connection of its own, and asserts exactly five holds, fifteen 409 answers, no
 commit until PostgreSQL reports the second one blocked behind it, and
 `test_cancellation_transaction.py` shows that a cancellation and its releases
 are one commit.
+
+Registration and account security are tested the same way. `tests/unit` holds
+the token rules, the lockout window with the clock moved between attempts, the
+password rule, the profile rules and every use case against the in memory
+stores, with a hasher that counts so the two registration paths can be shown
+to do the same work. `tests/api` asks every account route for every answer it
+can give and reads the link out of the message the fake gateway was handed.
+`tests/integration/test_account_security.py` and `test_account_storage.py`
+prove on PostgreSQL that the account and the profile commit together or not at
+all, that the token columns hold only hashes, that every step writes its audit
+event, and that registration and the lockout work within the grants of the
+application role.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

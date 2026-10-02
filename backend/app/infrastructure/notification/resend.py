@@ -110,6 +110,14 @@ class ResendEmailAdapter:
             f"recipient_restricted={self._allowed_recipient is not None})"
         )
 
+    def delivers_to(self, address: str) -> bool:
+        """Return True unless a recipient restriction is set and this address is not it.
+
+        The answer comes from the configuration and the address alone. It says
+        nothing about whether the address belongs to anybody.
+        """
+        return self._may_send_to(address)
+
     def send(self, message: EmailMessage) -> DeliveryReceipt:
         """Send one message and report what happened. Never raises for a failed delivery."""
         if not self._may_send_to(message.to):

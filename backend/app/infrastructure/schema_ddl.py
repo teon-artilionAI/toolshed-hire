@@ -70,6 +70,11 @@ RELEASE_STATE_CONSTRAINT_NAME: Final[str] = "ck_asset_allocation_release_state"
 # Only counter staff are branch scoped, and every one of them is.
 BRANCH_SCOPE_CONSTRAINT_NAME: Final[str] = "ck_user_account_branch_scope"
 
+# One account for one address. The column is declared unique in the baseline,
+# and this is the name PostgreSQL gives the constraint. The account repository
+# recognises it when two registrations race for one address.
+ACCOUNT_EMAIL_CONSTRAINT_NAME: Final[str] = "user_account_email_key"
+
 # Every partial index the schema defines. An index that kept its name and lost
 # its predicate would go on answering queries, so nothing would fail and nobody
 # would notice it had grown to cover every row. The schema test checks each of

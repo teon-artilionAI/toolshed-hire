@@ -43,6 +43,10 @@ class UnconfiguredEmailGateway:
         )
         return DeliveryReceipt.failed(EMAIL_NOT_CONFIGURED_REASON)
 
+    def delivers_to(self, address: str) -> bool:
+        """Return False for every address, because this gateway sends nothing."""
+        return False
+
 
 class FakeEmailGateway:
     """A gateway for tests. It records every message and never touches the network."""
@@ -69,6 +73,10 @@ class FakeEmailGateway:
         if self._failure_reason is not None:
             return DeliveryReceipt.failed(self._failure_reason)
         return DeliveryReceipt.delivered(f"{FAKE_MESSAGE_ID_PREFIX}{len(self._sent)}")
+
+    def delivers_to(self, address: str) -> bool:
+        """Return True for every address. The fake hands every message over."""
+        return True
 
     def sent_to(self, address: str) -> list[EmailMessage]:
         """Return the messages addressed to one recipient, compared without regard to case."""
