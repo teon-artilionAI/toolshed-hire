@@ -1,10 +1,10 @@
 """Queueing the booking confirmation (BR-19).
 
-The booking module decides that a booking happened. The notification module
-decides what is sent about it and to whom. A booking use case calls
-`queue_booking_confirmation` inside its own unit of work, so the notification
-is written in the same transaction as the booking and commits or rolls back
-with it. Nothing is sent here. The dispatcher sends what was queued once that
+The booking module decides that a booking was confirmed. The notification
+module decides what is sent about it and to whom. The use case that confirms a
+reservation calls `queue_booking_confirmation` inside its own unit of work, so
+the notification is written in the same transaction as the confirmation and
+commits or rolls back with it. Nothing is sent here. The dispatcher sends what was queued once that
 transaction has committed.
 """
 
@@ -34,7 +34,7 @@ def queue_booking_confirmation(
         outbox: The outbox of the unit of work that holds the booking.
         reservation: The booking to confirm.
         customer: The customer the booking belongs to.
-        queued_at: The moment the booking was made, from the clock.
+        queued_at: The moment the booking was confirmed, from the clock.
 
     Returns:
         The queued notification, or None when the customer has no email

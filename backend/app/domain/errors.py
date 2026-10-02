@@ -151,9 +151,11 @@ class AllocationConflictError(DomainError):
         available_quantity: int | None = None,
         constraint_name: str | None = None,
         asset_tag: str | None = None,
+        model_slug: str | None = None,
     ) -> None:
         """Build the conflict with everything a caller needs to retry sensibly."""
         detail: dict[str, DetailValue] = {
+            "model_slug": model_slug,
             "product_model_id": str(product_model_id) if product_model_id else None,
             "branch_id": str(branch_id) if branch_id else None,
             "period": period,
@@ -175,17 +177,20 @@ class AllocationConflictError(DomainError):
 class StateTransitionError(DomainError):
     """A reservation was asked to make a move its current status does not permit.
 
-    The reservation states that raise this arrive with the booking lifecycle.
-    The error is defined now so the HTTP mapping is complete before the first
-    state exists. The API maps it to HTTP 409, because the request was well
-    formed and lost to the state the booking is already in.
+    The reservation states in `app.domain.states` raise this. The API maps it
+    to HTTP 409, because the request was well formed and lost to the state the
+    booking is already in.
     """
 
     code = "state-transition"
 
-    def __init__(self, message: str, *, from_status: str, to_status: str) -> None:
+    def __init__(
+        self, message: str, *, from_status: str, to_status: str, rule: str | None = None
+    ) -> None:
         """Build the error naming the status held and the status asked for."""
-        super().__init__(message, {"from_status": from_status, "to_status": to_status})
+        super().__init__(
+            message, {"from_status": from_status, "to_status": to_status}, rule=rule
+        )
         self.from_status = from_status
         self.to_status = to_status
 
@@ -207,3 +212,14 @@ class AccountOnHoldError(DomainError):
     """
 
     code = "account-on-hold"
+
+
+class EmailNotVerifiedError(DomainError):
+    """A customer who has not proved their email address tried to confirm (BR-47).
+
+    The API maps this to HTTP 403. The booking stays on hold, so the customer
+    can verify the address and confirm inside the hold, or a counter assistant
+    can confirm for them at the branch.
+    """
+
+    code = "email-not-verified"

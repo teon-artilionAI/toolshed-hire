@@ -31,6 +31,15 @@ class ProductModelRepository(Protocol):
         """Return the product model with this key, or None when there is none."""
         ...
 
+    def find_published_by_slug(self, slug: str) -> ProductModel | None:
+        """Return the published product model with this slug, or None when there is none.
+
+        A model that exists and is not published is answered with None, so a
+        draft cannot be booked and cannot be told apart from a slug nobody
+        ever used.
+        """
+        ...
+
 
 class CatalogueQuery(Protocol):
     """What a visitor may read of the catalogue."""

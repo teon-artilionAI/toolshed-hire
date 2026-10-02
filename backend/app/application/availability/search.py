@@ -1,10 +1,15 @@
 """Searching availability, which is FR-03 and FR-04.
 
 A visitor asks where the catalogue is free for a period, or where one model is
-free in a given quantity. Nothing is held and nothing is written, so there is
-no unit of work here. The answer comes from the `AvailabilityQuery` port, and
-this module owns the rules that decide whether the question may be asked at
-all.
+free in a given quantity. Nothing is held by a search, so there is no unit of
+work here. The answer comes from the `AvailabilityQuery` port, and this module
+owns the rules that decide whether the question may be asked at all.
+
+One thing is done before an answer is given. A hold that has run out still
+occupies its units until something lapses it, and nothing does that on a
+timer (BR-13). So the search is handed a way to lapse expired holds and calls
+it first, once the question has passed its checks. A unit nobody is holding
+any longer is then reported free.
 
 The period, the quantity and the hire limits of a model are checked by
 `app/application/availability/hire_request.py`, which a quote uses as well, so
@@ -23,6 +28,7 @@ limits of each model travel with it in the summary.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import date
 from typing import Final
 
@@ -63,6 +69,7 @@ class SearchAvailability:
         catalogue: CatalogueQuery,
         branches: BranchDirectory,
         clock: Clock,
+        lapse_expired_holds: Callable[[], object],
     ) -> None:
         """Keep the ports the search reads through and the clock it dates by.
 
@@ -71,12 +78,15 @@ class SearchAvailability:
             catalogue: Checks the category and finds the single model.
             branches: Checks the branch a search is narrowed to.
             clock: Where the current business day comes from.
+            lapse_expired_holds: Runs the sweep that frees the units of holds
+                that have run out. It is called before every answer.
 
         """
         self._availability = availability
         self._catalogue = catalogue
         self._branches = branches
         self._clock = clock
+        self._lapse_expired_holds = lapse_expired_holds
 
     def across_catalogue(
         self, start: date, end: date, models: ModelSearch, branch_code: str | None = None
@@ -97,6 +107,7 @@ class SearchAvailability:
         period = requested_period(start, end, self._clock.today())
         ensure_category_exists(self._catalogue, models.category_slug)
         self._ensure_branch_exists(branch_code)
+        self._lapse_expired_holds()
         return self._availability.search(
             AvailabilitySearch(period=period, models=models, branch_code=branch_code)
         )
@@ -128,6 +139,7 @@ class SearchAvailability:
             )
             raise NotFound(MODEL_NOT_FOUND_MESSAGE, {"slug": slug})
         ensure_within_hire_limits(model, period)
+        self._lapse_expired_holds()
         answers = self._availability.for_model(slug, period, quantity)
         return ModelAvailabilityAnswer(period=period, quantity=quantity, branches=tuple(answers))
 

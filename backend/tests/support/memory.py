@@ -13,6 +13,9 @@ are proved against PostgreSQL in tests/integration.
 
 Faults are switched on through the store, so a test can make the audit log or
 the outbox fail at the moment it wants to and then look at what was kept.
+
+The reservation repository is in `memory_booking`, with the read models it
+builds, and the repositories of the reference data are in `memory_reference`.
 """
 
 from __future__ import annotations
@@ -28,13 +31,19 @@ from uuid import UUID
 
 from app.domain.audit import AuditEvent
 from app.domain.availability import AssetAllocation
-from app.domain.booking import Reservation, format_reference
+from app.domain.booking import Reservation
 from app.domain.catalogue import Asset, ProductModel
 from app.domain.enums import NotificationStatus
 from app.domain.errors import AllocationConflictError
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.notification import Notification
 from app.domain.period import BookingPeriod
+from tests.support.memory_booking import MemoryReservations
+from tests.support.memory_reference import (
+    MemoryBranches,
+    MemoryCustomers,
+    MemoryProductModels,
+)
 
 FIRST_REFERENCE_NUMBER: Final[int] = 124
 CONSTRAINT_NAME: Final[str] = "asset_allocation_no_overlap"
@@ -54,6 +63,7 @@ class Records:
     allocations: list[AssetAllocation] = field(default_factory=list)
     audit_events: list[AuditEvent] = field(default_factory=list)
     notifications: dict[UUID, Notification] = field(default_factory=dict)
+    late_cancellations: dict[UUID, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -65,7 +75,10 @@ class MemoryStore:
         branches: The branches that exist, by key.
         product_models: The catalogue entries that exist, by key.
         profiles: The customer profiles, by the account they belong to.
+        walk_ins: The customer profiles that have no account.
         assets: The fleet.
+        unpublished_slugs: The slugs of models that exist and are not published.
+        closed_branch_codes: The codes of branches that have stopped trading.
         journal: `commit` and `rollback`, in the order they happened.
         fail_audit: When True, recording an audit event raises.
         fail_outbox_read: When True, reading the queued notifications raises.
@@ -77,7 +90,10 @@ class MemoryStore:
     branches: dict[UUID, Branch] = field(default_factory=dict)
     product_models: dict[UUID, ProductModel] = field(default_factory=dict)
     profiles: dict[UUID, CustomerProfile] = field(default_factory=dict)
+    walk_ins: list[CustomerProfile] = field(default_factory=list)
     assets: list[Asset] = field(default_factory=list)
+    unpublished_slugs: set[str] = field(default_factory=set)
+    closed_branch_codes: set[str] = field(default_factory=set)
     journal: list[str] = field(default_factory=list)
     fail_audit: bool = False
     fail_outbox_read: bool = False
@@ -90,22 +106,24 @@ class MemoryStore:
         """Return the next reference number. Like a sequence, it never rolls back."""
         return next(self._references)
 
+    def profile_with_id(self, customer_profile_id: UUID) -> CustomerProfile | None:
+        """Return the customer profile with this key, with or without an account."""
+        for profile in (*self.profiles.values(), *self.walk_ins):
+            if profile.id == customer_profile_id:
+                return profile
+        return None
 
-class _Reservations:
-    """The reservation repository over the working copy."""
+    def tag_of(self, asset_id: UUID) -> str:
+        """Return the tag of a unit of the fleet.
 
-    def __init__(self, store: MemoryStore, working: Records) -> None:
-        """Bind to the store and to the working copy of one transaction."""
-        self._store = store
-        self._working = working
+        Raises:
+            LookupError: If the store holds no unit with this key.
 
-    def add(self, reservation: Reservation) -> None:
-        """Keep the reservation in the working copy."""
-        self._working.reservations.append(reservation)
-
-    def next_reference(self, year: int) -> str:
-        """Return the next reference from the store's counter."""
-        return format_reference(year, self._store.next_reference_number())
+        """
+        for asset in self.assets:
+            if asset.id == asset_id:
+                return asset.asset_tag
+        raise LookupError(f"Attempted to read the tag of asset {asset_id}, which is not stored.")
 
 
 class _Assets:
@@ -148,42 +166,6 @@ class _Assets:
             and allocation.period.overlaps(period)
             for allocation in self._working.allocations
         )
-
-
-class _Branches:
-    """The branch repository."""
-
-    def __init__(self, store: MemoryStore) -> None:
-        """Bind to the store that holds the reference data."""
-        self._store = store
-
-    def get(self, branch_id: UUID) -> Branch | None:
-        """Return the branch with this key, if there is one."""
-        return self._store.branches.get(branch_id)
-
-
-class _ProductModels:
-    """The product model repository."""
-
-    def __init__(self, store: MemoryStore) -> None:
-        """Bind to the store that holds the reference data."""
-        self._store = store
-
-    def get(self, product_model_id: UUID) -> ProductModel | None:
-        """Return the product model with this key, if there is one."""
-        return self._store.product_models.get(product_model_id)
-
-
-class _Customers:
-    """The customer repository."""
-
-    def __init__(self, store: MemoryStore) -> None:
-        """Bind to the store that holds the reference data."""
-        self._store = store
-
-    def profile_for_account(self, user_account_id: UUID) -> CustomerProfile | None:
-        """Return the profile of an account, if it has one."""
-        return self._store.profiles.get(user_account_id)
 
 
 class _Outbox:
@@ -243,11 +225,11 @@ class _AuditLog:
 class InMemoryUnitOfWork:
     """A unit of work that keeps its records in memory."""
 
-    reservations: _Reservations
+    reservations: MemoryReservations
     assets: _Assets
-    branches: _Branches
-    product_models: _ProductModels
-    customers: _Customers
+    branches: MemoryBranches
+    product_models: MemoryProductModels
+    customers: MemoryCustomers
     notifications: _Outbox
     audit: _AuditLog
 
@@ -287,11 +269,11 @@ class InMemoryUnitOfWork:
     def _bind(self, working: Records) -> None:
         """Point every repository at one working copy."""
         self._working = working
-        self.reservations = _Reservations(self.store, working)
+        self.reservations = MemoryReservations(self.store, working)
         self.assets = _Assets(self.store, working)
-        self.branches = _Branches(self.store)
-        self.product_models = _ProductModels(self.store)
-        self.customers = _Customers(self.store)
+        self.branches = MemoryBranches(self.store)
+        self.product_models = MemoryProductModels(self.store)
+        self.customers = MemoryCustomers(self.store, working)
         self.notifications = _Outbox(self.store, working)
         self.audit = _AuditLog(self.store, working)
 

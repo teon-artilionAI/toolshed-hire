@@ -15,6 +15,9 @@ from enum import Enum
 from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.application.identity.sign_in import LOGIN_ATTEMPTS_PER_ADDRESS, LOGIN_ATTEMPTS_PER_EMAIL
+from app.config_checks import check_login_limits, describe_failure, force_psycopg_driver
+
 logger = logging.getLogger(__name__)
 
 # The placeholder secret shipped in .env.example. Recognised by name so that a
@@ -26,8 +29,6 @@ MINIMUM_JWT_SECRET_LENGTH = 32
 MINIMUM_ACCESS_TOKEN_MINUTES = 1
 MAXIMUM_ACCESS_TOKEN_MINUTES = 60
 SUPPORTED_JWT_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
-REQUIRED_DRIVER_PREFIX = "postgresql+psycopg://"
-BARE_POSTGRES_PREFIXES = ("postgres://", "postgresql://")
 # Reported as the revision when the process is not running on Cloud Run.
 LOCAL_REVISION = "local"
 # What RESEND_API_KEY holds in a deployment whose email account does not exist
@@ -121,27 +122,22 @@ class Settings(BaseSettings):
         validation_alias="EMAIL_ALLOWED_RECIPIENT",
         description="When set, the only address the service will send email to",
     )
+    login_attempts_per_email: int = Field(
+        default=LOGIN_ATTEMPTS_PER_EMAIL,
+        validation_alias="LOGIN_ATTEMPTS_PER_EMAIL",
+        description="Sign in attempts one email address may make in a window",
+    )
+    login_attempts_per_address: int = Field(
+        default=LOGIN_ATTEMPTS_PER_ADDRESS,
+        validation_alias="LOGIN_ATTEMPTS_PER_ADDRESS",
+        description="Sign in attempts one client address may make in a window",
+    )
 
     @field_validator("database_url")
     @classmethod
     def normalise_database_url(cls, value: str) -> str:
         """Force the psycopg driver so a bare postgres DSN cannot pick psycopg2."""
-        candidate = value.strip()
-        if not candidate:
-            raise ValueError("DATABASE_URL was empty. Set it to a PostgreSQL DSN.")
-        for prefix in BARE_POSTGRES_PREFIXES:
-            if candidate.startswith(prefix):
-                return REQUIRED_DRIVER_PREFIX + candidate[len(prefix) :]
-        if not candidate.startswith(REQUIRED_DRIVER_PREFIX):
-            # Only the scheme is repeated. The rest of the value holds the
-            # credentials, and this message ends up in the start-up log.
-            scheme, separator, _rest = candidate.partition("://")
-            found = f"the scheme {scheme!r}" if separator else "a value with no scheme"
-            raise ValueError(
-                "DATABASE_URL must be a PostgreSQL DSN. Expected a value starting with "
-                f"{REQUIRED_DRIVER_PREFIX!r}, postgres:// or postgresql://, got {found}."
-            )
-        return candidate
+        return force_psycopg_driver(value)
 
     @field_validator("revision")
     @classmethod
@@ -219,6 +215,17 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def keep_login_limits_within_bounds(self) -> Settings:
+        """Refuse a sign in limit under the floor, or one raised where the service is deployed."""
+        check_login_limits(
+            per_email=self.login_attempts_per_email,
+            per_address=self.login_attempts_per_address,
+            environment=self.environment.value,
+            relaxed=self.environment.is_relaxed,
+        )
+        return self
+
     @property
     def cors_origins(self) -> list[str]:
         """Return the configured browser origins as a list."""
@@ -240,7 +247,8 @@ class Settings(BaseSettings):
         which would turn "set", the lifetime in minutes and the state of the
         email key into the placeholder and lose the facts this record exists
         to show. The one permitted recipient is an address, so the record says
-        whether a restriction is on and not who it names.
+        whether a restriction is on and not who it names. The two sign in
+        limits keep the names of their settings, which hold none of the three.
         """
         return {
             "environment": self.environment.value,
@@ -253,6 +261,8 @@ class Settings(BaseSettings):
             "email_delivery": "configured" if self.email_configured else "not-configured",
             "email_sender": self.email_from,
             "email_recipient_restriction": "on" if self.email_allowed_recipient else "off",
+            "login_attempts_per_email": self.login_attempts_per_email,
+            "login_attempts_per_address": self.login_attempts_per_address,
         }
 
 
@@ -260,20 +270,6 @@ def _host_of(database_url: str) -> str:
     """Extract the host and database name from a DSN, discarding credentials."""
     without_scheme = database_url.split("://", 1)[-1]
     return without_scheme.rsplit("@", 1)[-1] if "@" in without_scheme else without_scheme
-
-
-def _describe(failure: ValidationError) -> str:
-    """Say what each failed check said, without the value that failed it.
-
-    The text pydantic renders for a failure quotes the input it rejected, and
-    here the input is the signing key and the connection string. So the
-    message is rebuilt from the name of each setting and the reason alone.
-    """
-    reasons = failure.errors(include_url=False, include_context=False, include_input=False)
-    return "; ".join(
-        f"{'.'.join(str(part) for part in reason['loc']) or 'settings'}: {reason['msg']}"
-        for reason in reasons
-    )
 
 
 def load_settings() -> Settings:
@@ -293,8 +289,9 @@ def load_settings() -> Settings:
             "Failed to load backend configuration from the environment. "
             "Attempted to read DATABASE_URL, JWT_SECRET, JWT_ALGORITHM, "
             "ACCESS_TOKEN_MINUTES, ENVIRONMENT, CORS_ORIGINS, K_REVISION, "
-            "RESEND_API_KEY, EMAIL_FROM and EMAIL_ALLOWED_RECIPIENT. "
-            f"Cause: {_describe(exc)}"
+            "RESEND_API_KEY, EMAIL_FROM, EMAIL_ALLOWED_RECIPIENT, "
+            "LOGIN_ATTEMPTS_PER_EMAIL and LOGIN_ATTEMPTS_PER_ADDRESS. "
+            f"Cause: {describe_failure(exc)}"
         ) from None
 
 

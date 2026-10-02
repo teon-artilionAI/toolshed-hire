@@ -27,7 +27,7 @@ even when what follows it fails.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Final
@@ -52,6 +52,8 @@ from app.domain.session import RefreshSession, hash_refresh_token, mint_refresh_
 logger = logging.getLogger(__name__)
 
 LOGIN_WINDOW: Final[timedelta] = timedelta(minutes=15)
+# The limits the design document sets. The use case is handed its limits, and
+# these are the defaults. The composition root passes the configured ones.
 LOGIN_ATTEMPTS_PER_EMAIL: Final[int] = 10
 LOGIN_ATTEMPTS_PER_ADDRESS: Final[int] = 30
 LOGIN_EMAIL_RULE: Final[ThrottleRule] = ThrottleRule(
@@ -88,6 +90,36 @@ class LoginFailure(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class LoginThrottleRules:
+    """The two rules every sign in attempt is counted against.
+
+    Attributes:
+        email: The rule for the address being signed in to.
+        address: The rule for the client address the attempt came from.
+
+    """
+
+    email: ThrottleRule = LOGIN_EMAIL_RULE
+    address: ThrottleRule = LOGIN_ADDRESS_RULE
+
+    @classmethod
+    def with_limits(cls, *, per_email: int, per_address: int) -> LoginThrottleRules:
+        """Return the two rules with other limits, keeping their names and their window.
+
+        Raises:
+            ValueError: If either limit is below one.
+
+        """
+        return cls(
+            email=replace(LOGIN_EMAIL_RULE, limit=per_email),
+            address=replace(LOGIN_ADDRESS_RULE, limit=per_address),
+        )
+
+
+DEFAULT_LOGIN_RULES: Final[LoginThrottleRules] = LoginThrottleRules()
+
+
+@dataclass(frozen=True, slots=True)
 class SignInCommand:
     """A request to sign in.
 
@@ -113,6 +145,7 @@ class SignInUseCase(UseCase[SignInCommand, SessionGrant]):
         passwords: PasswordVerifier,
         tokens: AccessTokenIssuer,
         throttle: Throttle,
+        rules: LoginThrottleRules = DEFAULT_LOGIN_RULES,
     ) -> None:
         """Keep the collaborators the use case works with.
 
@@ -122,12 +155,14 @@ class SignInUseCase(UseCase[SignInCommand, SessionGrant]):
             passwords: Verifies a password against a stored hash.
             tokens: Signs the access token.
             throttle: Counts the attempt against the two sign in windows.
+            rules: The limits of the two windows. The defaults when omitted.
 
         """
         super().__init__(uow, clock)
         self._passwords = passwords
         self._tokens = tokens
         self._throttle = throttle
+        self._rules = rules
 
     def execute(self, command: SignInCommand) -> SessionGrant:
         """Sign the caller in, or refuse without saying why.
@@ -167,8 +202,8 @@ class SignInUseCase(UseCase[SignInCommand, SessionGrant]):
         """Count the attempt in both windows and return the wait, or zero when allowed."""
         address = str(client.address) if client.address is not None else UNKNOWN_ADDRESS_SUBJECT
         verdicts = [
-            self._throttle.check(uow.rate_limits, LOGIN_EMAIL_RULE, email, now),
-            self._throttle.check(uow.rate_limits, LOGIN_ADDRESS_RULE, address, now),
+            self._throttle.check(uow.rate_limits, self._rules.email, email, now),
+            self._throttle.check(uow.rate_limits, self._rules.address, address, now),
         ]
         return max(
             (verdict.retry_after_seconds for verdict in verdicts if not verdict.allowed),

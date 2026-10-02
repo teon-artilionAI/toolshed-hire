@@ -1,18 +1,13 @@
-"""The HTTP boundary: the layered auth chain, and the conflict that must be 409.
+"""The HTTP boundary of the layered auth chain.
 
 Authority is read from the database on every request and never from a token
 claim. The token does carry the role and the branch, and the dependency chain
 does not rely on either, so a role change or a deactivation takes effect on the
 very next request rather than whenever the token happens to expire.
 
-Losing a race for the last unit is a normal outcome, so it is answered with 409
-and a problem document. A 500 there would tell the client the server broke, when
-in fact it worked exactly as designed and somebody else booked first.
-
-These run against the in memory database, so the 409 proved here is the one
-raised by the availability pre check. The 409 raised by the exclusion constraint
-under genuine concurrency is proved in
-tests/integration/test_concurrent_allocation.py, which needs real PostgreSQL.
+These run against the in memory database. What the reservation routes do for a
+signed in caller, including the conflict that must be 409 and never 500, is in
+tests/api/test_reservation_routes.py and tests/api/test_reservation_refusals.py.
 """
 
 from __future__ import annotations
@@ -28,9 +23,8 @@ from sqlmodel import Session
 from app.domain.enums import UserRole
 from app.infrastructure.models import UserAccount
 from tests.support.factories import TEST_PASSWORD, Factory
-from tests.support.http import booking_payload, future_period, problem_code, problem_of
+from tests.support.http import problem_code, problem_of
 from tests.support.probe_app import ADMIN_PATH, ANY_ROLE_PATH, COUNTER_PATH
-from tests.support.scenarios import AllocationScenario, build_allocation_scenario
 from tests.support.tokens import (
     authorization_header,
     mint_access_token,
@@ -41,13 +35,10 @@ from tests.support.tokens import (
 
 ME_PATH: Final[str] = "/api/me"
 SIGN_IN_PATH: Final[str] = "/api/auth/login"
-ALLOCATIONS_PATH: Final[str] = "/api/allocations"
 AUTHENTICATION_PROBLEM: Final[str] = "authentication-failure"
 INVALID_CREDENTIALS_PROBLEM: Final[str] = "invalid-credentials"
 AUTHORISATION_PROBLEM: Final[str] = "authorisation-failure"
 INACTIVE_PROBLEM: Final[str] = "inactive-account"
-CONFLICT_PROBLEM: Final[str] = "asset-unavailable"
-REQUESTED_QUANTITY: Final[int] = 1
 # Eleven characters, one short of the policy minimum that used to be enforced on
 # the sign in request itself. Wrong either way, and it must be answered the same
 # way as any other wrong password.
@@ -61,15 +52,6 @@ OVERLONG_PASSWORD_LENGTH: Final[int] = 73
 SHARED_REQUEST_ID: Final[dict[str, str]] = {
     "X-Request-ID": "6f1c2b9e-3d4a-4c5b-8e7f-0a1b2c3d4e5f"
 }
-
-
-def payload_for(scenario: AllocationScenario) -> dict[str, object]:
-    """Return the booking body for a scenario's product model and branch."""
-    return booking_payload(
-        product_model_id=scenario.product_model.id,
-        branch_id=scenario.branch.id,
-        period=future_period(),
-    )
 
 
 @pytest.fixture
@@ -277,93 +259,3 @@ class TestRolesAreDatabaseAuthoritative:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert problem_code(response) == INACTIVE_PROBLEM
         assert problem_of(response)["errors"] == {"reason": "account-deactivated"}
-
-
-class TestAllocationConflictIsFourZeroNine:
-    """A losing race is a normal outcome, so it is a conflict and not a fault."""
-
-    def test_a_booking_of_a_free_unit_returns_201_naming_the_asset_it_held(
-        self, client: TestClient, session: Session, factory: Factory
-    ) -> None:
-        scenario = build_allocation_scenario(factory, future_period())
-        session.commit()
-        payload = payload_for(scenario)
-        response = client.post(
-            ALLOCATIONS_PATH,
-            json=payload,
-            headers=authorization_header(mint_access_token(scenario.customer.id)),
-        )
-        assert response.status_code == status.HTTP_201_CREATED
-        body = response.json()
-        assert body["startDate"] == payload["startDate"]
-        assert [item["assetTag"] for item in body["allocated"]] == [scenario.asset.asset_tag]
-
-    def test_a_second_booking_of_the_only_unit_returns_409_and_not_500(
-        self, client: TestClient, session: Session, factory: Factory
-    ) -> None:
-        scenario = build_allocation_scenario(factory, future_period())
-        session.commit()
-        payload = payload_for(scenario)
-        headers = authorization_header(mint_access_token(scenario.customer.id))
-        first = client.post(ALLOCATIONS_PATH, json=payload, headers=headers)
-        assert first.status_code == status.HTTP_201_CREATED
-
-        second = client.post(ALLOCATIONS_PATH, json=payload, headers=headers)
-        assert second.status_code == status.HTTP_409_CONFLICT
-        assert problem_code(second) == CONFLICT_PROBLEM
-
-    def test_the_conflict_document_names_the_period_and_the_quantities_involved(
-        self, client: TestClient, session: Session, factory: Factory
-    ) -> None:
-        scenario = build_allocation_scenario(factory, future_period())
-        session.commit()
-        payload = payload_for(scenario)
-        headers = authorization_header(mint_access_token(scenario.customer.id))
-        client.post(ALLOCATIONS_PATH, json=payload, headers=headers)
-
-        errors = problem_of(client.post(ALLOCATIONS_PATH, json=payload, headers=headers))["errors"]
-        assert isinstance(errors, dict)
-        assert errors["period"] == future_period().as_postgres_daterange()
-        assert errors["requested_quantity"] == REQUESTED_QUANTITY
-        assert errors["available_quantity"] == 0
-
-    def test_booking_without_a_token_is_401_before_any_availability_work_happens(
-        self, client: TestClient, session: Session, factory: Factory
-    ) -> None:
-        scenario = build_allocation_scenario(factory, future_period())
-        session.commit()
-        response = client.post(
-            ALLOCATIONS_PATH,
-            json=payload_for(scenario),
-        )
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    def test_a_reversed_period_is_refused_with_422_rather_than_reaching_the_database(
-        self, client: TestClient, session: Session, factory: Factory
-    ) -> None:
-        scenario = build_allocation_scenario(factory, future_period())
-        session.commit()
-        payload = payload_for(scenario)
-        payload["startDate"], payload["endDate"] = payload["endDate"], payload["startDate"]
-        response = client.post(
-            ALLOCATIONS_PATH,
-            json=payload,
-            headers=authorization_header(mint_access_token(scenario.customer.id)),
-        )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-    def test_a_customer_may_not_book_on_behalf_of_another_account(
-        self, client: TestClient, session: Session, factory: Factory
-    ) -> None:
-        scenario = build_allocation_scenario(factory, future_period())
-        someone_else = factory.user(role=UserRole.CUSTOMER)
-        session.commit()
-        payload = payload_for(scenario)
-        payload["customerUserId"] = str(someone_else.id)
-        response = client.post(
-            ALLOCATIONS_PATH,
-            json=payload,
-            headers=authorization_header(mint_access_token(scenario.customer.id)),
-        )
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert problem_code(response) == AUTHORISATION_PROBLEM

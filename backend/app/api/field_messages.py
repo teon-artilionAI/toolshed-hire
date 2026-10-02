@@ -26,6 +26,7 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 
 QUERY_LOCATION: Final[str] = "query"
+BODY_LOCATION: Final[str] = "body"
 LOCATION_SEPARATOR: Final[str] = "."
 SINGLE: Final[int] = 1
 

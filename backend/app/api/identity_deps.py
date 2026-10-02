@@ -50,10 +50,10 @@ from app.api.security_headers import CACHE_CONTROL_HEADER, CACHE_CONTROL_NO_STOR
 from app.application.identity.ports import AccessTokenIssuer, PasswordVerifier
 from app.application.identity.refresh_session import RefreshSessionUseCase
 from app.application.identity.sessions import ClientDetails
-from app.application.identity.sign_in import SignInUseCase
+from app.application.identity.sign_in import LoginThrottleRules, SignInUseCase
 from app.application.identity.sign_out import SignOutUseCase
 from app.application.throttle import Throttle
-from app.config import settings
+from app.config import Settings, settings
 from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, OriginNotAllowed
 from app.infrastructure.identity_accounts import BcryptPasswordVerifier, JwtAccessTokenIssuer
@@ -81,6 +81,19 @@ _THROTTLE = Throttle(
 )
 _PASSWORD_VERIFIER = BcryptPasswordVerifier()
 _ACCESS_TOKEN_ISSUER = JwtAccessTokenIssuer()
+
+
+def login_rules_for(configuration: Settings) -> LoginThrottleRules:
+    """Return the two sign in rules with the limits a configuration sets."""
+    return LoginThrottleRules.with_limits(
+        per_email=configuration.login_attempts_per_email,
+        per_address=configuration.login_attempts_per_address,
+    )
+
+
+# Built once, as the module is imported. A limit the throttle cannot use then
+# stops the process as it starts and not at the first sign in.
+_LOGIN_RULES = login_rules_for(settings)
 
 
 def normalise_origin(origin: str) -> str:
@@ -240,6 +253,11 @@ def get_throttle() -> Throttle:
     return _THROTTLE
 
 
+def get_login_rules() -> LoginThrottleRules:
+    """Return the two sign in rules, with the limits the process was configured with."""
+    return _LOGIN_RULES
+
+
 def get_password_verifier() -> PasswordVerifier:
     """Return the bcrypt password verifier."""
     return _PASSWORD_VERIFIER
@@ -259,9 +277,10 @@ def get_sign_in_use_case(
     passwords: Annotated[PasswordVerifier, Depends(get_password_verifier)],
     tokens: AccessTokenIssuerDependency,
     throttle: Annotated[Throttle, Depends(get_throttle)],
+    rules: Annotated[LoginThrottleRules, Depends(get_login_rules)],
 ) -> SignInUseCase:
-    """Return the sign in use case, wired to its unit of work, clock and collaborators."""
-    return SignInUseCase(uow, clock, passwords, tokens, throttle)
+    """Return the sign in use case, wired to its collaborators and the configured limits."""
+    return SignInUseCase(uow, clock, passwords, tokens, throttle, rules)
 
 
 def get_refresh_session_use_case(

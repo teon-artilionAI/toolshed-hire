@@ -37,15 +37,23 @@ class BranchDirectory(Protocol):
 
 
 class BranchRepository(Protocol):
-    """Read access to the trading branches."""
+    """Read access to the branches."""
 
     def get(self, branch_id: UUID) -> Branch | None:
         """Return the branch with this key, or None when there is none."""
         ...
 
+    def find_active_by_code(self, code: str) -> Branch | None:
+        """Return the trading branch with this code, or None when there is none.
+
+        A branch that has stopped trading is answered with None, because
+        nothing can be collected there.
+        """
+        ...
+
 
 class CustomerRepository(Protocol):
-    """Read access to customer profiles."""
+    """Customer profiles, as far as a booking reads and counts on them."""
 
     def profile_for_account(self, user_account_id: UUID) -> CustomerProfile | None:
         """Return the customer profile that belongs to a sign in account.
@@ -54,6 +62,22 @@ class CustomerRepository(Protocol):
             The profile, or None when the account has none. Staff accounts have
             none, and an account that is not a customer cannot own a booking.
 
+        """
+        ...
+
+    def get(self, customer_profile_id: UUID) -> CustomerProfile | None:
+        """Return the customer profile with this key, or None when there is none.
+
+        A walk-in has a profile and no account, so this is how staff name the
+        customer a counter booking is for.
+        """
+        ...
+
+    def record_late_cancellation(self, customer_profile_id: UUID) -> None:
+        """Count one late cancellation on a customer profile (BR-16).
+
+        The count is raised by one in the database, so two cancellations at
+        the same moment are both counted.
         """
         ...
 

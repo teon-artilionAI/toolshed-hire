@@ -107,6 +107,22 @@ class AssetAllocation:
         """Return True while the allocation still occupies its asset."""
         return self.released_at is None
 
+    def release(self, reason: ReleaseReason, now: datetime) -> None:
+        """Stop the allocation occupying its asset, with the reason and the time together.
+
+        An allocation that is already released is left as it was, so the first
+        reason and the first time are the ones that stand.
+
+        Args:
+            reason: Why the unit is being let go.
+            now: The moment of the release, from the clock.
+
+        """
+        if not self.is_active():
+            return
+        self.released_at = now
+        self.release_reason = reason
+
     def conflicts_with(self, other: AssetAllocation) -> bool:
         """Return True when the two allocations could not both stand.
 

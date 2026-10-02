@@ -11,8 +11,11 @@ The domain raises meaning, the HTTP layer chooses a number.
 
 A refused field is always reported the same way, under `errors.fields`, keyed
 by where the value came from and its name on the wire, for example
-`query.from`. That holds whether the framework refused the value for its type
-or a read refused it for breaking a rule, so a client reads one shape.
+`query.from` or `body.from`. That holds whether the framework refused the
+value for its type or a use case refused it for breaking a rule, so a client
+reads one shape. A rule names the field and not where it travelled, so the
+place is read off the request. A GET carries its values in the query string
+and every other method carries them in the body.
 
 The sentence against a refused query parameter is shown to a customer as it
 is written, so it is a plain one. `app/api/field_messages.py` rewords what the
@@ -47,7 +50,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.field_messages import QUERY_LOCATION, refused_fields
+from app.api.field_messages import BODY_LOCATION, QUERY_LOCATION, refused_fields
 from app.api.refresh_cookie import refresh_cookie_of
 from app.api.schemas import ProblemDetail
 from app.application.refusal import refused_parameter_of
@@ -58,6 +61,7 @@ from app.domain.errors import (
     AuthorisationFailure,
     BranchScopeError,
     DomainError,
+    EmailNotVerifiedError,
     InactiveAccount,
     InvalidCredentials,
     NotFound,
@@ -78,6 +82,8 @@ REQUEST_VALIDATION_DETAIL = (
     "Some of the details were not accepted. Check each one and try again."
 )
 RETRY_AFTER_HEADER = "Retry-After"
+# The methods whose values travel in the query string and not in a body.
+QUERY_STRING_METHODS = frozenset({"GET", "HEAD"})
 
 # One entry per domain error. A domain error absent from this table would fall
 # through to the catch all and be reported as a 500, so the table is total.
@@ -93,6 +99,7 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     InactiveAccount: status.HTTP_403_FORBIDDEN,
     BranchScopeError: status.HTTP_403_FORBIDDEN,
     AccountOnHoldError: status.HTTP_403_FORBIDDEN,
+    EmailNotVerifiedError: status.HTTP_403_FORBIDDEN,
     AllocationConflictError: status.HTTP_409_CONFLICT,
     StateTransitionError: status.HTTP_409_CONFLICT,
 }
@@ -181,17 +188,17 @@ def validation_problem(
 async def handle_domain_error(request: Request, exc: Exception) -> Response:
     """Map a domain error to its status code and a problem document.
 
-    A validation failure that names the query parameter it refused is answered
-    in the shape of a request validation failure, with its sentence under that
-    parameter.
+    A validation failure that names the field it refused is answered in the
+    shape of a request validation failure, with its sentence under that field.
     """
     if not isinstance(exc, DomainError):
         raise exc
     refused_parameter = refused_parameter_of(exc) if isinstance(exc, ValidationFailure) else None
     if refused_parameter is not None:
+        location = QUERY_LOCATION if request.method in QUERY_STRING_METHODS else BODY_LOCATION
         return validation_problem(
             request,
-            {f"{QUERY_LOCATION}.{refused_parameter}": exc.message},
+            {f"{location}.{refused_parameter}": exc.message},
             refused_because={"code": exc.code, "rule": exc.rule, "detail": exc.detail},
         )
     status_code = DOMAIN_ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)

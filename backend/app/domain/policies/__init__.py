@@ -16,13 +16,16 @@ from app.domain.policies.pricing import (
     PricingPolicy,
 )
 from app.domain.policies.standard_pricing import StandardPricingPolicy
+from app.domain.policies.totals import HireTotals, totals_of
 
 __all__ = [
     "FixedRatePricingPolicy",
     "HireQuote",
+    "HireTotals",
     "InvalidPricingInput",
     "LineSnapshot",
     "PricingBasis",
     "PricingPolicy",
     "StandardPricingPolicy",
+    "totals_of",
 ]

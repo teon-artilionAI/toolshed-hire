@@ -24,7 +24,12 @@ from app.application.identity.refresh_session import (
     RefreshSessionUseCase,
 )
 from app.application.identity.sessions import ClientDetails, SessionGrant
-from app.application.identity.sign_in import SignInCommand, SignInUseCase
+from app.application.identity.sign_in import (
+    DEFAULT_LOGIN_RULES,
+    LoginThrottleRules,
+    SignInCommand,
+    SignInUseCase,
+)
 from app.application.identity.sign_out import SignOutCommand, SignOutUseCase
 from app.application.throttle import Throttle
 from app.domain.audit import AuditEvent
@@ -59,6 +64,7 @@ class Desk:
     passwords: CountingPasswordVerifier = field(default_factory=CountingPasswordVerifier)
     tokens: FakeAccessTokenIssuer = field(default_factory=FakeAccessTokenIssuer)
     throttle: Throttle = field(default_factory=lambda: Throttle(FAKE_SALT))
+    rules: LoginThrottleRules = DEFAULT_LOGIN_RULES
 
     def _uow(self) -> IdentityMemoryUnitOfWork:
         """Return a new unit of work over the two stores."""
@@ -72,7 +78,7 @@ class Desk:
     ) -> SessionGrant:
         """Run the sign in use case once."""
         use_case = SignInUseCase(
-            self._uow(), self.clock, self.passwords, self.tokens, self.throttle
+            self._uow(), self.clock, self.passwords, self.tokens, self.throttle, self.rules
         )
         return use_case.execute(SignInCommand(email=email, password=password, client=client))
 

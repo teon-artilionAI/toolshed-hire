@@ -138,7 +138,9 @@ def availability() -> FakeAvailability:
 @pytest.fixture
 def service(availability: FakeAvailability) -> SearchAvailability:
     """Return the availability search on the fakes and a clock that stands still."""
-    return SearchAvailability(availability, FakeCatalogue(), FakeBranches(), FixedClock())
+    return SearchAvailability(
+        availability, FakeCatalogue(), FakeBranches(), FixedClock(), lambda: None
+    )
 
 
 def refusal_of(raised: pytest.ExceptionInfo[ValidationFailure]) -> str | None:
@@ -201,7 +203,9 @@ class TestSearchingAcrossTheCatalogue:
     ) -> None:
         """Half past midnight on the second in Cape Town is still the first in UTC."""
         clock = FixedClock(datetime(2026, 3, 1, 22, 30, tzinfo=UTC))
-        service = SearchAvailability(availability, FakeCatalogue(), FakeBranches(), clock)
+        service = SearchAvailability(
+            availability, FakeCatalogue(), FakeBranches(), clock, lambda: None
+        )
         with pytest.raises(ValidationFailure) as raised:
             service.across_catalogue(date(2026, 3, 1), NINTH, ModelSearch())
         assert refusal_of(raised) == "from"
