@@ -8,6 +8,12 @@
 # promote-api.sh. On the very first deployment there is no existing revision to
 # keep serving, so the revision takes traffic straight away.
 #
+# The repository is public, so its workflow logs are public too. The address of
+# the service is therefore never written to the log. Browsers reach the API
+# through the frontend domain, and that is the only address that is published.
+# The address is masked as soon as it is known, and the output of the deploy
+# command, which prints it, is filtered.
+#
 # Outputs, written to GITHUB_OUTPUT:
 #   service_url     the stable URL of the service
 #   check_url       the URL to smoke test (the candidate URL when one exists)
@@ -43,8 +49,24 @@ CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
 # again does not collide with the revision the first attempt created.
 revision_suffix="${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER:-0}-${GITHUB_RUN_ATTEMPT:-1}"
 
+# Replaces anything that looks like a Cloud Run address in what a command
+# prints. The first deployment prints the address before this script could
+# know it, so masking alone is not enough.
+hide_service_urls() {
+  sed -E 's#https://[A-Za-z0-9.-]+\.run\.app#[service address hidden]#g'
+}
+
+# Tells GitHub to redact one value from the rest of the log.
+mask() {
+  if [ -n "${1}" ]; then
+    echo "::add-mask::${1}"
+    echo "::add-mask::${1#https://}"
+  fi
+}
+
 existing_url="$(gcloud run services describe "${SERVICE_NAME}" \
   --region="${REGION}" --format="value(status.url)" 2>/dev/null || true)"
+mask "${existing_url}"
 
 traffic_flags=()
 used_candidate="false"
@@ -76,7 +98,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_NAME}:latest,RESEND_API_KEY=${RESEND_API_KEY_SECRET}:latest" \
   --revision-suffix="${revision_suffix}" \
   "${traffic_flags[@]}" \
-  --quiet
+  --quiet 2>&1 | hide_service_urls
 
 service_url="$(gcloud run services describe "${SERVICE_NAME}" \
   --region="${REGION}" --format="value(status.url)")"
@@ -85,6 +107,7 @@ if [ -z "${service_url}" ]; then
   echo "::error title=No service URL::Cloud Run reported no URL for ${SERVICE_NAME} after a successful deploy, so there is nothing to smoke test."
   exit 1
 fi
+mask "${service_url}"
 
 check_url="${service_url}"
 if [ "${used_candidate}" = "true" ]; then
@@ -95,6 +118,7 @@ if [ "${used_candidate}" = "true" ]; then
     echo "::error title=No candidate URL::The candidate revision was deployed but Cloud Run lists no URL for the ${CANDIDATE_TAG} tag."
     exit 1
   fi
+  mask "${check_url}"
 fi
 
 {
@@ -103,5 +127,4 @@ fi
   echo "used_candidate=${used_candidate}"
 } >> "${GITHUB_OUTPUT}"
 
-echo "Service URL: ${service_url}"
-echo "URL to smoke test: ${check_url}"
+echo "Deployed. The service address is kept out of this log on purpose."

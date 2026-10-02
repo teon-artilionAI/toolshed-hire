@@ -15,4 +15,4 @@ echo "Shifting all traffic on ${SERVICE_NAME} to the latest revision."
 gcloud run services update-traffic "${SERVICE_NAME}" \
   --region="${REGION}" \
   --to-latest \
-  --quiet
+  --quiet 2>&1 | sed -E 's#https://[A-Za-z0-9.-]+\.run\.app#[service address hidden]#g'
