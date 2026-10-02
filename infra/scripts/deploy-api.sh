@@ -94,7 +94,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --min-instances="${CLOUD_RUN_MIN_INSTANCES}" \
   --max-instances="${CLOUD_RUN_MAX_INSTANCES}" \
   --allow-unauthenticated \
-  --set-env-vars="ENVIRONMENT=${ENVIRONMENT_NAME},CORS_ORIGINS=${FRONTEND_ORIGIN},EMAIL_ALLOWED_RECIPIENT=${EMAIL_ALLOWED_RECIPIENT}" \
+  --set-env-vars="ENVIRONMENT=${ENVIRONMENT_NAME},CORS_ORIGINS=${FRONTEND_ORIGIN},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},EMAIL_ALLOWED_RECIPIENT=${EMAIL_ALLOWED_RECIPIENT}" \
   --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_NAME}:latest,RESEND_API_KEY=${RESEND_API_KEY_SECRET}:latest" \
   --revision-suffix="${revision_suffix}" \
   "${traffic_flags[@]}" \
