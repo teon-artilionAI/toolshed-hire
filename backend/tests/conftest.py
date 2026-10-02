@@ -8,7 +8,9 @@ THE FAST FAMILY, no database required
     `sqlite_engine`, `session`, `factory`, `client` and `probe_client`. An in
     memory SQLite database behind a StaticPool, so the one connection holding
     the schema is the one the request handler is given. These run in the "not
-    postgres" job and must never open a network connection.
+    postgres" job and must never open a network connection. That includes the
+    email provider. Every client is given the fake gateway from the
+    `email_gateway` fixture, whatever the environment of the run holds.
 
 THE POSTGRES FAMILY, marked `postgres`
     `postgres_engine`, `postgres_session` and `postgres_factory`. A real
@@ -39,8 +41,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
 
+from app.api.deps import get_notification_gateway
 from app.config import settings
 from app.infrastructure.database import get_session
+from app.infrastructure.notification import FakeEmailGateway
 from app.main import app as production_app
 from tests.support.factories import Factory
 from tests.support.log_capture import (
@@ -121,7 +125,20 @@ def factory(session: Session) -> Factory:
     return Factory(session=session)
 
 
-def _client_for(application: FastAPI, open_session: Session) -> Iterator[TestClient]:
+@pytest.fixture
+def email_gateway() -> FakeEmailGateway:
+    """Return the fake email gateway every test client sends through.
+
+    It accepts every message and keeps it, so a test can read what would have
+    been sent. A test that wants a provider failure overrides the gateway
+    dependency itself.
+    """
+    return FakeEmailGateway()
+
+
+def _client_for(
+    application: FastAPI, open_session: Session, gateway: FakeEmailGateway
+) -> Iterator[TestClient]:
     """Yield a test client whose request sessions are the one the test holds.
 
     The application is entered without its lifespan. The startup check probes
@@ -146,22 +163,24 @@ def _client_for(application: FastAPI, open_session: Session) -> Iterator[TestCli
             open_session.rollback()
 
     application.dependency_overrides[get_session] = _override_session
+    application.dependency_overrides[get_notification_gateway] = lambda: gateway
     try:
         yield TestClient(application)
     finally:
         application.dependency_overrides.pop(get_session, None)
+        application.dependency_overrides.pop(get_notification_gateway, None)
 
 
 @pytest.fixture
-def client(session: Session) -> Iterator[TestClient]:
+def client(session: Session, email_gateway: FakeEmailGateway) -> Iterator[TestClient]:
     """Yield a client for the real application, backed by the in memory database."""
-    yield from _client_for(production_app, session)
+    yield from _client_for(production_app, session, email_gateway)
 
 
 @pytest.fixture
-def probe_client(session: Session) -> Iterator[TestClient]:
+def probe_client(session: Session, email_gateway: FakeEmailGateway) -> Iterator[TestClient]:
     """Yield a client for the role policy probe application."""
-    yield from _client_for(build_role_probe_app(), session)
+    yield from _client_for(build_role_probe_app(), session, email_gateway)
 
 
 @pytest.fixture

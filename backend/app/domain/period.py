@@ -14,12 +14,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from app.domain.errors import ValidationFailure
+
 # The PostgreSQL bound specifier that matches this class. Written here so the
 # migration and the domain object quote the same literal.
 DATERANGE_BOUNDS = "[)"
 
 MINIMUM_HIRE_DAYS = 1
 MAXIMUM_HIRE_DAYS = 28
+# How far ahead a hire may start (BR-05).
+MAXIMUM_DAYS_AHEAD = 90
 
 
 class InvalidBookingPeriod(ValueError):
@@ -130,3 +134,30 @@ class BookingPeriod:
     def __str__(self) -> str:
         """Return a human readable half open period."""
         return self.as_postgres_daterange()
+
+
+def ensure_within_booking_window(period: BookingPeriod, today: date) -> None:
+    """Refuse a hire that starts in the past or beyond the booking horizon.
+
+    Args:
+        period: The hire period being booked.
+        today: The current business day, from the clock.
+
+    Raises:
+        ValidationFailure: If the period starts before today (BR-04) or more
+            than `MAXIMUM_DAYS_AHEAD` days after it (BR-05).
+
+    """
+    if period.start < today:
+        raise ValidationFailure(
+            f"Attempted to book a hire starting {period.start.isoformat()}, which is before "
+            f"today, {today.isoformat()}. A hire may not start in the past (BR-04).",
+            {"start_date": period.start.isoformat(), "today": today.isoformat()},
+        )
+    days_ahead = (period.start - today).days
+    if days_ahead > MAXIMUM_DAYS_AHEAD:
+        raise ValidationFailure(
+            f"Attempted to book a hire starting {period.start.isoformat()}, which is "
+            f"{days_ahead} days ahead. The booking horizon is {MAXIMUM_DAYS_AHEAD} days (BR-05).",
+            {"days_ahead": days_ahead, "maximum_days_ahead": MAXIMUM_DAYS_AHEAD},
+        )

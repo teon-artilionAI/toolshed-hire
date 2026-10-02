@@ -5,10 +5,14 @@ product model, a branch and a half open period, the use case holds specific
 tagged units inside one transaction, and the database has the last word.
 
 When the exclusion constraint rejects the insert the use case raises
-AssetUnavailableConflict, the domain error handler maps it to 409, and the
+AllocationConflictError, the domain error handler maps it to 409, and the
 response is a problem document naming the period and the quantity. It is never
 a 500, because a losing race is a normal outcome of a correct design rather
 than a fault.
+
+The router does no work of its own beyond the HTTP boundary. It validates the
+request, decides whose booking it is and hands a command to the use case, which
+arrives already wired to its unit of work, its clock and its dispatcher.
 """
 
 from __future__ import annotations
@@ -18,11 +22,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, status
 
-from app.api.deps import AnyRoleUser, SessionDependency
+from app.api.deps import AnyRoleUser, CreateReservation
 from app.api.schemas import AllocatedAssetResponse, AllocationRequest, AllocationResponse
-from app.application.reserve import ReservationCommand, create_reservation_with_allocation
+from app.application.booking.create_reservation import CreateReservationCommand
 from app.domain.enums import UserRole
 from app.domain.errors import AuthorisationFailure, ValidationFailure
+from app.domain.identity import Actor
 from app.domain.period import BookingPeriod, InvalidBookingPeriod
 from app.infrastructure.models import UserAccount
 
@@ -43,14 +48,14 @@ router = APIRouter(prefix="/allocations", tags=["allocations"])
     },
 )
 def post_allocation(
-    payload: AllocationRequest, user: AnyRoleUser, session: SessionDependency
+    payload: AllocationRequest, user: AnyRoleUser, use_case: CreateReservation
 ) -> AllocationResponse:
     """Create a held reservation and allocate specific assets to it.
 
     Args:
         payload: The product model, branch, half open period and quantity.
         user: The active account making the request.
-        session: The request scoped session. The use case owns the commit.
+        use_case: The reservation use case. It owns the commit.
 
     Returns:
         The committed reservation with the tagged units held.
@@ -58,17 +63,20 @@ def post_allocation(
     Raises:
         ValidationFailure: If the period is not a valid hire period.
         AuthorisationFailure: If a customer tries to book on someone else's behalf.
-        AssetUnavailableConflict: If no free unit exists. Mapped to HTTP 409.
+        AllocationConflictError: If no free unit exists. Mapped to HTTP 409.
 
     """
     period = _build_period(payload)
     customer_user_id = _resolve_customer(user, payload)
+    # Read before the use case runs. The commit expires the loaded account, and
+    # the role recorded in the audit trail is the one held at this moment.
+    actor = Actor(user_id=user.id, role=user.role)
 
     logger.info(
         "allocations.request_received",
         extra={
-            "actor_user_id": str(user.id),
-            "actor_role": user.role.value,
+            "actor_user_id": str(actor.user_id),
+            "actor_role": actor.role.value,
             "customer_user_id": str(customer_user_id),
             "branch_id": str(payload.branch_id),
             "product_model_id": str(payload.product_model_id),
@@ -77,16 +85,15 @@ def post_allocation(
         },
     )
 
-    result = create_reservation_with_allocation(
-        session,
-        ReservationCommand(
+    result = use_case.execute(
+        CreateReservationCommand(
+            actor=actor,
             customer_user_id=customer_user_id,
-            created_by_user_id=user.id,
             branch_id=payload.branch_id,
             product_model_id=payload.product_model_id,
             period=period,
             quantity=payload.quantity,
-        ),
+        )
     )
 
     logger.info(

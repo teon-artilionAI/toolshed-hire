@@ -5,10 +5,11 @@ transaction, and returns an Outcome rather than raising. Returning is what lets
 the test say "exactly one of these two succeeded" in a single line instead of
 unpicking which thread raised what.
 
-Two of them go through the real use case, so the application's row lock is in
-play. Two of them insert directly with no lock at all, which is what a future
-refactor or a hand written script would do, and is the only way to reach the
-exclusion constraint as the last line of defence.
+One of them goes through the real allocation path, inside a real unit of work,
+so the application's row lock is in play. The other three insert directly with
+no lock at all, which is what a future refactor or a hand written script would
+do, and is the only way to reach the exclusion constraint as the last line of
+defence.
 """
 
 from __future__ import annotations
@@ -23,10 +24,12 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session
 
-from app.application.allocate import AllocationCommand, allocate_assets
-from app.domain.errors import AssetUnavailableConflict
+from app.application.availability.allocation import AllocationCommand, allocate_assets
+from app.domain.errors import AllocationConflictError
 from app.domain.period import BookingPeriod
+from app.infrastructure.clock import SystemClock
 from app.infrastructure.models import AssetAllocation
+from app.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from tests.support.pg import constraint_name_of, sqlstate_of
 from tests.support.race import BARRIER_TIMEOUT_SECONDS, Outcome, backend_pid
 from tests.support.scenarios import AllocationScenario
@@ -82,18 +85,23 @@ class AllocationTarget:
 def book_through_the_use_case(
     engine: Engine, command: AllocationCommand, barrier: threading.Barrier
 ) -> Outcome:
-    """Run the real allocation use case in its own transaction, racing the other thread."""
-    with Session(engine) as session:
-        barrier.wait(timeout=BARRIER_TIMEOUT_SECONDS)
-        try:
-            allocate_assets(session, command)
-            session.commit()
-        except AssetUnavailableConflict as exc:
-            session.rollback()
-            logger.info("test.contender_lost", extra={"reason": exc.code})
-            return Outcome(succeeded=False, error=exc)
-        logger.info("test.contender_won", extra={"line_id": str(command.reservation_line_id)})
-        return Outcome(succeeded=True)
+    """Run the real allocation in a unit of work of its own, racing the other thread.
+
+    The unit of work opens its own session on the engine, so each contender
+    holds its own connection and its own transaction. Leaving the block
+    without a commit is what rolls the loser back.
+    """
+    unit_of_work = SqlAlchemyUnitOfWork(lambda: Session(engine))
+    try:
+        with unit_of_work as uow:
+            barrier.wait(timeout=BARRIER_TIMEOUT_SECONDS)
+            allocate_assets(uow.assets, SystemClock(), command)
+            uow.commit()
+    except AllocationConflictError as exc:
+        logger.info("test.contender_lost", extra={"reason": exc.code})
+        return Outcome(succeeded=False, error=exc)
+    logger.info("test.contender_won", extra={"line_id": str(command.reservation_line_id)})
+    return Outcome(succeeded=True)
 
 
 def insert_without_any_lock(

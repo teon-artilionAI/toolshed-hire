@@ -3,7 +3,7 @@
 The migration creates the schema from its own frozen definitions under
 `alembic/baseline` and imports nothing from here, so a later edit to this
 module cannot change what an already released migration does. What lives here
-is the application's side of the same facts. The allocation use case imports
+is the application's side of the same facts. The asset repository imports
 the constraint name it has to recognise, the health check and the tests read
 the extension list, and an integration test asserts that the database the
 migration built carries every one of these names. That test is what keeps the

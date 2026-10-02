@@ -5,6 +5,8 @@ moment the middleware accepts the request until the response is finished. The
 logging filter reads the request id from it, the problem documents quote it,
 and the authentication dependency writes the role of the caller into it so the
 access log can report who made the request without a second database query.
+The audit trail reads the request id and the client address from it, so a use
+case can be audited without being handed anything about HTTP.
 
 The variable holds one mutable object and I change that object in place rather
 than setting the variable again. FastAPI runs a synchronous dependency in a
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Final
 from uuid import UUID, uuid4
 
@@ -38,11 +41,14 @@ class RequestContext:
             problem document and every log record of this request.
         actor_role: The stored role of the authenticated caller, or
             `ANONYMOUS_ACTOR_ROLE` while nobody has been authenticated.
+        client_address: The network address the request came from, or None
+            when the server could not tell or was not told a valid one.
 
     """
 
     request_id: str
     actor_role: str = ANONYMOUS_ACTOR_ROLE
+    client_address: IPv4Address | IPv6Address | None = None
 
 
 _current_request: ContextVar[RequestContext | None] = ContextVar(
@@ -80,6 +86,25 @@ def _parse_uuid(candidate: str) -> UUID | None:
         return None
 
 
+def resolve_client_address(candidate: str | None) -> IPv4Address | IPv6Address | None:
+    """Return the client address a host string spells, or None when it spells none.
+
+    The server reports the peer as text. Behind a proxy that text comes from a
+    forwarding header, which the caller can influence, so it is parsed and
+    anything that is not an IP address is dropped instead of being stored.
+
+    Args:
+        candidate: The host the server reported for the client, if any.
+
+    """
+    if not candidate:
+        return None
+    try:
+        return ip_address(candidate.strip())
+    except ValueError:
+        return None
+
+
 def bind_request_context(context: RequestContext) -> Token[RequestContext | None]:
     """Make `context` the current request and return the token that undoes it."""
     return _current_request.set(context)
@@ -94,6 +119,12 @@ def current_request_id() -> str | None:
     """Return the id of the request being served, or None outside a request."""
     context = _current_request.get()
     return context.request_id if context is not None else None
+
+
+def current_client_address() -> IPv4Address | IPv6Address | None:
+    """Return the address of the client being served, or None when it is not known."""
+    context = _current_request.get()
+    return context.client_address if context is not None else None
 
 
 def record_actor_role(role: str) -> None:

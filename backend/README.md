@@ -22,17 +22,119 @@ first pass at the whole application.
 
 | Path | Layer | Holds |
 |---|---|---|
-| `app/domain` | Domain | `BookingPeriod`, enumerations, errors. No database access. |
-| `app/application` | Application | Use cases and transaction boundaries. |
-| `app/infrastructure` | Infrastructure | Engine, SQLModel tables, hashing, tokens. |
+| `app/domain` | Domain | Entities as plain dataclasses, `BookingPeriod`, enumerations, errors. No framework, no SQL, no IO. |
+| `app/application` | Application | Use cases, transaction boundaries and ports. One package per module, plus the unit of work, the clock and the audit log, which every module shares. |
+| `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. |
+| `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
 | `seed_data` | Tooling | The catalogue and the fleet as plain data. It opens no file and no connection. |
 | `seeding`, `seed.py` | Tooling | The loader for that data, and its entry point. |
 | `scripts` | Tooling | `provision_roles.py`, which creates the two database roles. |
+
+Dependencies point inward only. The domain imports nothing from the other
+layers, the application layer imports the domain and nothing else, and the API
+layer is the only one that imports everything, because it is where the pieces
+are put together.
+
+The design document describes eight modules. Five have code so far, and each
+keeps the same name in every layer it appears in.
+
+| Module | Domain | Application | Infrastructure |
+|---|---|---|---|
+| `identity` | `Actor`, `Branch`, `CustomerProfile` | `BranchRepository`, `CustomerRepository` | `SqlBranchRepository`, `SqlCustomerRepository` |
+| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository` | `SqlProductModelRepository` |
+| `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets` | `SqlAssetRepository` |
+| `booking` | `Reservation`, `ReservationLine` | `ReservationRepository`, `CreateReservationUseCase` | `SqlReservationRepository` |
+| `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
+
+`hire`, `money` and `reporting` gain their packages when their first use case
+is built. The audit trail belongs to no module, because every module writes to
+it, so it has a file of its own in each layer.
+
+## The two patterns in place
+
+The design document names four patterns. Two are built.
+
+### Repository with Unit of Work
+
+One booking writes a reservation, a line, an allocation for every unit, an
+audit event and a queued notification. BR-09 and BR-49 need those to commit
+together or not at all, so exactly one object owns the transaction.
+
+`UnitOfWork` is a port in the application layer. A use case enters it, works
+through the repositories it exposes and calls `commit`. Leaving the block
+without a commit rolls everything back. `SqlAlchemyUnitOfWork` implements it
+over one `Session`, which it shares with every repository, the audit log and
+the outbox.
+
+```python
+with self._uow as uow:
+    uow.reservations.add(reservation)
+    allocated = allocate_assets(uow.assets, self._clock, allocation_command)
+    uow.audit.record(event)
+    queue_booking_confirmation(uow.notifications, ...)
+    uow.commit()
+```
+
+Three things live in exactly one place because of it.
+
+- `SqlAssetRepository.lock_allocatable` is the only place that issues
+  `SELECT ... FOR UPDATE SKIP LOCKED`.
+- `SqlAssetRepository.translate_integrity_error` is the only place a violation
+  of the exclusion constraint becomes `AllocationConflictError`.
+- `SqlAuditLog.record` writes the audit event in the same transaction as the
+  change. If it cannot be written, the change does not happen (BR-49).
+
+Every state changing use case leaves one audit event. It carries the actor and
+the role the actor held at the time, the entity and the action, for example
+`reservation.held`, the changed fields before and after, the request id and
+the client address when the server knows one.
+
+A use case is a class with one `execute(command)` method. It takes the unit of
+work, a clock and anything else it needs through its constructor. The router
+never builds one. `app/api/deps.py` does, and it is the only module that knows
+which implementation stands behind each port.
+
+### Adapter
+
+`NotificationGateway` is the port. `ResendEmailAdapter` is the only class that
+knows which email provider is in use. It calls the Resend HTTP API with a five
+second timeout and returns a `DeliveryReceipt`. A status outside the 2xx
+range, a timeout and a transport error each come back as a failed receipt with
+a short reason. The adapter never raises for a delivery that did not happen.
+
+The `notification` table is a transactional outbox (BR-19).
+
+1. The use case writes the notification `QUEUED` in the same transaction as
+   the booking.
+2. After the commit, with no transaction open, `NotificationDispatcher` sends
+   whatever is queued and records `SENT` with the provider's message id, or
+   `FAILED` with the reason.
+3. A provider failure never rolls the booking back, and the dispatcher never
+   raises.
+
+Dispatch runs inside the request, after the commit and before the response.
+Cloud Run only gives a container CPU while it is serving a request, so work
+left for a background thread might never run. Every message carries an
+`Idempotency-Key` derived from the notification id, so a notification that is
+dispatched twice is delivered once.
+
+Only a booking confirmation writes a notification row. The existing flow
+creates a held reservation, so that is where the confirmation is queued today.
+It moves to the confirmation use case when that is built.
+
+### The clock
+
+Nothing in the domain or the application layer reads the time from the
+operating system. A use case is handed a `Clock`. `SystemClock` returns
+instants in UTC and works out the business day in `Africa/Johannesburg`, so a
+booking made at half past midnight in Cape Town belongs to the new day. The
+tests use a clock that stands still, and one test reads the source of both
+layers to make sure neither calls `datetime.now()` or `date.today()`.
 
 ## The schema
 
@@ -204,10 +306,11 @@ An allocation is active exactly while `released_at` is null. Releasing one
 stamps `released_at` and `release_reason` together, which a check constraint
 enforces, and the row drops out of the constraint without being deleted.
 
-A violation arrives as SQLSTATE `23P01`. The allocation use case matches on the
-code and the constraint name reported in the driver diagnostics, never on the
-error message text, and raises `AssetUnavailableConflict`, which the API maps
-to a 409 problem document.
+A violation arrives as SQLSTATE `23P01`. `SqlAssetRepository` matches on the
+code and on the constraint name, both read from the driver diagnostics and
+never from the error message text, and raises `AllocationConflictError`, which
+the API maps to a 409 problem document. An integrity error that is not this
+constraint is re-raised unchanged.
 
 ## Configuration
 
@@ -218,6 +321,26 @@ deployment that boots on a known secret is a hole nobody notices.
 
 `ENVIRONMENT` is `development`, `test`, `staging` or `production`. Staging is
 held to every check production is.
+
+Three settings control email.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RESEND_API_KEY` | unset | The Resend API key. Unset, blank or the literal `not-configured-yet` means email is off. |
+| `EMAIL_FROM` | `Toolshed Hire <onboarding@resend.dev>` | The From header of every email. |
+| `EMAIL_ALLOWED_RECIPIENT` | unset | When set, the only address the service will send to. |
+
+With email off the application still starts. It logs one warning,
+`notification.email_not_configured`, and every confirmation is recorded as
+`FAILED` with the reason that email is not configured in this environment.
+
+`EMAIL_ALLOWED_RECIPIENT` is how the demonstration environment runs without a
+verified sending domain. It is enforced inside the adapter, on the server. A
+message for any other address is refused before the provider is called, and it
+is never redirected to the allowed address, because that would deliver one
+customer's booking to somebody else.
+
+The key is never logged and never appears in a receipt or an error message.
 
 ## Checks
 
@@ -232,11 +355,16 @@ pytest tests -m "not postgres"   # unit, component and API tests, no database
 pip-audit                        # known vulnerabilities in the installed packages
 ```
 
-`lint-imports` reads its contracts from `pyproject.toml`. It fails when
-`app.domain` imports `app.application`, `app.infrastructure` or `app.api`, and
-when `app.application` or `app.infrastructure` imports `app.api`. It does not
-yet stop `app.application` importing `app.infrastructure`. I tighten that
-contract when the repositories land.
+`lint-imports` reads five contracts from `pyproject.toml`.
+
+1. `app.domain` imports nothing from the other three layers.
+2. `app.application` does not import `app.api`.
+3. `app.application` does not import `app.infrastructure`. The use cases depend
+   on ports, and `app.api` is the composition root that wires the
+   implementations in.
+4. `app.infrastructure` does not import `app.api`.
+5. Neither `app.domain` nor `app.application` imports SQLAlchemy, SQLModel,
+   FastAPI, Starlette, pydantic, httpx or psycopg.
 
 The full run needs a real PostgreSQL 16. I start the one described by
 `docker-compose.yml` at the repository root, which holds a single disposable
@@ -267,8 +395,12 @@ pytest tests -m "not postgres"   # unit, component and API tests, no database
 pytest tests -m postgres         # the schema, the constraint, concurrency, the seed and the roles
 ```
 
-Everything without the marker runs against an in memory SQLite engine and must
-never open a network connection. The marked tests need a real PostgreSQL 16
+The tests without the marker come in three kinds. `tests/unit` uses no database
+at all, and it runs the use cases against an in memory unit of work and a fake
+email gateway, which is what depending on ports makes possible. `tests/component`
+runs the real repositories and the real unit of work on in memory SQLite.
+`tests/api` goes through HTTP on the same SQLite engine. None of them may open
+a network connection, and every test client is given the fake email gateway. The marked tests need a real PostgreSQL 16
 reached through `DATABASE_URL`, because the things they prove, `btree_gist`, a
 `daterange` exclusion constraint and two genuinely concurrent transactions, have
 no SQLite equivalent. With `DATABASE_URL` unset they skip with a message saying

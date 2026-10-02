@@ -22,6 +22,10 @@ innermost.
 The interactive documentation and the OpenAPI document are served in
 development and test only. A deployed service that describes every endpoint to
 anyone who asks has done an attacker's reconnaissance for them.
+
+The email gateway is chosen here as well, from the configuration. With no API
+key the application still starts. It logs one warning, and every booking
+confirmation is then recorded as not sent.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
+from app.api.deps import NOTIFICATION_GATEWAY_STATE_KEY
 from app.api.errors import register_exception_handlers
 from app.api.request_middleware import RequestContextMiddleware
 from app.api.routers import api_router
@@ -45,6 +50,7 @@ from app.infrastructure.database import (
     describe_pool,
     engine,
 )
+from app.infrastructure.notification import build_notification_gateway
 from app.logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -145,6 +151,17 @@ def create_app(configuration: Settings = settings) -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(api_router)
+    # Chosen once, here, so a missing API key is reported once at start-up and
+    # every request is served by the same gateway.
+    setattr(
+        app.state,
+        NOTIFICATION_GATEWAY_STATE_KEY,
+        build_notification_gateway(
+            api_key=configuration.resend_api_key,
+            sender=configuration.email_from,
+            allowed_recipient=configuration.email_allowed_recipient,
+        ),
+    )
     logger.info(
         "startup.application_built",
         extra={

@@ -33,13 +33,15 @@ dependencies = [
     # the last release passlib can introspect without emitting a spurious
     # version warning on every hash call.
     "bcrypt==4.0.1",
+    # The HTTP client behind the Resend adapter. It was already pinned for the
+    # test client, so the running application gains no new package.
+    "httpx==0.28.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
-    "httpx==0.28.1",
     "ruff==0.8.4",
     "mypy==1.14.0",
     # Coverage for the gated run, the layer contract and the dependency audit.
@@ -59,9 +61,15 @@ packages = [
     "app.api",
     "app.api.routers",
     "app.application",
+    "app.application.availability",
+    "app.application.booking",
+    "app.application.catalogue",
+    "app.application.identity",
+    "app.application.notification",
     "app.domain",
     "app.infrastructure",
     "app.infrastructure.models",
+    "app.infrastructure.notification",
 ]
 
 [tool.pytest.ini_options]
@@ -94,10 +102,15 @@ fail_under = 70
 show_missing = true
 
 # The layer contract, checked by `lint-imports` from this directory. The
-# documented rule is that the domain imports nothing from the other layers, and
-# nothing below the API reaches up into it.
+# documented rule is that dependencies point inward only. The domain imports
+# nothing from the other layers, the application layer imports the domain and
+# nothing else, and nothing below the API reaches up into it.
+#
+# include_external_packages lets a contract name a third party package, which
+# the last contract needs.
 [tool.importlinter]
 root_package = "app"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "The domain layer imports nothing from the other layers"
@@ -105,20 +118,37 @@ type = "forbidden"
 source_modules = ["app.domain"]
 forbidden_modules = ["app.application", "app.infrastructure", "app.api"]
 
-# This contract does not yet forbid app.application importing
-# app.infrastructure, because the use cases still import the SQLModel tables
-# directly. I tighten it when the repositories land.
 [[tool.importlinter.contracts]]
 name = "The application layer does not import the API layer"
 type = "forbidden"
 source_modules = ["app.application"]
 forbidden_modules = ["app.api"]
 
+# The use cases depend on ports and the infrastructure layer implements them.
+# The API layer is the composition root that puts the two together, so it is
+# the only layer allowed to import both.
+[[tool.importlinter.contracts]]
+name = "The application layer does not import the infrastructure layer"
+type = "forbidden"
+source_modules = ["app.application"]
+forbidden_modules = ["app.infrastructure"]
+
 [[tool.importlinter.contracts]]
 name = "The infrastructure layer does not import the API layer"
 type = "forbidden"
 source_modules = ["app.infrastructure"]
 forbidden_modules = ["app.api"]
+
+# The two inner layers hold rules and orchestration, and both are tested with
+# no database and no network. A framework or a driver imported into either one
+# would end that, however it arrived. allow_indirect_imports keeps the contract
+# to what these two layers import themselves.
+[[tool.importlinter.contracts]]
+name = "The domain and application layers import no framework and no driver"
+type = "forbidden"
+source_modules = ["app.domain", "app.application"]
+forbidden_modules = ["sqlalchemy", "sqlmodel", "fastapi", "starlette", "pydantic", "httpx", "psycopg"]
+allow_indirect_imports = true
 
 [tool.ruff]
 line-length = 100
@@ -129,9 +159,10 @@ target-version = "py312"
 # C901 fails a function whose cyclomatic complexity passes the limit below.
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "ANN", "D", "S608", "C901"]
 # D203 and D213 conflict with the docstring style used throughout.
-# N818 is ignored deliberately: the domain errors are named in the vocabulary of
-# the business, AssetUnavailableConflict and NotFound, and an Error suffix on
-# every one of them would make the call sites read worse, not better.
+# N818 is ignored deliberately. Several domain errors are named in the
+# vocabulary of the business, ValidationFailure and NotFound for example, and an
+# Error suffix on every one of them would make the call sites read worse, not
+# better. The ones the design document names carry the names it gives them.
 # UP042 is ignored because the enumerations inherit str and Enum rather than
 # StrEnum, which keeps `.value` the explicit way a stored value is read.
 ignore = ["D203", "D213", "N818", "UP042"]

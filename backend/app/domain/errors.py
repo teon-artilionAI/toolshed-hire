@@ -66,13 +66,17 @@ class InactiveAccount(DomainError):
     code = "inactive-account"
 
 
-class AssetUnavailableConflict(DomainError):
+class AllocationConflictError(DomainError):
     """No asset could be held for the requested product model, branch and period.
 
     Raised both when the pre check finds too few free units and when the
     database exclusion constraint rejects an insert. The second case is the one
     that matters, because it is the only path that is correct under two
     genuinely concurrent transactions. The API maps this to HTTP 409.
+
+    The class carries the name the design document gives it. The problem slug
+    stays `asset-unavailable`, because the slug is what a client reads and
+    renaming a class is no reason to change what goes over the wire.
     """
 
     code = "asset-unavailable"
@@ -87,6 +91,7 @@ class AssetUnavailableConflict(DomainError):
         requested_quantity: int | None = None,
         available_quantity: int | None = None,
         constraint_name: str | None = None,
+        asset_tag: str | None = None,
     ) -> None:
         """Build the conflict with everything a caller needs to retry sensibly."""
         detail: dict[str, DetailValue] = {
@@ -96,6 +101,7 @@ class AssetUnavailableConflict(DomainError):
             "requested_quantity": requested_quantity,
             "available_quantity": available_quantity,
             "constraint_name": constraint_name,
+            "asset_tag": asset_tag,
         }
         # Annotated rather than inferred. Without it the comprehension narrows
         # the value type to the non None union, and dict is invariant in its
@@ -105,3 +111,40 @@ class AssetUnavailableConflict(DomainError):
             key: value for key, value in detail.items() if value is not None
         }
         super().__init__(message, present)
+
+
+class StateTransitionError(DomainError):
+    """A reservation was asked to make a move its current status does not permit.
+
+    The reservation states that raise this arrive with the booking lifecycle.
+    The error is defined now so the HTTP mapping is complete before the first
+    state exists. The API maps it to HTTP 409, because the request was well
+    formed and lost to the state the booking is already in.
+    """
+
+    code = "state-transition"
+
+    def __init__(self, message: str, *, from_status: str, to_status: str) -> None:
+        """Build the error naming the status held and the status asked for."""
+        super().__init__(message, {"from_status": from_status, "to_status": to_status})
+        self.from_status = from_status
+        self.to_status = to_status
+
+
+class BranchScopeError(DomainError):
+    """A branch scoped account reached for a record that belongs to another branch.
+
+    Counter staff act for one branch only. The API maps this to HTTP 403.
+    """
+
+    code = "branch-scope"
+
+
+class AccountOnHoldError(DomainError):
+    """A customer whose account is on hold tried to book (BR-18).
+
+    The API maps this to HTTP 403. The customer is known and the request is
+    valid, and the answer is still no until the branch lifts the hold.
+    """
+
+    code = "account-on-hold"

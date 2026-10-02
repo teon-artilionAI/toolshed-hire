@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from enum import Enum
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,12 @@ REQUIRED_DRIVER_PREFIX = "postgresql+psycopg://"
 BARE_POSTGRES_PREFIXES = ("postgres://", "postgresql://")
 # Reported as the revision when the process is not running on Cloud Run.
 LOCAL_REVISION = "local"
+# What RESEND_API_KEY holds in a deployment whose email account does not exist
+# yet. It is treated exactly like an unset key, so the service starts and takes
+# bookings and every confirmation is recorded as not sent.
+RESEND_API_KEY_PLACEHOLDER = "not-configured-yet"
+# The sender Resend accepts without a verified domain.
+DEFAULT_EMAIL_FROM = "Toolshed Hire <onboarding@resend.dev>"
 
 
 class Environment(str, Enum):
@@ -100,6 +106,21 @@ class Settings(BaseSettings):
         validation_alias="K_REVISION",
         description="The Cloud Run revision name, set by the platform and never by hand",
     )
+    resend_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="RESEND_API_KEY",
+        description="The Resend API key. Unset or the placeholder means email is off",
+    )
+    email_from: str = Field(
+        default=DEFAULT_EMAIL_FROM,
+        validation_alias="EMAIL_FROM",
+        description="The From header of every email the service sends",
+    )
+    email_allowed_recipient: str | None = Field(
+        default=None,
+        validation_alias="EMAIL_ALLOWED_RECIPIENT",
+        description="When set, the only address the service will send email to",
+    )
 
     @field_validator("database_url")
     @classmethod
@@ -127,6 +148,31 @@ class Settings(BaseSettings):
     def default_blank_revision(cls, value: str) -> str:
         """Report a blank revision as the local one rather than as nothing."""
         return value.strip() or LOCAL_REVISION
+
+    @field_validator("resend_api_key")
+    @classmethod
+    def treat_placeholder_key_as_unset(cls, value: SecretStr | None) -> SecretStr | None:
+        """Read a blank key and the deployment placeholder as no key at all."""
+        if value is None:
+            return None
+        candidate = value.get_secret_value().strip()
+        if not candidate or candidate == RESEND_API_KEY_PLACEHOLDER:
+            return None
+        return SecretStr(candidate)
+
+    @field_validator("email_from")
+    @classmethod
+    def default_blank_sender(cls, value: str) -> str:
+        """Fall back to the default sender when the variable is set but blank."""
+        return value.strip() or DEFAULT_EMAIL_FROM
+
+    @field_validator("email_allowed_recipient")
+    @classmethod
+    def normalise_allowed_recipient(cls, value: str | None) -> str | None:
+        """Lower case the one permitted recipient, and read a blank value as no restriction."""
+        if value is None:
+            return None
+        return value.strip().lower() or None
 
     @field_validator("jwt_algorithm")
     @classmethod
@@ -178,16 +224,23 @@ class Settings(BaseSettings):
         """Return the configured browser origins as a list."""
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
 
+    @property
+    def email_configured(self) -> bool:
+        """Return True when there is an API key to send email with."""
+        return self.resend_api_key is not None
+
     def redacted(self) -> dict[str, str | int | list[str]]:
         """Return the resolved configuration with every secret removed.
 
         Used by the startup log so an operator can confirm what the process
         actually loaded without the log becoming a credential leak.
 
-        Two keys are named with care. The log redaction filter replaces the
-        value of any key whose name contains `secret` or `token`, which would
-        turn "set" and the lifetime in minutes into the placeholder and lose
-        the two facts this record exists to show.
+        Three keys are named with care. The log redaction filter replaces the
+        value of any key whose name contains `secret`, `token` or `api_key`,
+        which would turn "set", the lifetime in minutes and the state of the
+        email key into the placeholder and lose the facts this record exists
+        to show. The one permitted recipient is an address, so the record says
+        whether a restriction is on and not who it names.
         """
         return {
             "environment": self.environment.value,
@@ -197,6 +250,9 @@ class Settings(BaseSettings):
             "jwt_signing_key": "set" if self.jwt_secret else "missing",
             "access_lifetime_minutes": self.access_token_minutes,
             "cors_origins": self.cors_origins,
+            "email_delivery": "configured" if self.email_configured else "not-configured",
+            "email_sender": self.email_from,
+            "email_recipient_restriction": "on" if self.email_allowed_recipient else "off",
         }
 
 
@@ -236,7 +292,8 @@ def load_settings() -> Settings:
         raise ConfigurationError(
             "Failed to load backend configuration from the environment. "
             "Attempted to read DATABASE_URL, JWT_SECRET, JWT_ALGORITHM, "
-            "ACCESS_TOKEN_MINUTES, ENVIRONMENT, CORS_ORIGINS and K_REVISION. "
+            "ACCESS_TOKEN_MINUTES, ENVIRONMENT, CORS_ORIGINS, K_REVISION, "
+            "RESEND_API_KEY, EMAIL_FROM and EMAIL_ALLOWED_RECIPIENT. "
             f"Cause: {_describe(exc)}"
         ) from None
 

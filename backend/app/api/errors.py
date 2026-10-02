@@ -34,12 +34,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.schemas import ProblemDetail
 from app.domain.errors import (
-    AssetUnavailableConflict,
+    AccountOnHoldError,
+    AllocationConflictError,
     AuthenticationFailure,
     AuthorisationFailure,
+    BranchScopeError,
     DomainError,
     InactiveAccount,
     NotFound,
+    StateTransitionError,
     ValidationFailure,
 )
 from app.request_context import current_request_id
@@ -57,7 +60,10 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     AuthenticationFailure: status.HTTP_401_UNAUTHORIZED,
     AuthorisationFailure: status.HTTP_403_FORBIDDEN,
     InactiveAccount: status.HTTP_403_FORBIDDEN,
-    AssetUnavailableConflict: status.HTTP_409_CONFLICT,
+    BranchScopeError: status.HTTP_403_FORBIDDEN,
+    AccountOnHoldError: status.HTTP_403_FORBIDDEN,
+    AllocationConflictError: status.HTTP_409_CONFLICT,
+    StateTransitionError: status.HTTP_409_CONFLICT,
 }
 
 # Returned to the caller in place of any unhandled exception detail. The

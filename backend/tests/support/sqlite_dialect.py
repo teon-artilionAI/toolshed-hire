@@ -14,7 +14,9 @@ taught to SQLite before an in memory engine can create the tables at all.
    them with `create_type=False`, so nothing tries to issue `CREATE TYPE`.
 4. `JSONB` renders as `JSON`, which SQLite stores as text and SQLAlchemy
    serialises the same way on both sides.
-5. `INET` renders as a `VARCHAR` wide enough for an IPv6 address.
+5. `INET` renders as a `VARCHAR` wide enough for an IPv6 address. The driver
+   is taught to write an address object as its text, which is what PostgreSQL
+   does with one natively, so an audit event can carry a client address here.
 6. `BIGINT` renders as `INTEGER`. SQLite only numbers a primary key by itself
    when the column is declared with exactly that word, so the two BIGSERIAL
    keys would otherwise have to be supplied by hand.
@@ -42,6 +44,7 @@ import itertools
 import logging
 import sqlite3
 from collections.abc import Iterator
+from ipaddress import IPv4Address, IPv6Address
 from typing import Final
 
 from sqlalchemy import BigInteger, Engine, event
@@ -156,6 +159,12 @@ def render_big_integer_for_sqlite(
 ) -> str:
     """Render a BIGINT column as INTEGER, the one type SQLite will number itself."""
     return ROWID_SQLITE_TYPE
+
+
+# Registered once for the process, which is how the sqlite3 module keeps its
+# adapters. An address is stored as the text PostgreSQL would print for it.
+sqlite3.register_adapter(IPv4Address, str)
+sqlite3.register_adapter(IPv6Address, str)
 
 
 def _install_connection_shims(engine: Engine) -> None:
