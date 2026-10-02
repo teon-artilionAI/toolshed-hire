@@ -4,155 +4,61 @@
  * Three layouts, because three people use this system in three postures. A
  * customer browses a catalogue on a phone. Counter staff stand at a trade
  * counter with a queue behind them, so their targets are generous and the
- * branch they are working at never leaves the screen. An owner reads
- * reports sitting down, so their layout is denser and visibly a different
- * tool. The layout follows the screen's own role rather than who is signed
- * in, so a counter screen always looks like a counter screen.
+ * branch they work at never leaves the screen. An owner reads reports sitting
+ * down, so their layout is denser and visibly a different tool.
+ *
+ * The layout and the menu follow the person who is signed in. A visitor and a
+ * customer get the customer layout. Counter staff get the counter layout with
+ * the name of their branch, which comes from their account. An admin gets the
+ * owner's layout, with the counter screens in the same menu because an admin
+ * may use those too. The rule for the menu is `navFor` in screen-access.ts.
+ *
+ * The shell also owns the notice that says a screen still shows sample data.
  */
 
-import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
-import {
-  AlarmClock, BarChart3, Boxes, CalendarDays, CalendarPlus, CalendarRange,
-  Home, LayoutDashboard, LogOut, MapPin, MoreHorizontal, ScrollText, Search,
-  ShieldCheck, ShoppingCart, Tags, User, Users, Wrench, X,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import type { Role } from './types'
+import { Link, NavLink } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { LogOut, ShoppingCart } from 'lucide-react'
+import { catalogueQueries } from './api/catalogue-queries'
 import type { ScreenDef } from './navigation'
-import { navForRole } from './navigation'
-import { useSession } from './session'
-
-const ICONS: Record<string, LucideIcon> = {
-  AlarmClock, BarChart3, Boxes, CalendarDays, CalendarPlus, CalendarRange,
-  Home, LayoutDashboard, MapPin, ScrollText, Search, ShieldCheck,
-  ShoppingCart, Tags, User, Users,
-}
-
-/** Most items a phone tab bar can carry before labels stop being legible. */
-const MAX_TAB_BAR_ITEMS = 5
-
-/** One tab. 56px tall with 8px between neighbours, which is what a thumb
- *  at a counter needs. */
-const TAB_CLASS =
-  'flex min-h-[3.5rem] flex-1 cursor-pointer flex-col items-center justify-center gap-xs rounded px-xs py-sm text-xs leading-tight transition-colors'
-
-/** The screen's own icon, falling back to a spanner so a new screen with
- *  no icon still renders rather than leaving a hole in the navigation. */
-function NavIcon({ screen }: { screen: ScreenDef }) {
-  const Icon = (screen.icon && ICONS[screen.icon]) || Wrench
-  return <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-}
-
-/** Active state is amber with ink text, which passes contrast where amber
- *  with white would not. */
-function navItemClass(
-  base: string,
-  idle: string,
-  active = 'bg-accent font-semibold text-accent-ink',
-) {
-  return ({ isActive }: { isActive: boolean }) =>
-    `${base} ${isActive ? active : idle}`
-}
-
-function SkipLink() {
-  return <a href="#main" className="skip-link">Skip to main content</a>
-}
-
-function BrandMark({ full = false }: { full?: boolean }) {
-  return (
-    <img
-      src={full ? '/logo.png' : '/mark.png'}
-      alt="Toolshed Hire"
-      className={full ? 'h-9 w-auto' : 'h-8 w-8'}
-    />
-  )
-}
-
-/** Bottom tab bar for phones. Beyond five items the tail moves into a
- *  sheet, because six labels at 375px stop being readable. */
-function MobileTabBar({ items }: { items: ScreenDef[] }) {
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const location = useLocation()
-  const overflowing = items.length > MAX_TAB_BAR_ITEMS
-  const tabs = overflowing ? items.slice(0, MAX_TAB_BAR_ITEMS - 1) : items
-  const rest = overflowing ? items.slice(MAX_TAB_BAR_ITEMS - 1) : []
-
-  useEffect(() => setSheetOpen(false), [location.pathname])
-
-  return (
-    <>
-      {sheetOpen && (
-        <div
-          id="more-nav-sheet"
-          className="fixed inset-x-0 bottom-[4.5rem] z-30 border-t border-line bg-surface p-md shadow-pop md:hidden"
-        >
-          <div className="mb-sm flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink">More</h2>
-            <button type="button" className="btn px-sm text-slate-soft hover:bg-muted" onClick={() => setSheetOpen(false)}>
-              <X className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only">Close the more menu</span>
-            </button>
-          </div>
-          <ul className="flex flex-col gap-sm">
-            {rest.map((s) => (
-              <li key={s.id}>
-                <NavLink to={s.path} className={navItemClass('btn w-full justify-start', 'text-ink hover:bg-muted')}>
-                  <NavIcon screen={s} />
-                  {s.navLabel ?? s.name}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <nav
-        aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 flex gap-sm border-t border-line bg-surface px-sm pb-[env(safe-area-inset-bottom)] md:hidden"
-      >
-        {tabs.map((s) => (
-          <NavLink
-            key={s.id}
-            to={s.path}
-            end={s.path === '/'}
-            className={navItemClass(TAB_CLASS, 'text-slate-soft hover:bg-muted', 'bg-accent-wash font-semibold text-ink')}
-          >
-            <NavIcon screen={s} />
-            <span className="text-center">{s.navLabel ?? s.name}</span>
-          </NavLink>
-        ))}
-        {overflowing && (
-          <button
-            type="button"
-            aria-expanded={sheetOpen}
-            aria-controls="more-nav-sheet"
-            onClick={() => setSheetOpen((v) => !v)}
-            className={`${TAB_CLASS} text-slate-soft hover:bg-muted`}
-          >
-            <MoreHorizontal className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <span>More</span>
-          </button>
-        )}
-      </nav>
-    </>
-  )
-}
+import { CATALOGUE_PATH, SIGN_IN_PATH } from './navigation'
+import { SampleDataNotice } from './sample-data-notice'
+import { navFor } from './screen-access'
+import { BrandMark, MobileTabBar, NavIcon, SkipLink } from './shell-nav'
+import { MAX_TAB_BAR_ITEMS, navItemClass } from './shell-nav-style'
+import { useSession } from './use-session'
 
 /** Who you are, and the way out. Shared by both staff sidebars. */
 function AuthControl({ signOutClass }: { signOutClass: string }) {
-  const { signedIn, user, signOut } = useSession()
-  if (!signedIn || !user) {
-    return <Link to="/signin" className="btn-primary w-full">Sign in</Link>
+  const { user, signOut, signingOut } = useSession()
+  if (!user) {
+    return <Link to={SIGN_IN_PATH} className="btn-primary w-full">Sign in</Link>
   }
   return (
     <>
-      <p className="truncate text-sm font-medium">{user.name}</p>
-      <button type="button" onClick={signOut} className={`btn mt-sm w-full justify-start px-sm ${signOutClass}`}>
+      <p className="truncate text-sm font-medium">{user.fullName}</p>
+      <button
+        type="button"
+        onClick={signOut}
+        disabled={signingOut}
+        className={`btn mt-sm w-full justify-start px-sm ${signOutClass}`}
+      >
         <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
         Sign out
       </button>
     </>
+  )
+}
+
+/** The way out on a phone, where the staff sidebar is not shown. */
+function MobileSignOut() {
+  const { signOut, signingOut } = useSession()
+  return (
+    <button type="button" onClick={signOut} disabled={signingOut} className="btn-secondary px-sm text-sm">
+      <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="sr-only">Sign out</span>
+    </button>
   )
 }
 
@@ -176,7 +82,8 @@ function Whereabouts({ heading, subheading, dark = false }: StaffChrome) {
 }
 
 /** Desktop side navigation for staff. `dark` is the owner's tool, which is
- *  deliberately a different object from the counter's. */
+ *  deliberately a different object from the counter's. It stays in view while
+ *  the screen scrolls, so the way out is never below a long page. */
 function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { items: ScreenDef[] }) {
   const ground = dark ? 'bg-slate text-white border-slate-soft' : 'bg-surface text-ink border-line'
   const edge = dark ? 'border-slate-soft' : 'border-line'
@@ -184,7 +91,7 @@ function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { i
   const size = dark ? 'min-h-[2.75rem] text-sm' : 'min-h-[3rem] text-base'
 
   return (
-    <aside className={`hidden w-64 shrink-0 flex-col border-r md:flex ${ground}`}>
+    <aside className={`hidden w-64 shrink-0 flex-col border-r md:sticky md:top-0 md:flex md:h-dvh ${ground}`}>
       <div className={`flex items-center gap-sm border-b p-md ${edge}`}>
         <Whereabouts heading={heading} subheading={subheading} dark={dark} />
       </div>
@@ -211,14 +118,14 @@ function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { i
 }
 
 function CustomerHeader({ items }: { items: ScreenDef[] }) {
-  const { signedIn, user, basketCount, signOut } = useSession()
+  const { user, basketCount, signOut, signingOut } = useSession()
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-md px-md py-sm">
         {/* The logo is 36px tall, so the link gets its own 44px minimum
             rather than inheriting the image's height as its target. */}
         <Link
-          to="/"
+          to={CATALOGUE_PATH}
           className="flex min-h-[2.75rem] min-w-[2.75rem] shrink-0 cursor-pointer items-center"
           aria-label="Toolshed Hire, home"
         >
@@ -230,7 +137,7 @@ function CustomerHeader({ items }: { items: ScreenDef[] }) {
               <li key={s.id}>
                 <NavLink
                   to={s.path}
-                  end={s.path === '/'}
+                  end={s.path === CATALOGUE_PATH}
                   className={navItemClass('btn px-md', 'text-slate hover:bg-muted hover:text-ink', 'bg-accent-wash font-semibold text-ink')}
                 >
                   {s.navLabel ?? s.name}
@@ -248,14 +155,19 @@ function CustomerHeader({ items }: { items: ScreenDef[] }) {
             <ShoppingCart className="h-5 w-5 shrink-0" aria-hidden="true" />
             <span className="tabular text-sm font-semibold">{basketCount}</span>
           </Link>
-          {signedIn && user ? (
-            <button type="button" onClick={signOut} className="btn-secondary px-md text-sm">
+          {user ? (
+            <button
+              type="button"
+              onClick={signOut}
+              disabled={signingOut}
+              className="btn-secondary px-md text-sm"
+            >
               <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="hidden sm:inline">Sign out</span>
               <span className="sr-only sm:hidden">Sign out</span>
             </button>
           ) : (
-            <Link to="/signin" className="btn-primary px-md text-sm">Sign in</Link>
+            <Link to={SIGN_IN_PATH} className="btn-primary px-md text-sm">Sign in</Link>
           )}
         </div>
       </div>
@@ -263,41 +175,79 @@ function CustomerHeader({ items }: { items: ScreenDef[] }) {
   )
 }
 
-const MAIN_CLASS =
-  'mx-auto w-full max-w-6xl flex-1 px-md py-lg pb-[8.5rem] md:pb-2xl'
+/**
+ * The name of the branch a counter account works at.
+ *
+ * The account carries the branch code and the API knows the name. Until the
+ * list of branches has arrived, and if it cannot be loaded, the code stands in
+ * for the name, so the counter layout always says where the person is.
+ */
+function useCounterBranch(branchCode: string | null): StaffChrome {
+  const branches = useQuery({ ...catalogueQueries.branches(), enabled: branchCode !== null })
+  if (branchCode === null) return { heading: 'Toolshed Hire', subheading: 'Branch counter' }
+  const branch = branches.data?.items.find((candidate) => candidate.code === branchCode)
+  return branch
+    ? { heading: branch.name, subheading: `${branch.suburb} branch counter` }
+    : { heading: `Branch ${branchCode}`, subheading: 'Branch counter' }
+}
 
-/** @param variant which layout to draw, taken from the screen's own role. */
-export default function AppShell({ variant, children }: { variant: Role; children: ReactNode }) {
-  const { branch } = useSession()
-  const items = navForRole(variant)
+/** `tabIndex` lets the router move focus here when the address changes, and
+ *  lets the skip link land on it. It is not a tab stop. */
+function Main({ screen, children }: { screen?: ScreenDef; children: ReactNode }) {
+  return (
+    <main
+      id="main"
+      tabIndex={-1}
+      className="mx-auto w-full max-w-6xl flex-1 px-md py-lg pb-[8.5rem] md:pb-2xl"
+    >
+      <SampleDataNotice screen={screen} />
+      {children}
+    </main>
+  )
+}
 
-  if (variant === 'customer') {
+/**
+ * @param screen The screen being shown. Leave it out when the shell frames
+ *   something that is not a screen, such as a refusal or a missing page, so
+ *   the sample data notice is not shown above it.
+ */
+export default function AppShell({ screen, children }: { screen?: ScreenDef; children: ReactNode }) {
+  const { user, role } = useSession()
+  const items = navFor(role)
+  const counter = useCounterBranch(role === 'counter' ? (user?.branchCode ?? null) : null)
+
+  if (role === null || role === 'customer') {
     return (
       <div className="flex min-h-dvh flex-col">
         <SkipLink />
         <CustomerHeader items={items} />
-        <main id="main" className={MAIN_CLASS}>{children}</main>
+        <Main screen={screen}>{children}</Main>
         <MobileTabBar items={items.slice(0, MAX_TAB_BAR_ITEMS)} />
       </div>
     )
   }
 
-  const isAdmin = variant === 'admin'
-  const heading = isAdmin ? 'Toolshed Hire' : branch.name
-  const subheading = isAdmin ? 'Owner and admin' : `${branch.suburb} branch counter`
+  const isAdmin = role === 'admin'
+  const chrome: StaffChrome = isAdmin
+    ? { heading: 'Toolshed Hire', subheading: 'Owner and admin' }
+    : counter
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
       <SkipLink />
-      <Sidebar items={items} heading={heading} subheading={subheading} dark={isAdmin} />
+      <Sidebar items={items} {...chrome} dark={isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-sm border-b border-line bg-surface px-md py-sm md:hidden">
-          <Whereabouts heading={heading} subheading={subheading} />
+          <Whereabouts {...chrome} />
+          {/* A phone has no sidebar, so the way out sits beside the branch. */}
+          <div className="ml-auto shrink-0">
+            <MobileSignOut />
+          </div>
         </div>
         {!isAdmin && (
-          <p className="sr-only" aria-live="polite">Working at the {branch.name} branch</p>
+          <p className="sr-only" aria-live="polite">Working at {chrome.heading}</p>
         )}
-        <main id="main" className={MAIN_CLASS}>{children}</main>
+        <Main screen={screen}>{children}</Main>
       </div>
       <MobileTabBar items={items} />
     </div>

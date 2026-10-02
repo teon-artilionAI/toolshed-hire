@@ -20,7 +20,7 @@ import {
   PageHeader,
   StatTile,
 } from '../../shared/ui'
-import { useSession } from '../../shared/session'
+import { useSession } from '../../shared/use-session'
 import AuditTrail from './AuditTrail'
 import NotificationLog from './NotificationLog'
 
@@ -60,7 +60,7 @@ export default function AuditLog() {
         {
           id: `ae-resend-${sending.id}-${trail.length}`,
           at: stampNow(),
-          actor: user?.name ?? 'Admin',
+          actor: user?.fullName ?? 'Admin',
           action: 'NOTIFICATION_RESENT',
           entity: sending.reference,
           detail: `Booking confirmation sent again to ${sending.to}`,

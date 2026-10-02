@@ -156,15 +156,15 @@ describe('a malformed body', () => {
   })
 
   it('throws a malformed error naming a field that is missing', () => {
-    const thrown = captureError(() => requireField<string>({}, 'accessToken', 'string', '/api/auth/sign-in'))
+    const thrown = captureError(() => requireField<string>({}, 'accessToken', 'string', '/api/auth/login'))
 
     expect(thrown.kind).toBe('malformed')
     expect(thrown.detail).toContain('accessToken')
-    expect(thrown.detail).toContain('/api/auth/sign-in')
+    expect(thrown.detail).toContain('/api/auth/login')
   })
 
   it('throws a malformed error for a field of the wrong type', () => {
-    const thrown = captureError(() => requireField<string>({ accessToken: 12 }, 'accessToken', 'string', '/api/auth/sign-in'))
+    const thrown = captureError(() => requireField<string>({ accessToken: 12 }, 'accessToken', 'string', '/api/auth/login'))
 
     expect(thrown.detail).toContain('got number')
   })
@@ -180,7 +180,7 @@ describe('a well formed body', () => {
   })
 
   it('gives back a required field of the right type', () => {
-    expect(requireField<string>({ accessToken: 'abc' }, 'accessToken', 'string', '/api/auth/sign-in')).toBe('abc')
+    expect(requireField<string>({ accessToken: 'abc' }, 'accessToken', 'string', '/api/auth/login')).toBe('abc')
   })
 })
 
@@ -199,6 +199,33 @@ describe('a failure that was never an API response', () => {
     const original = errorFromResponse(responseWith(502, ''), '', REQUEST_PATH)
 
     expect(asApiError(original, REQUEST_PATH)).toBe(original)
+  })
+})
+
+describe('the wait a 429 names', () => {
+  const body = JSON.stringify({
+    type: 'https://toolshedhire.example/problems/too-many-attempts',
+    title: 'Too many attempts',
+    status: 429,
+    detail: 'Wait and try again.',
+  })
+
+  function tooMany(retryAfter?: string): ApiError {
+    const headers = new Headers({ 'content-type': PROBLEM_JSON })
+    if (retryAfter !== undefined) headers.set('Retry-After', retryAfter)
+    return errorFromResponse(new Response(null, { status: 429, headers }), body, REQUEST_PATH)
+  }
+
+  it('is carried on the error in whole seconds', () => {
+    expect(tooMany('90').retryAfterSeconds).toBe(90)
+    expect(tooMany(' 5 ').retryAfterSeconds).toBe(5)
+  })
+
+  it('is null when the header is absent or is not a count of seconds', () => {
+    expect(tooMany().retryAfterSeconds).toBeNull()
+    expect(tooMany('Wed, 21 Oct 2026 07:28:00 GMT').retryAfterSeconds).toBeNull()
+    expect(tooMany('-3').retryAfterSeconds).toBeNull()
+    expect(tooMany('1.5').retryAfterSeconds).toBeNull()
   })
 })
 

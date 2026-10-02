@@ -29,6 +29,10 @@ type Schemas = components['schemas']
 type JsonOf<Operation extends { responses: { 200: { content: { 'application/json': unknown } } } }> =
   Operation['responses'][200]['content']['application/json']
 
+/** The JSON body one operation accepts. */
+type BodyOf<Operation extends { requestBody: { content: { 'application/json': unknown } } }> =
+  Operation['requestBody']['content']['application/json']
+
 /** The query one operation accepts. */
 type QueryOf<Operation extends { parameters: { query?: object } }> = NonNullable<
   Operation['parameters']['query']
@@ -96,21 +100,40 @@ export type UserRole = 'customer' | 'counter' | 'admin'
 export type HealthReport = JsonOf<paths['/api/health']['get']>
 
 /**
- * An account as `GET /api/me` describes it.
+ * The signed in account. `GET /api/me`, and the `user` member of what login
+ * and refresh answer with.
  *
- * Counter staff carry a branch. Customers and administrators do not, and the
- * API may then leave `branchCode` out. The reader turns that into null, so
- * null here is a fact about the role and not missing data.
+ * Counter staff carry the code of the branch they work at. Customers and
+ * administrators do not, and `branchCode` is null for them. Null is a fact
+ * about the role and not missing data. The generated type also lets the member
+ * be left out. The reader in auth.ts turns a missing one into null, so here it
+ * is always present.
  */
-export type ApiUserAccount = Refine<
+export type SessionUser = Refine<
   JsonOf<paths['/api/me']['get']>,
   { role: UserRole; branchCode: string | null }
 >
 
-/** A successful sign in. The token, its lifetime, and whom it belongs to. */
-export type SignInResult = Refine<
-  JsonOf<paths['/api/auth/sign-in']['post']>,
-  { user: ApiUserAccount }
+/** The body `POST /api/auth/login` accepts. */
+export type LoginRequest = BodyOf<paths['/api/auth/login']['post']>
+
+/** The one token type the API issues. The generated type is a plain `string`,
+ *  and the client only knows how to send this one. */
+export type AccessTokenType = 'Bearer'
+
+/**
+ * What `POST /api/auth/login` and `POST /api/auth/refresh` both answer with.
+ *
+ * The access token, how many seconds it lasts, and whom it belongs to. The
+ * refresh token is not here. The server keeps it in an HttpOnly cookie that
+ * the page cannot read.
+ *
+ * `POST /api/auth/logout` takes no body and answers 204 with none, so it needs
+ * no type here.
+ */
+export type SessionGrant = Refine<
+  JsonOf<paths['/api/auth/login']['post']> & JsonOf<paths['/api/auth/refresh']['post']>,
+  { tokenType: AccessTokenType; user: SessionUser }
 >
 
 /** One trading branch. The codes in use are CBD, BLV and SMW. */

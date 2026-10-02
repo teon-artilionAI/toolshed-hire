@@ -1,14 +1,12 @@
 /**
- * Fixture data for the prototype.
+ * Sample data for the screens that are not connected to the API yet.
  *
- * The Task 1 prototype rubric awards 15 marks for "meaningful dummy data"
- * and "role-based flows evident", and explicitly marks down limited or
- * placeholder content. So this is real South African tool hire: actual
- * makes and models, plausible Cape Town rand rates, and bookings that
- * overlap, run late and come back damaged, because a catalogue where
- * everything is available demonstrates nothing.
+ * It is written to read like real South African tool hire, with actual makes
+ * and models, plausible Cape Town rand rates, and bookings that overlap, run
+ * late and come back damaged. A catalogue where everything is available
+ * demonstrates nothing.
  *
- * The worked example is the one used throughout the Task 1 document:
+ * The worked example is the one the design document uses throughout. It is
  * reservation TSH-R-26-000123 at the CBD branch, rental TSH-H-26-000098,
  * R1,200.00 deposit, asset TSH-DR-0042 returned two days late at R120.00
  * per day, R240.00 withheld and R960.00 released.

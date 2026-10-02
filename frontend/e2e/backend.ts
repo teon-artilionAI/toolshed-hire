@@ -8,6 +8,10 @@
  *
  * A degraded backend counts as absent. The health endpoint answers 503 when
  * the database is down, and the catalogue cannot load from that either.
+ *
+ * A healthy backend is not enough for the session spec. It needs the session
+ * routes, and a backend can be up and answering without having them. So that
+ * spec asks a second question, about one of those routes by name.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -43,4 +47,44 @@ export async function backendIsReachable(request: APIRequestContext): Promise<bo
     )
   }
   return response.ok()
+}
+
+/** One of the session routes. If it is there, the others were built with it. */
+const SESSION_PROBE_PATH = '/api/auth/refresh'
+
+/** What a backend answers for a route it does not have. 404 when nothing is
+ *  mounted on the path, and 405 when the path exists for another method. */
+const ROUTE_ABSENT_STATUSES: readonly number[] = [404, 405]
+
+/** The lowest status that means the API itself did not answer properly. */
+const SERVER_FAILURE_FROM = 500
+
+/** The reason shown beside a skipped session spec in the report. */
+export const SESSION_ROUTES_NEEDED =
+  `This needs the session routes on the real backend, and POST ${SESSION_PROBE_PATH} answered ` +
+  'as a route that is not there. Run the browser tests again against a backend that has ' +
+  'login, refresh and logout.'
+
+/**
+ * Ask whether the backend has the session routes.
+ *
+ * I post to refresh with no cookie. A backend that has the route refuses that
+ * with a 401, which is an answer from the route and so proves it exists. A
+ * backend that does not have it answers 404 or 405.
+ *
+ * @returns True only when the backend is healthy and the route answered for
+ *   itself. An absent backend is a false and not a throw.
+ */
+export async function sessionRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await backendIsReachable(request))) return false
+  const response = await request.post(SESSION_PROBE_PATH, { timeout: HEALTH_TIMEOUT_MS })
+  const status = response.status()
+  const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+  if (!present && BACKEND_IS_REQUIRED) {
+    throw new Error(
+      `${REQUIRE_BACKEND_VARIABLE} is set, so the session routes have to be there, and ` +
+        `POST ${SESSION_PROBE_PATH} answered ${status}. A skipped spec would hide that.`,
+    )
+  }
+  return present
 }

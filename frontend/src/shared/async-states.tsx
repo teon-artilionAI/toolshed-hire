@@ -74,15 +74,31 @@ export function LoadingState({
   )
 }
 
+/**
+ * What the error state is about. A read names what could not be loaded. An
+ * action that failed, such as a sign in, writes the whole heading instead,
+ * because nothing was being loaded.
+ */
+type ErrorSubject =
+  | {
+      /** What could not be loaded, for example "the catalogue". It follows
+       *  the words "We could not load". */
+      what: string
+      heading?: undefined
+    }
+  | {
+      /** The whole heading, for example "We could not sign you in". */
+      heading: string
+      what?: undefined
+    }
+
 export function ErrorState({
   what,
+  heading,
   error,
   onRetry,
   children,
-}: {
-  /** What could not be loaded, for example "the catalogue". It follows the
-   *  words "We could not load". */
-  what: string
+}: ErrorSubject & {
   /** Whatever was thrown. Only its kind and its request id are used. */
   error: unknown
   /** Called when the person asks to try again. Leave it out when trying again
@@ -100,7 +116,9 @@ export function ErrorState({
       <div className="flex items-start gap-sm">
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-overdue" aria-hidden="true" />
         <div className="min-w-0">
-          <p className="text-base font-semibold text-ink">We could not load {what}</p>
+          <p className="text-base font-semibold text-ink">
+            {heading ?? `We could not load ${what}`}
+          </p>
           <p className="mt-xs text-sm text-slate-soft">{advice}</p>
           {(onRetry || children) && (
             <div className="mt-md flex flex-wrap items-center gap-sm">

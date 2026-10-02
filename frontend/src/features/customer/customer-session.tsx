@@ -1,71 +1,56 @@
 /**
- * Who the signed in customer is, for the three screens that only make sense
- * when someone is signed in.
+ * The sample profile behind the three customer screens that are not connected
+ * to the API yet, My Hires, a booking, and My Account.
  *
- * The prototype has no authentication, but "my reservations" and "my
- * account" are meaningless without an answer to "whose". The session holds
- * the account; the customer profile holds the billing and identification
- * detail. This joins the two and gives the screens one honest signed out
- * state to render instead of three different ones.
+ * The session says who is signed in, and that is real. The bookings, charges
+ * and identification detail these screens show are still sample data, kept
+ * against sample customers. This joins the two by email address, so the seeded
+ * customer account sees the sample bookings made in its name.
+ *
+ * An account with no sample profile is shown nothing, and is told why. I never
+ * fall back to somebody else's sample bookings, because that would put another
+ * person's name and charges in front of a signed in customer as their own.
+ *
+ * The guard in App.tsx has already dealt with a signed out person and with a
+ * staff account before any of these screens render. All of this goes when the
+ * screens read the signed in customer's own bookings from the API.
  */
 
 import { Link } from 'react-router-dom'
 import { customers } from '../../shared/fixtures'
-import { useSession } from '../../shared/session'
 import type { CustomerProfile } from '../../shared/types'
 import { EmptyState } from '../../shared/ui'
+import { useSession } from '../../shared/use-session'
 
-/** The signed in customer's profile, or null when nobody is signed in or
- *  the signed in account is a staff account. */
+/** The sample profile for the signed in customer, or null when the account
+ *  has none or the person is not a customer. */
 export function useCustomerProfile(): CustomerProfile | null {
-  const { signedIn, user } = useSession()
-  if (!signedIn || !user || user.role !== 'customer') return null
-  return (
-    customers.find((customer) => customer.userId === user.id) ??
-    customers.find((customer) => customer.email === user.email) ??
-    null
-  )
+  const { user } = useSession()
+  if (!user || user.role !== 'customer') return null
+  const email = user.email.toLowerCase()
+  return customers.find((customer) => customer.email.toLowerCase() === email) ?? null
 }
 
 /**
- * Shown in place of a customer screen when nobody is signed in.
+ * Shown in place of a customer screen when the signed in account has no
+ * sample profile to show.
  *
  * @param what what the person came here to see, folded into the heading,
  *             for example "your hires".
  */
-export function SignInRequired({ what }: { what: string }) {
-  const { signedIn, user } = useSession()
-
-  if (signedIn && user && user.role !== 'customer') {
-    return (
-      <div className="card">
-        <EmptyState
-          title={`${what} belongs to a customer account`}
-          body={`You are signed in as ${user.name}, which is a staff account. Switch to the customer role to see this screen.`}
-          action={
-            <Link to="/" className="btn-secondary px-md">
-              Back to the catalogue
-            </Link>
-          }
-        />
-      </div>
-    )
-  }
-
+export function NoSampleProfile({ what }: { what: string }) {
+  const { user } = useSession()
   return (
     <div className="card">
       <EmptyState
-        title={`Sign in to see ${what}`}
-        body="Your bookings, charges and deposits are kept against your account, so we need to know who you are before we can show them."
+        title={`We cannot show ${what} yet`}
+        body={`This screen still shows sample data, and there is none for ${
+          user?.email ?? 'this account'
+        }. It will show the bookings on your own account once it is connected.`}
         action={
-          <div className="flex flex-wrap justify-center gap-sm">
-            <Link to="/signin" className="btn-primary px-md">
-              Sign in
-            </Link>
-            <Link to="/register" className="btn-secondary px-md">
-              Create an account
-            </Link>
-          </div>
+          <Link to="/" className="btn-secondary px-md">
+            Back to the catalogue
+          </Link>
         }
       />
     </div>

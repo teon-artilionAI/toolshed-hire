@@ -23,6 +23,8 @@ import type { ProblemDocument } from './api/contract'
 const PROBLEM_MEDIA_TYPE = 'application/problem+json'
 /** The response header that carries the id of the request on every answer. */
 export const REQUEST_ID_HEADER = 'X-Request-ID'
+/** The response header a 429 uses to say how many seconds to wait. */
+export const RETRY_AFTER_HEADER = 'Retry-After'
 const HTTP_NO_CONTENT = 204
 /** How much of an unparseable body to quote back in the error message. */
 const BODY_EXCERPT_LENGTH = 120
@@ -54,6 +56,8 @@ export interface ApiErrorInput {
   problem?: ProblemDocument | null
   /** The id the server gave the request, or null when nothing answered. */
   requestId?: string | null
+  /** The seconds the server asked the caller to wait, when it named any. */
+  retryAfterSeconds?: number | null
   cause?: unknown
 }
 
@@ -73,6 +77,7 @@ export class ApiError extends Error {
   readonly requestPath: string
   readonly problem: ProblemDocument | null
   readonly requestId: string | null
+  readonly retryAfterSeconds: number | null
 
   constructor(input: ApiErrorInput) {
     super(`${input.title}: ${input.detail}`, { cause: input.cause })
@@ -84,6 +89,7 @@ export class ApiError extends Error {
     this.requestPath = input.requestPath
     this.problem = input.problem ?? null
     this.requestId = input.requestId ?? null
+    this.retryAfterSeconds = input.retryAfterSeconds ?? null
   }
 
   /** True when the API itself was never reached, whether because nothing
@@ -146,6 +152,13 @@ export function malformedResponse(
 /** The request id a response carries in its header, or null when it has none. */
 export function requestIdFromHeaders(response: Response): string | null {
   return response.headers.get(REQUEST_ID_HEADER)
+}
+
+/** The wait a response names in `Retry-After`, in whole seconds, or null when
+ *  the header is absent or is not a count of seconds. */
+export function retryAfterFromHeaders(response: Response): number | null {
+  const raw = response.headers.get(RETRY_AFTER_HEADER)?.trim() ?? ''
+  return /^\d+$/.test(raw) ? Number(raw) : null
 }
 
 /**
@@ -257,6 +270,7 @@ export function errorFromResponse(
       requestPath,
       problem,
       requestId,
+      retryAfterSeconds: retryAfterFromHeaders(response),
     })
   }
   if (record === null && GATEWAY_STATUSES.includes(response.status)) {

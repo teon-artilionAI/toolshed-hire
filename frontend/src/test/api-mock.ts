@@ -16,6 +16,9 @@ import type { Mock } from 'vitest'
 const PROBLEM_MEDIA_TYPE = 'application/problem+json'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const HTTP_NOT_IMPLEMENTED = 501
+const HTTP_NO_CONTENT = 204
+/** What every problem `type` the API sends starts with. */
+const PROBLEM_TYPE_PREFIX = 'https://toolshedhire.co.za/problems/'
 
 /** One request as a test sees it. */
 export interface SeenRequest {
@@ -54,15 +57,28 @@ export function jsonResponse(body: unknown, requestId = 'req-test-0001'): Respon
   })
 }
 
+/** A 204 with no body, which is how the API answers a sign out. */
+export function noContentResponse(requestId = 'req-test-0204'): Response {
+  return new Response(null, { status: HTTP_NO_CONTENT, headers: { [REQUEST_ID_HEADER]: requestId } })
+}
+
 /** A problem document, the way the API sends every error. */
 export function problemResponse(
   status: number,
-  options: { detail?: string; errors?: Record<string, unknown>; requestId?: string } = {},
+  options: {
+    detail?: string
+    errors?: Record<string, unknown>
+    requestId?: string
+    /** How the `type` ends, for example `session-expired`. */
+    slug?: string
+    /** Further response headers, for example `Retry-After`. */
+    headers?: Record<string, string>
+  } = {},
 ): Response {
   const requestId = options.requestId ?? 'req-test-problem'
   return new Response(
     JSON.stringify({
-      type: 'https://toolshedhire.co.za/problems/test',
+      type: `${PROBLEM_TYPE_PREFIX}${options.slug ?? 'test'}`,
       title: 'Test Problem',
       status,
       detail: options.detail ?? 'The request could not be completed.',
@@ -71,7 +87,11 @@ export function problemResponse(
     }),
     {
       status,
-      headers: { 'Content-Type': PROBLEM_MEDIA_TYPE, [REQUEST_ID_HEADER]: requestId },
+      headers: {
+        'Content-Type': PROBLEM_MEDIA_TYPE,
+        [REQUEST_ID_HEADER]: requestId,
+        ...options.headers,
+      },
     },
   )
 }
