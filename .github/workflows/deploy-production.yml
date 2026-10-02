@@ -35,11 +35,14 @@ env:
   IMAGE_NAME: api
   HEALTH_PATH: /api/health
   ENVIRONMENT_NAME: production
-  # The instance cap is the figure the connection arithmetic in NFR-15 depends
-  # on. Four instances at a pool of five is twenty connections at peak. Raising
-  # it here without raising the database allowance is how the service starts
-  # refusing connections under load.
-  CLOUD_RUN_MAX_INSTANCES: "4"
+  # The design sizes production at four instances, which with a pool of five
+  # is the twenty connections NFR-15 is worked out from. While the system runs
+  # as a demonstration on a free account it is capped at one. An instance cap
+  # is the only hard limit on what a public service can cost if somebody
+  # hammers it, and one instance at a concurrency of eighty is far more than a
+  # demonstration needs. Going live for a paying client means setting this back
+  # to four and checking the database allowance at the same time.
+  CLOUD_RUN_MAX_INSTANCES: "1"
 
 jobs:
   # This job needs no credentials, so it runs before the approval. A tag that
