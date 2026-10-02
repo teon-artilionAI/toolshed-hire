@@ -5,6 +5,9 @@
  * does is send the person somewhere else once they are signed in. `fetch` is
  * replaced, so each test says how the API answers the sign in and then reads
  * the page.
+ *
+ * The two password reset states of this screen are in
+ * SC06-Password-Reset.test.tsx.
  */
 
 import { screen, waitFor } from '@testing-library/react'
@@ -25,7 +28,6 @@ import {
   signedInAs,
   tooManyAttempts,
 } from '../../test/session-samples'
-import { RESET_UNAVAILABLE_TITLE } from './password-reset-panels'
 import { REFUSED_MESSAGE } from './sign-in-failure'
 
 const SIGN_IN_HEADING = 'Sign in to Toolshed Hire'
@@ -226,31 +228,5 @@ describe('what the screen no longer does', () => {
     expect(screen.queryByText(/any password is accepted/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/@toolshedhire\.co\.za/)).not.toBeInTheDocument()
     expect(screen.queryByText(/@buildright\.co\.za/)).not.toBeInTheDocument()
-  })
-
-  it('says password reset is not available, and sends nothing', async () => {
-    const network = mockApi(signedOutWith({}))
-    const user = await openSignIn()
-    const requestsBefore = network.requests.length
-
-    await user.click(screen.getByRole('button', { name: 'Forgotten your password?' }))
-
-    expect(await screen.findByText(RESET_UNAVAILABLE_TITLE)).toBeVisible()
-    expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument()
-    expect(screen.queryByText(/check your email|on its way|password has been changed/i)).not.toBeInTheDocument()
-    expect(network.requests).toHaveLength(requestsBefore)
-
-    await user.click(screen.getByRole('button', { name: 'Back to sign in' }))
-    expect(screen.getByLabelText('Email address')).toBeVisible()
-  })
-
-  it('says the same to somebody who follows a reset link', async () => {
-    mockApi(signedOutWith({}))
-
-    renderApp('/signin?reset=1')
-
-    expect(await findScreenHeading('Reset your password')).toBeVisible()
-    expect(screen.getByText(RESET_UNAVAILABLE_TITLE)).toBeVisible()
-    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
   })
 })

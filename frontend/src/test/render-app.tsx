@@ -18,7 +18,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import App from '../App'
 import { createQueryClient } from '../shared/api/query-client'
-import { ADDRESS_TEST_ID, CurrentAddress } from './current-address'
+import { ADDRESS_TEST_ID, CurrentAddress, FRAGMENT_TEST_ID } from './current-address'
 
 /**
  * How long a test waits for a screen. Each screen is its own module and is
@@ -48,6 +48,12 @@ export function renderApp(at: string): RenderedApp {
 /** The address the application is on, path and query string. */
 export function currentAddress(): string {
   return screen.getByTestId(ADDRESS_TEST_ID).textContent ?? ''
+}
+
+/** The fragment of the address the application is on, with its `#`, or an
+ *  empty string when there is none. */
+export function currentFragment(): string {
+  return screen.getByTestId(FRAGMENT_TEST_ID).textContent ?? ''
 }
 
 /** Wait for the top level heading of a screen, which proves it has loaded. */

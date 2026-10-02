@@ -17,6 +17,7 @@ const PROBLEM_MEDIA_TYPE = 'application/problem+json'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const HTTP_NOT_IMPLEMENTED = 501
 const HTTP_CREATED = 201
+const HTTP_ACCEPTED = 202
 const HTTP_NO_CONTENT = 204
 /** What every problem `type` the API sends starts with. */
 const PROBLEM_TYPE_PREFIX = 'https://toolshedhire.co.za/problems/'
@@ -63,6 +64,15 @@ export function jsonResponse(body: unknown, requestId = 'req-test-0001'): Respon
 export function createdResponse(body: unknown, requestId = 'req-test-0201'): Response {
   return new Response(JSON.stringify(body), {
     status: HTTP_CREATED,
+    headers: { 'Content-Type': 'application/json', [REQUEST_ID_HEADER]: requestId },
+  })
+}
+
+/** A 202 with a JSON body, which is how the API answers a registration, a
+ *  resent verification link and a password reset request. */
+export function acceptedResponse(body: unknown, requestId = 'req-test-0202'): Response {
+  return new Response(JSON.stringify(body), {
+    status: HTTP_ACCEPTED,
     headers: { 'Content-Type': 'application/json', [REQUEST_ID_HEADER]: requestId },
   })
 }

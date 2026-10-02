@@ -14,6 +14,11 @@
  * names, and a screen should not have to know those. The reservation types
  * are in contract-booking.ts and are passed on from here.
  *
+ * There is one exception to "not written by hand". The registration and
+ * account routes are agreed and are not in the OpenAPI document yet, so their
+ * types are in contract-account.ts, written from the agreed contract, until
+ * the document has them.
+ *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
  * the generated type has, and can only narrow it. So a member the backend
@@ -26,6 +31,18 @@
 import type { BodyOf, ClockTime, IsoDate, JsonOf, Money, Paths, QueryOf, Refine, Schemas } from './contract-kit'
 
 export type { ClockTime, IsoDate, IsoTimestamp, Money } from './contract-kit'
+export type {
+  AccountStatus,
+  CompletePasswordResetRequest,
+  CustomerType,
+  EmailDelivery,
+  IdDocumentType,
+  MyProfile,
+  PasswordResetRequest,
+  RegisterRequest,
+  UpdateMyProfileRequest,
+  VerifyEmailRequest,
+} from './contract-account'
 export type {
   CancelReservationRequest,
   CreateReservationRequest,

@@ -59,12 +59,21 @@ describe('who may open a screen', () => {
     expect(accessTo(screen(id), role)).toBe(expected)
   })
 
-  it('keeps the screens that were public before public, and no others', () => {
+  it('keeps the screens that were public before public, with the privacy notice, and no others', () => {
     const publicIds = SCREENS.filter((candidate) => candidate.publicAccess).map(
       (candidate) => candidate.id,
     )
 
-    expect(publicIds).toEqual(['SC-01', 'SC-02', 'SC-03', 'SC-04', 'SC-05', 'SC-06', 'DEV-01'])
+    expect(publicIds).toEqual([
+      'SC-01',
+      'SC-02',
+      'SC-03',
+      'SC-04',
+      'SC-05',
+      'SC-06',
+      'INFO-01',
+      'DEV-01',
+    ])
   })
 })
 
@@ -76,6 +85,7 @@ describe('the screen an address belongs to', () => {
     ['/counter', 'SC-10'],
     ['/counter/checkout/rn-1', 'SC-14'],
     ['/admin/users', 'SC-23'],
+    ['/privacy', 'INFO-01'],
   ])('finds %s as %s', (path, id) => {
     expect(screenForPath(path)?.id).toBe(id)
   })
@@ -115,9 +125,9 @@ describe('the menu', () => {
     expect(areas.lastIndexOf('admin')).toBeLessThan(areas.indexOf('counter'))
   })
 
-  it('never offers the development screen', () => {
+  it('never offers the development screen or a supporting page', () => {
     for (const role of [null, ...ROLES]) {
-      expect(navFor(role).some((item) => item.devOnly)).toBe(false)
+      expect(navFor(role).some((item) => item.devOnly || item.supporting)).toBe(false)
     }
   })
 })

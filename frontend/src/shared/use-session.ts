@@ -32,6 +32,15 @@ export interface Session {
   /** Sign out, drop everything cached from the server, empty the hire basket,
    *  and go to the catalogue. */
   signOut: () => void
+  /**
+   * End the session without leaving the screen.
+   *
+   * For a public screen that has just learnt the server ended every session
+   * of the account, which is what a password reset does. It drops the token
+   * and everything cached from the server. The hire basket is left alone,
+   * because the same person is about to sign in again. It never rejects.
+   */
+  endSessionHere: () => Promise<void>
 }
 
 export const SessionContext = createContext<Session | undefined>(undefined)

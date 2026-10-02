@@ -6,80 +6,89 @@
  * worth thirty thousand rand. So the form asks for it up front rather than
  * springing it on someone standing at the counter with a bakkie outside.
  *
- * Validation runs when a field is left and again on submit. Errors sit
- * beside the field they belong to, and the summary at the top jumps to the
- * first one, which is the quickest route through a long form on a phone.
- * The rules themselves live in register-form.ts.
+ * The screen has three states. The form, which is SC05-Register-Form.tsx.
+ * What it says once the form has been sent. And where the link in the
+ * verification email lands, which is SC05-Email-Verification.tsx.
  *
- * Opening an account online is a later change, and the API has no route for it
- * yet. The form is here so its questions and its validation can be seen. It
- * says so before anyone types, and a form that passes every check is answered
- * with the same plain statement. It never reports an account as created.
+ * The API answers a registration the same way whether or not the address
+ * already has an account, and so does this screen. It says that a link was
+ * sent if the address is new, and it never says which it was. The browser
+ * holds no list of accounts to look in.
+ *
+ * When the API says the email cannot be delivered, the screen says that too,
+ * with what the person can still do, so nobody waits for a link that is not
+ * coming.
  */
 
 import { useState } from 'react'
-import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { branches } from '../../shared/fixtures'
-import { Card, Notice, PageHeader } from '../../shared/ui'
-import type { BranchCode } from '../../shared/types'
-import {
-  CheckboxField,
-  ErrorSummary,
-  MIN_PASSWORD_LENGTH,
-  PasswordField,
-  SelectField,
-  TextField,
-} from './customer-fields'
-import { ID_DOC_LABEL } from './customer-labels'
-import {
-  EMPTY_REGISTRATION,
-  REGISTRATION_FIELD_ORDER,
-  validateRegistration,
-} from './register-form'
-import type {
-  IdDocType,
-  RegistrationErrors,
-  RegistrationField,
-  RegistrationForm,
-} from './register-form'
+import { VERIFICATION_LINK_HOURS } from '../../shared/api/account'
+import type { EmailDelivery } from '../../shared/api/contract'
+import { SIGN_IN_PATH } from '../../shared/navigation'
+import { Card, PageHeader } from '../../shared/ui'
+import { DemonstrationEmailNote, WITHOUT_THE_LINK } from './email-delivery-note'
+import { EmailVerification } from './SC05-Email-Verification'
+import { RegisterForm } from './SC05-Register-Form'
+import { StateHeading } from './state-heading'
+import { VERIFY_LINK_NAME, useLinkToken } from './use-link-token'
 
-const UNAVAILABLE_TITLE = 'Creating an account online is not available yet'
+export const CHECK_YOUR_EMAIL_HEADING = 'Check your email'
+
+/** The one thing the screen says about the address, whoever it belongs to. */
+export const REGISTRATION_SENT_MESSAGE = 'If that address is new, we have sent it a link.'
+
+interface RegistrationSent {
+  email: string
+  delivery: EmailDelivery
+}
+
+function CheckYourEmail({ email, delivery }: RegistrationSent) {
+  return (
+    <Card>
+      <StateHeading>{CHECK_YOUR_EMAIL_HEADING}</StateHeading>
+      <p className="mt-sm text-sm text-ink">
+        {REGISTRATION_SENT_MESSAGE} The address you gave is{' '}
+        <span className="break-all font-medium">{email}</span>.
+        {delivery.emailDeliverable &&
+          ` Open the link within ${VERIFICATION_LINK_HOURS} hours to confirm it.`}
+      </p>
+      <p className="mt-sm text-sm text-slate-soft">
+        If that address already has an account, nothing has changed. Sign in with it, or reset the
+        password from the sign in screen.
+      </p>
+      {!delivery.emailDeliverable && (
+        <div className="mt-md">
+          <DemonstrationEmailNote>{WITHOUT_THE_LINK}</DemonstrationEmailNote>
+        </div>
+      )}
+      <Link to={SIGN_IN_PATH} className="btn-primary mt-lg px-lg">
+        Go to sign in
+      </Link>
+    </Card>
+  )
+}
 
 export default function Register() {
-  const [form, setForm] = useState<RegistrationForm>(EMPTY_REGISTRATION)
-  const [touched, setTouched] = useState<
-    Partial<Record<RegistrationField, boolean>>
-  >({})
-  const [submitted, setSubmitted] = useState(false)
-  const [refused, setRefused] = useState(false)
+  const link = useLinkToken(VERIFY_LINK_NAME)
+  const [verifying, setVerifying] = useState(link.token !== null)
+  const [sent, setSent] = useState<RegistrationSent | null>(null)
 
-  const errors = validateRegistration(form)
-  const shownErrors: RegistrationErrors = {}
-  for (const field of REGISTRATION_FIELD_ORDER) {
-    if ((submitted || touched[field]) && errors[field]) {
-      shownErrors[field] = errors[field]
-    }
-  }
-  const problems = REGISTRATION_FIELD_ORDER.filter(
-    (field) => errors[field],
-  ).map((field) => ({ id: field, message: errors[field] as string }))
+  // A verification link opened while the form was already on the page.
+  if (link.token !== null && !verifying) setVerifying(true)
 
-  function markTouched(field: RegistrationField) {
-    setTouched((current) => ({ ...current, [field]: true }))
-  }
-
-  function update<K extends RegistrationField>(
-    field: K,
-    value: RegistrationForm[K],
-  ) {
-    setForm((current) => ({ ...current, [field]: value }))
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitted(true)
-    setRefused(problems.length === 0)
+  if (verifying) {
+    return (
+      <>
+        <PageHeader
+          screenId="SC-05"
+          title="Confirm your email address"
+          subtitle="The link in your email brought you here. It works once."
+        />
+        <div className="mx-auto w-full max-w-2xl">
+          <EmailVerification token={link.token} onSpent={link.forget} />
+        </div>
+      </>
+    )
   }
 
   return (
@@ -89,188 +98,12 @@ export default function Register() {
         title="Create your hire account"
         subtitle="It takes about two minutes. We ask for identification now so that collection at the counter is quick."
       />
-
       <div className="mx-auto w-full max-w-2xl">
-        <div className="mb-lg">
-          <Notice tone="warn" title={UNAVAILABLE_TITLE}>
-            <p>
-              You can see what we will ask for, but this form cannot be sent yet. Nothing you type
-              here is saved and no account is opened.
-            </p>
-          </Notice>
-        </div>
-
-        {refused && problems.length === 0 && (
-          <div className="mb-lg">
-            <Notice tone="error" title="We have not opened an account">
-              <p>
-                Your answers passed every check, but creating an account online is not available
-                yet. Nothing was saved and nothing was sent.
-              </p>
-            </Notice>
-          </div>
+        {sent ? (
+          <CheckYourEmail email={sent.email} delivery={sent.delivery} />
+        ) : (
+          <RegisterForm onSent={(email, delivery) => setSent({ email, delivery })} />
         )}
-
-        {submitted && problems.length > 0 && (
-          <div className="mb-lg">
-            <Notice
-              tone="error"
-              title={`We cannot open the account yet. ${problems.length} ${
-                problems.length === 1 ? 'answer needs' : 'answers need'
-              } fixing.`}
-            >
-              <ErrorSummary problems={problems} />
-            </Notice>
-          </div>
-        )}
-
-        <form noValidate onSubmit={handleSubmit}>
-          <Card title="Your details">
-            <div className="flex flex-col gap-md">
-              <TextField
-                id="fullName"
-                label="Full name"
-                autoComplete="name"
-                value={form.fullName}
-                onChange={(v) => update('fullName', v)}
-                onBlur={() => markTouched('fullName')}
-                help="As it appears on your identity document."
-                error={shownErrors.fullName}
-                required
-              />
-              <TextField
-                id="email"
-                label="Email address"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={(v) => update('email', v)}
-                onBlur={() => markTouched('email')}
-                help="Booking confirmations and return reminders go here."
-                error={shownErrors.email}
-                required
-              />
-              <TextField
-                id="mobile"
-                label="Mobile number"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="082 441 7719"
-                value={form.mobile}
-                onChange={(v) => update('mobile', v)}
-                onBlur={() => markTouched('mobile')}
-                error={shownErrors.mobile}
-                required
-              />
-            </div>
-          </Card>
-
-          <div className="mt-lg">
-            <Card title="Identification and billing">
-              <div className="flex flex-col gap-md">
-                <SelectField
-                  id="idDocType"
-                  label="Identity document"
-                  value={form.idDocType}
-                  onChange={(v) => update('idDocType', v as IdDocType)}
-                  options={(Object.keys(ID_DOC_LABEL) as IdDocType[]).map(
-                    (key) => ({ value: key, label: ID_DOC_LABEL[key] }),
-                  )}
-                />
-                <TextField
-                  id="idDocNumber"
-                  label={`${ID_DOC_LABEL[form.idDocType]} number`}
-                  inputMode={form.idDocType === 'SA_ID' ? 'numeric' : 'text'}
-                  value={form.idDocNumber}
-                  onChange={(v) => update('idDocNumber', v)}
-                  onBlur={() => markTouched('idDocNumber')}
-                  help="Only the last few digits are shown back to you once the account is open."
-                  error={shownErrors.idDocNumber}
-                  required
-                />
-                <div className="grid gap-md sm:grid-cols-2">
-                  <TextField
-                    id="billingSuburb"
-                    label="Billing suburb"
-                    autoComplete="address-level2"
-                    value={form.billingSuburb}
-                    onChange={(v) => update('billingSuburb', v)}
-                    onBlur={() => markTouched('billingSuburb')}
-                    error={shownErrors.billingSuburb}
-                    required
-                  />
-                  <TextField
-                    id="billingCity"
-                    label="Billing city"
-                    autoComplete="address-level1"
-                    value={form.billingCity}
-                    onChange={(v) => update('billingCity', v)}
-                    onBlur={() => markTouched('billingCity')}
-                    error={shownErrors.billingCity}
-                    required
-                  />
-                </div>
-                <SelectField
-                  id="homeBranch"
-                  label="Usual collection branch"
-                  value={form.homeBranch}
-                  onChange={(v) => update('homeBranch', v as BranchCode)}
-                  help="You can choose a different branch on any booking."
-                  options={branches.map((branch) => ({
-                    value: branch.code,
-                    label: `${branch.name}, ${branch.suburb}`,
-                  }))}
-                />
-              </div>
-            </Card>
-          </div>
-
-          <div className="mt-lg">
-            <Card title="Set a password">
-              <div className="flex flex-col gap-md">
-                <PasswordField
-                  id="password"
-                  label="Password"
-                  autoComplete="new-password"
-                  value={form.password}
-                  onChange={(v) => update('password', v)}
-                  onBlur={() => markTouched('password')}
-                  help={`At least ${MIN_PASSWORD_LENGTH} characters, including a number.`}
-                  error={shownErrors.password}
-                />
-                <PasswordField
-                  id="confirmPassword"
-                  label="Confirm password"
-                  autoComplete="new-password"
-                  value={form.confirmPassword}
-                  onChange={(v) => update('confirmPassword', v)}
-                  onBlur={() => markTouched('confirmPassword')}
-                  error={shownErrors.confirmPassword}
-                />
-                <CheckboxField
-                  id="acceptsTerms"
-                  checked={form.acceptsTerms}
-                  onChange={(v) => update('acceptsTerms', v)}
-                  error={shownErrors.acceptsTerms}
-                >
-                  I accept the hire terms. I understand a refundable deposit is
-                  taken at collection and that late returns are charged per day.
-                </CheckboxField>
-              </div>
-            </Card>
-          </div>
-
-          <div className="mt-lg flex flex-wrap items-center gap-sm">
-            <button type="submit" className="btn-primary px-lg">
-              Check my answers
-            </button>
-            <Link to="/signin" className="btn-ghost px-md">
-              I already have an account
-            </Link>
-          </div>
-        </form>
       </div>
     </>
   )

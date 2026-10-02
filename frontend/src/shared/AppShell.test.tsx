@@ -117,11 +117,11 @@ describe('the menu and the layout', () => {
 })
 
 describe('the sample data notice in the shell', () => {
-  it('is above a public screen that is not connected yet', async () => {
-    mockApi(SIGNED_OUT)
+  it('is above a screen that is not connected yet', async () => {
+    mockApi(signedInAs(COUNTER_STAFF))
 
-    renderApp('/register')
-    const title = await findScreenHeading('Create your hire account')
+    renderApp('/counter')
+    const title = await findScreenHeading('Today at the counter')
 
     const notice = screen.getByText(SAMPLE_DATA_TITLE)
     expect(notice).toBeVisible()
@@ -130,19 +130,12 @@ describe('the sample data notice in the shell', () => {
     expect(within(screen.getByRole('main')).getByText(SAMPLE_DATA_TITLE)).toBe(notice)
   })
 
-  it('is above a protected screen that is not connected yet', async () => {
-    mockApi(signedInAs(COUNTER_STAFF))
-
-    renderApp('/counter')
-    await findScreenHeading('Today at the counter')
-
-    expect(screen.getByText(SAMPLE_DATA_TITLE)).toBeVisible()
-  })
-
   it.each([
     ['/signin', 'Sign in to Toolshed Hire'],
     ['/basket', 'Your hire basket'],
-  ])('is not on %s, which reads from the API', async (opened, heading) => {
+    ['/register', 'Create your hire account'],
+    ['/privacy', 'Privacy notice'],
+  ])('is not on %s, a public screen that is connected', async (opened, heading) => {
     mockApi(SIGNED_OUT)
 
     renderApp(opened)
@@ -154,6 +147,7 @@ describe('the sample data notice in the shell', () => {
   it.each([
     ['/reservations', 'My hires'],
     ['/reservations/TSH-R-26-000124', 'Booking detail'],
+    ['/account', 'My account'],
   ])('is not on %s, a protected screen that reads from the API', async (opened, heading) => {
     mockApi(signedInAs(CUSTOMER))
 

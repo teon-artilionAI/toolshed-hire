@@ -35,6 +35,10 @@
  * A reservation runs under it too. A hold lapses by itself after thirty
  * minutes and the counter can move a booking on, so a status read a while ago
  * may no longer be the status.
+ *
+ * The customer's own profile runs under it as well. A branch can put the
+ * account on hold, and a link opened in another tab can confirm the email
+ * address, and the account screen must not go on saying otherwise.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -67,10 +71,13 @@ export const QUOTE_KEY = 'quote'
 /** The first segment of every reservation query key. */
 export const RESERVATIONS_KEY = 'reservations'
 
+/** The first segment of every query key about the signed in person's own account. */
+export const ACCOUNT_KEY = 'account'
+
 /** What never fresh means to the cache. The answer is stale when it arrives,
  *  and it is asked for again whenever a screen mounts, the window regains
- *  focus or the network comes back. Availability, quotes and reservations all
- *  run on it. */
+ *  focus or the network comes back. Availability, quotes, reservations and the
+ *  customer's own profile all run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -117,5 +124,6 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([AVAILABILITY_KEY], NEVER_FRESH)
   client.setQueryDefaults([QUOTE_KEY], NEVER_FRESH)
   client.setQueryDefaults([RESERVATIONS_KEY], NEVER_FRESH)
+  client.setQueryDefaults([ACCOUNT_KEY], NEVER_FRESH)
   return client
 }
