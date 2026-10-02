@@ -2,9 +2,10 @@
  * The catalogue journey, against the real backend.
  *
  * A visitor picks dates on the home screen, sees what is free, opens one
- * model, and reads its price and whether each branch can supply it. That is
- * SC-01, SC-02 and SC-03 end to end, through the real API and a seeded
- * database, under the same Content Security Policy a visitor gets.
+ * model, and reads its price, what the hire will cost and whether each branch
+ * can supply it. That is SC-01, SC-02 and SC-03 end to end, through the real
+ * API and a seeded database, under the same Content Security Policy a visitor
+ * gets.
  *
  * These specs skip themselves when `/api/health` does not answer OK, so the
  * run still passes on a machine with no backend. They name no particular tool,
@@ -17,6 +18,7 @@ import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { BACKEND_NEEDED, backendIsReachable } from './backend.ts'
+import { asShown, quoteFromTheApi } from './quote.ts'
 import { CATALOGUE_HOME, SEARCH } from './routes.ts'
 
 /** The time zone the branches trade in. "Today" for a hire means today there. */
@@ -44,6 +46,7 @@ const RAND = /R\s[\d\s]+[,.]\d{2}/
 
 const SEARCH_RESULTS = 'Search results'
 const BRANCH_CARD_HEADING = 'At each branch for these dates'
+const PRICE_PANEL = 'Price for these dates'
 const REFUSED_SEARCH = 'We cannot search with those details'
 
 /** What the specs read of a category, as `GET /api/catalogue/categories` sends it. */
@@ -97,6 +100,19 @@ function priceOf(page: Page, term: string): Locator {
   return page.locator('dt', { hasText: term }).locator('xpath=following-sibling::dd[1]')
 }
 
+/** The figure shown against one term in the price panel of the booking card. */
+function quotedFigure(page: Page, term: string): Locator {
+  return page
+    .getByRole('group', { name: PRICE_PANEL })
+    .locator('dt', { hasText: term })
+    .locator('xpath=following-sibling::dd[1]')
+}
+
+/** The slug of the model whose screen the page is on. */
+function slugOnScreen(page: Page): string {
+  return new URL(page.url()).pathname.split('/').pop() ?? ''
+}
+
 test.describe('the catalogue against the real backend', () => {
   test.beforeEach(async ({ request }) => {
     test.skip(!(await backendIsReachable(request)), BACKEND_NEEDED)
@@ -104,6 +120,7 @@ test.describe('the catalogue against the real backend', () => {
 
   test('a visitor searches for dates, opens a model and sees its price and each branch', async ({
     page,
+    request,
   }) => {
     // SC-01. Pick the dates and search.
     await page.goto(CATALOGUE_HOME.path)
@@ -140,6 +157,20 @@ test.describe('the catalogue against the real backend', () => {
     for (const branch of await branches.all()) await expect(branch).toHaveText(BRANCH_ANSWER)
     await expect(page.getByRole('main')).not.toContainText(STOCK_COUNT)
     await expect(page.getByText(/^(Free at|Not free at) /).first()).toBeVisible()
+
+    // The cost of the hire is the server's quote. I ask the API the question
+    // the screen asked and the two have to agree to the cent.
+    const asked = { slug: slugOnScreen(page), from: COLLECT_ON, to: RETURN_ON }
+    const forOne = await quoteFromTheApi(request, { ...asked, quantity: 1 })
+    await expect(quotedFigure(page, 'Total with VAT')).toHaveText(asShown(forOne.totalIncVat))
+    await expect(quotedFigure(page, 'Deposit')).toHaveText(asShown(forOne.depositTotal))
+
+    // A second unit is priced by the server too, and the screen follows it.
+    await page.getByRole('button', { name: `One more ${name}` }).click()
+    const forTwo = await quoteFromTheApi(request, { ...asked, quantity: 2 })
+    expect(forTwo.totalIncVat).not.toBe(forOne.totalIncVat)
+    await expect(quotedFigure(page, 'Total with VAT')).toHaveText(asShown(forTwo.totalIncVat))
+    await expect(quotedFigure(page, 'Deposit')).toHaveText(asShown(forTwo.depositTotal))
   })
 
   test('a reload brings the same search back', async ({ page }) => {
@@ -244,6 +275,7 @@ test.describe('the catalogue against the real backend', () => {
     await row.getByRole('link', { name: /See dates and book/ }).click()
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
     await expect(page.getByText(/^(Free at|Not free at) /).first()).toBeVisible()
+    await expect(quotedFigure(page, 'Total with VAT')).toBeVisible()
 
     expect(await blockingViolations(page)).toEqual([])
   })
