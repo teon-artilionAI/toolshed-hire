@@ -20,14 +20,15 @@ parameter it refused.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.catalogue_deps import (
+    FromDate,
     ModelSearchParameters,
     SearchAvailabilityDependency,
+    ToDate,
     never_cache,
 )
 from app.api.catalogue_schemas import (
@@ -45,12 +46,6 @@ from app.api.schemas import MAXIMUM_QUANTITY, MINIMUM_QUANTITY
 router = APIRouter(
     prefix="/catalogue", tags=["availability"], dependencies=[Depends(public_access)]
 )
-
-FromDate = Annotated[date, Query(alias="from", description="The first day of the hire.")]
-ToDate = Annotated[
-    date,
-    Query(alias="to", description="The day the equipment comes back. It is free again that day."),
-]
 
 
 @router.get(

@@ -146,6 +146,7 @@ def _build_period(payload: AllocationRequest) -> BookingPeriod:
                 "start_date": payload.start_date.isoformat(),
                 "end_date": payload.end_date.isoformat(),
             },
+            rule=exc.rule,
         ) from exc
 
 

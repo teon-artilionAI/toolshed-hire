@@ -5,8 +5,9 @@ shops for. An asset is the individually tagged unit that is allocated, collected
 and returned. Availability is the allocation of specific assets and never a
 quantity counter.
 
-Money is held as `Decimal` here. The design document names a `Money` value
-object, which arrives with the pricing policy that is its first user.
+Money is held as `Decimal` here, as the database hands it over. A price is
+worked out with the `Money` value object in `app.domain.money`, and the pricing
+policy is handed a snapshot of these figures and never the entry itself.
 """
 
 from __future__ import annotations

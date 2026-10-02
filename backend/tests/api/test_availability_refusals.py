@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlmodel import Session
 
-from app.api.errors import PROBLEM_TYPE_PREFIX
+from app.api.errors import PROBLEM_TYPE_PREFIX, REQUEST_VALIDATION_DETAIL
 from tests.support.catalogue import (
     AVAILABILITY_PATH,
     VALIDATION_PROBLEM,
@@ -137,14 +137,9 @@ class TestTheSearchAcrossTheCatalogue:
         assert body["type"] == f"{PROBLEM_TYPE_PREFIX}{VALIDATION_PROBLEM}"
         assert body["title"] == HTTPStatus(status.HTTP_422_UNPROCESSABLE_CONTENT).phrase
         assert body["instance"] == AVAILABILITY_PATH
+        assert body["detail"] == REQUEST_VALIDATION_DETAIL
         assert body["errors"] == {
-            "fields": {
-                "query.to": (
-                    "A hire period is half open and must contain at least one day. "
-                    "Attempted start=2026-03-09 end=2026-03-09, which requires end to be "
-                    "strictly after start."
-                )
-            }
+            "fields": {"query.to": "The return date has to be after the start date."}
         }
 
     def test_a_refusal_is_not_given_a_cache_lifetime(self, visitor: TestClient) -> None:

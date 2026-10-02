@@ -14,6 +14,12 @@ by where the value came from and its name on the wire, for example
 `query.from`. That holds whether the framework refused the value for its type
 or a read refused it for breaking a rule, so a client reads one shape.
 
+The sentence against a refused query parameter is shown to a customer as it
+is written, so it is a plain one. `app/api/field_messages.py` rewords what the
+framework refuses, and a read writes its own. The rule behind a refusal and
+the values that were tried are written to the log here and are not sent
+(NFR-12).
+
 Every problem document carries the request id as `requestId`. The same value
 is in the `X-Request-ID` response header and on every log record of the
 request, which is what makes the sentence in the generic 500 body true.
@@ -33,7 +39,7 @@ so the browser stops presenting a token that no longer works.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request, Response, status
@@ -41,6 +47,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.field_messages import QUERY_LOCATION, refused_fields
 from app.api.refresh_cookie import refresh_cookie_of
 from app.api.schemas import ProblemDetail
 from app.application.refusal import refused_parameter_of
@@ -67,10 +74,9 @@ logger = logging.getLogger(__name__)
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 PROBLEM_TYPE_PREFIX = "https://toolshedhire.co.za/problems/"
 REQUEST_VALIDATION_CODE = "request-validation-failure"
-REQUEST_VALIDATION_DETAIL = "The request body or query string did not pass validation."
-# Where a refused read parameter came from. Every read takes its parameters
-# from the query string, and FastAPI names its own refusals the same way.
-QUERY_LOCATION = "query"
+REQUEST_VALIDATION_DETAIL = (
+    "Some of the details were not accepted. Check each one and try again."
+)
 RETRY_AFTER_HEADER = "Retry-After"
 
 # One entry per domain error. A domain error absent from this table would fall
@@ -137,17 +143,31 @@ def problem_response(
     )
 
 
-def validation_problem(request: Request, fields: dict[str, str]) -> JSONResponse:
+def validation_problem(
+    request: Request, fields: dict[str, str], *, refused_because: Mapping[str, object]
+) -> JSONResponse:
     """Build the 422 that names each refused field under `errors.fields`.
 
     A field is named by where its value came from and what it is called on the
     wire, for example `query.from`. There is one shape for every refused
     field, whether the framework refused it for its type or a rule refused it
     for its value, so a client needs one reader.
+
+    Args:
+        request: The request being answered.
+        fields: The sentence for each refused field. These are sent.
+        refused_because: Why each was refused, a rule and the values tried or
+            the kind of refusal the framework named. These are logged only.
+
     """
     logger.info(
         "api.request_validation_failed",
-        extra={"path": request.url.path, "method": request.method, "fields": fields},
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "fields": fields,
+            **refused_because,
+        },
     )
     return problem_response(
         request=request,
@@ -169,13 +189,18 @@ async def handle_domain_error(request: Request, exc: Exception) -> Response:
         raise exc
     refused_parameter = refused_parameter_of(exc) if isinstance(exc, ValidationFailure) else None
     if refused_parameter is not None:
-        return validation_problem(request, {f"{QUERY_LOCATION}.{refused_parameter}": exc.message})
+        return validation_problem(
+            request,
+            {f"{QUERY_LOCATION}.{refused_parameter}": exc.message},
+            refused_because={"code": exc.code, "rule": exc.rule, "detail": exc.detail},
+        )
     status_code = DOMAIN_ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
     log = logger.warning if status_code < status.HTTP_500_INTERNAL_SERVER_ERROR else logger.error
     log(
         "api.domain_error",
         extra={
             "code": exc.code,
+            "rule": exc.rule,
             "status": status_code,
             "path": request.url.path,
             "method": request.method,
@@ -224,11 +249,8 @@ async def handle_request_validation_error(request: Request, exc: Exception) -> R
     """Render a request validation failure as a 422 problem document."""
     if not isinstance(exc, RequestValidationError):
         raise exc
-    fields = {
-        ".".join(str(part) for part in error.get("loc", ())): str(error.get("msg", ""))
-        for error in exc.errors()
-    }
-    return validation_problem(request, fields)
+    fields, kinds = refused_fields(exc.errors())
+    return validation_problem(request, fields, refused_because={"refused_as": kinds})
 
 
 async def handle_unexpected_error(request: Request, exc: Exception) -> Response:

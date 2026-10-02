@@ -8,6 +8,11 @@ agreed key.
 
 The name is the one the read itself uses for the parameter. Nothing here knows
 about HTTP. The API layer reads the key and decides how the answer is shaped.
+
+The sentence of a refusal is shown to the visitor beside the input, exactly as
+it is written. So it says what to do in plain words, and the rule that refused
+and the values that were tried go in `rule` and in the detail, which the API
+layer writes to the log and does not send.
 """
 
 from __future__ import annotations
@@ -22,21 +27,28 @@ REFUSED_PARAMETER: Final[str] = "refused_parameter"
 
 
 def refused(
-    parameter: str, message: str, detail: Mapping[str, DetailValue] | None = None
+    parameter: str,
+    message: str,
+    detail: Mapping[str, DetailValue] | None = None,
+    *,
+    rule: str | None = None,
 ) -> ValidationFailure:
     """Build the failure for one refused parameter.
 
     Args:
         parameter: The name of the parameter the rule refused.
-        message: A sentence saying what was attempted and why it was refused.
+        message: A plain sentence a visitor can act on. It is shown as written.
         detail: Further structured context for the log.
+        rule: The business rule that refused, for the log.
 
     Returns:
         The failure to raise. It is returned and not raised here, so the call
         site can chain it to the error that caused it.
 
     """
-    return ValidationFailure(message, {**(detail or {}), REFUSED_PARAMETER: parameter})
+    return ValidationFailure(
+        message, {**(detail or {}), REFUSED_PARAMETER: parameter}, rule=rule
+    )
 
 
 def refused_parameter_of(failure: ValidationFailure) -> str | None:
