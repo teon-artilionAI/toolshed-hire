@@ -3,7 +3,7 @@
   "info": {
     "title": "Toolshed Hire API",
     "description": "Rental system for Toolshed Hire. Availability is the allocation of specific tagged assets over half open date periods, enforced by a PostgreSQL GiST exclusion constraint.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "paths": {
     "/api/health": {
