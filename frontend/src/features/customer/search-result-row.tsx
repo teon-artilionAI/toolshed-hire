@@ -21,6 +21,7 @@ import { ArrowRight, CircleAlert } from 'lucide-react'
 import type { ModelAvailabilityRow } from '../../shared/api/contract'
 import { money } from '../../shared/format'
 import { AvailabilityChip } from './catalogue-ui'
+import { ModelThumbnail } from './model-picture'
 
 export default function SearchResultRow({
   row,
@@ -38,10 +39,7 @@ export default function SearchResultRow({
   return (
     <li className="card overflow-hidden">
       <div className="flex flex-col sm:flex-row">
-        <div
-          className="h-2 shrink-0 bg-gradient-to-br from-slate-600 to-slate-800 sm:h-auto sm:w-3"
-          aria-hidden="true"
-        />
+        <ModelThumbnail categoryCode={model.categoryCode} imagePath={model.imagePath} />
         <div className="min-w-0 flex-1 p-lg">
           <p className="font-mono text-xs uppercase tracking-wide text-slate-faint">
             {model.categoryName}

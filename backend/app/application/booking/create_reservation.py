@@ -16,10 +16,10 @@ request carry, and the profile is resolved here.
 
 The price snapshots on the line are copied from the product model (BR-20). The
 money totals are not calculated yet. They are the output of the pricing policy
-(BR-21), which is not built, so they are written as zero and not as a figure
-worked out some other way that would look right and be wrong. The hold expiry
-is left unset for the same reason. Setting it is BR-12, and it arrives with the
-reservation lifecycle that also expires it.
+(BR-21), which this use case does not call yet, so they are written as zero and
+not as a figure worked out some other way that would look right and be wrong.
+The hold expiry is left unset for the same reason. Setting it is BR-12, and it
+arrives with the reservation lifecycle that also expires it.
 """
 
 from __future__ import annotations

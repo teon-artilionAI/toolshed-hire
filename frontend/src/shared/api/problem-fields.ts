@@ -15,9 +15,20 @@
  */
 
 import { isApiError } from '../api-problem'
+import type { ApiError } from '../api-problem'
 
 /** The status the API uses for a request it understood and refused to accept. */
 export const HTTP_UNPROCESSABLE = 422
+
+/**
+ * Whether a failed call was the API refusing what was in the request.
+ *
+ * A refusal is put right by changing a field, and any other failure by trying
+ * again, so a form shows the two differently.
+ */
+export function isRefusal(error: unknown): error is ApiError {
+  return isApiError(error) && error.status === HTTP_UNPROCESSABLE
+}
 
 /** A message for each refused field, keyed by the bare field name. */
 export type FieldErrors = Readonly<Record<string, string>>
@@ -76,7 +87,7 @@ function collect(source: Record<string, unknown>, into: Record<string, string>):
  *   422 or carried no `errors`, so a caller can always index into the result.
  */
 export function fieldErrorsFromProblem(error: unknown): FieldErrors {
-  if (!isApiError(error) || error.status !== HTTP_UNPROCESSABLE) return NO_FIELD_ERRORS
+  if (!isRefusal(error)) return NO_FIELD_ERRORS
   const errors = error.problem?.errors
   if (!errors) return NO_FIELD_ERRORS
   const fields: Record<string, string> = {}

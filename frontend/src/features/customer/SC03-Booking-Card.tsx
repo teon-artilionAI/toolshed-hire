@@ -6,27 +6,37 @@
  * API's, asked again every time one of the three changes. It is free or not
  * free, never a count.
  *
+ * Under the fields is the price, which is the server's quote for the same
+ * dates and quantity. It is in SC03-Quote-Panel.tsx.
+ *
  * The API is the judge of the dates and the quantity. What it refuses comes
- * back as a 422 and each message is shown under the field it is about.
+ * back as a 422 and each message is shown under the field it is about. The
+ * availability route and the quote route are asked the same question, so
+ * either may be the one that refuses, and a message from either lands under
+ * the same field.
  */
 
 import { Link } from 'react-router-dom'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { ShoppingCart } from 'lucide-react'
 import { MAX_QUANTITY, MIN_QUANTITY } from '../../shared/api/catalogue'
-import type { BranchList, ModelAvailability, ModelDetail } from '../../shared/api/contract'
+import type {
+  BranchList,
+  ModelAvailability,
+  ModelDetail,
+  ModelQuote,
+} from '../../shared/api/contract'
 import {
-  HTTP_UNPROCESSABLE,
   fieldErrorsFromProblem,
+  isRefusal,
   otherFieldMessages,
 } from '../../shared/api/problem-fields'
 import { queryPhase } from '../../shared/api/query-phase'
-import { isApiError } from '../../shared/api-problem'
 import { ErrorState } from '../../shared/async-states'
-import { money, moneyTimes } from '../../shared/format'
 import { Card, Notice, StatusPill } from '../../shared/ui'
 import { ANY_BRANCH, BranchSelect, PeriodFields, QuantityStepper } from './catalogue-ui'
-import { describePeriod, hireDays, isIsoDate } from './hire-period'
+import { describePeriod } from './hire-period'
+import QuotePanel from './SC03-Quote-Panel'
 
 /** The fields this card shows a message under. */
 const CARD_FIELDS = ['from', 'to', 'quantity']
@@ -40,6 +50,7 @@ export default function BookingCard({
   quantity,
   branches,
   availability,
+  quote,
   onChangeStart,
   onChangeEnd,
   onChangeBranch,
@@ -54,17 +65,22 @@ export default function BookingCard({
   quantity: number
   branches: UseQueryResult<BranchList>
   availability: UseQueryResult<ModelAvailability>
+  /** The server's price for the same dates and quantity. */
+  quote: UseQueryResult<ModelQuote>
   onChangeStart: (value: string) => void
   onChangeEnd: (value: string) => void
   onChangeBranch: (value: string) => void
   onChangeQuantity: (value: number) => void
 }) {
   const phase = queryPhase(availability)
-  const refused =
-    phase === 'failed' &&
-    isApiError(availability.error) &&
-    availability.error.status === HTTP_UNPROCESSABLE
-  const fieldErrors = fieldErrorsFromProblem(availability.error)
+  const availabilityRefused = phase === 'failed' && isRefusal(availability.error)
+  const refused = availabilityRefused || (queryPhase(quote) === 'failed' && isRefusal(quote.error))
+  // Both routes judge the same dates and quantity. Where both speak about one
+  // field, the availability route's sentence is the one shown.
+  const fieldErrors = {
+    ...fieldErrorsFromProblem(quote.error),
+    ...fieldErrorsFromProblem(availability.error),
+  }
   const otherMessages = otherFieldMessages(fieldErrors, CARD_FIELDS)
 
   const answers = phase === 'ready' ? (availability.data?.branches ?? []) : []
@@ -75,11 +91,6 @@ export default function BookingCard({
       : null
   const canBook = here !== null && here.available
 
-  // The sum is worked out here so it moves the moment a date or the quantity
-  // does. It only appears for a pair of real dates in the right order, and
-  // never beside a refusal from the API.
-  const datesInOrder = isIsoDate(startIso) && isIsoDate(endIso) && endIso > startIso
-  const days = datesInOrder && !refused ? hireDays(startIso, endIso) : null
   const periodLabel = describePeriod(startIso, endIso)
 
   const basketParams = new URLSearchParams({
@@ -120,39 +131,19 @@ export default function BookingCard({
             }}
           />
         )}
-        <div>
-          <QuantityStepper
-            id="detail-quantity"
-            itemLabel={model.name}
-            value={quantity}
-            min={MIN_QUANTITY}
-            max={MAX_QUANTITY}
-            onChange={onChangeQuantity}
-          />
-          {fieldErrors.quantity && (
-            <p className="field-error">
-              <span>{fieldErrors.quantity}</span>
-            </p>
-          )}
-        </div>
+        <QuantityStepper
+          id="detail-quantity"
+          itemLabel={model.name}
+          value={quantity}
+          min={MIN_QUANTITY}
+          max={MAX_QUANTITY}
+          onChange={onChangeQuantity}
+          error={fieldErrors.quantity}
+        />
       </div>
 
-      <div className="mt-md rounded bg-muted p-md">
-        {days === null ? (
-          <p className="text-sm text-slate-soft">Choose your dates to see the hire charge.</p>
-        ) : (
-          <>
-            <p className="text-sm text-slate-soft">
-              {quantity} for {days} {days === 1 ? 'day' : 'days'} at the daily rate
-            </p>
-            <p className="tabular mt-xs text-xl font-semibold text-ink">
-              {money(moneyTimes(model.dailyRate, quantity * days))}
-            </p>
-            <p className="tabular mt-xs text-sm text-slate-soft">
-              Plus {money(moneyTimes(model.depositAmount, quantity))} deposit, refunded on return.
-            </p>
-          </>
-        )}
+      <div className="mt-md">
+        <QuotePanel quote={quote} />
       </div>
 
       <div className="mt-md" aria-busy={availability.isFetching}>
@@ -175,7 +166,7 @@ export default function BookingCard({
           </Notice>
         )}
 
-        {phase === 'failed' && !refused && (
+        {phase === 'failed' && !availabilityRefused && (
           <ErrorState
             what="what is free for these dates"
             error={availability.error}

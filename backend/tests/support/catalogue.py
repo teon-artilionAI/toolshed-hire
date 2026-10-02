@@ -58,6 +58,11 @@ def model_availability_path(slug: str) -> str:
     return f"{MODELS_PATH}/{slug}/availability"
 
 
+def model_quote_path(slug: str) -> str:
+    """Return the path of the quote for one model."""
+    return f"{MODELS_PATH}/{slug}/quote"
+
+
 @contextmanager
 def visitor_client(session: Session, clock: FixedClock | None = None) -> Iterator[TestClient]:
     """Yield a client for the real application, with no credential and a still clock.
@@ -144,6 +149,33 @@ def a_model(
     return model
 
 
+def a_priced_model(
+    factory: Factory,
+    *,
+    name: str,
+    daily_rate: str,
+    weekly_rate: str,
+    deposit: str,
+    late_fee: str = "120.00",
+    min_hire_days: int = 1,
+    max_hire_days: int = 28,
+) -> ProductModel:
+    """Create a published catalogue entry with every figure a quote reads."""
+    model = a_model(
+        factory,
+        name=name,
+        daily_rate=daily_rate,
+        min_hire_days=min_hire_days,
+        max_hire_days=max_hire_days,
+    )
+    model.weekly_rate = Decimal(weekly_rate)
+    model.deposit_amount = Decimal(deposit)
+    model.late_fee_per_day = Decimal(late_fee)
+    factory.session.add(model)
+    factory.session.flush()
+    return model
+
+
 def hold_unit(
     factory: Factory, asset: Asset, period: BookingPeriod, *, released: bool = False
 ) -> AssetAllocation:
@@ -195,9 +227,11 @@ __all__ = [
     "VALIDATION_PROBLEM",
     "a_category",
     "a_model",
+    "a_priced_model",
     "hold_unit",
     "model_availability_path",
     "model_path",
+    "model_quote_path",
     "refused_fields",
     "visitor_client",
 ]

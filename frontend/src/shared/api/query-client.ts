@@ -27,6 +27,10 @@
  * page, so it is stale the moment it arrives. A screen that shows a cached
  * answer always refetches it at the same time, on mount and on focus, and a
  * failed refetch is shown as a failure and not hidden behind the old answer.
+ *
+ * A quote runs under the same rule. A price the server worked out a while ago
+ * may no longer be the price, and a customer must never read an old one as the
+ * figure they will pay.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -52,6 +56,19 @@ export const CATALOGUE_KEY = 'catalogue'
 
 /** The first segment of every availability query key. */
 export const AVAILABILITY_KEY = 'availability'
+
+/** The first segment of every quote query key. */
+export const QUOTE_KEY = 'quote'
+
+/** What never fresh means to the cache. The answer is stale when it arrives,
+ *  and it is asked for again whenever a screen mounts, the window regains
+ *  focus or the network comes back. Availability and quotes both run on it. */
+const NEVER_FRESH = {
+  staleTime: AVAILABILITY_FRESH_MS,
+  refetchOnMount: 'always',
+  refetchOnWindowFocus: 'always',
+  refetchOnReconnect: 'always',
+} as const
 
 /**
  * Decide whether a failed read is worth another try.
@@ -89,11 +106,7 @@ export function createQueryClient(): QueryClient {
     },
   })
   client.setQueryDefaults([CATALOGUE_KEY], { staleTime: CATALOGUE_FRESH_MS })
-  client.setQueryDefaults([AVAILABILITY_KEY], {
-    staleTime: AVAILABILITY_FRESH_MS,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchOnReconnect: 'always',
-  })
+  client.setQueryDefaults([AVAILABILITY_KEY], NEVER_FRESH)
+  client.setQueryDefaults([QUOTE_KEY], NEVER_FRESH)
   return client
 }

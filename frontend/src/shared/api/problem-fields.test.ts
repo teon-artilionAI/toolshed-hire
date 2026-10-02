@@ -7,20 +7,20 @@
 
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../api-problem'
-import { fieldErrorsFromProblem, otherFieldMessages } from './problem-fields'
+import { fieldErrorsFromProblem, isRefusal, otherFieldMessages } from './problem-fields'
 
 function refusal(errors: Record<string, unknown> | undefined, status = 422): ApiError {
   return new ApiError({
     kind: 'problem',
     status,
     title: 'Unprocessable Entity',
-    detail: 'The request did not pass validation.',
+    detail: 'Some of the details were not accepted. Check each one and try again.',
     requestPath: '/api/catalogue/availability',
     problem: {
       type: 'https://toolshedhire.co.za/problems/request-validation-failure',
       title: 'Unprocessable Entity',
       status,
-      detail: 'The request did not pass validation.',
+      detail: 'Some of the details were not accepted. Check each one and try again.',
       errors,
     },
   })
@@ -48,15 +48,22 @@ describe('fieldErrorsFromProblem', () => {
 
   it('reads the messages the API nests under fields, by the bare field name', () => {
     const errors = fieldErrorsFromProblem(
-      refusal({ fields: { 'query.from': 'Input should be a valid date.', 'query.quantity': 'Too many.' } }),
+      refusal({
+        fields: {
+          'query.from': 'Enter a valid date, in the form YYYY-MM-DD.',
+          'query.quantity': 'Enter 10 or less.',
+        },
+      }),
     )
 
-    expect(errors).toEqual({ from: 'Input should be a valid date.', quantity: 'Too many.' })
+    expect(errors).toEqual({
+      from: 'Enter a valid date, in the form YYYY-MM-DD.',
+      quantity: 'Enter 10 or less.',
+    })
   })
 
   it('puts the refusal of a return date, exactly as the API words it, under to', () => {
-    const sentence =
-      'A hire period may not exceed 28 days. Attempted start=2026-10-10 end=2026-11-20, which is 41 days.'
+    const sentence = 'A hire can be at most 28 days.'
     const errors = fieldErrorsFromProblem(refusal({ fields: { 'query.to': sentence } }))
 
     expect(errors).toEqual({ to: sentence })
@@ -103,6 +110,19 @@ describe('fieldErrorsFromProblem', () => {
   it('is empty for something that is not an API failure at all', () => {
     expect(fieldErrorsFromProblem(new TypeError('boom'))).toEqual({})
     expect(fieldErrorsFromProblem(null)).toEqual({})
+  })
+})
+
+describe('isRefusal', () => {
+  it('is true for a 422, whether or not it names a field', () => {
+    expect(isRefusal(refusal({ fields: { 'query.to': 'A hire can be at most 28 days.' } }))).toBe(true)
+    expect(isRefusal(refusal(undefined))).toBe(true)
+  })
+
+  it('is false for any other failure', () => {
+    expect(isRefusal(refusal({ unitId: 'already allocated' }, 409))).toBe(false)
+    expect(isRefusal(new TypeError('boom'))).toBe(false)
+    expect(isRefusal(null)).toBe(false)
   })
 })
 

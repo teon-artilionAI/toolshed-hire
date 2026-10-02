@@ -9,6 +9,9 @@
  * Beside it, the booking card asks the API whether each branch can supply the
  * quantity wanted for the dates chosen. The answer per branch is free or not
  * free. The API sends no unit counts, so the screen shows none.
+ *
+ * The card also shows what the hire will cost. That figure is the server's
+ * quote for the same dates and quantity. This screen does no sum of its own.
  */
 
 import { useState } from 'react'
@@ -24,8 +27,9 @@ import { money } from '../../shared/format'
 import { Card, Notice, PageHeader } from '../../shared/ui'
 import { todayInBranchTime } from '../../shared/today'
 import { searchHref } from './catalogue-links'
-import { AvailabilityChip, ModelBanner } from './catalogue-ui'
+import { AvailabilityChip } from './catalogue-ui'
 import { defaultPeriod, describePeriod } from './hire-period'
+import { ModelBanner } from './model-picture'
 import BookingCard from './SC03-Booking-Card'
 
 const HTTP_NOT_FOUND = 404
@@ -44,6 +48,10 @@ export default function ModelDetail() {
   const branches = useQuery(catalogueQueries.branches())
   const availability = useQuery({
     ...catalogueQueries.modelAvailability(slug, { from: startIso, to: endIso, quantity }),
+    enabled: slug !== '' && startIso !== '' && endIso !== '',
+  })
+  const quote = useQuery({
+    ...catalogueQueries.modelQuote(slug, { from: startIso, to: endIso, quantity }),
     enabled: slug !== '' && startIso !== '' && endIso !== '',
   })
 
@@ -124,8 +132,9 @@ export default function ModelDetail() {
             <ModelBanner
               name={tool.name}
               manufacturer={tool.manufacturer}
+              categoryCode={tool.categoryCode}
               imagePath={tool.imagePath}
-              height="h-40 sm:h-56"
+              height="h-32 sm:h-44"
             />
             <div className="p-lg">
               <p className="text-base text-ink">{tool.shortDescription}</p>
@@ -161,6 +170,7 @@ export default function ModelDetail() {
             quantity={quantity}
             branches={branches}
             availability={availability}
+            quote={quote}
             onChangeStart={setStartIso}
             onChangeEnd={setEndIso}
             onChangeBranch={setChosenBranch}

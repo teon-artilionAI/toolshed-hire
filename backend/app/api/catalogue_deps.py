@@ -1,6 +1,6 @@
 """The dependencies of the public read side, which is the catalogue and availability.
 
-Three things live here.
+Four things live here.
 
 The first is the read side half of the composition root. `app/api/deps.py`
 wires the use cases that write. This module wires the query objects that read,
@@ -14,7 +14,10 @@ availability search share. The parameter names are the ones the contract uses,
 `category`, `q`, `sort`, `page` and `pageSize`, so a refusal names the field a
 screen has an input for.
 
-The third is the two cache policies. A catalogue response is the same for
+The third is the hire period as a request spells it, `from` and `to`. The
+availability routes and the quote route read it the same way.
+
+The fourth is the two cache policies. A catalogue response is the same for
 every visitor and changes rarely, so it may be kept for a minute. An
 availability answer is out of date the moment somebody books, so it is never
 stored. A request that carried a credential is answered `no-store` whatever is
@@ -23,6 +26,7 @@ set here, which the security headers middleware sees to.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Final
 
 from fastapi import Depends, Query, Response
@@ -112,6 +116,13 @@ def model_search_parameters(
 
 
 ModelSearchParameters = Annotated[ModelSearch, Depends(model_search_parameters)]
+
+# The period is half open. `to` is the day the equipment comes back.
+FromDate = Annotated[date, Query(alias="from", description="The first day of the hire.")]
+ToDate = Annotated[
+    date,
+    Query(alias="to", description="The day the equipment comes back. It is free again that day."),
+]
 
 
 # ---------------------------------------------------------------------------

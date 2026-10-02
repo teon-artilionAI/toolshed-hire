@@ -10,6 +10,9 @@ are not SQL live here.
    category with nothing in it.
 2. A model that does not exist and a model that is not published are the same
    answer, `NotFound`.
+
+Both refusals are worded for the visitor, who sees the sentence as it is
+written. What was asked for goes to the log.
 """
 
 from __future__ import annotations
@@ -31,6 +34,13 @@ logger = logging.getLogger(__name__)
 
 # The name of the parameter a search carries its category in.
 CATEGORY_PARAMETER: Final[str] = "category"
+UNKNOWN_CATEGORY_MESSAGE: Final[str] = (
+    "We do not have that category. Choose a category from the list."
+)
+# One sentence for every read that is asked about a model nobody can see.
+MODEL_NOT_FOUND_MESSAGE: Final[str] = (
+    "We could not find that tool. Browse the catalogue to choose another."
+)
 
 
 def ensure_category_exists(catalogue: CatalogueQuery, slug: str | None) -> None:
@@ -48,11 +58,7 @@ def ensure_category_exists(catalogue: CatalogueQuery, slug: str | None) -> None:
     if slug is None or catalogue.category_exists(slug):
         return
     logger.info("catalogue.unknown_category_refused", extra={"category": slug})
-    raise refused(
-        CATEGORY_PARAMETER,
-        f"Attempted to search category {slug!r}, which is not a category of this catalogue.",
-        {"category": slug},
-    )
+    raise refused(CATEGORY_PARAMETER, UNKNOWN_CATEGORY_MESSAGE, {"category": slug})
 
 
 class BrowseCatalogue:
@@ -85,9 +91,9 @@ class BrowseCatalogue:
         """
         found = self._catalogue.find_model(slug)
         if found is None:
-            logger.info("catalogue.model_not_found", extra={"slug": slug})
-            raise NotFound(
-                f"Attempted to open catalogue model {slug!r}, which does not exist.",
-                {"slug": slug},
+            logger.info(
+                "catalogue.model_not_found",
+                extra={"slug": slug, "attempted": "open a catalogue model"},
             )
+            raise NotFound(MODEL_NOT_FOUND_MESSAGE, {"slug": slug})
         return found

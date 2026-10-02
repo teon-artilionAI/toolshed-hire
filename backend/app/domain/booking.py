@@ -8,9 +8,10 @@ infrastructure layer map these dataclasses to the table classes and back.
 
 Two things the design document describes are deliberately not here yet. The
 reservation states, which decide the moves a booking may make, arrive with the
-booking lifecycle. The pricing policy, which fills the money totals, arrives
-with pricing (BR-21). Until then a reservation is created held and its totals
-are written as zero, so nothing reads as a price that was never calculated.
+booking lifecycle. The pricing policy, which fills the money totals, is built
+in `app.domain.policies` (BR-21), and a reservation does not call it yet. Until
+it does, a reservation is created held and its totals are written as zero, so
+nothing reads as a price that was never calculated.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from app.domain.period import BookingPeriod
 REFERENCE_PREFIX: Final[str] = "TSH-R"
 REFERENCE_YEAR_MODULUS: Final[int] = 100
 FIRST_LINE_POSITION: Final[int] = 1
-# What every money total carries until the pricing policy exists to fill it in.
+# What every money total carries until a reservation is priced by the pricing policy.
 NOT_YET_PRICED: Final[Decimal] = Decimal("0.00")
 
 

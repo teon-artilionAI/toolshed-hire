@@ -28,4 +28,7 @@ sessions and throttle counters, and holds the two fakes that stand in for
 bcrypt and the token signer. `identity_desk` wires the three session use cases
 over it. `sessions` gives the session routes a client on a clock that stands
 still, and reads and presents the refresh cookie.
+
+`pricing` holds the snapshot of the worked example and a few builders for the
+tests of the pricing policy.
 """

@@ -35,6 +35,9 @@ the whole design document.
   guarded by role.
 - A notice on every screen that is not connected to the API yet, saying that it
   still shows sample data.
+- A pricing policy and a quote. A hire is charged by whole weeks plus the
+  remaining days, or by the day, whichever is lower, with VAT on top and the
+  deposit shown separately. The price is calculated in one place.
 
 ### Removed
 
@@ -42,6 +45,8 @@ the whole design document.
 
 ### Changed
 
+- Refusal messages from the catalogue, availability and quote routes are plain
+  sentences. The rule identifier and the rejected values go to the log.
 - Sign in moved from `POST /api/auth/sign-in` to `POST /api/auth/login`, the
   path the design document names.
 - The use cases now depend on ports. Repositories, the unit of work, the clock

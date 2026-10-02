@@ -6,14 +6,14 @@ no unit of work here. The answer comes from the `AvailabilityQuery` port, and
 this module owns the rules that decide whether the question may be asked at
 all.
 
-The period is built as a `BookingPeriod`, so a search and a booking agree
-about what a period is. That gives BR-02, the half open bounds, and BR-03, the
-limit of twenty eight days. `ensure_within_booking_window` gives BR-04 and
-BR-05, no start in the past and none more than ninety days ahead. The day it
-is comes from the clock, in the business time zone.
+The period, the quantity and the hire limits of a model are checked by
+`app/application/availability/hire_request.py`, which a quote uses as well, so
+a search, a quote and a booking agree about what may be asked (BR-02 to
+BR-05). The day it is comes from the clock, in the business time zone.
 
 Every refusal names the parameter that caused it, so the screen can put the
-sentence beside the right input.
+sentence beside the right input. The sentence is written for the visitor. The
+rule and the values that were tried go to the log.
 
 The hire limits of a single model are checked on the single model question
 only. A search across the catalogue answers whether a unit is free, and the
@@ -26,29 +26,32 @@ import logging
 from datetime import date
 from typing import Final
 
-from app.application.availability.allocation import MAXIMUM_QUANTITY, MINIMUM_QUANTITY
+from app.application.availability.hire_request import (
+    ensure_quantity_in_range,
+    ensure_within_hire_limits,
+    requested_period,
+)
 from app.application.availability.ports import AvailabilityQuery
 from app.application.availability.read_models import (
     AvailabilityPage,
     AvailabilitySearch,
     ModelAvailabilityAnswer,
 )
-from app.application.catalogue.browse import ensure_category_exists
+from app.application.catalogue.browse import MODEL_NOT_FOUND_MESSAGE, ensure_category_exists
 from app.application.catalogue.ports import CatalogueQuery
-from app.application.catalogue.read_models import ModelDetail, ModelSearch
+from app.application.catalogue.read_models import ModelSearch
 from app.application.clock import Clock
 from app.application.identity.ports import BranchDirectory
 from app.application.refusal import refused
-from app.domain.errors import DetailValue, NotFound, ValidationFailure
-from app.domain.period import BookingPeriod, InvalidBookingPeriod, ensure_within_booking_window
+from app.domain.errors import NotFound
 
 logger = logging.getLogger(__name__)
 
-# The names of the parameters a search carries, as a refusal reports them.
-FROM_PARAMETER: Final[str] = "from"
-TO_PARAMETER: Final[str] = "to"
+# The name of the parameter a search carries its branch in.
 BRANCH_PARAMETER: Final[str] = "branch"
-QUANTITY_PARAMETER: Final[str] = "quantity"
+UNKNOWN_BRANCH_MESSAGE: Final[str] = (
+    "We do not have a branch with that code. Choose a branch from the list."
+)
 
 
 class SearchAvailability:
@@ -91,7 +94,7 @@ class SearchAvailability:
                 refused. The failure names the parameter.
 
         """
-        period = self._hire_period(start, end)
+        period = requested_period(start, end, self._clock.today())
         ensure_category_exists(self._catalogue, models.category_slug)
         self._ensure_branch_exists(branch_code)
         return self._availability.search(
@@ -115,42 +118,18 @@ class SearchAvailability:
             NotFound: If no published model carries the slug.
 
         """
-        period = self._hire_period(start, end)
-        _ensure_quantity_in_range(quantity)
+        period = requested_period(start, end, self._clock.today())
+        ensure_quantity_in_range(quantity)
         model = self._catalogue.find_model(slug)
         if model is None:
-            logger.info("availability.model_not_found", extra={"slug": slug})
-            raise NotFound(
-                f"Attempted to check availability of catalogue model {slug!r}, "
-                "which does not exist.",
-                {"slug": slug},
+            logger.info(
+                "availability.model_not_found",
+                extra={"slug": slug, "attempted": "check availability of a catalogue model"},
             )
-        _ensure_within_hire_limits(model, period)
+            raise NotFound(MODEL_NOT_FOUND_MESSAGE, {"slug": slug})
+        ensure_within_hire_limits(model, period)
         answers = self._availability.for_model(slug, period, quantity)
         return ModelAvailabilityAnswer(period=period, quantity=quantity, branches=tuple(answers))
-
-    def _hire_period(self, start: date, end: date) -> BookingPeriod:
-        """Build the period of a search, refusing one a booking would refuse.
-
-        Raises:
-            ValidationFailure: Naming `to` when the dates cannot form a hire
-                period, and `from` when the hire starts in the past or beyond
-                the booking horizon.
-
-        """
-        try:
-            period = BookingPeriod(start, end)
-        except InvalidBookingPeriod as error:
-            raise refused(
-                TO_PARAMETER,
-                str(error),
-                {"from": start.isoformat(), "to": end.isoformat()},
-            ) from error
-        try:
-            ensure_within_booking_window(period, self._clock.today())
-        except ValidationFailure as failure:
-            raise refused(FROM_PARAMETER, failure.message, failure.detail) from failure
-        return period
 
     def _ensure_branch_exists(self, branch_code: str | None) -> None:
         """Refuse a search narrowed to a branch that is not trading.
@@ -167,47 +146,7 @@ class SearchAvailability:
             logger.info("availability.unknown_branch_refused", extra={"branch": branch_code})
             raise refused(
                 BRANCH_PARAMETER,
-                f"Attempted to search branch {branch_code!r}, which is not a trading branch.",
+                UNKNOWN_BRANCH_MESSAGE,
                 {"branch": branch_code, "known_branches": sorted(known)},
             )
 
-
-def _ensure_quantity_in_range(quantity: int) -> None:
-    """Refuse a quantity a reservation line could not carry."""
-    if not MINIMUM_QUANTITY <= quantity <= MAXIMUM_QUANTITY:
-        raise refused(
-            QUANTITY_PARAMETER,
-            f"Attempted to check availability of {quantity} units. A booking holds between "
-            f"{MINIMUM_QUANTITY} and {MAXIMUM_QUANTITY} units of one model.",
-            {"minimum": MINIMUM_QUANTITY, "maximum": MAXIMUM_QUANTITY, "received": quantity},
-        )
-
-
-def _ensure_within_hire_limits(model: ModelDetail, period: BookingPeriod) -> None:
-    """Refuse a period shorter or longer than the model may be hired for.
-
-    Raises:
-        ValidationFailure: Naming `to`, because the return day is the bound a
-            visitor moves to make the hire longer or shorter.
-
-    """
-    detail: dict[str, DetailValue] = {
-        "sku": model.sku,
-        "hire_days": period.days,
-        "min_hire_days": model.min_hire_days,
-        "max_hire_days": model.max_hire_days,
-    }
-    if period.days > model.max_hire_days:
-        raise refused(
-            TO_PARAMETER,
-            f"Attempted to check a hire of {period.days} days for {model.name}. "
-            f"This model is hired for at most {model.max_hire_days} days.",
-            detail,
-        )
-    if period.days < model.min_hire_days:
-        raise refused(
-            TO_PARAMETER,
-            f"Attempted to check a hire of {period.days} days for {model.name}. "
-            f"This model is hired for at least {model.min_hire_days} days.",
-            detail,
-        )

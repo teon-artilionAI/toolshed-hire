@@ -6,6 +6,10 @@ usable from a test, a script or a future worker with no HTTP anywhere in sight.
 
 Every error carries structured detail rather than only a sentence, so the log
 line and the problem response can both be built without parsing prose.
+
+The sentence and the detail can both reach a caller. The identifier of the
+business rule behind a refusal must not, so it has a member of its own, `rule`,
+which is written to the log and never placed in a response.
 """
 
 from __future__ import annotations
@@ -24,16 +28,25 @@ class DomainError(Exception):
         message: A sentence describing what was attempted and what went wrong.
         code: A stable machine readable slug, used as the problem type suffix.
         detail: Structured context, safe to return to an authenticated caller.
+        rule: The business rule that refused, for example BR-04, or None when
+            no single rule did. It is for the log and never leaves the server.
 
     """
 
     code = "domain-error"
 
-    def __init__(self, message: str, detail: dict[str, DetailValue] | None = None) -> None:
-        """Store the message and the structured detail bag."""
+    def __init__(
+        self,
+        message: str,
+        detail: dict[str, DetailValue] | None = None,
+        *,
+        rule: str | None = None,
+    ) -> None:
+        """Store the message, the structured detail bag and the rule for the log."""
         super().__init__(message)
         self.message = message
         self.detail: dict[str, DetailValue] = detail or {}
+        self.rule = rule
 
 
 class ValidationFailure(DomainError):

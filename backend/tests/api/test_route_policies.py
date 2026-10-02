@@ -68,6 +68,7 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "GET /api/catalogue/models/{slug}": (AccessKind.PUBLIC, frozenset()),
     "GET /api/catalogue/availability": (AccessKind.PUBLIC, frozenset()),
     "GET /api/catalogue/models/{slug}/availability": (AccessKind.PUBLIC, frozenset()),
+    "GET /api/catalogue/models/{slug}/quote": (AccessKind.PUBLIC, frozenset()),
 }
 
 
@@ -122,6 +123,7 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
     MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
     MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),
+    MatrixRow("pricing", API, "GET", "/api/catalogue/models/any-model/quote", EVERYONE),
     MatrixRow("administrator only", PROBE, "GET", ADMIN_PATH, ADMIN_ONLY),
     MatrixRow("administrator, read again", PROBE, "GET", FRESH_ADMIN_PATH, ADMIN_ONLY),
     MatrixRow("counter and administrator", PROBE, "GET", COUNTER_PATH, STAFF),

@@ -1,9 +1,11 @@
 /**
  * One icon per catalogue category, so the tiles read at a glance on a phone.
  *
- * The API identifies a category by its slug, so the icons are keyed by slug
- * too. A category that arrives without an entry here gets a spanner, which is
- * better than a hole in the tile.
+ * The icons are keyed by the category code. A category carries its code, and
+ * so does every model in it, so the same lookup serves a category tile and the
+ * placeholder a model shows when it has no photograph. A category that arrives
+ * without an entry here gets a spanner, which is better than a hole in the
+ * tile.
  */
 
 import {
@@ -26,23 +28,29 @@ import {
 import type { LucideIcon } from 'lucide-react'
 
 const CATEGORY_ICON: Record<string, LucideIcon> = {
-  'breaking-drilling': Hammer,
-  compaction: Layers,
-  'concrete-mixing': Container,
-  'cutting-grinding': Disc3,
-  'sanding-floor-preparation': Eraser,
-  'access-lifting': MoveVertical,
-  'ladders-trestles-towers': Fence,
-  'lifting-material-handling': Forklift,
-  gardening: Trees,
-  'power-lighting': Zap,
-  'pumps-dewatering': Droplets,
-  welding: Flame,
-  'cleaning-floor-care': SprayCan,
-  'site-equipment': Construction,
+  'BREAK-DRILL': Hammer,
+  COMPACTION: Layers,
+  'CONCRETE-MIX': Container,
+  'CUT-GRIND': Disc3,
+  'FLOOR-PREP': Eraser,
+  'ACCESS-LIFT': MoveVertical,
+  ACCESS: Fence,
+  LIFTING: Forklift,
+  GARDEN: Trees,
+  'POWER-LIGHT': Zap,
+  PUMPS: Droplets,
+  WELDING: Flame,
+  CLEANING: SprayCan,
+  'SITE-EQUIP': Construction,
 }
 
-/** A spanner and not a hole, if a new category arrives without an icon. */
-export function categoryIconFor(slug: string): LucideIcon {
-  return CATEGORY_ICON[slug] ?? Wrench
+/**
+ * The icon for a category.
+ *
+ * @param code The category code, as `code` on a category and `categoryCode`
+ *   on a model.
+ * @returns A spanner and not a hole, if a new category arrives without an icon.
+ */
+export function categoryIconFor(code: string): LucideIcon {
+  return CATEGORY_ICON[code] ?? Wrench
 }

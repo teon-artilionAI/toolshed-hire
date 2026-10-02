@@ -1,5 +1,5 @@
 /**
- * The catalogue and availability reads, as cached queries.
+ * The catalogue, availability and quote reads, as cached queries.
  *
  * A screen does not call the endpoint functions directly. It asks for one of
  * these and hands it to `useQuery`, so every screen that wants the same data
@@ -7,8 +7,9 @@
  *
  * The first segment of each key decides how fresh the data is. Keys that start
  * with the catalogue segment are fresh for a minute, and keys that start with
- * the availability segment are never fresh. Those rules live in
- * query-client.ts, and the key is all a query needs to get the right one.
+ * the availability segment or the quote segment are never fresh. Those rules
+ * live in query-client.ts, and the key is all a query needs to get the right
+ * one.
  *
  * Each read passes on the signal it is given, so a request for a search the
  * customer has already moved on from is abandoned and not left to finish.
@@ -18,13 +19,19 @@ import { queryOptions } from '@tanstack/react-query'
 import {
   getModel,
   getModelAvailability,
+  getModelQuote,
   listBranches,
   listCategories,
   listModels,
   searchAvailability,
 } from './catalogue'
-import type { AvailabilityQuery, ModelAvailabilityQuery, ModelListQuery } from './contract'
-import { AVAILABILITY_KEY, CATALOGUE_KEY } from './query-client'
+import type {
+  AvailabilityQuery,
+  ModelAvailabilityQuery,
+  ModelListQuery,
+  ModelQuoteQuery,
+} from './contract'
+import { AVAILABILITY_KEY, CATALOGUE_KEY, QUOTE_KEY } from './query-client'
 
 export const catalogueQueries = {
   /** The three branches. */
@@ -67,5 +74,12 @@ export const catalogueQueries = {
     queryOptions({
       queryKey: [AVAILABILITY_KEY, 'model', slug, query],
       queryFn: ({ signal }) => getModelAvailability(slug, query, signal),
+    }),
+
+  /** What one model costs for a quantity and a period, priced by the server. */
+  modelQuote: (slug: string, query: ModelQuoteQuery) =>
+    queryOptions({
+      queryKey: [QUOTE_KEY, 'model', slug, query],
+      queryFn: ({ signal }) => getModelQuote(slug, query, signal),
     }),
 }

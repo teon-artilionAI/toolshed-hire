@@ -14,6 +14,7 @@ import type {
   ModelAvailability,
   ModelDetail,
   ModelPage,
+  ModelQuote,
   ModelSummary,
 } from '../shared/api/contract'
 
@@ -123,4 +124,59 @@ export const MODEL_AVAILABILITY: ModelAvailability = {
   hireDays: 4,
   quantity: 1,
   branches: branchAnswers(true, false, false),
+}
+
+/** Four days of one plate compactor. Too short for a week, so every day is
+ *  charged at the daily rate. */
+export const DAILY_QUOTE: ModelQuote = {
+  from: TEST_TODAY,
+  to: TEST_DEFAULT_RETURN,
+  hireDays: 4,
+  quantity: 1,
+  perUnit: {
+    dailyRate: '340.00',
+    weeklyRate: '1360.00',
+    wholeWeeks: 0,
+    remainderDays: 4,
+    basis: 'daily',
+    amountExVat: '1360.00',
+  },
+  subtotalExVat: '1360.00',
+  discountPercent: '0.00',
+  discountAmount: '0.00',
+  vatRate: '15.00',
+  vatAmount: '204.00',
+  totalIncVat: '1564.00',
+  depositPerUnit: '1500.00',
+  depositTotal: '1500.00',
+  lateFeePerDay: '220.00',
+}
+
+/** The day ten days after `TEST_TODAY`, which makes a week and three days. */
+export const TEST_TEN_DAY_RETURN = '2026-03-22'
+
+/** Ten days of two plate compactors. A whole week at the weekly rate and the
+ *  three days left over at the daily rate. */
+export const WEEKLY_QUOTE: ModelQuote = {
+  from: TEST_TODAY,
+  to: TEST_TEN_DAY_RETURN,
+  hireDays: 10,
+  quantity: 2,
+  perUnit: {
+    dailyRate: '340.00',
+    weeklyRate: '1360.00',
+    wholeWeeks: 1,
+    remainderDays: 3,
+    basis: 'weekly',
+    amountExVat: '2380.00',
+  },
+  subtotalExVat: '4760.00',
+  discountPercent: '0.00',
+  discountAmount: '0.00',
+  vatRate: '15.00',
+  vatAmount: '714.00',
+  totalIncVat: '5474.00',
+  depositPerUnit: '1500.00',
+  depositTotal: '3000.00',
+  lateFeePerDay: '220.00',
 }

@@ -172,6 +172,8 @@ error as `retryAfterSeconds`.
 for a form to show under each input. The API names each refused value by where
 it came from and then the field, for example `query.to`. The helper strips
 that prefix, so a form looks a message up by the bare name of its field.
+`isRefusal` in the same file says whether a failure was a 422, which a form
+puts right by changing a field and not by trying again.
 
 ### Wire types
 
@@ -216,10 +218,40 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
 - Catalogue data is fresh for 60 seconds.
 - Availability is never fresh. A cached answer is always refetched when it is
   used, and a failed refetch is shown as a failure.
+- A quote is never fresh either, for the same reason. An old price must never
+  be read as the price.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
 uses the query and does not call the route function directly.
+
+### Prices
+
+A price is worked out in one place, on the server. The browser never adds,
+multiplies or rounds money.
+
+`SC-03` shows what a hire will cost on its booking card. The figures are the
+answer of `GET /api/catalogue/models/{slug}/quote` for the dates and the
+quantity chosen, and the card asks again whenever one of them changes. It says
+how the price is made up in plain words, for example "1 week and 3 days" or
+"3 days at the daily rate", then the subtotal, the VAT and the total. The
+deposit is shown apart from the total, because it is held when the equipment
+is collected and returned afterwards. The panel is
+`src/features/customer/SC03-Quote-Panel.tsx`.
+
+While a new quote is on its way the old one is taken down, so a price never
+sits beside a quantity it was not worked out for. When the API refuses the
+dates or the quantity, each message goes under the field it is about and no
+price is shown.
+
+### Model pictures
+
+A model may have no photograph, and every seeded one has none. In place of an
+empty block, `src/features/customer/model-picture.tsx` draws the icon of the
+model's category on the brand wash, the same icon the category tiles use. The
+name of the model stays real text beside it, so it is read once whether there
+is a photograph or not. The icons are keyed by category code in
+`src/features/customer/category-icons.ts`.
 
 ### Shared states
 
@@ -241,8 +273,10 @@ throws while rendering shows the error state and the navigation stays up.
   `YYYY-MM-DD`. A screen on the API uses it for "today". A test passes its own
   date in.
 - `money` in `src/shared/format.ts` accepts the strings the API sends, such as
-  `"280.00"`, and never passes them through a float. `moneyTimes` multiplies
-  one by a whole number in whole cents.
+  `"280.00"`, and never passes them through a float. `percent` writes a rate
+  the API sends, such as `"15.00"`, as `15%`. `isNoMoney` says whether an
+  amount is zero, so a line that would only say zero can be left out. None of
+  them does a sum.
 - `src/shared/pagination.tsx` is the page control for a list the server pages.
 
 ## Commands
@@ -309,7 +343,10 @@ their failed state.
 
 `e2e/catalogue.spec.ts` needs the real backend with seeded data on port 8000.
 It follows a visitor from picking dates on the home screen, through the search
-results, to a model's price and its availability per branch. It checks that a
+results, to a model's price and its availability per branch. On the model
+screen it asks the quote route the question the screen asked, and checks that
+the total and the deposit on the screen are the server's, for one unit and
+then for two. The helpers for that are in `e2e/quote.ts`. It checks that a
 refusal from the API lands under the right field, that the home screen offers
 each top level category once, and that choosing a branch lists only what is
 free there. It also scans the three loaded screens. It asks `/api/health`

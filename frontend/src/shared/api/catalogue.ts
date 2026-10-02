@@ -1,14 +1,17 @@
 /**
- * The public catalogue and availability endpoints.
+ * The public catalogue, availability and quote endpoints.
  *
- * Six routes, none of which needs a sign in. Each function here makes one call
- * and reads the body into its contract type. The limits the contract states,
- * such as the largest page and the largest quantity, are named here so a screen
- * can build its controls from them without repeating a number.
+ * Seven routes, none of which needs a sign in. Each function here makes one
+ * call and reads the body into its contract type. The limits the contract
+ * states, such as the largest page and the largest quantity, are named here so
+ * a screen can build its controls from them without repeating a number.
  *
  * Nothing in an availability answer is a unit count. The API says whether a
  * branch can supply a model for the whole period, yes or no, and that is all a
  * customer is meant to know.
+ *
+ * A price is worked out in one place, on the server. The quote route sends
+ * every figure a screen shows, and nothing here or above it does a sum.
  */
 
 import { api } from './client'
@@ -26,8 +29,12 @@ import type {
   ModelDetail,
   ModelListQuery,
   ModelPage,
+  ModelQuote,
+  ModelQuoteQuery,
   ModelSort,
   ModelSummary,
+  QuoteBasis,
+  UnitQuote,
 } from './contract'
 import {
   readCount,
@@ -36,6 +43,8 @@ import {
   readMoney,
   readNullableText,
   readObject,
+  readOneOf,
+  readPercent,
   readText,
 } from './read'
 
@@ -48,9 +57,12 @@ export const MAX_PAGE_SIZE = 50
 /** The shortest text search the API accepts. */
 export const MIN_SEARCH_LENGTH = 2
 
-/** The fewest and the most units one availability question may ask about. */
+/** The fewest and the most units one availability or quote question may ask about. */
 export const MIN_QUANTITY = 1
 export const MAX_QUANTITY = 10
+
+/** The two ways the API may have charged one unit. */
+const QUOTE_BASES: readonly QuoteBasis[] = ['weekly', 'daily']
 
 /** The orders a model list can be asked for, in the order a menu shows them. */
 export const MODEL_SORTS: readonly ModelSort[] = ['name', 'dailyRateAsc', 'dailyRateDesc']
@@ -174,6 +186,38 @@ function readModelAvailability(value: unknown, path: string): ModelAvailability 
   }
 }
 
+function readUnitQuote(value: unknown, path: string): UnitQuote {
+  const record = readObject(value, path, 'a quote for one unit')
+  return {
+    dailyRate: readMoney(record, 'dailyRate', path),
+    weeklyRate: readMoney(record, 'weeklyRate', path),
+    wholeWeeks: readCount(record, 'wholeWeeks', path),
+    remainderDays: readCount(record, 'remainderDays', path),
+    basis: readOneOf(record, 'basis', path, QUOTE_BASES),
+    amountExVat: readMoney(record, 'amountExVat', path),
+  }
+}
+
+function readModelQuote(value: unknown, path: string): ModelQuote {
+  const record = readObject(value, path, 'a quote')
+  return {
+    from: readText(record, 'from', path),
+    to: readText(record, 'to', path),
+    hireDays: readCount(record, 'hireDays', path),
+    quantity: readCount(record, 'quantity', path),
+    perUnit: readUnitQuote(record.perUnit, path),
+    subtotalExVat: readMoney(record, 'subtotalExVat', path),
+    discountPercent: readPercent(record, 'discountPercent', path),
+    discountAmount: readMoney(record, 'discountAmount', path),
+    vatRate: readPercent(record, 'vatRate', path),
+    vatAmount: readMoney(record, 'vatAmount', path),
+    totalIncVat: readMoney(record, 'totalIncVat', path),
+    depositPerUnit: readMoney(record, 'depositPerUnit', path),
+    depositTotal: readMoney(record, 'depositTotal', path),
+    lateFeePerDay: readMoney(record, 'lateFeePerDay', path),
+  }
+}
+
 /** A slug is user input by the time it reaches here, so it is always encoded. */
 function modelEndpoint(slug: string): string {
   return `/catalogue/models/${encodeURIComponent(slug)}`
@@ -228,4 +272,18 @@ export function getModelAvailability(
   signal?: AbortSignal,
 ): Promise<ModelAvailability> {
   return api.get(`${modelEndpoint(slug)}/availability`, readModelAvailability, { query, signal })
+}
+
+/**
+ * GET /api/catalogue/models/{slug}/quote.
+ *
+ * @throws ApiError with status 404 for an unknown slug and 422 for dates or a
+ *   quantity the API refuses.
+ */
+export function getModelQuote(
+  slug: string,
+  query: ModelQuoteQuery,
+  signal?: AbortSignal,
+): Promise<ModelQuote> {
+  return api.get(`${modelEndpoint(slug)}/quote`, readModelQuote, { query, signal })
 }

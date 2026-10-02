@@ -93,6 +93,19 @@ describe('the freshness rules', () => {
     expect(defaults.refetchOnWindowFocus).toBe('always')
   })
 
+  it('never treat a quote as fresh, and refetch it on every use', () => {
+    const client = createQueryClient()
+    const defaults = client.getQueryDefaults(
+      catalogueQueries.modelQuote('cp-100', { from: '2026-03-12', to: '2026-03-16', quantity: 2 })
+        .queryKey,
+    )
+
+    expect(defaults.staleTime).toBe(0)
+    expect(defaults.refetchOnMount).toBe('always')
+    expect(defaults.refetchOnWindowFocus).toBe('always')
+    expect(defaults.refetchOnReconnect).toBe('always')
+  })
+
   it('never retry a write', () => {
     expect(createQueryClient().getDefaultOptions().mutations?.retry).toBe(false)
   })

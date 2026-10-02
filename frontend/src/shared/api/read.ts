@@ -16,6 +16,9 @@ import type { Money } from './contract'
 /** Money on the wire. Digits, a point, and exactly two decimals. */
 const MONEY_PATTERN = /^\d+\.\d{2}$/
 
+/** A percentage on the wire. Digits, a point, and exactly two decimals. */
+const PERCENT_PATTERN = /^\d+\.\d{2}$/
+
 /** Read a value that must be a JSON object. */
 export function readObject(
   value: unknown,
@@ -70,6 +73,39 @@ export function readMoney(source: Record<string, unknown>, key: string, requestP
     )
   }
   return value
+}
+
+/** Read a percentage, and refuse anything that is not a string with two
+ *  decimals. The API writes a rate the way it writes money, so "15.00". */
+export function readPercent(source: Record<string, unknown>, key: string, requestPath: string): string {
+  const value = readText(source, key, requestPath)
+  if (!PERCENT_PATTERN.test(value)) {
+    throw malformedResponse(
+      requestPath,
+      `Expected field ${key} in the response from ${requestPath} to be a percentage written as ` +
+        `a string with two decimals, for example "15.00", got "${value}".`,
+    )
+  }
+  return value
+}
+
+/** Read a field that must be one of a fixed set of words. */
+export function readOneOf<Word extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+  words: readonly Word[],
+): Word {
+  const value = readText(source, key, requestPath)
+  const word = words.find((known) => known === value)
+  if (word === undefined) {
+    throw malformedResponse(
+      requestPath,
+      `Expected field ${key} in the response from ${requestPath} to be one of ` +
+        `${words.join(', ')}, got "${value}".`,
+    )
+  }
+  return word
 }
 
 /** Read a field that must be an array, reading every item with `readItem`. */

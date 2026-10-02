@@ -228,3 +228,54 @@ export type ModelAvailability = Refine<
   JsonOf<paths['/api/catalogue/models/{slug}/availability']['get']>,
   { from: IsoDate; to: IsoDate }
 >
+
+/** Which of the two ways of charging one unit came out cheaper. */
+export type QuoteBasis = Schemas['QuoteBasis']
+
+/**
+ * What one unit costs for the period, before VAT, and how that was reached.
+ *
+ * `basis` is `weekly` when the whole weeks at the weekly rate plus the days
+ * left over at the daily rate cost less than every day at the daily rate. It
+ * is `daily` otherwise, and then every one of the hire days is a daily one.
+ */
+export type UnitQuote = Refine<
+  Schemas['UnitQuoteResponse'],
+  { dailyRate: Money; weeklyRate: Money; amountExVat: Money }
+>
+
+/**
+ * The query `GET /api/catalogue/models/{slug}/quote` accepts.
+ *
+ * `to` is the return day and is exclusive. `quantity` is 1 to 10, and the API
+ * uses 1 when it is left out.
+ */
+export type ModelQuoteQuery = Refine<
+  QueryOf<paths['/api/catalogue/models/{slug}/quote']['get']>,
+  { from: IsoDate; to: IsoDate }
+>
+
+/**
+ * `GET /api/catalogue/models/{slug}/quote`. What a hire will cost.
+ *
+ * Every figure is the server's. `totalIncVat` is the hire charge. The deposit
+ * is not part of it, because a deposit is held and returned and not charged.
+ * The VAT is worked out on the subtotal after the discount. The two
+ * percentages are strings with two decimals like the money, for example
+ * "15.00".
+ */
+export type ModelQuote = Refine<
+  JsonOf<paths['/api/catalogue/models/{slug}/quote']['get']>,
+  {
+    from: IsoDate
+    to: IsoDate
+    perUnit: UnitQuote
+    subtotalExVat: Money
+    discountAmount: Money
+    vatAmount: Money
+    totalIncVat: Money
+    depositPerUnit: Money
+    depositTotal: Money
+    lateFeePerDay: Money
+  }
+>
