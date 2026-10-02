@@ -9,6 +9,11 @@ that carries no stack trace, no SQL and no file path.
 The mapping from a domain error to a status code lives here and nowhere else.
 The domain raises meaning, the HTTP layer chooses a number.
 
+A refused field is always reported the same way, under `errors.fields`, keyed
+by where the value came from and its name on the wire, for example
+`query.from`. That holds whether the framework refused the value for its type
+or a read refused it for breaking a rule, so a client reads one shape.
+
 Every problem document carries the request id as `requestId`. The same value
 is in the `X-Request-ID` response header and on every log record of the
 request, which is what makes the sentence in the generic 500 body true.
@@ -33,6 +38,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.schemas import ProblemDetail
+from app.application.refusal import refused_parameter_of
 from app.domain.errors import (
     AccountOnHoldError,
     AllocationConflictError,
@@ -51,6 +57,11 @@ logger = logging.getLogger(__name__)
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 PROBLEM_TYPE_PREFIX = "https://toolshedhire.co.za/problems/"
+REQUEST_VALIDATION_CODE = "request-validation-failure"
+REQUEST_VALIDATION_DETAIL = "The request body or query string did not pass validation."
+# Where a refused read parameter came from. Every read takes its parameters
+# from the query string, and FastAPI names its own refusals the same way.
+QUERY_LOCATION = "query"
 
 # One entry per domain error. A domain error absent from this table would fall
 # through to the catch all and be reported as a 500, so the table is total.
@@ -112,10 +123,39 @@ def problem_response(
     )
 
 
+def validation_problem(request: Request, fields: dict[str, str]) -> JSONResponse:
+    """Build the 422 that names each refused field under `errors.fields`.
+
+    A field is named by where its value came from and what it is called on the
+    wire, for example `query.from`. There is one shape for every refused
+    field, whether the framework refused it for its type or a rule refused it
+    for its value, so a client needs one reader.
+    """
+    logger.info(
+        "api.request_validation_failed",
+        extra={"path": request.url.path, "method": request.method, "fields": fields},
+    )
+    return problem_response(
+        request=request,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        code=REQUEST_VALIDATION_CODE,
+        detail=REQUEST_VALIDATION_DETAIL,
+        errors={"fields": fields},
+    )
+
+
 async def handle_domain_error(request: Request, exc: Exception) -> Response:
-    """Map a domain error to its status code and a problem document."""
+    """Map a domain error to its status code and a problem document.
+
+    A validation failure that names the query parameter it refused is answered
+    in the shape of a request validation failure, with its sentence under that
+    parameter.
+    """
     if not isinstance(exc, DomainError):
         raise exc
+    refused_parameter = refused_parameter_of(exc) if isinstance(exc, ValidationFailure) else None
+    if refused_parameter is not None:
+        return validation_problem(request, {f"{QUERY_LOCATION}.{refused_parameter}": exc.message})
     status_code = DOMAIN_ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
     log = logger.warning if status_code < status.HTTP_500_INTERNAL_SERVER_ERROR else logger.error
     log(
@@ -167,17 +207,7 @@ async def handle_request_validation_error(request: Request, exc: Exception) -> R
         ".".join(str(part) for part in error.get("loc", ())): str(error.get("msg", ""))
         for error in exc.errors()
     }
-    logger.info(
-        "api.request_validation_failed",
-        extra={"path": request.url.path, "method": request.method, "fields": fields},
-    )
-    return problem_response(
-        request=request,
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        code="request-validation-failure",
-        detail="The request body or query string did not pass validation.",
-        errors={"fields": fields},
-    )
+    return validation_problem(request, fields)
 
 
 async def handle_unexpected_error(request: Request, exc: Exception) -> Response:

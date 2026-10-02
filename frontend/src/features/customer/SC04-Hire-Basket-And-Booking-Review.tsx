@@ -14,21 +14,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CircleCheck, ShoppingCart } from 'lucide-react'
-import { branches } from '../../shared/fixtures'
+import { TODAY, branches } from '../../shared/fixtures'
 import type { BranchCode, Uuid } from '../../shared/types'
 import { formatDate, money } from '../../shared/format'
 import { useSession } from '../../shared/session'
 import { Card, DataTable, EmptyState, Notice, PageHeader } from '../../shared/ui'
 import { availabilityAt } from './availability'
-import { DEFAULT_END, DEFAULT_START, validatePeriod } from './hire-period'
-import { hireDays, modelById } from './catalogue-data'
-import { BranchSelect, PeriodFields } from './catalogue-ui'
+import { defaultPeriod, hireDays, validatePeriod } from './hire-period'
+import { modelById } from './catalogue-data'
+import { ANY_BRANCH, BranchSelect, PeriodFields } from './catalogue-ui'
 import BasketConfirmed from './basket-confirmed'
 import { readBranch } from './branch-params'
 import BasketLine from './basket-line'
 import type { BasketItem } from './basket-state'
 import { nextReference, seedBasket } from './basket-state'
 import BasketTotals from './basket-totals'
+
+/** The basket still runs on fixtures, so its today is the fixture date. */
+const DEFAULT_PERIOD = defaultPeriod(TODAY)
 
 export default function Basket() {
   const [params] = useSearchParams()
@@ -37,14 +40,14 @@ export default function Basket() {
   const [lines, setLines] = useState<BasketItem[]>(() =>
     seedBasket(params.get('add'), Math.max(1, Number.parseInt(params.get('qty') ?? '1', 10) || 1)),
   )
-  const [startIso, setStartIso] = useState(params.get('from') ?? DEFAULT_START)
-  const [endIso, setEndIso] = useState(params.get('to') ?? DEFAULT_END)
+  const [startIso, setStartIso] = useState(params.get('from') ?? DEFAULT_PERIOD.startIso)
+  const [endIso, setEndIso] = useState(params.get('to') ?? DEFAULT_PERIOD.endIso)
   const [branchCode, setBranchCode] = useState<BranchCode>(readBranch(params.get('branch')))
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [confirmedReference, setConfirmedReference] = useState<string | null>(null)
 
-  const periodError = validatePeriod(startIso, endIso)
+  const periodError = validatePeriod(startIso, endIso, TODAY)
   const usablePeriod = periodError === null
   const days = hireDays(startIso, endIso)
 
@@ -153,14 +156,18 @@ export default function Basket() {
                   idPrefix="basket"
                   startIso={startIso}
                   endIso={endIso}
+                  minIso={TODAY}
                   onChangeStart={setStartIso}
                   onChangeEnd={setEndIso}
-                  error={periodError}
+                  startError={periodError ?? undefined}
                 />
                 <BranchSelect
                   id="basket-branch"
+                  branches={branches}
                   value={branchCode}
-                  onChange={(value) => setBranchCode(value as BranchCode)}
+                  onChange={(value) => {
+                    if (value !== ANY_BRANCH) setBranchCode(value)
+                  }}
                 />
               </div>
               <p className="mt-md text-sm text-slate-soft">

@@ -3,31 +3,31 @@
  * error every call throws, and the narrowing helpers that read an unknown body
  * without lying about its shape.
  *
- * It lives beside api.ts rather than inside it so that neither file grows past
- * the point where it can be read in one sitting. api.ts owns the requests and
- * the endpoints. This file owns what happens when one of them does not work.
+ * It lives beside the `api` folder rather than inside the client so that
+ * neither file grows past the point where it can be read in one sitting.
+ * api/client.ts owns the requests. This file owns what happens when one of
+ * them does not work.
  *
  * Nothing here returns null to signal a failure. Every path that cannot produce
  * the requested value throws `ApiError`, carrying the status where there was
  * one, so a caller can tell a 409 from a 500 and answer each differently.
+ *
+ * Every failure also carries the request id when the server sent one. I read it
+ * from the `requestId` member of the problem document first and from the
+ * `X-Request-ID` header second, so a person can quote one value and I can find
+ * the log lines it belongs to.
  */
 
+import type { ProblemDocument } from './api/contract'
+
 const PROBLEM_MEDIA_TYPE = 'application/problem+json'
+/** The response header that carries the id of the request on every answer. */
+export const REQUEST_ID_HEADER = 'X-Request-ID'
 const HTTP_NO_CONTENT = 204
 /** How much of an unparseable body to quote back in the error message. */
 const BODY_EXCERPT_LENGTH = 120
 /** Statuses an edge returns on the API's behalf when it cannot reach it. */
 const GATEWAY_STATUSES: readonly number[] = [502, 503, 504]
-
-/** An RFC 9457 problem document, as the backend's `ProblemDetail` emits it. */
-export interface ProblemDocument {
-  type: string
-  title: string
-  status: number
-  detail: string
-  instance?: string
-  errors?: Record<string, unknown>
-}
 
 /**
  * Why a call failed.
@@ -52,6 +52,8 @@ export interface ApiErrorInput {
   detail: string
   requestPath: string
   problem?: ProblemDocument | null
+  /** The id the server gave the request, or null when nothing answered. */
+  requestId?: string | null
   cause?: unknown
 }
 
@@ -70,6 +72,7 @@ export class ApiError extends Error {
   readonly detail: string
   readonly requestPath: string
   readonly problem: ProblemDocument | null
+  readonly requestId: string | null
 
   constructor(input: ApiErrorInput) {
     super(`${input.title}: ${input.detail}`, { cause: input.cause })
@@ -80,6 +83,7 @@ export class ApiError extends Error {
     this.detail = input.detail
     this.requestPath = input.requestPath
     this.problem = input.problem ?? null
+    this.requestId = input.requestId ?? null
   }
 
   /** True when the API itself was never reached, whether because nothing
@@ -124,14 +128,24 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 /** Build a malformed response error naming the endpoint and what was expected. */
-export function malformedResponse(requestPath: string, detail: string): ApiError {
+export function malformedResponse(
+  requestPath: string,
+  detail: string,
+  requestId: string | null = null,
+): ApiError {
   return new ApiError({
     kind: 'malformed',
     status: null,
     title: 'The API answered in an unexpected shape',
     detail,
     requestPath,
+    requestId,
   })
+}
+
+/** The request id a response carries in its header, or null when it has none. */
+export function requestIdFromHeaders(response: Response): string | null {
+  return response.headers.get(REQUEST_ID_HEADER)
 }
 
 /**
@@ -177,7 +191,12 @@ function tryParse(raw: string): unknown {
  *
  * @throws ApiError of kind `malformed` when the body is not JSON.
  */
-export function parseJsonBody(raw: string, status: number, requestPath: string): unknown {
+export function parseJsonBody(
+  raw: string,
+  status: number,
+  requestPath: string,
+  requestId: string | null = null,
+): unknown {
   if (status === HTTP_NO_CONTENT) return null
   const parsed = tryParse(raw)
   if (parsed !== undefined) return parsed
@@ -192,6 +211,7 @@ export function parseJsonBody(raw: string, status: number, requestPath: string):
         `block in vite.config.ts. The body began: ${excerpt}`
       : `${requestPath} returned a body that could not be parsed as JSON: ${excerpt}`,
     requestPath,
+    requestId,
   })
 }
 
@@ -217,7 +237,9 @@ export function errorFromResponse(
   const body = tryParse(raw)
   const record = asRecord(body)
   const isProblem = response.headers.get('content-type')?.startsWith(PROBLEM_MEDIA_TYPE) ?? false
+  const headerRequestId = requestIdFromHeaders(response)
   if (record && isProblem && typeof record.detail === 'string') {
+    const requestId = typeof record.requestId === 'string' ? record.requestId : headerRequestId
     const problem: ProblemDocument = {
       type: typeof record.type === 'string' ? record.type : 'about:blank',
       title: typeof record.title === 'string' ? record.title : response.statusText,
@@ -225,6 +247,7 @@ export function errorFromResponse(
       detail: record.detail,
       instance: typeof record.instance === 'string' ? record.instance : undefined,
       errors: asRecord(record.errors) ?? undefined,
+      requestId: requestId ?? undefined,
     }
     return new ApiError({
       kind: 'problem',
@@ -233,6 +256,7 @@ export function errorFromResponse(
       detail: problem.detail,
       requestPath,
       problem,
+      requestId,
     })
   }
   if (record === null && GATEWAY_STATUSES.includes(response.status)) {
@@ -245,6 +269,7 @@ export function errorFromResponse(
         'front of the API speaking rather than the API itself. The Vite dev server returns an ' +
         'empty 502 like this when nothing is listening on the port it forwards to.',
       requestPath,
+      requestId: headerRequestId,
     })
   }
   return new ApiError({
@@ -255,5 +280,6 @@ export function errorFromResponse(
       `${requestPath} answered ${response.status} without a problem document. Every error ` +
       'from this API is meant to arrive as application/problem+json.',
     requestPath,
+    requestId: headerRequestId,
   })
 }

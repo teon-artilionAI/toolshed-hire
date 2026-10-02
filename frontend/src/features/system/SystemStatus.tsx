@@ -23,8 +23,8 @@
  * SC-01 to SC-24 reconcile one to one with the documented screen inventory and
  * are untouched. This screen is DEV-01, deliberately outside that series, and
  * it is excluded from the screenshot capture that feeds the Task 1 appendix.
- * The twenty four still read from fixtures. Wiring them to the API is separate
- * work with its own budget, and doing it here would spend that budget early.
+ * The numbered screens are moving onto the API one group at a time. SC-01 to
+ * SC-03 call it now and the rest still read from fixtures.
  *
  * The API being absent is the normal state during document work, so every call
  * here fails into an explanation rather than a blank page.
@@ -34,15 +34,10 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Card, Notice, PageHeader, StatusPill } from '../../shared/ui'
 import { PasswordField, TextField } from '../customer/customer-fields'
-import {
-  apiPath,
-  asApiError,
-  getCurrentUser,
-  getHealth,
-  resolvedApiUrl,
-  signIn,
-} from '../../shared/api'
-import type { ApiUserAccount, HealthReport, SignInResult } from '../../shared/api'
+import { asApiError } from '../../shared/api-problem'
+import { apiPath, resolvedApiUrl } from '../../shared/api/client'
+import type { ApiUserAccount, HealthReport, SignInResult } from '../../shared/api/contract'
+import { getCurrentUser, getHealth, signIn } from '../../shared/api/system'
 import {
   DevelopmentScreenBanner,
   FactRow,
@@ -87,7 +82,7 @@ function HealthCard({ health }: { health: Loadable<HealthReport> }) {
             affirmative
             yes="Answered"
             no="Silent"
-            detail={`status ${health.value.status}, environment ${health.value.environment}`}
+            detail={`status ${health.value.status}, environment ${health.value.environment}, revision ${health.value.revision}`}
           />
           <FactRow
             label="PostgreSQL is reachable"
@@ -272,10 +267,9 @@ export default function SystemStatus() {
 
       <DevelopmentScreenBanner>
         <p>
-          This screen is not part of the twenty four assessed screens. SC-01 to SC-24 are the
-          documented inventory and they read from fixtures, as Task 1 requires. This one exists to
-          prove the path from the browser to PostgreSQL, and it is excluded from the screenshot
-          capture that feeds the document appendix.
+          This screen is not part of the twenty four numbered screens. SC-01 to SC-24 are the
+          documented inventory. This one exists to prove the path from the browser to PostgreSQL,
+          and it is excluded from the screenshot capture that feeds the document appendix.
         </p>
       </DevelopmentScreenBanner>
 

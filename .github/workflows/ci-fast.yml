@@ -112,6 +112,11 @@ jobs:
       - name: Run unit and component tests
         run: npm run test
 
+      # The wire types are generated from the API's OpenAPI document. This
+      # fails when that document has changed and the types were not regenerated.
+      - name: Check the generated API types are current
+        run: npm run api:types:check
+
   # One job that always runs and reports a single result. Branch protection
   # requires this job, so a skipped or cancelled job above can never leave a
   # required check waiting forever.

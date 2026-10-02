@@ -15,6 +15,13 @@ the whole design document.
   change. If the audit event cannot be written, the change is not made.
 - An email gateway with a Resend adapter and a transactional outbox. A booking
   is never lost or rolled back because an email could not be sent.
+- A public catalogue with categories, models and prices, and an availability
+  search that says for a date range at which branches a model is free. The
+  catalogue home, search results and model detail screens now read from it.
+- A frontend data layer with a typed API client, cached server state, shared
+  loading, error and empty states and an error boundary. The wire types are
+  generated from the API's OpenAPI document.
+- Browser tests that run against the real API and a seeded database.
 
 ### Changed
 
