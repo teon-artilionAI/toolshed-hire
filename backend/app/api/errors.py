@@ -9,6 +9,20 @@ that carries no stack trace, no SQL and no file path.
 The mapping from a domain error to a status code lives here and nowhere else.
 The domain raises meaning, the HTTP layer chooses a number.
 
+A refused field is always reported the same way, under `errors.fields`, keyed
+by where the value came from and its name on the wire, for example
+`query.from` or `body.from`. That holds whether the framework refused the
+value for its type or a use case refused it for breaking a rule, so a client
+reads one shape. A rule names the field and not where it travelled, so the
+place is read off the request. A GET carries its values in the query string
+and every other method carries them in the body.
+
+The sentence against a refused query parameter is shown to a customer as it
+is written, so it is a plain one. `app/api/field_messages.py` rewords what the
+framework refuses, and a read writes its own. The rule behind a refusal and
+the values that were tried are written to the log here and are not sent
+(NFR-12).
+
 Every problem document carries the request id as `requestId`. The same value
 is in the `X-Request-ID` response header and on every log record of the
 request, which is what makes the sentence in the generic 500 body true.
@@ -19,12 +33,16 @@ to carry the request id and the security headers. It calls
 `handle_unexpected_error` to do so. The same function is still registered for
 `Exception` below, so an application assembled without that middleware answers
 with the same document.
+
+Two refusals carry something beside the document. A throttled caller is told
+how long to wait in `Retry-After`. A refused refresh clears the refresh cookie,
+so the browser stops presenting a token that no longer works.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request, Response, status
@@ -32,14 +50,25 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.field_messages import BODY_LOCATION, QUERY_LOCATION, refused_fields
+from app.api.refresh_cookie import refresh_cookie_of
 from app.api.schemas import ProblemDetail
+from app.application.refusal import refused_parameter_of
 from app.domain.errors import (
-    AssetUnavailableConflict,
+    AccountOnHoldError,
+    AllocationConflictError,
     AuthenticationFailure,
     AuthorisationFailure,
+    BranchScopeError,
     DomainError,
+    EmailNotVerifiedError,
     InactiveAccount,
+    InvalidCredentials,
     NotFound,
+    OriginNotAllowed,
+    SessionExpired,
+    StateTransitionError,
+    TooManyAttempts,
     ValidationFailure,
 )
 from app.request_context import current_request_id
@@ -48,6 +77,13 @@ logger = logging.getLogger(__name__)
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 PROBLEM_TYPE_PREFIX = "https://toolshedhire.co.za/problems/"
+REQUEST_VALIDATION_CODE = "request-validation-failure"
+REQUEST_VALIDATION_DETAIL = (
+    "Some of the details were not accepted. Check each one and try again."
+)
+RETRY_AFTER_HEADER = "Retry-After"
+# The methods whose values travel in the query string and not in a body.
+QUERY_STRING_METHODS = frozenset({"GET", "HEAD"})
 
 # One entry per domain error. A domain error absent from this table would fall
 # through to the catch all and be reported as a 500, so the table is total.
@@ -55,9 +91,17 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     ValidationFailure: status.HTTP_422_UNPROCESSABLE_ENTITY,
     NotFound: status.HTTP_404_NOT_FOUND,
     AuthenticationFailure: status.HTTP_401_UNAUTHORIZED,
+    InvalidCredentials: status.HTTP_401_UNAUTHORIZED,
+    SessionExpired: status.HTTP_401_UNAUTHORIZED,
+    TooManyAttempts: status.HTTP_429_TOO_MANY_REQUESTS,
+    OriginNotAllowed: status.HTTP_403_FORBIDDEN,
     AuthorisationFailure: status.HTTP_403_FORBIDDEN,
     InactiveAccount: status.HTTP_403_FORBIDDEN,
-    AssetUnavailableConflict: status.HTTP_409_CONFLICT,
+    BranchScopeError: status.HTTP_403_FORBIDDEN,
+    AccountOnHoldError: status.HTTP_403_FORBIDDEN,
+    EmailNotVerifiedError: status.HTTP_403_FORBIDDEN,
+    AllocationConflictError: status.HTTP_409_CONFLICT,
+    StateTransitionError: status.HTTP_409_CONFLICT,
 }
 
 # Returned to the caller in place of any unhandled exception detail. The
@@ -106,16 +150,64 @@ def problem_response(
     )
 
 
+def validation_problem(
+    request: Request, fields: dict[str, str], *, refused_because: Mapping[str, object]
+) -> JSONResponse:
+    """Build the 422 that names each refused field under `errors.fields`.
+
+    A field is named by where its value came from and what it is called on the
+    wire, for example `query.from`. There is one shape for every refused
+    field, whether the framework refused it for its type or a rule refused it
+    for its value, so a client needs one reader.
+
+    Args:
+        request: The request being answered.
+        fields: The sentence for each refused field. These are sent.
+        refused_because: Why each was refused, a rule and the values tried or
+            the kind of refusal the framework named. These are logged only.
+
+    """
+    logger.info(
+        "api.request_validation_failed",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "fields": fields,
+            **refused_because,
+        },
+    )
+    return problem_response(
+        request=request,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        code=REQUEST_VALIDATION_CODE,
+        detail=REQUEST_VALIDATION_DETAIL,
+        errors={"fields": fields},
+    )
+
+
 async def handle_domain_error(request: Request, exc: Exception) -> Response:
-    """Map a domain error to its status code and a problem document."""
+    """Map a domain error to its status code and a problem document.
+
+    A validation failure that names the field it refused is answered in the
+    shape of a request validation failure, with its sentence under that field.
+    """
     if not isinstance(exc, DomainError):
         raise exc
+    refused_parameter = refused_parameter_of(exc) if isinstance(exc, ValidationFailure) else None
+    if refused_parameter is not None:
+        location = QUERY_LOCATION if request.method in QUERY_STRING_METHODS else BODY_LOCATION
+        return validation_problem(
+            request,
+            {f"{location}.{refused_parameter}": exc.message},
+            refused_because={"code": exc.code, "rule": exc.rule, "detail": exc.detail},
+        )
     status_code = DOMAIN_ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
     log = logger.warning if status_code < status.HTTP_500_INTERNAL_SERVER_ERROR else logger.error
     log(
         "api.domain_error",
         extra={
             "code": exc.code,
+            "rule": exc.rule,
             "status": status_code,
             "path": request.url.path,
             "method": request.method,
@@ -123,13 +215,20 @@ async def handle_domain_error(request: Request, exc: Exception) -> Response:
             "detail": exc.detail,
         },
     )
-    return problem_response(
+    response = problem_response(
         request=request,
         status_code=status_code,
         code=exc.code,
         detail=exc.message,
         errors=dict(exc.detail) or None,
     )
+    if isinstance(exc, TooManyAttempts):
+        response.headers[RETRY_AFTER_HEADER] = str(exc.retry_after_seconds)
+    if isinstance(exc, SessionExpired):
+        cookie = refresh_cookie_of(request)
+        if cookie is not None:
+            cookie.clear_on(response)
+    return response
 
 
 async def handle_http_exception(request: Request, exc: Exception) -> Response:
@@ -157,21 +256,8 @@ async def handle_request_validation_error(request: Request, exc: Exception) -> R
     """Render a request validation failure as a 422 problem document."""
     if not isinstance(exc, RequestValidationError):
         raise exc
-    fields = {
-        ".".join(str(part) for part in error.get("loc", ())): str(error.get("msg", ""))
-        for error in exc.errors()
-    }
-    logger.info(
-        "api.request_validation_failed",
-        extra={"path": request.url.path, "method": request.method, "fields": fields},
-    )
-    return problem_response(
-        request=request,
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        code="request-validation-failure",
-        detail="The request body or query string did not pass validation.",
-        errors={"fields": fields},
-    )
+    fields, kinds = refused_fields(exc.errors())
+    return validation_problem(request, fields, refused_because={"refused_as": kinds})
 
 
 async def handle_unexpected_error(request: Request, exc: Exception) -> Response:

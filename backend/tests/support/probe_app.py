@@ -11,6 +11,10 @@ What it proves is exactly what the production application relies on: that the
 chain of `get_bearer_token`, `get_authenticated_user`, `get_active_user` and
 `require_roles` answers 401, 403 or 200, and that the answer is a problem
 document rather than a stack trace.
+
+One more route stands in for work that is not built yet. It admits an
+administrator only after reading the account again, which is the policy the
+waiver, user management and force release routes will carry.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from fastapi import FastAPI, status
 
 from app.api.deps import AdminUser, AnyRoleUser, CounterUser, CustomerUser
 from app.api.errors import register_exception_handlers
+from app.api.identity_deps import FreshAdminUser
 from app.infrastructure.models import UserAccount
 
 logger = logging.getLogger(__name__)
@@ -30,6 +35,7 @@ ADMIN_PATH: Final[str] = "/probe/admin-only"
 COUNTER_PATH: Final[str] = "/probe/counter-only"
 CUSTOMER_PATH: Final[str] = "/probe/customer-only"
 ANY_ROLE_PATH: Final[str] = "/probe/any-role"
+FRESH_ADMIN_PATH: Final[str] = "/probe/fresh-admin-only"
 PROBE_TITLE: Final[str] = "Role policy probe"
 
 
@@ -69,6 +75,11 @@ def build_role_probe_app() -> FastAPI:
         """Admit any signed in, active account."""
         return _describe(user)
 
+    @app.get(FRESH_ADMIN_PATH, status_code=status.HTTP_200_OK)
+    def read_fresh_admin_only(user: FreshAdminUser) -> dict[str, str]:
+        """Admit an administrator, after reading the account again."""
+        return _describe(user)
+
     logger.debug("test.role_probe_app_built", extra={"route_count": len(app.routes)})
     return app
 
@@ -78,5 +89,6 @@ __all__ = [
     "ANY_ROLE_PATH",
     "COUNTER_PATH",
     "CUSTOMER_PATH",
+    "FRESH_ADMIN_PATH",
     "build_role_probe_app",
 ]

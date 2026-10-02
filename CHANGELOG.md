@@ -9,6 +9,62 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
+The customer journey. A visitor can browse the catalogue and check availability
+across the three branches, and a signed in customer can price, hold, confirm
+and cancel a reservation.
+
+### Added
+
+- An audit event for every state change, written in the same transaction as the
+  change. If the audit event cannot be written, the change is not made.
+- An email gateway with a Resend adapter and a transactional outbox. A booking
+  is never lost or rolled back because an email could not be sent.
+- A public catalogue with categories, models and prices, and an availability
+  search that says for a date range at which branches a model is free. The
+  catalogue home, search results and model detail screens now read from it.
+- A frontend data layer with a typed API client, cached server state, shared
+  loading, error and empty states and an error boundary. The wire types are
+  generated from the API's OpenAPI document.
+- Browser tests that run against the real API and a seeded database.
+- Sessions. Sign in returns a short lived access token and sets an HttpOnly
+  refresh cookie that is rotated on every use. Presenting a refresh token that
+  has already been used revokes the whole session family. Sign out revokes on
+  the server.
+- Account lockout after five failed sign ins, and throttling per email and per
+  client address.
+- A declared access policy on every route. The application refuses to start if
+  a route has none.
+- A real session in the frontend. The access token is held in memory only, a
+  reload restores the session through the refresh cookie, and screens are
+  guarded by role.
+- A notice on every screen that is not connected to the API yet, saying that it
+  still shows sample data.
+- Reservations. A customer builds a basket, sees the server's figures, holds
+  named units for thirty minutes, confirms, and can cancel. Every change of
+  status goes through one set of state rules, an expired hold releases its
+  units, and a confirmation email is queued when the booking is confirmed.
+- A pricing policy and a quote. A hire is charged by whole weeks plus the
+  remaining days, or by the day, whichever is lower, with VAT on top and the
+  deposit shown separately. The price is calculated in one place.
+
+### Removed
+
+- `POST /api/allocations`, the walking skeleton's single route for holding one
+  line. The reservation routes replace it.
+- The demonstration role switcher and the on screen list of sample accounts.
+
+### Changed
+
+- Refusal messages from the catalogue, availability and quote routes are plain
+  sentences. The rule identifier and the rejected values go to the log.
+- Sign in moved from `POST /api/auth/sign-in` to `POST /api/auth/login`, the
+  path the design document names.
+- The use cases now depend on ports. Repositories, the unit of work, the clock
+  and the email adapter implement them in the infrastructure layer, and an
+  import contract stops the application layer from importing infrastructure.
+
 ## [0.1.0] - 2026-10-02
 
 The first release that is deployed. It carries no new feature for a customer or

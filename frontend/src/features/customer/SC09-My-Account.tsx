@@ -27,7 +27,7 @@ import {
   StatusPill,
 } from '../../shared/ui'
 import { AccountProfileCard } from './account-profile-card'
-import { SignInRequired, useCustomerProfile } from './customer-session'
+import { NoSampleProfile, useCustomerProfile } from './customer-session'
 import { CHARGE_KIND_LABEL, RENTAL_STATUS_LABEL } from './customer-labels'
 
 /** A hire is only finished, and its deposit only released, once the account
@@ -56,7 +56,7 @@ export default function MyAccount() {
     return (
       <>
         <PageHeader screenId="SC-09" title="My account" />
-        <SignInRequired what="your account" />
+        <NoSampleProfile what="your account" />
       </>
     )
   }

@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react'
 import { FlaskConical } from 'lucide-react'
 import { Notice, StatusPill } from '../../shared/ui'
-import type { ApiError } from '../../shared/api'
+import type { ApiError } from '../../shared/api-problem'
 
 /**
  * Where an asynchronous call has got to.
@@ -27,9 +27,9 @@ export type Loadable<T> =
  *  filed in a README they would have to go and find. */
 export const START_BACKEND_COMMAND = 'uvicorn app.main:app --reload --port 8000'
 
-/** A yes or no fact about the system, shown as a pill so the answer survives
- *  greyscale printing. `AVAILABLE` and `QUARANTINED` are the existing status
- *  vocabulary, reused rather than a new colour scale invented here. */
+/** A yes or no fact about the system, shown as a pill with its own words, so
+ *  the answer never rests on colour alone. `AVAILABLE` and `QUARANTINED` are
+ *  the existing status vocabulary, reused rather than a new colour scale. */
 export function FactRow({
   label,
   affirmative,
@@ -68,9 +68,10 @@ export function LiteralRow({ label, value }: { label: string; value: string }) {
 /**
  * What went wrong, in the words the failure itself supplied.
  *
- * An unreachable backend gets the softer tone and the command, because during
- * document work the API being absent is the normal state rather than a fault,
- * and what the reader needs then is the line to type rather than a stack trace.
+ * An unreachable backend gets the softer tone and the command. While the
+ * interface is being worked on the API is often not running, which is not a
+ * fault, and what the reader needs then is the line to type and not a stack
+ * trace.
  */
 export function FailureNotice({ error, what }: { error: ApiError; what: string }) {
   if (error.isBackendUnreachable) {
@@ -78,9 +79,9 @@ export function FailureNotice({ error, what }: { error: ApiError; what: string }
       <Notice tone="warn" title="The backend is not running">
         <p>{`${what} did not get through. ${error.detail}`}</p>
         <p className="mt-sm">
-          This is the only screen that needs the API. The other twenty four read from fixtures
-          and are unaffected. Start it from the backend directory with its virtual environment
-          active:
+          This screen and the catalogue screens need the API. The screens that still read from
+          fixtures are unaffected. Start it from the backend directory with its virtual
+          environment active:
         </p>
         <p className="mt-xs break-all font-mono text-xs">{START_BACKEND_COMMAND}</p>
       </Notice>
@@ -98,14 +99,15 @@ export function FailureNotice({ error, what }: { error: ApiError; what: string }
   )
 }
 
-/** The banner that says, unambiguously, that this screen is not part of the
- *  assessed inventory. It is the first thing on the page for that reason. */
+/** The banner that says, unambiguously, that this is a development page and
+ *  not a screen of the product. It is the first thing on the page for that
+ *  reason. */
 export function DevelopmentScreenBanner({ children }: { children: ReactNode }) {
   return (
     <div className="mb-lg rounded-lg border-2 border-dashed border-slate-faint bg-muted p-md">
       <p className="flex items-center gap-sm font-mono text-xs uppercase tracking-wide text-slate-soft">
         <FlaskConical className="h-4 w-4 shrink-0" aria-hidden="true" />
-        Development and demonstration screen
+        Development screen
       </p>
       <div className="mt-sm text-sm text-slate-soft">{children}</div>
     </div>

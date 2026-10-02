@@ -7,6 +7,12 @@ BR-02: a unit returned on the twelfth frees the twelfth for a hire starting on
 the twelfth. The same semantics are enforced a second time in the database by
 the GiST exclusion constraint, which builds `daterange(start_date, end_date,
 '[)')`. The two definitions must never drift apart.
+
+A refusal raised here can end up on a customer's screen, beside the date they
+chose. So each message is a sentence that says what to do, and it names no
+rule and repeats no value. The rule that refused travels beside the message,
+in `rule`, and the layer that catches the refusal writes it to the log with
+the dates that were attempted.
 """
 
 from __future__ import annotations
@@ -14,16 +20,43 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from app.domain.errors import ValidationFailure
+
 # The PostgreSQL bound specifier that matches this class. Written here so the
 # migration and the domain object quote the same literal.
 DATERANGE_BOUNDS = "[)"
 
 MINIMUM_HIRE_DAYS = 1
 MAXIMUM_HIRE_DAYS = 28
+# How far ahead a hire may start (BR-05).
+MAXIMUM_DAYS_AHEAD = 90
+# The week a weekly rate pays for, which `whole_weeks` counts in.
+DAYS_IN_A_WEEK = 7
+
+# The rules behind the refusals of this module, as the log names them.
+PERIOD_BOUNDS_RULE = "BR-03"
+NO_PAST_START_RULE = "BR-04"
+BOOKING_HORIZON_RULE = "BR-05"
+
+RETURN_NOT_AFTER_START_MESSAGE = "The return date has to be after the start date."
+HIRE_TOO_LONG_MESSAGE = f"A hire can be at most {MAXIMUM_HIRE_DAYS} days."
+START_IN_THE_PAST_MESSAGE = "The hire has to start today or later."
+START_BEYOND_HORIZON_MESSAGE = f"A hire can start at most {MAXIMUM_DAYS_AHEAD} days from today."
 
 
 class InvalidBookingPeriod(ValueError):
-    """Raised when a pair of dates cannot form a valid hire period."""
+    """Raised when a pair of dates cannot form a valid hire period.
+
+    Attributes:
+        rule: The business rule that refused the dates, for the log. None when
+            the refusal is a mistake in the calling code and not a rule.
+
+    """
+
+    def __init__(self, message: str, *, rule: str | None = None) -> None:
+        """Keep the sentence and, beside it, the rule that refused."""
+        super().__init__(message)
+        self.rule = rule
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,26 +83,29 @@ class BookingPeriod:
         if not isinstance(self.start, date) or not isinstance(self.end, date):
             raise InvalidBookingPeriod(
                 "Attempted to build a BookingPeriod from non date values. "
-                f"Got start={self.start!r} ({type(self.start).__name__}) and "
-                f"end={self.end!r} ({type(self.end).__name__}). Both must be datetime.date."
+                f"Got {self.start!r} ({type(self.start).__name__}) as the start and "
+                f"{self.end!r} ({type(self.end).__name__}) as the end. "
+                "Both must be datetime.date."
             )
         if self.end <= self.start:
-            raise InvalidBookingPeriod(
-                "A hire period is half open and must contain at least one day. "
-                f"Attempted start={self.start.isoformat()} end={self.end.isoformat()}, "
-                "which requires end to be strictly after start."
-            )
+            raise InvalidBookingPeriod(RETURN_NOT_AFTER_START_MESSAGE, rule=PERIOD_BOUNDS_RULE)
         if self.days > MAXIMUM_HIRE_DAYS:
-            raise InvalidBookingPeriod(
-                f"A hire period may not exceed {MAXIMUM_HIRE_DAYS} days. "
-                f"Attempted start={self.start.isoformat()} end={self.end.isoformat()}, "
-                f"which is {self.days} days."
-            )
+            raise InvalidBookingPeriod(HIRE_TOO_LONG_MESSAGE, rule=PERIOD_BOUNDS_RULE)
 
     @property
     def days(self) -> int:
         """Return the number of chargeable days in the period."""
         return (self.end - self.start).days
+
+    @property
+    def whole_weeks(self) -> int:
+        """Return how many complete weeks the period holds."""
+        return self.days // DAYS_IN_A_WEEK
+
+    @property
+    def remainder_days(self) -> int:
+        """Return the days left over once the complete weeks are taken out."""
+        return self.days % DAYS_IN_A_WEEK
 
     @property
     def last_day(self) -> date:
@@ -130,3 +166,32 @@ class BookingPeriod:
     def __str__(self) -> str:
         """Return a human readable half open period."""
         return self.as_postgres_daterange()
+
+
+def ensure_within_booking_window(period: BookingPeriod, today: date) -> None:
+    """Refuse a hire that starts in the past or beyond the booking horizon.
+
+    Args:
+        period: The hire period being booked.
+        today: The current business day, from the clock.
+
+    Raises:
+        ValidationFailure: If the period starts before today (BR-04) or more
+            than `MAXIMUM_DAYS_AHEAD` days after it (BR-05). The failure names
+            its rule in `rule` and carries the dates in its detail, and the
+            message holds neither.
+
+    """
+    if period.start < today:
+        raise ValidationFailure(
+            START_IN_THE_PAST_MESSAGE,
+            {"start_date": period.start.isoformat(), "today": today.isoformat()},
+            rule=NO_PAST_START_RULE,
+        )
+    days_ahead = (period.start - today).days
+    if days_ahead > MAXIMUM_DAYS_AHEAD:
+        raise ValidationFailure(
+            START_BEYOND_HORIZON_MESSAGE,
+            {"days_ahead": days_ahead, "maximum_days_ahead": MAXIMUM_DAYS_AHEAD},
+            rule=BOOKING_HORIZON_RULE,
+        )

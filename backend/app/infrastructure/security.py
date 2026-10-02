@@ -1,23 +1,36 @@
 """Password hashing and access token issue and verification.
 
 Self hosted JWT with bcrypt, which is the decision recorded in the canonical
-decisions. Two properties matter and are enforced here.
+decisions. Four properties matter and are enforced here.
 
-A token carries the subject and nothing that grants authority. The role is
-never read from a claim, because a token minted before a demotion would
-otherwise keep the old permissions until it expired. The dependency chain loads
-the account and reads the role from the database on every request.
+A token names its signing key. The header carries a `kid`, which is the first
+characters of the SHA-256 of the key, so the identifier needs no setting of
+its own and gives nothing away about the key. Verification looks the key up by
+that identifier and refuses a token that names a key this service does not
+hold. That is what lets the key be rotated (C-36). A second key is added to
+the ring, new tokens are signed with it, and tokens signed with the old one
+keep working until they expire.
+
+A token carries `sub`, `role` and `branch_id`, as the design document sets out.
+The dependency chain in `app/api/deps.py` still loads the account and reads
+the role from the row on every request, which is stricter than the fifteen
+minutes the document allows a claim to be trusted for. The claims are there
+for a reader that has no database to ask.
+
+The time is never read here. A token is issued at an instant the caller
+supplies and its expiry is checked against one, so both come from the clock
+and a test can hold them still.
 
 A verification failure is never swallowed. Every path raises
-AuthenticationFailure with the reason attached, and the API turns that into a
-401 with a problem document that says nothing about which half of the credential
-pair was wrong.
+AuthenticationFailure with the reason attached.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Final
 from uuid import UUID
 
@@ -25,6 +38,7 @@ import jwt
 from passlib.context import CryptContext
 
 from app.config import settings
+from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, ValidationFailure
 
 logger = logging.getLogger(__name__)
@@ -36,6 +50,14 @@ MINIMUM_PASSWORD_LENGTH: Final[int] = 12
 MAXIMUM_PASSWORD_BYTES: Final[int] = 72
 TOKEN_TYPE_ACCESS: Final[str] = "access"
 TOKEN_ISSUER: Final[str] = "toolshed-hire"
+KEY_ID_HEADER: Final[str] = "kid"
+# Sixteen hexadecimal characters of the digest. Enough to tell keys apart and
+# far too little to learn anything about one.
+KEY_ID_LENGTH: Final[int] = 16
+CLAIM_ROLE: Final[str] = "role"
+CLAIM_BRANCH: Final[str] = "branch_id"
+SECONDS_PER_MINUTE: Final[int] = 60
+SECRET_ENCODING: Final[str] = "utf-8"
 
 _password_context = CryptContext(
     schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=BCRYPT_ROUNDS
@@ -94,85 +116,173 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: UUID, *, issued_at: datetime | None = None) -> tuple[str, int]:
+def signing_key_id(secret: str) -> str:
+    """Return the identifier a signing key is known by, derived from the key itself."""
+    return hashlib.sha256(secret.encode(SECRET_ENCODING)).hexdigest()[:KEY_ID_LENGTH]
+
+
+def _verification_keys() -> dict[str, str]:
+    """Return every key a token may have been signed with, by identifier.
+
+    There is one today. Rotating the key means returning the old one here as
+    well until the last token signed with it has expired.
+    """
+    return {signing_key_id(settings.jwt_secret): settings.jwt_secret}
+
+
+@dataclass(frozen=True, slots=True)
+class AccessClaims:
+    """What a verified access token says about its holder.
+
+    Attributes:
+        subject: The account the token identifies.
+        role: The role the account held when the token was issued.
+        branch_id: The branch of a counter account at that moment, else None.
+
+    """
+
+    subject: UUID
+    role: UserRole
+    branch_id: UUID | None
+
+
+def create_access_token(
+    user_id: UUID, *, role: UserRole, branch_id: UUID | None, issued_at: datetime
+) -> tuple[str, int]:
     """Mint a signed access token for the given account.
 
     Args:
-        user_id: The account the token identifies. This is the only authority
-            the token carries.
-        issued_at: Override for the issue time, used by tests.
+        user_id: The account the token identifies.
+        role: The role the account holds now.
+        branch_id: The branch of a counter account, and None for anyone else.
+        issued_at: The instant of issue, from the clock.
 
     Returns:
         A tuple of the encoded token and its lifetime in seconds.
 
     """
-    now = issued_at or datetime.now(UTC)
-    expires_at = now + timedelta(minutes=settings.access_token_minutes)
-    payload: dict[str, str | int] = {
+    lifetime = timedelta(minutes=settings.access_token_minutes)
+    payload: dict[str, str | int | None] = {
         "sub": str(user_id),
+        CLAIM_ROLE: role.value,
+        CLAIM_BRANCH: str(branch_id) if branch_id is not None else None,
         "iss": TOKEN_ISSUER,
         "typ": TOKEN_TYPE_ACCESS,
-        "iat": int(now.timestamp()),
-        "exp": int(expires_at.timestamp()),
+        "iat": int(issued_at.timestamp()),
+        "exp": int((issued_at + lifetime).timestamp()),
     }
-    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    key_id = signing_key_id(settings.jwt_secret)
+    token = jwt.encode(
+        payload,
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+        headers={KEY_ID_HEADER: key_id},
+    )
+    expires_in = settings.access_token_minutes * SECONDS_PER_MINUTE
     logger.info(
-        "security.access_token_issued",
+        "security.access_issued",
         extra={
             "user_id": str(user_id),
-            "expires_in_seconds": settings.access_token_minutes * 60,
+            "role": role.value,
+            "expires_in_seconds": expires_in,
             "algorithm": settings.jwt_algorithm,
+            "key_id": key_id,
         },
     )
-    return token, settings.access_token_minutes * 60
+    return token, expires_in
 
 
-def read_subject(token: str) -> UUID:
-    """Verify a token and return the account id it identifies.
+def read_access_claims(token: str, *, now: datetime) -> AccessClaims:
+    """Verify a token and return what it says about its holder.
 
     Args:
         token: The bearer token taken from the Authorization header.
-
-    Returns:
-        The account id from the `sub` claim.
+        now: The current instant, from the clock. Expiry is checked against it.
 
     Raises:
-        AuthenticationFailure: If the signature, issuer, type, expiry or
-            subject is wrong. The message names the fault for the log, and the
-            API layer replaces it with a deliberately vague response.
+        AuthenticationFailure: If the key identifier is unknown, or the
+            signature, issuer, type, expiry, subject, role or branch is wrong.
+            The message names the fault for the log.
 
     """
+    key = _key_named_by(token)
     try:
-        claims: dict[str, str | int] = jwt.decode(
+        # Expiry is checked below against the clock. The library would check
+        # it against the operating system, which a test cannot hold still.
+        claims: dict[str, str | int | None] = jwt.decode(
             token,
-            settings.jwt_secret,
+            key,
             algorithms=[settings.jwt_algorithm],
             issuer=TOKEN_ISSUER,
-            options={"require": ["exp", "iat", "sub", "iss"]},
+            options={
+                "require": ["exp", "iat", "sub", "iss"],
+                "verify_exp": False,
+                "verify_iat": False,
+            },
         )
-    except jwt.ExpiredSignatureError as exc:
-        raise AuthenticationFailure(
-            "Attempted to authenticate with an expired access token.",
-            {"reason": "expired"},
-        ) from exc
     except jwt.InvalidTokenError as exc:
         raise AuthenticationFailure(
             f"Attempted to authenticate with a token that failed verification: {exc}",
             {"reason": "invalid"},
         ) from exc
 
+    expires_at = claims.get("exp")
+    if not isinstance(expires_at, int) or now.timestamp() >= expires_at:
+        raise AuthenticationFailure(
+            "Attempted to authenticate with an expired access token.",
+            {"reason": "expired"},
+        )
     if claims.get("typ") != TOKEN_TYPE_ACCESS:
         raise AuthenticationFailure(
             "Attempted to authenticate with a token that is not an access token. "
             f"Token type claim was {claims.get('typ')!r}.",
             {"reason": "wrong-token-type"},
         )
-    subject = str(claims.get("sub", ""))
+    return _claims_of(claims)
+
+
+def _claims_of(claims: dict[str, str | int | None]) -> AccessClaims:
+    """Read the subject, the role and the branch out of a verified payload.
+
+    Raises:
+        AuthenticationFailure: If any of the three is missing or malformed.
+
+    """
+    branch = claims.get(CLAIM_BRANCH)
     try:
-        return UUID(subject)
+        return AccessClaims(
+            subject=UUID(str(claims.get("sub", ""))),
+            role=UserRole(str(claims.get(CLAIM_ROLE, ""))),
+            branch_id=UUID(str(branch)) if branch is not None else None,
+        )
     except ValueError as exc:
         raise AuthenticationFailure(
-            f"Attempted to authenticate with a token whose subject claim {subject!r} "
-            "is not a UUID.",
-            {"reason": "malformed-subject"},
+            "Attempted to authenticate with a token whose subject, role or branch claim "
+            "is missing or malformed.",
+            {"reason": "malformed-claims"},
         ) from exc
+
+
+def _key_named_by(token: str) -> str:
+    """Return the signing key a token names in its header.
+
+    Raises:
+        AuthenticationFailure: If the token cannot be read at all, or names a
+            key this service does not hold.
+
+    """
+    try:
+        header = jwt.get_unverified_header(token)
+    except jwt.InvalidTokenError as exc:
+        raise AuthenticationFailure(
+            f"Attempted to authenticate with a token that failed verification: {exc}",
+            {"reason": "invalid"},
+        ) from exc
+    key = _verification_keys().get(str(header.get(KEY_ID_HEADER, "")))
+    if key is None:
+        raise AuthenticationFailure(
+            "Attempted to authenticate with a token signed by a key this service does not "
+            "hold. Its key identifier is missing or unknown.",
+            {"reason": "unknown-key"},
+        )
+    return key

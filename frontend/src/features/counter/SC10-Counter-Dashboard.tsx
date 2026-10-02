@@ -10,10 +10,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, EmptyState, PageHeader, StatTile } from '../../shared/ui'
-import { useSession } from '../../shared/session'
 import { TODAY, auditEvents } from '../../shared/fixtures'
 import { formatDate, formatDateTime, money } from '../../shared/format'
 import type { BranchScope } from './counter-desk-data'
+import { useHomeBranch } from './home-branch'
 import * as desk from './counter-desk-data'
 import type { FocusId } from './SC10-Focus-Panel'
 import FocusPanel, { PanelLink } from './SC10-Focus-Panel'
@@ -22,7 +22,7 @@ const TILE_BUTTON =
   'block h-full w-full cursor-pointer rounded-lg text-left transition-shadow duration-200 [&>div]:h-full'
 
 export default function CounterDashboard() {
-  const { branch } = useSession()
+  const branch = useHomeBranch()
   const [allBranches, setAllBranches] = useState(false)
   const [focus, setFocus] = useState<FocusId>('collections')
   const scope: BranchScope = allBranches ? 'ALL' : branch.code

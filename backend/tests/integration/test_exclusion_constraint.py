@@ -35,10 +35,12 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
-from app.application.allocate import AllocationCommand, allocate_assets
+from app.application.availability.allocation import AllocationCommand, allocate_assets
 from app.domain.enums import ReleaseReason
-from app.domain.errors import AssetUnavailableConflict
+from app.domain.errors import AllocationConflictError
 from app.domain.period import BookingPeriod
+from app.infrastructure.availability import SqlAssetRepository
+from app.infrastructure.clock import SystemClock
 from app.infrastructure.schema_ddl import (
     ALLOCATION_TABLE,
     OVERLAP_CONSTRAINT_NAME,
@@ -138,13 +140,14 @@ class TestOverlapIsRejected:
         postgres_session.rollback()
         assert sqlstate_of(raised.value) == EXCLUSION_VIOLATION_SQLSTATE
 
-    def test_the_use_case_refuses_an_overlapping_request_as_an_asset_unavailable_conflict(
+    def test_the_use_case_refuses_an_overlapping_request_as_an_allocation_conflict(
         self, postgres_session: Session, postgres_factory: Factory
     ) -> None:
         """The pre check answers first here, which is what gives a useful message.
 
-        The path where the constraint itself answers is proved under genuine
-        concurrency in test_concurrent_allocation.py.
+        The path where the constraint itself answers is proved in
+        test_allocation_conflict_translation.py, and under genuine concurrency
+        in test_concurrent_allocation.py.
         """
         scenario = build_allocation_scenario(postgres_factory, FIRST_HIRE)
         postgres_session.add(
@@ -154,9 +157,10 @@ class TestOverlapIsRejected:
         )
         postgres_session.commit()
 
-        with pytest.raises(AssetUnavailableConflict) as raised:
+        with pytest.raises(AllocationConflictError) as raised:
             allocate_assets(
-                postgres_session,
+                SqlAssetRepository(postgres_session),
+                SystemClock(),
                 AllocationCommand(
                     reservation_line_id=scenario.line.id,
                     product_model_id=scenario.product_model.id,

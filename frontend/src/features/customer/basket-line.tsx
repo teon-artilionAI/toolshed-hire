@@ -1,114 +1,107 @@
 /**
  * One line of the hire basket on SC-04.
  *
- * It shows its working on the line itself, quantity times days times rate,
- * so the customer never has to trust the total at the bottom on faith. When
- * the branch cannot supply the quantity asked for, the line says so and
- * offers the fix as a button rather than telling the customer to work it
- * out themselves.
+ * The basket knows a model by its slug and how many are wanted. The name and
+ * the rates come from the catalogue route for that model, so the line shows
+ * what the catalogue says today. It shows no total. The server prices the
+ * basket in the next step, and until then there is no figure to show.
+ *
+ * A model the catalogue no longer has says so on its line and offers to take
+ * itself off, because a booking that still names it would be refused.
  */
 
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
-import type { BranchCode, ProductModel, Uuid } from '../../shared/types'
+import { MAX_QUANTITY, MIN_QUANTITY } from '../../shared/api/catalogue'
+import { catalogueQueries } from '../../shared/api/catalogue-queries'
+import { queryPhase } from '../../shared/api/query-phase'
+import type { BasketLine as Line, BasketTerms } from '../../shared/basket-store'
 import { money } from '../../shared/format'
-import { Notice } from '../../shared/ui'
-import type { BranchAvailability } from './availability'
-import { fleetAt } from './availability'
+import { isNotFound } from './booking-refusal'
+import { modelDetailHref } from './catalogue-links'
 import { QuantityStepper } from './catalogue-ui'
 
+const NAME_WHILE_LOADING = 'this tool'
+
 export default function BasketLine({
-  model,
-  quantity,
-  days,
-  hire,
-  availability,
-  short,
-  branchCode,
-  startIso,
-  endIso,
+  line,
+  terms,
+  error,
+  disabled,
   onChangeQuantity,
   onRemove,
 }: {
-  model: ProductModel
-  quantity: number
-  days: number
-  /** Hire charge for this line, already worked out by the screen. */
-  hire: number
-  /** Null while the chosen period is unusable, so nothing is claimed. */
-  availability: BranchAvailability | null
-  short: boolean
-  branchCode: BranchCode
-  startIso: string
-  endIso: string
-  onChangeQuantity: (modelId: Uuid, quantity: number) => void
-  onRemove: (modelId: Uuid) => void
+  line: Line
+  /** The period and the branch of the basket, carried on the link to the model. */
+  terms: BasketTerms
+  /** Why the API refused this line, when it did. */
+  error?: string
+  /** True while a request is in flight, so the basket cannot change under it. */
+  disabled: boolean
+  onChangeQuantity: (modelSlug: string, quantity: number) => void
+  onRemove: (modelSlug: string) => void
 }) {
+  const model = useQuery(catalogueQueries.model(line.modelSlug))
+  const phase = queryPhase(model)
+  const withdrawn = phase === 'failed' && isNotFound(model.error)
+  const name = model.data?.name ?? NAME_WHILE_LOADING
+
   return (
-    <li className="border-b border-line pb-lg last:border-0 last:pb-0">
+    <li className="border-b border-line pb-lg last:border-0 last:pb-0" aria-busy={phase === 'loading'}>
       <div className="flex flex-wrap items-start justify-between gap-md">
         <div className="min-w-0">
-          <Link
-            to={`/model/${model.id}?from=${startIso}&to=${endIso}&branch=${branchCode}`}
-            className="inline-flex min-h-[2.75rem] cursor-pointer items-center text-base font-semibold text-ink underline decoration-line underline-offset-4 transition-colors duration-200 hover:decoration-accent"
-          >
-            {model.name}
-          </Link>
-          <p className="tabular mt-xs text-sm text-slate-soft">
-            {money(model.dailyRate)} per day, {money(model.depositAmount)} deposit each
-          </p>
+          {model.data ? (
+            <>
+              <Link
+                to={modelDetailHref(line.modelSlug, { from: terms.from, to: terms.to }, terms.branchCode)}
+                className="inline-flex min-h-[2.75rem] cursor-pointer items-center text-base font-semibold text-ink underline decoration-line underline-offset-4 transition-colors duration-200 hover:decoration-accent"
+              >
+                {model.data.name}
+              </Link>
+              <p className="tabular mt-xs text-sm text-slate-soft">
+                {money(model.data.dailyRate)} per day, {money(model.data.depositAmount)} deposit
+                each
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-mono text-sm text-ink">{line.modelSlug}</p>
+              <p className="mt-xs text-sm text-slate-soft" role={withdrawn ? 'alert' : undefined}>
+                {phase === 'loading' && 'Loading the name and the rates of this tool.'}
+                {withdrawn &&
+                  'We no longer hire this tool. Take it off the basket before you carry on.'}
+                {phase === 'failed' &&
+                  !withdrawn &&
+                  'We could not load the name and the rates of this tool. You can still book it.'}
+              </p>
+            </>
+          )}
         </div>
-        <button type="button" className="btn-ghost px-md" onClick={() => onRemove(model.id)}>
+        <button
+          type="button"
+          className="btn-ghost px-md"
+          disabled={disabled}
+          onClick={() => onRemove(line.modelSlug)}
+        >
           <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Remove
-          <span className="sr-only"> {model.name} from the basket</span>
+          Remove{' '}
+          <span className="sr-only">{name} from the basket</span>
         </button>
       </div>
 
-      <div className="mt-md flex flex-wrap items-end gap-lg">
-        {/* Capped at the branch's whole fleet rather than at what is free, so
-            asking for too many produces an explanation instead of a dead
-            button. */}
+      <fieldset className="mt-md" disabled={disabled}>
+        <legend className="sr-only">How many of {name}</legend>
         <QuantityStepper
-          id={`qty-${model.id}`}
-          itemLabel={model.name}
-          value={quantity}
-          max={Math.max(quantity, fleetAt(model.id, branchCode).length)}
-          onChange={(next) => onChangeQuantity(model.id, next)}
+          id={`qty-${line.modelSlug}`}
+          itemLabel={name}
+          value={line.quantity}
+          min={MIN_QUANTITY}
+          max={MAX_QUANTITY}
+          onChange={(next) => onChangeQuantity(line.modelSlug, next)}
+          error={error}
         />
-        <p className="tabular text-sm text-slate-soft">
-          {quantity} × {days} {days === 1 ? 'day' : 'days'} × {money(model.dailyRate)} ={' '}
-          <span className="font-semibold text-ink">{money(hire)}</span>
-        </p>
-      </div>
-
-      {short && availability && (
-        <div className="mt-md">
-          <Notice
-            tone="warn"
-            title={
-              availability.availableUnits === 0
-                ? `None free at ${availability.branch.name}`
-                : `Only ${availability.availableUnits} free at ${availability.branch.name}`
-            }
-          >
-            <p>{availability.reason ?? 'The units here are already committed.'}</p>
-            <button
-              type="button"
-              className="btn-secondary mt-sm px-md"
-              onClick={() =>
-                availability.availableUnits > 0
-                  ? onChangeQuantity(model.id, availability.availableUnits)
-                  : onRemove(model.id)
-              }
-            >
-              {availability.availableUnits > 0
-                ? `Take ${availability.availableUnits} instead`
-                : 'Take it off the basket'}
-            </button>
-          </Notice>
-        </div>
-      )}
+      </fieldset>
     </li>
   )
 }

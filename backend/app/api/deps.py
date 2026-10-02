@@ -7,18 +7,30 @@ Four layers, each building on the one before it.
 3. `get_active_user` refuses a deactivated account.
 4. `require_roles` refuses an account whose role is not in the allowed set.
 
-The role is read from the database row on every request, never from a token
-claim. An access token minted before a demotion therefore stops granting the
-old permissions the moment the row changes, rather than at expiry.
+The token carries the role and the branch as claims, and this chain does not
+rely on them. It reads the role from the database row on every request, so an
+access token minted before a demotion stops granting the old permissions the
+moment the row changes and not fifteen minutes later. An action that must not
+run on a stale row even within one request uses `require_fresh_roles` from
+`app/api/identity_deps.py`.
 
-Every endpoint must depend on one of the role dependencies. An endpoint with no
-declared policy is a defect (BR-41). Nothing enforces that yet. No test walks
-the route table to check it, so today the rule holds because I read each router
-before I publish it. A later change adds that test with the authorisation model.
+Every endpoint must depend on one of the role dependencies, or on
+`public_access` when it admits a caller with no account (BR-41). Each of them
+is registered as a policy in `app/api/access_policy.py`, and the application
+refuses to start while any route depends on none of them.
 
 The second layer also records the role of the account it loaded against the
 current request. The access log reads it from there, which is how one line per
 request can say who made it without the middleware querying the database.
+
+This module is also the composition root. The application layer depends on
+ports and imports nothing from the infrastructure layer, so something has to
+choose the implementations, and that happens in the dependencies at the foot of
+this file. A use case reaches a router already holding the SQL unit of work,
+the system clock and the email gateway, and the router never learns which
+classes those are. The booking use cases are wired from these parts in
+`app/api/booking_deps.py`, and the query objects of the public read side in
+`app/api/catalogue_deps.py`.
 """
 
 from __future__ import annotations
@@ -30,19 +42,39 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlmodel import Session
 
+from app.api.access_policy import PUBLIC_POLICY, declare_policy, role_policy
+from app.application.clock import Clock
+from app.application.notification.dispatcher import NotificationDispatcher
+from app.application.notification.ports import NotificationGateway
+from app.application.unit_of_work import UnitOfWork
 from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, AuthorisationFailure, InactiveAccount
+from app.infrastructure.clock import SystemClock
 from app.infrastructure.database import get_session
-from app.infrastructure.models import Branch, UserAccount
-from app.infrastructure.security import read_subject
+from app.infrastructure.models import UserAccount
+from app.infrastructure.security import read_access_claims
+from app.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from app.request_context import record_actor_role
 
 logger = logging.getLogger(__name__)
 
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_PREFIX = "Bearer "
+# The attribute of the application state that holds the email gateway. The
+# application factory sets it once, when the application is built.
+NOTIFICATION_GATEWAY_STATE_KEY = "notification_gateway"
+
+_SYSTEM_CLOCK = SystemClock()
 
 SessionDependency = Annotated[Session, Depends(get_session)]
+
+
+def get_clock() -> Clock:
+    """Return the system clock. A test overrides this to hold the time still."""
+    return _SYSTEM_CLOCK
+
+
+ClockDependency = Annotated[Clock, Depends(get_clock)]
 
 
 def get_bearer_token(request: Request) -> str:
@@ -76,7 +108,9 @@ def get_bearer_token(request: Request) -> str:
 TokenDependency = Annotated[str, Depends(get_bearer_token)]
 
 
-def get_authenticated_user(token: TokenDependency, session: SessionDependency) -> UserAccount:
+def get_authenticated_user(
+    token: TokenDependency, session: SessionDependency, clock: ClockDependency
+) -> UserAccount:
     """Verify the token and load the account it identifies.
 
     Raises:
@@ -85,7 +119,7 @@ def get_authenticated_user(token: TokenDependency, session: SessionDependency) -
             answered identically, so a caller cannot probe for valid ids.
 
     """
-    user_id = read_subject(token)
+    user_id = read_access_claims(token, now=clock.now()).subject
     account = session.get(UserAccount, user_id)
     if account is None:
         logger.warning(
@@ -167,6 +201,7 @@ def require_roles(*allowed: UserRole) -> Callable[[UserAccount], UserAccount]:
             )
         return user
 
+    declare_policy(dependency, role_policy(permitted))
     return dependency
 
 
@@ -179,23 +214,67 @@ AnyRoleUser = Annotated[
 ]
 
 
-def branch_code_of(session: Session, user: UserAccount) -> str | None:
-    """Return the branch code of a branch scoped account, or None.
+def public_access() -> None:
+    """Declare that an endpoint admits a caller with no account.
 
-    Counter staff carry a branch. Customers and administrators do not, so the
-    absence of a code is a fact about the role rather than missing data.
+    It checks nothing, because there is nothing to check. It exists so that a
+    public endpoint states its policy in its route, the same way a protected
+    one names its roles, and is never public merely because nobody declared
+    anything (BR-41).
     """
-    if user.branch_id is None:
-        return None
-    branch = session.get(Branch, user.branch_id)
-    if branch is None:
-        logger.error(
-            "auth.branch_missing_for_account",
-            extra={
-                "user_id": str(user.id),
-                "branch_id": str(user.branch_id),
-                "attempted": "resolve branch code for a branch scoped account",
-            },
+
+
+declare_policy(public_access, PUBLIC_POLICY)
+
+
+# ---------------------------------------------------------------------------
+# The composition root. Each function returns a port, and the body chooses the
+# implementation behind it.
+# ---------------------------------------------------------------------------
+
+
+def get_unit_of_work(session: SessionDependency) -> UnitOfWork:
+    """Return a SQL unit of work over the request scoped session.
+
+    The session is borrowed and not owned. The authentication dependency reads
+    the account through the same one, and the request closes it, so the unit of
+    work is told not to.
+    """
+    return SqlAlchemyUnitOfWork(lambda: session, close_on_exit=False)
+
+
+UnitOfWorkDependency = Annotated[UnitOfWork, Depends(get_unit_of_work)]
+
+
+def get_notification_gateway(request: Request) -> NotificationGateway:
+    """Return the email gateway the application was built with.
+
+    Raises:
+        RuntimeError: If the application carries no gateway. The application
+            factory installs one, so this means an application was assembled
+            some other way and then asked to send email.
+
+    """
+    gateway = getattr(request.app.state, NOTIFICATION_GATEWAY_STATE_KEY, None)
+    if not isinstance(gateway, NotificationGateway):
+        raise RuntimeError(
+            "Attempted to send a notification from an application that was built without "
+            f"an email gateway. Set `app.state.{NOTIFICATION_GATEWAY_STATE_KEY}` when the "
+            "application is assembled, as `create_app` does."
         )
-        return None
-    return branch.code
+    return gateway
+
+
+NotificationGatewayDependency = Annotated[NotificationGateway, Depends(get_notification_gateway)]
+
+
+def get_notification_dispatcher(
+    uow: UnitOfWorkDependency, gateway: NotificationGatewayDependency, clock: ClockDependency
+) -> NotificationDispatcher:
+    """Return the dispatcher that sends queued notifications after a commit."""
+    return NotificationDispatcher(uow, gateway, clock)
+
+
+NotificationDispatcherDependency = Annotated[
+    NotificationDispatcher, Depends(get_notification_dispatcher)
+]

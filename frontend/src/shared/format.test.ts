@@ -15,8 +15,10 @@ import {
   formatDateShort,
   formatDateTime,
   humanise,
+  isNoMoney,
   isOverdue,
   money,
+  percent,
 } from './format'
 
 /** The no-break spaces a locale formatter likes to use between digit groups. */
@@ -54,6 +56,82 @@ describe('money', () => {
   it('never shows the ISO currency code', () => {
     expect(money(450)).not.toContain('ZAR')
   })
+})
+
+describe('money, given a string as the API sends it', () => {
+  it('writes the figure the same way it writes a number', () => {
+    expect(money('280.00')).toMatch(/^R 280[,.]00$/)
+    expect(money('280.00')).toBe(money(280))
+    expect(money('1234567.89')).toBe(money(1234567.89))
+  })
+
+  it('shows the cents exactly as they arrived', () => {
+    expect(money('0.10')).toMatch(/^R 0[,.]10$/)
+    expect(money('19.99')).toMatch(/^R 19[,.]99$/)
+    expect(money('0.00')).toMatch(/^R 0[,.]00$/)
+  })
+
+  it('keeps every digit of an amount too large for a float to hold', () => {
+    // As a float this is 9007199254740993.57, which rounds to a neighbour and
+    // would show a different figure from the one that was sent.
+    const digitsOnly = money('9007199254740993.57').replace(/\D/g, '')
+
+    expect(digitsOnly).toBe('900719925474099357')
+  })
+
+  it('pads a figure written with fewer than two decimals', () => {
+    expect(money('280')).toBe(money('280.00'))
+    expect(money('280.5')).toBe(money('280.50'))
+  })
+
+  it('writes a negative amount with its sign', () => {
+    expect(money('-45.50')).toBe(money(-45.5))
+  })
+
+  it('uses plain spaces and never the ISO currency code', () => {
+    expect(money('1234567.89')).not.toMatch(NO_BREAK_SPACES)
+    expect(money('1234567.89')).not.toContain('ZAR')
+  })
+
+  it.each(['', 'abc', '12.345', '1,200.00', 'R 280.00', '1e3'])(
+    'refuses "%s" and does not guess at a figure',
+    (amount) => {
+      expect(() => money(amount)).toThrow(RangeError)
+    },
+  )
+})
+
+describe('isNoMoney', () => {
+  it.each(['0.00', '0', '-0.00', '000.0'])('says "%s" is nothing', (amount) => {
+    expect(isNoMoney(amount)).toBe(true)
+  })
+
+  it.each(['0.01', '1.00', '-12.50'])('says "%s" is something', (amount) => {
+    expect(isNoMoney(amount)).toBe(false)
+  })
+
+  it('refuses an amount that is not money', () => {
+    expect(() => isNoMoney('lots')).toThrow(RangeError)
+  })
+})
+
+describe('percent', () => {
+  it('drops decimals that are all zeros', () => {
+    expect(percent('15.00')).toBe('15%')
+    expect(percent('0.00')).toBe('0%')
+  })
+
+  it('keeps decimals that say something', () => {
+    expect(percent('12.50')).toMatch(/^12[,.]5%$/)
+    expect(percent('7.25')).toMatch(/^7[,.]25%$/)
+  })
+
+  it.each(['', 'fifteen', '15%', '-5.00', '1.234'])(
+    'refuses "%s" and does not guess at a rate',
+    (rate) => {
+      expect(() => percent(rate)).toThrow(RangeError)
+    },
+  )
 })
 
 describe('formatDate', () => {

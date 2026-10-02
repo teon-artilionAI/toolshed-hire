@@ -15,4 +15,29 @@ them, for the tests that prove what the application role may not do.
 `log_capture` reads what the application wrote through its real log handler,
 and `request_probe` adds a few routes to the real application for the tests of
 the request middleware to aim at.
+
+`clock` holds the clock that stands still, and `memory` holds an in memory unit
+of work, so a use case can be tested with no database behind it. Its
+reservation repository is in `memory_booking` and the repositories of its
+reference data in `memory_reference`. `memory_world` builds the smallest world
+a booking can happen in and wires every booking use case over it.
+
+`reservations` builds a reservation in each of its eight statuses for the
+tests of the states. `booking_api` builds the same small world out of database
+rows and drives the six reservation routes as a chosen account, `booking` wires
+the booking use cases over real units of work, and `booking_race` sends many
+requests to the real application at the same moment.
+
+`catalogue` gives the public read side a visitor's client and a few builders,
+and `statements` counts what an engine is asked to run, for the tests that
+prove a query does not loop.
+
+`memory_identity` extends the in memory unit of work with accounts, refresh
+sessions and throttle counters, and holds the two fakes that stand in for
+bcrypt and the token signer. `identity_desk` wires the three session use cases
+over it. `sessions` gives the session routes a client on a clock that stands
+still, and reads and presents the refresh cookie.
+
+`pricing` holds the snapshot of the worked example and a few builders for the
+tests of the pricing policy.
 """

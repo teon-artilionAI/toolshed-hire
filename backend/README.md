@@ -17,22 +17,472 @@ first pass at the whole application.
    constraint has the last word.
 4. A React client can call a role protected endpoint and get a correct answer.
 5. A constraint violation surfaces as a clean HTTP 409, never a 500.
+6. A session outlives its access token. Signing in, refreshing with rotation,
+   reuse detection, signing out, the lockout and the throttles all work against
+   real rows, and no route can be added without saying who may call it.
+7. A reservation moves through its lifecycle by one set of rules. A customer
+   builds a priced draft, holds named units for thirty minutes, confirms, reads
+   and cancels, and twenty hold requests at once for five units give exactly
+   five holds and fifteen clean refusals.
 
 ## Layout
 
 | Path | Layer | Holds |
 |---|---|---|
-| `app/domain` | Domain | `BookingPeriod`, enumerations, errors. No database access. |
-| `app/application` | Application | Use cases and transaction boundaries. |
-| `app/infrastructure` | Infrastructure | Engine, SQLModel tables, hashing, tokens. |
+| `app/domain` | Domain | Entities as plain dataclasses, `BookingPeriod`, `Money`, enumerations, errors. No framework, no SQL, no IO. |
+| `app/domain/policies` | Domain | The rules that can be swapped. `PricingPolicy` and its two implementations, and the totals of a reservation. |
+| `app/domain/states` | Domain | The eight reservation states. The base state refuses every move and each state overrides the ones that are legal from it. |
+| `app/application` | Application | Use cases, transaction boundaries and ports. One package per module, plus the unit of work, the clock and the audit log, which every module shares. |
+| `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. |
+| `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases and `sweep_deps.py` wires the sweep that lapses expired holds. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
 | `seed_data` | Tooling | The catalogue and the fleet as plain data. It opens no file and no connection. |
 | `seeding`, `seed.py` | Tooling | The loader for that data, and its entry point. |
 | `scripts` | Tooling | `provision_roles.py`, which creates the two database roles. |
+
+Dependencies point inward only. The domain imports nothing from the other
+layers, the application layer imports the domain and nothing else, and the API
+layer is the only one that imports everything, because it is where the pieces
+are put together.
+
+The design document describes eight modules. Six have code so far, and each
+keeps the same name in every layer it appears in.
+
+| Module | Domain | Application | Infrastructure |
+|---|---|---|---|
+| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `AccountRepository`, `SessionRepository`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlAccountRepository`, `SqlSessionRepository` |
+| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue` | `SqlProductModelRepository`, `SqlCatalogueQuery` |
+| `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
+| `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
+| `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
+| `money` | `Money`, `PricingPolicy`, `StandardPricingPolicy`, `FixedRatePricingPolicy`, `LineSnapshot`, `HireQuote`, `HireTotals` | `QuoteHire` | none yet, a quote writes nothing |
+
+`hire` and `reporting` gain their packages when their first use case is built.
+The audit trail belongs to no module, because every module writes to
+it, so it has a file of its own in each layer. The throttle in
+`app/application/throttle.py` and the ownership scope in
+`app/application/ownership.py` belong to no module for the same reason.
+
+## The four patterns in place
+
+The design document names four patterns. All four are built.
+
+### Repository with Unit of Work
+
+A hold writes an allocation for every unit of every line, the new status of
+the reservation and an audit event. BR-09 and BR-49 need those to commit
+together or not at all, so exactly one object owns the transaction.
+
+`UnitOfWork` is a port in the application layer. A use case enters it, works
+through the repositories it exposes and calls `commit`. Leaving the block
+without a commit rolls everything back. `SqlAlchemyUnitOfWork` implements it
+over one `Session`, which it shares with every repository, the audit log and
+the outbox.
+
+```python
+with self._uow as uow:
+    reservation = load_for_change(uow, actor, key)
+    reservation.hold(now=now, today=today, models=models, allocator=allocator)
+    uow.reservations.save(reservation)
+    record_change(uow, actor=actor, reservation=reservation, action="reservation.held", ...)
+    uow.commit()
+```
+
+Three things live in exactly one place because of it.
+
+- `SqlAssetRepository.lock_allocatable` is the only place that issues
+  `SELECT ... FOR UPDATE SKIP LOCKED`. A reservation that is going to change
+  is locked with a plain `FOR UPDATE`, which waits, because it is one
+  particular row and not any free unit.
+- `SqlAssetRepository.translate_integrity_error` is the only place a violation
+  of the exclusion constraint becomes `AllocationConflictError`.
+- `SqlAuditLog.record` writes the audit event in the same transaction as the
+  change. If it cannot be written, the change does not happen (BR-49).
+
+Every state changing use case leaves one audit event. It carries the actor and
+the role the actor held at the time, the entity and the action, for example
+`reservation.held`, the changed fields before and after, the request id and
+the client address when the server knows one.
+
+A use case is a class with one `execute(command)` method. It takes the unit of
+work, a clock and anything else it needs through its constructor. The router
+never builds one. `app/api/deps.py` does, and it is the only module that knows
+which implementation stands behind each port a use case writes through. The
+query objects of the read side are chosen the same way in
+`app/api/catalogue_deps.py`.
+
+### Adapter
+
+`NotificationGateway` is the port. `ResendEmailAdapter` is the only class that
+knows which email provider is in use. It calls the Resend HTTP API with a five
+second timeout and returns a `DeliveryReceipt`. A status outside the 2xx
+range, a timeout and a transport error each come back as a failed receipt with
+a short reason. The adapter never raises for a delivery that did not happen.
+
+The `notification` table is a transactional outbox (BR-19).
+
+1. The use case writes the notification `QUEUED` in the same transaction as
+   the confirmation of the reservation.
+2. After the commit, with no transaction open, `NotificationDispatcher` sends
+   whatever is queued and records `SENT` with the provider's message id, or
+   `FAILED` with the reason.
+3. A provider failure never rolls the booking back, and the dispatcher never
+   raises.
+
+Dispatch runs inside the request, after the commit and before the response.
+Cloud Run only gives a container CPU while it is serving a request, so work
+left for a background thread might never run. Every message carries an
+`Idempotency-Key` derived from the notification id, so a notification that is
+dispatched twice is delivered once.
+
+Only a booking confirmation writes a notification row, and
+`ConfirmReservationUseCase` is the one place that queues it. Creating a draft
+and holding it write none, so nobody is sent a confirmation of a hold they
+never confirmed.
+
+### Strategy
+
+BR-21 says a hire price is produced by a pricing policy and not by arithmetic
+scattered through the system. `PricingPolicy` is a port in
+`app/domain/policies`, and `StandardPricingPolicy` is the one implementation
+that runs. `app/api/pricing_deps.py` builds it once at start-up and hands the
+same one to every request. `FixedRatePricingPolicy` is its counterpart for
+tests. It charges one fixed amount for a unit, so a test of a booking can state
+its price in a line.
+
+```python
+quote = policy.quote(line, period, discount_percent)
+```
+
+`line` is a `LineSnapshot`, which is the daily rate, the weekly rate, the
+deposit and the quantity as they were copied (BR-20). The policy never sees the
+catalogue, so a price worked out from a snapshot at R280 does not move when the
+catalogue goes to R310. The trade discount is an input as well. The policy
+never looks one up.
+
+The rule for one unit is the lower of two totals. Complete weeks at the weekly
+rate with the days left over at the daily rate, or every day at the daily rate.
+A hire shorter than a week has no complete week, so it is charged by the day.
+The quantity multiplies that, the discount comes off as a percentage, and VAT
+goes on what is left. `BookingPeriod.whole_weeks` and `remainder_days` do the
+counting, and the week is seven days, named once as `WEEK_LENGTH_DAYS` on the
+policy.
+
+Three things live in exactly one place because of it.
+
+- `StandardPricingPolicy.quote` is the only place a rate is multiplied by a
+  number of days. `tests/unit/test_one_place_for_a_price.py` parses every
+  module of `app` to keep it so.
+- `VAT_RATE_PERCENT` in `app/domain/vat.py` is the only place the VAT rate is
+  written, as `Decimal("15.00")`. Hire rates exclude VAT. A deposit carries
+  none (BR-23).
+- `Money.rounded` is the only place an amount is rounded, half up to the cent.
+
+`Money` holds a `Decimal` and refuses a float wherever one is offered, as an
+amount, as a multiplier or in a comparison (BR-22). An amount stays exact while
+it is being worked on. The amount charged after the discount and the VAT on it
+are each rounded once from the exact figure, because those are the two amounts
+a charge is written with. The total is their sum and the discount shown is the
+subtotal less the amount charged, so the figures on a quote add up to the cent.
+
+### State
+
+BR-11 says a reservation changes status only along the permitted transitions.
+`ReservationState` in `app/domain/states` declares the seven moves, `hold`,
+`confirm`, `cancel`, `collect`, `expire`, `mark_no_show` and `close`, and its
+own version of each refuses with `StateTransitionError`. A concrete state
+overrides only the moves that are legal from it, and the four terminal states
+share `TerminalState`, which overrides nothing. A move nobody thought about is
+refused, because allowing it would have taken somebody writing it.
+
+`Reservation` never changes its own status. It hands every move to the state
+it is in.
+
+```python
+reservation.confirm(now=now, email_verified=verified)   # asks HeldState, or is refused
+```
+
+A state checks its guards before it changes anything, so a refused move leaves
+the reservation exactly as it was. The thirty minutes of a hold and the 17:00
+cutoff for a late cancellation are named constants beside the guards that use
+them. `collect`, `mark_no_show` and `close` are built and tested in the states.
+The use cases that call them come with checkout and returns.
+
+### The clock
+
+Nothing in the domain or the application layer reads the time from the
+operating system. A use case is handed a `Clock`. `SystemClock` returns
+instants in UTC and works out the business day in `Africa/Johannesburg`, so a
+booking made at half past midnight in Cape Town belongs to the new day. The
+tests use a clock that stands still, and one test reads the source of both
+layers to make sure neither calls `datetime.now()` or `date.today()`.
+
+## The read side
+
+A visitor with no account browses the catalogue and asks where a model is free
+for a period (FR-02, FR-03, FR-04). Nothing is written, so there is no unit of
+work, no lock and no audit event. A read goes through a query object.
+
+| Port in the application layer | Query object in the infrastructure layer |
+|---|---|
+| `BranchDirectory` | `SqlBranchDirectory` |
+| `CatalogueQuery` | `SqlCatalogueQuery` |
+| `AvailabilityQuery` | `SearchAvailabilityQuery` |
+
+A query object selects columns and returns small frozen dataclasses that the
+application layer defines, in the `read_models.py` of each module. It never
+returns a table row. None of those dataclasses has a field for an asset tag, a
+serial number or a number of units, so a customer cannot be told stock (US-07).
+The single model question counts free units inside the database and returns
+only whether there are enough.
+
+Two services hold the rules that are not SQL. `BrowseCatalogue` refuses an
+unknown category and answers an unpublished model as not found.
+`SearchAvailability` checks the period through
+`app/application/availability/hire_request.py`, which builds it as a
+`BookingPeriod` and checks it with `ensure_within_booking_window`. `QuoteHire`
+goes through the same module, so a search, a quote and a booking agree about
+BR-02 to BR-05. The day it is comes from the clock.
+
+A unit is free for a period when its status is `AVAILABLE` and it holds no
+active allocation whose half open period overlaps the one asked about (BR-10).
+The availability list answers for every model on the page and every active
+branch in one statement. The condition is written with the same
+`daterange(start_date, end_date, '[)') &&` expression as the exclusion
+constraint, under `released_at IS NULL`, so the GiST index behind the
+constraint can serve it, and the partial index `ix_asset_available` finds the
+hireable units. An availability search issues the count and the page, plus one
+lookup for a category and one for a branch when the search names them, whatever
+the page holds. `app/infrastructure/availability_search.py` says how the
+planner runs the statement and what slows down first as the fleet grows.
+
+The order of a list comes from the `ModelSort` enumeration, which the query
+object maps to columns. No part of a request is ever placed in a statement
+(C-28).
+
+Every query logs when it starts and when it finishes, with its filters, its row
+count and its duration. The text a visitor searched for is logged by its length
+only.
+
+## Sessions and authorisation
+
+This is the session model of the security section of the design document
+(BR-41 to BR-46, BR-48, C-13 to C-25). Registration, email verification and
+password reset are not built yet.
+
+### The two tokens
+
+Signing in returns two things. The access token is a signed JWT in the
+response body. It lives 15 minutes, carries `sub`, `role` and `branch_id`, and
+names its signing key in a `kid` header. The `kid` is the first sixteen
+characters of the SHA-256 of the key, so it needs no setting, and a token that
+names a key the service does not hold is refused. The access token is never
+set as a cookie.
+
+The refresh token is opaque, 256 random bits, and only its SHA-256 is stored,
+in `refresh_session`. It travels in a cookie and is never returned in a body.
+
+```text
+toolshed_refresh=<token>; Max-Age=604800; Path=/api/auth; HttpOnly; Secure; SameSite=Strict
+```
+
+`Secure` is dropped in development and test only, so local work over plain
+HTTP still functions. `Max-Age` is what the session has left, which is seven
+days at most.
+
+A session ends 14 days after the sign in that started it, however often it is
+used, and 7 days after it was last used. `expires_at` holds the first and is
+copied to every successor. The second is worked out from `issued_at`.
+
+### Rotation and reuse
+
+A refresh token works once. `POST /api/auth/refresh` stamps the session as
+rotated, revokes it with the reason `ROTATION` and opens a successor in the
+same family with a new token. The account is read again at that moment, so a
+deactivated account gets nothing further.
+
+A token that arrives a second time revokes every live session of its family
+with the reason `REUSE_DETECTED`, writes the audit event
+`auth.refresh_reuse_detected` and is answered 401. The row is read under a row
+lock, so of two requests that present one token the second waits and is then
+treated as the reuse it is. A client must therefore never send two refreshes
+at once.
+
+`POST /api/auth/logout` revokes the family with the reason `LOGOUT` and clears
+the cookie. It answers 204 whatever it was handed.
+
+Both routes are authenticated by the cookie alone, so both check the `Origin`
+header. When it is present it must be one of `CORS_ORIGINS`, and anything else
+is 403. A request with no `Origin` is allowed, because `SameSite=Strict`
+already keeps the cookie off every cross site request.
+
+### Sign in failures
+
+A wrong password, an unknown address, a locked account and a deactivated
+account are answered with the same 401, byte for byte. Exactly one bcrypt
+verification runs on every path, against a dummy hash when there is no account
+to check, so the time the answer takes does not give the reason away. The
+reason goes to the audit event `auth.login_failed` and to the log. A success
+writes `auth.login_succeeded`.
+
+Five failures lock the account for fifteen minutes, in `failed_login_count`
+and `locked_until`. A success sets the count back to zero. I count failures in
+a row and not failures inside a fifteen minute window, because the two columns
+hold no time for the first failure. That locks an account in every case the
+design document describes and in a few it does not.
+
+### Throttling
+
+Every sign in attempt is counted in two fixed windows of fifteen minutes
+before any password is looked at. One window is for the address being signed
+in to and allows 10 attempts. The other is for the client address and allows
+30. Going over either is a 429 with `Retry-After` in seconds.
+
+`LOGIN_ATTEMPTS_PER_EMAIL` and `LOGIN_ATTEMPTS_PER_ADDRESS` set the two limits.
+The defaults are 10 and 30, and neither can be set below 1. Development and
+test accept any value from 1 up, which is what lets a browser test run sign one
+seeded account in more often than a person would. Staging and production
+accept only a value at or below the default, and the process refuses to start
+on a higher one. The window is not a setting.
+
+The counters are rows in `rate_limit_counter`, because the instances share no
+memory. A bucket is keyed by a salted SHA-256 and never by the address. The
+salt is derived from `JWT_SECRET`. Counting is one atomic statement, and it is
+committed before the password check starts, so the lock on a counter row lasts
+one statement and not one bcrypt. Windows older than a day are deleted, at
+most once every fifteen minutes by each process.
+
+`Throttle` in `app/application/throttle.py` is the reusable piece.
+Registration, the verification email and the password reset will use it with
+rules of their own.
+
+Clients whose address the server cannot work out share one window. The limit
+of 30 only means what it says when the platform forwards the real client
+address, so that is worth checking after the first deployment.
+
+### Deny by default
+
+Every route declares who may call it, by depending on one of three kinds of
+policy.
+
+| Policy | Declared by | Admits |
+|---|---|---|
+| Public | `public_access` | A caller with no account. |
+| Roles | `require_roles(...)`, or one of `CustomerUser`, `CounterUser`, `AdminUser`, `AnyRoleUser` | The roles it names. |
+| Refresh cookie | `refresh_cookie_access` | The holder of a refresh cookie, from this site. |
+
+The application walks its route table when it is built and again when it
+starts serving. A route that depends on none of them stops the process with a
+message naming it, and so does a route that declares itself public and names
+roles as well. `tests/api/test_route_policies.py` enumerates the same table, so
+a missing policy fails the build first. That file also holds the role and
+endpoint matrix, one row for a representative endpoint of every module.
+
+The role dependencies read the role from the `user_account` row on every
+request and not from the token. That is stricter than the fifteen minutes the
+design document allows a claim to be trusted for.
+
+Waivers, user and role management and force release do not exist yet. When
+they are added they depend on `FreshAdminUser` from `app/api/identity_deps.py`.
+It reads the account again under a shared row lock, so the role that is checked
+is the role that holds until the action commits.
+
+### Ownership and branch scope
+
+A read on behalf of a customer takes an `OwnerScope`, and the repository puts
+it in the WHERE clause. A reservation that belongs to somebody else is not
+found, and the answer is the same 404 as for a key nobody issued (BR-42).
+Every lookup of one reservation does it, the read behind
+`GET /api/reservations/{id}` and the locked read behind each move alike, so a
+customer can neither see nor change a reservation that is not theirs.
+
+`ensure_branch_scope` in `app/domain/identity.py` refuses a write by counter
+staff to a branch that is not their own with `BranchScopeError`, which is a 403
+(BR-43). Creating a reservation checks the branch it is for, and holding,
+confirming and cancelling check the branch of the reservation. Staff reads are
+not restricted by branch.
+
+## The reservation lifecycle
+
+A customer puts one or more models into a reservation for one period at one
+branch, sees what it will cost, holds named units for thirty minutes, confirms,
+looks at their reservations and cancels one (FR-05 to FR-11).
+
+| From | To | Move | Guards and effects |
+|---|---|---|---|
+| DRAFT | HELD | `hold` | The start is not before today and not more than 90 days ahead. The hire is within the limits of every model. Every line is given all of its units at the collection branch. The hold expires thirty minutes later. |
+| DRAFT | CANCELLED | `cancel` | Nothing is held, so nothing is released. |
+| HELD | CONFIRMED | `confirm` | The hold has not run out. Every line holds its quantity. The customer has a verified email address, or staff are confirming for them. The expiry is cleared and the confirmation is queued. |
+| HELD | CANCELLED | `cancel` | The caller owns it or is staff. The units are released with the reason `CANCELLED`. |
+| HELD | EXPIRED | `expire` | The hold has run out. The units are released with the reason `EXPIRED`. |
+| CONFIRMED | COLLECTED | `collect` | Built in the states. The use case comes with checkout. |
+| CONFIRMED | CANCELLED | `cancel` | The caller owns it or is staff, and no rental exists. The units are released. After 17:00 on the day before collection it is counted as a late cancellation. |
+| CONFIRMED | NO_SHOW | `mark_no_show` | Built in the states. The use case comes with the no-show half of the sweep. |
+| COLLECTED | RETURNED | `close` | Built in the states. The use case comes with returns. |
+
+Any other move is a `StateTransitionError`, which is a 409.
+
+**A draft is a basket.** `CreateReservationUseCase` creates it with its totals
+and allocates nothing. The rates, the deposit, the late fee and the replacement
+value of each model are copied onto its line (BR-20), the pricing policy prices
+each line from that copy with the trade discount on the customer's profile, and
+`totals_of` adds the answers up. The subtotal is the hire after the discount,
+so the subtotal and the VAT add up to the total. A later change to the
+catalogue never alters a reservation that exists.
+
+**A hold is all or nothing.** `HoldReservationUseCase` gives every line named
+units through the allocation algorithm, in one unit of work (BR-07, BR-09). A
+line that cannot be given all of its units fails the whole hold, and the answer
+is a 409 whose sentence names the model and the dates. It never says how many
+units are left. The counts go to the log.
+
+**A hold lapses lazily.** There is no scheduler. `ExpireHoldsAndNoShowsUseCase`
+lapses the holds that have run out before a hold, before a confirmation, before
+a reservation or a list of them is read, and before an availability search is
+answered (BR-13). One call takes at most 25 reservations, oldest expiry first.
+It locks the due rows, checks each again and lapses it, so two sweeps at once
+take turns and the second finds nothing left to do. Its query reads through the
+partial index `ix_reservation_hold_expiry`. Every use case that is about to
+decide something about one reservation also lapses that one itself, so the
+bound on the batch never lets an expired hold be confirmed. The no-show half of
+the sweep is not built, and its place in the use case is marked.
+
+**A confirmation is where the customer is told.** `ConfirmReservationUseCase`
+queues the booking confirmation in its own transaction and sends it after the
+commit, inside the request (BR-19).
+
+**A cancellation deletes nothing.** `CancelReservationUseCase` releases every
+unit in the same transaction as the change of status (BR-14), and nothing is
+charged. A late cancellation raises `late_cancellation_count` on the customer
+profile by one. There is no route that deletes anything (BR-51).
+
+**A customer on hold cannot book.** A profile whose `account_status` is not
+`ACTIVE` is refused when a draft is created and again when it is put on hold,
+with `AccountOnHoldError`, which is a 403 (BR-18).
+
+Every change of status writes one audit event in the same transaction (BR-49),
+`reservation.created`, `reservation.held`, `reservation.confirmed`,
+`reservation.cancelled` or `reservation.expired`. The last one has no actor,
+because nobody asks for a sweep.
+
+Two things here get worse with volume and are worth naming. The list is found
+with OFFSET and counted in full. A customer's own list is short and indexed, so
+the first query to slow down is the list staff ask for with no filter, which
+sorts every reservation by its creation time. The sweep runs on the request
+path, one bounded batch a call, so if holds ran out faster than requests
+arrived to sweep them, expired holds would wait and their units would look
+taken for longer. At a hundred times the volume the list wants a keyed page and
+the sweep wants a scheduled job.
+
+Holding a line of more than one unit under heavy contention has one more
+property worth knowing. `SKIP LOCKED` lets several requests each lock some of
+the free units, and a request that locked fewer than it needs is refused and
+lets them go. Nobody is ever left half held, but two requests that each wanted
+two of the last three units can both be refused and have to try again.
 
 ## The schema
 
@@ -136,12 +586,174 @@ uvicorn app.main:app --reload --port 8000
 | Method | Path | Roles admitted |
 |---|---|---|
 | GET | `/api/health` | Public by declaration, for the uptime check. |
-| POST | `/api/auth/sign-in` | Public, it issues the credential. |
+| POST | `/api/auth/login` | Public by declaration, it issues the credentials. |
+| POST | `/api/auth/refresh` | The holder of the refresh cookie. |
+| POST | `/api/auth/logout` | The holder of the refresh cookie. Always 204. |
 | GET | `/api/me` | Any active account. |
-| POST | `/api/allocations` | Any active account. A customer may only book for themselves. |
+| POST | `/api/reservations` | Any active account. A customer books for themselves, staff name the customer. |
+| POST | `/api/reservations/{id}/hold` | Any active account. The owner, an administrator, or counter staff of the branch. |
+| POST | `/api/reservations/{id}/confirm` | Any active account, as above. |
+| POST | `/api/reservations/{id}/cancellation` | Any active account, as above. |
+| GET | `/api/reservations` | Any active account. A customer sees their own. |
+| GET | `/api/reservations/{id}` | Any active account. Somebody else's is a 404 for a customer. |
+| GET | `/api/branches` | Public by declaration. |
+| GET | `/api/catalogue/categories` | Public by declaration. |
+| GET | `/api/catalogue/models` | Public by declaration. |
+| GET | `/api/catalogue/models/{slug}` | Public by declaration. |
+| GET | `/api/catalogue/availability` | Public by declaration. |
+| GET | `/api/catalogue/models/{slug}/availability` | Public by declaration. |
+| GET | `/api/catalogue/models/{slug}/quote` | Public by declaration. |
 
-Every other endpoint added later must declare its roles. The default is deny
-(BR-41).
+Every endpoint added later must declare its policy. The default is deny
+(BR-41), the application refuses to start on a route that declares nothing, and
+`tests/api/test_route_policies.py` lists the policy expected of every route.
+
+### The session routes
+
+All three are under `/api/auth`, take and return JSON with camelCase names and
+answer errors as `application/problem+json`.
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/auth/login` | `email`, `password` | 200 with `accessToken`, `tokenType` of `Bearer`, `expiresIn` and `user`, and a `Set-Cookie` for the refresh token. 401 `invalid-credentials`. 429 `too-many-attempts` with `Retry-After`. |
+| `POST /api/auth/refresh` | none | 200 with the same body and a `Set-Cookie` that replaces the refresh token. 401 `session-expired`, with the cookie cleared. 403 `origin-not-allowed`. |
+| `POST /api/auth/logout` | none | 204 with the cookie cleared. 403 `origin-not-allowed`. |
+
+`user` is `id`, `email`, `fullName`, `role`, `branchCode` and `emailVerified`,
+and `GET /api/me` returns the same object. `role` is `customer`, `counter` or
+`admin`. `branchCode` is null unless the account is counter staff.
+
+### The reservation routes
+
+All six take and return JSON with camelCase names. Money is a string with two
+decimals, a date is `YYYY-MM-DD`, and an instant is ISO 8601 with the offset of
+Cape Town, for example `2026-10-02T15:30:00+02:00`. `{id}` is the key of the
+reservation or its reference.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `POST /api/reservations` | `branchCode`, `from`, `to`, `lines` of `modelSlug` and `quantity`, and optionally `customerProfileId` and `notes` | 201 with the reservation as a `DRAFT` and a `Location` header. 422 naming the field. 403 when a customer names a profile, when counter staff book at another branch, or when the customer is on hold. |
+| `POST /api/reservations/{id}/hold` | none | 200 with the reservation, now `HELD`. 409 `asset-unavailable` when a line cannot be fully allocated. 409 `state-transition` when it is not a draft. |
+| `POST /api/reservations/{id}/confirm` | none | 200 with the reservation, now `CONFIRMED`. 409 `state-transition` when the hold has run out or the move is not permitted. 403 `email-not-verified`. |
+| `POST /api/reservations/{id}/cancellation` | `reason`, optional, at most 200 characters | 200 with the reservation, now `CANCELLED`. 409 `state-transition` when it can no longer be cancelled. |
+| `GET /api/reservations` | `status`, `page`, `pageSize` from 1 to 50 and 20 by default. Staff may add `customerProfileId` or `branch` | 200 with `items`, `page`, `pageSize` and `total`, newest first. |
+| `GET /api/reservations/{id}` | none | 200 with the reservation. 404 when it does not exist or is not the caller's. |
+
+A reservation carries `id`, `reference`, `status`, `branchCode`, `branchName`,
+`from`, `to`, `hireDays`, `lines`, `subtotalExVat`, `discountPercent`,
+`vatAmount`, `estimatedTotalIncVat`, `depositTotal`, `holdExpiresAt`,
+`confirmedAt`, `cancelledAt`, `cancellationReason`, `canHold`, `canConfirm`,
+`canCancel`, `customerName` and `createdAt`. A line carries `modelSlug`,
+`modelName`, `quantity`, `dailyRate`, `weeklyRate`, `depositPerUnit`,
+`lineSubtotalExVat`, `allocatedCount` and `assetTags`.
+
+`canHold`, `canConfirm` and `canCancel` say what the caller may do right now.
+They are worked out on the server from the state of the reservation and from
+who is asking, so a screen never repeats the rules of the lifecycle.
+`assetTags` is filled for counter staff and administrators and is an empty list
+for a customer, who never learns which unit they were given (US-07).
+
+A refused field is named under `errors.fields` by where it travelled and its
+name on the wire, for example `body.to` or `body.lines.0.modelSlug`. A value a
+rule refused carries a plain sentence. A value the framework refused for its
+type carries the framework's own wording, as every request body does. No
+sentence names a business rule. The rule goes to the log.
+
+### The public catalogue, availability and quote routes
+
+All seven return JSON with camelCase member names. Money is a string with two
+decimals, for example `"280.00"`, and never a number. A date is `YYYY-MM-DD`
+and a time of day is `HH:MM`.
+
+| Path | Query | Returns |
+|---|---|---|
+| `/api/branches` | none | `items`, the active branches ordered by name. |
+| `/api/catalogue/categories` | none | `items`, the active categories, each parent followed by its children. `modelCount` counts published models and a parent includes its children. |
+| `/api/catalogue/models` | `category`, `q`, `sort`, `page`, `pageSize` | `items`, `page`, `pageSize`, `total`, for published models only. |
+| `/api/catalogue/models/{slug}` | none | One published model, with `longDescription` and `lateFeePerDay`. 404 for an unknown or unpublished slug. |
+| `/api/catalogue/availability` | `from`, `to`, the five above, `branch` | `from`, `to`, `hireDays`, `items`, `page`, `pageSize`, `total`. Each item is a `model` and one `available` boolean for every active branch. |
+| `/api/catalogue/models/{slug}/availability` | `from`, `to`, `quantity` | `from`, `to`, `hireDays`, `quantity`, `branches`. A branch is available when at least `quantity` units are free. |
+| `/api/catalogue/models/{slug}/quote` | `from`, `to`, `quantity` | What the hire will cost, described below. 404 for an unknown or unpublished slug. |
+
+`category` is a category slug and a parent includes its children. `q` is at
+least 2 characters and is matched against the name, the manufacturer and the
+model number in any case. `sort` is `name`, `dailyRateAsc` or `dailyRateDesc`.
+`page` counts from 1 and `pageSize` is 1 to 50, 24 when left out. `branch` is a
+branch code and keeps only the models free at that branch. `quantity` is 1 to
+10. `from` and `to` are half open, so `to` is the day the equipment comes back
+and is free again.
+
+A refused parameter is a 422 problem document. The type ends in
+`request-validation-failure` and `errors.fields` holds one sentence for each
+refused field, keyed by where the value came from and its name in the query,
+for example `query.to` or `query.pageSize`. The shape is the same whether the
+value could not be read or a rule refused it. The rules are that `to` is after
+`from`, the period is at most 28 days and within the hire limits of the model
+on the single model route, `from` is not in the past and not more than 90 days
+ahead, and the category, the branch and the sort order are known.
+
+A sentence in `detail` or under `errors.fields` is put on a customer's screen
+as it is written. So it says what to do, for example "The hire has to start
+today or later." or "A hire can be at most 28 days.", and it names no business
+rule and repeats no raw value (NFR-12). That holds for a value the framework
+refused as well. `app/api/field_messages.py` replaces the framework's sentence
+for a query parameter with a plain one, chosen by the kind of refusal. The
+rule and the values that were tried go to the log instead, on the
+`api.request_validation_failed` and `api.domain_error` lines, as `rule`,
+`detail` and `refused_as`. `tests/api/test_plain_refusals.py` asks every one
+of these routes for every refusal it can give and fails if a sentence contains
+`BR-`, `NFR-`, `start=` or `end=`.
+
+The quote route answers what a hire of `quantity` units will cost (FR-05).
+
+```json
+{
+  "from": "2026-10-09", "to": "2026-10-19", "hireDays": 10, "quantity": 2,
+  "perUnit": {
+    "dailyRate": "280.00", "weeklyRate": "1120.00",
+    "wholeWeeks": 1, "remainderDays": 3,
+    "basis": "weekly",
+    "amountExVat": "1960.00"
+  },
+  "subtotalExVat": "3920.00",
+  "discountPercent": "0.00",
+  "discountAmount": "0.00",
+  "vatRate": "15.00",
+  "vatAmount": "588.00",
+  "totalIncVat": "4508.00",
+  "depositPerUnit": "1200.00",
+  "depositTotal": "2400.00",
+  "lateFeePerDay": "120.00"
+}
+```
+
+`basis` is `weekly` when the weeks and the days left over came to less than
+every day at the daily rate, and `daily` when the daily total was lower or the
+same. `vatAmount` is worked out on the subtotal after the discount.
+`totalIncVat` leaves the deposit out, because a deposit is held and returned
+and not charged. The period and the quantity are held to the same limits as on
+the single model availability route, so a quote is never given for a hire that
+could not then be booked.
+
+The route applies no trade discount. It is public, so it does not know who is
+asking. The dependencies that read an account are the role policies, and a
+route that is public and depends on one of them as well is refused at
+start-up. Reading the account some other way would step around that check, so
+the route does not. `QuoteHire` takes the discount as an input, and the booking
+flow, which knows the customer, passes the one on their profile.
+
+The four catalogue routes answer `Cache-Control: public, max-age=60`. The two
+availability routes and the quote route answer `no-store`, because the answer
+can be wrong a second after it is given. A request that carried a credential
+is always answered `no-store`.
+
+`openapi.json` in this directory is the OpenAPI document of the API, kept so
+the frontend can generate its types from it. I write it from Python and not by
+redirecting standard output, because the application logs to standard output.
+
+```bash
+ENVIRONMENT=test python -c "import json, pathlib; from app.main import create_app; pathlib.Path('openapi.json').write_text(json.dumps(create_app().openapi(), indent=2) + '\\n', encoding='utf-8')"
+```
 
 `/docs`, `/redoc` and `/openapi.json` are served in development and test only.
 In staging and production they answer 404.
@@ -204,10 +816,11 @@ An allocation is active exactly while `released_at` is null. Releasing one
 stamps `released_at` and `release_reason` together, which a check constraint
 enforces, and the row drops out of the constraint without being deleted.
 
-A violation arrives as SQLSTATE `23P01`. The allocation use case matches on the
-code and the constraint name reported in the driver diagnostics, never on the
-error message text, and raises `AssetUnavailableConflict`, which the API maps
-to a 409 problem document.
+A violation arrives as SQLSTATE `23P01`. `SqlAssetRepository` matches on the
+code and on the constraint name, both read from the driver diagnostics and
+never from the error message text, and raises `AllocationConflictError`, which
+the API maps to a 409 problem document. An integrity error that is not this
+constraint is re-raised unchanged.
 
 ## Configuration
 
@@ -218,6 +831,41 @@ deployment that boots on a known secret is a hole nobody notices.
 
 `ENVIRONMENT` is `development`, `test`, `staging` or `production`. Staging is
 held to every check production is.
+
+`CORS_ORIGINS` does two jobs. It is the list the CORS middleware allows, and it
+is the list the refresh and sign out routes compare the `Origin` header with.
+A browser sends `Origin` on a same origin POST, so in a deployment the list has
+to hold the public address of the site itself. Without it every refresh from a
+browser is answered 403.
+
+`JWT_SECRET` signs the access tokens, and the `kid` and the salt of the
+throttle are both derived from it. Changing it refuses every access token
+already issued and starts every throttle window again. The refresh sessions are
+not affected, so a client refreshes once and carries on.
+
+`LOGIN_ATTEMPTS_PER_EMAIL` and `LOGIN_ATTEMPTS_PER_ADDRESS` are the two sign
+in limits, 10 and 30 by default and never below 1. Outside development and
+test they can only be lowered. See Throttling above.
+
+Three settings control email.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RESEND_API_KEY` | unset | The Resend API key. Unset, blank or the literal `not-configured-yet` means email is off. |
+| `EMAIL_FROM` | `Toolshed Hire <onboarding@resend.dev>` | The From header of every email. |
+| `EMAIL_ALLOWED_RECIPIENT` | unset | When set, the only address the service will send to. |
+
+With email off the application still starts. It logs one warning,
+`notification.email_not_configured`, and every confirmation is recorded as
+`FAILED` with the reason that email is not configured in this environment.
+
+`EMAIL_ALLOWED_RECIPIENT` is how the demonstration environment runs without a
+verified sending domain. It is enforced inside the adapter, on the server. A
+message for any other address is refused before the provider is called, and it
+is never redirected to the allowed address, because that would deliver one
+customer's booking to somebody else.
+
+The key is never logged and never appears in a receipt or an error message.
 
 ## Checks
 
@@ -232,11 +880,16 @@ pytest tests -m "not postgres"   # unit, component and API tests, no database
 pip-audit                        # known vulnerabilities in the installed packages
 ```
 
-`lint-imports` reads its contracts from `pyproject.toml`. It fails when
-`app.domain` imports `app.application`, `app.infrastructure` or `app.api`, and
-when `app.application` or `app.infrastructure` imports `app.api`. It does not
-yet stop `app.application` importing `app.infrastructure`. I tighten that
-contract when the repositories land.
+`lint-imports` reads five contracts from `pyproject.toml`.
+
+1. `app.domain` imports nothing from the other three layers.
+2. `app.application` does not import `app.api`.
+3. `app.application` does not import `app.infrastructure`. The use cases depend
+   on ports, and `app.api` is the composition root that wires the
+   implementations in.
+4. `app.infrastructure` does not import `app.api`.
+5. Neither `app.domain` nor `app.application` imports SQLAlchemy, SQLModel,
+   FastAPI, Starlette, pydantic, httpx or psycopg.
 
 The full run needs a real PostgreSQL 16. I start the one described by
 `docker-compose.yml` at the repository root, which holds a single disposable
@@ -267,8 +920,12 @@ pytest tests -m "not postgres"   # unit, component and API tests, no database
 pytest tests -m postgres         # the schema, the constraint, concurrency, the seed and the roles
 ```
 
-Everything without the marker runs against an in memory SQLite engine and must
-never open a network connection. The marked tests need a real PostgreSQL 16
+The tests without the marker come in three kinds. `tests/unit` uses no database
+at all, and it runs the use cases against an in memory unit of work and a fake
+email gateway, which is what depending on ports makes possible. `tests/component`
+runs the real repositories and the real unit of work on in memory SQLite.
+`tests/api` goes through HTTP on the same SQLite engine. None of them may open
+a network connection, and every test client is given the fake email gateway. The marked tests need a real PostgreSQL 16
 reached through `DATABASE_URL`, because the things they prove, `btree_gist`, a
 `daterange` exclusion constraint and two genuinely concurrent transactions, have
 no SQLite equivalent. With `DATABASE_URL` unset they skip with a message saying
@@ -277,6 +934,21 @@ what to set rather than failing.
 The marked tests migrate the database to head themselves and truncate every
 table between cases, so point them at a database you are willing to lose. They
 refuse to run at all unless `ENVIRONMENT` is `development` or `test`.
+
+The reservation lifecycle is tested at every level. `tests/unit` turns the
+table of moves into tests, one for each legal move with its guards and its
+effects and one for every pairing of a status and a move the table does not
+allow, and runs each use case against the in memory unit of work on a clock
+that stands still. `tests/api` asks the six routes for every answer and every
+refusal they can give, and reads `canHold`, `canConfirm` and `canCancel` for
+every status as every kind of caller. `tests/integration` proves what needs a
+real database. `test_concurrent_holds.py` sends twenty hold requests for five
+units to the real application from twenty threads at once, each on a
+connection of its own, and asserts exactly five holds, fifteen 409 answers, no
+500 and no unit held twice. `test_hold_expiry_sweep.py` holds one sweep at its
+commit until PostgreSQL reports the second one blocked behind it, and
+`test_cancellation_transaction.py` shows that a cancellation and its releases
+are one commit.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

@@ -2,10 +2,10 @@
  * The router.
  *
  * Every screen in the documented inventory gets an address here, from the
- * first commit, whether or not its module exists yet. That is deliberate:
- * the prototype, the journey map and the built system are all marked on
- * reconciling with one another, and a screen that is reachable in one and
- * missing from another is a finding.
+ * first commit, whether or not its module exists yet. That is deliberate.
+ * The prototype, the journey map and the built system have to reconcile with
+ * one another, and a screen that is reachable in one and missing from another
+ * is a finding.
  *
  * Screen modules load lazily, one chunk each, so the first paint carries
  * only the screen being looked at. All twenty four are present; an id with
@@ -13,19 +13,36 @@
  * is what a newly added inventory entry looks like before its screen lands.
  *
  * DEV-01 is routed from the same table and is not one of the twenty four. It
- * is the connectivity panel at /system, which is the only screen in this
- * application that calls the API. Keeping it in this table rather than adding
- * a second routing mechanism beside it is the whole reason the table exists.
+ * is the connectivity panel at /system. Keeping it in this table rather than
+ * adding a second routing mechanism beside it is the whole reason the table
+ * exists.
+ *
+ * Every screen renders inside an error boundary. A screen that throws shows the
+ * shared error state in its place, and the shell and its navigation stay up.
+ *
+ * THE GUARD
+ * =========
+ * Every route passes through `ScreenRoute`, which asks screen-access.ts whether
+ * the person may open the screen. The answer comes from `publicAccess` and
+ * `role` in the inventory. A signed out person who opens a protected screen is
+ * sent to sign in, with the address they wanted in the query string so they
+ * are brought back afterwards. A signed in person whose role does not reach
+ * the screen is told so and offered their own home. The screen module is never
+ * rendered in either case.
  */
 
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import type { ComponentType } from 'react'
-import { Link, Route, Routes } from 'react-router-dom'
-import { SCREENS, ROLE_HOME, ROLE_LABEL } from './shared/navigation'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { CATALOGUE_PATH, SCREENS, ROLE_HOME, ROLE_LABEL } from './shared/navigation'
 import type { ScreenDef } from './shared/navigation'
 import AppShell from './shared/AppShell'
-import { SessionProvider, useSession } from './shared/session'
+import { ScreenErrorBoundary } from './shared/error-boundary'
+import { NoAccess } from './shared/no-access'
+import { accessTo, signInAddress } from './shared/screen-access'
+import { SessionProvider } from './shared/session'
 import { PageHeader } from './shared/ui'
+import { useSession } from './shared/use-session'
 import Placeholder from './features/placeholder'
 
 type ScreenLoader = () => Promise<{ default: ComponentType }>
@@ -107,6 +124,8 @@ function ScreenSkeleton() {
   )
 }
 
+const NO_ACCESS_TITLE = 'No access'
+
 function ScreenRoute({
   screen,
   Screen,
@@ -114,15 +133,34 @@ function ScreenRoute({
   screen: ScreenDef
   Screen: ComponentType
 }) {
+  const { pathname, search } = useLocation()
+  const { role } = useSession()
+  const access = accessTo(screen, role)
   useEffect(() => {
-    document.title = `${screen.name} | Toolshed Hire`
-  }, [screen])
+    document.title = `${access === 'wrongRole' ? NO_ACCESS_TITLE : screen.name} | Toolshed Hire`
+  }, [screen, access])
+
+  if (access === 'signInNeeded') {
+    return <Navigate to={signInAddress(`${pathname}${search}`)} replace />
+  }
+  if (access === 'wrongRole') {
+    return (
+      <AppShell>
+        <NoAccess screen={screen} />
+      </AppShell>
+    )
+  }
 
   return (
-    <AppShell variant={screen.role}>
-      <Suspense fallback={<ScreenSkeleton />}>
-        <Screen />
-      </Suspense>
+    <AppShell screen={screen}>
+      {/* Keyed by the path, so a failure on one address is gone on the next.
+          The query string is left out on purpose. A search that changes its
+          filters must not lose its place. */}
+      <ScreenErrorBoundary key={pathname}>
+        <Suspense fallback={<ScreenSkeleton />}>
+          <Screen />
+        </Suspense>
+      </ScreenErrorBoundary>
     </AppShell>
   )
 }
@@ -134,17 +172,17 @@ function NotFound() {
   }, [])
 
   return (
-    <AppShell variant={role}>
+    <AppShell>
       <PageHeader
         title="We cannot find that page"
         subtitle="The address may have been mistyped, or the page may have moved. Nothing has been lost."
       />
       <div className="card p-lg">
         <p className="text-sm text-slate-soft">
-          Go back to the {ROLE_LABEL[role].toLowerCase()} home screen and carry
-          on from there.
+          Go back to the {role ? `${ROLE_LABEL[role].toLowerCase()} home screen` : 'catalogue'} and
+          carry on from there.
         </p>
-        <Link to={ROLE_HOME[role]} className="btn-primary mt-md px-md">
+        <Link to={role ? ROLE_HOME[role] : CATALOGUE_PATH} className="btn-primary mt-md px-md">
           Take me home
         </Link>
       </div>
@@ -152,9 +190,33 @@ function NotFound() {
   )
 }
 
+/** The id of the main region in AppShell, which the skip link also targets. */
+const MAIN_REGION_ID = 'main'
+
+/**
+ * Moves keyboard focus to the main region when the address changes.
+ *
+ * Without this, focus stays on the link or button that caused the move, which
+ * may no longer be on the page. After a sign in or a redirect a keyboard or
+ * screen reader user would be left at the top of the document, or nowhere.
+ * The first address is left alone, so a page load starts where a browser
+ * normally starts it.
+ */
+function RouteFocus() {
+  const { pathname } = useLocation()
+  const previous = useRef(pathname)
+  useEffect(() => {
+    if (previous.current === pathname) return
+    previous.current = pathname
+    document.getElementById(MAIN_REGION_ID)?.focus({ preventScroll: true })
+  }, [pathname])
+  return null
+}
+
 export default function App() {
   return (
     <SessionProvider>
+      <RouteFocus />
       <Routes>
         {ROUTES.map(({ screen, Screen }) => (
           <Route

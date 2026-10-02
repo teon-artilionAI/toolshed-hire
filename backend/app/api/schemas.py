@@ -13,11 +13,10 @@ role cannot be added without this file failing loudly.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.enums import UserRole
 
@@ -41,6 +40,8 @@ EMAIL_MIN_LENGTH = 5
 # which is the one place a password is chosen rather than merely presented.
 MAXIMUM_PASSWORD_LENGTH = 72
 MINIMUM_QUANTITY = 1
+# How the client is told to present the access token.
+BEARER_TOKEN_TYPE = "Bearer"
 MAXIMUM_QUANTITY = 10
 
 
@@ -61,7 +62,7 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
 
-class SignInRequest(BaseModel):
+class LoginRequest(BaseModel):
     """Credentials posted to the sign in endpoint.
 
     The address is checked structurally rather than with a full RFC 5322
@@ -100,21 +101,28 @@ class SignInRequest(BaseModel):
 
 
 class UserResponse(CamelModel):
-    """The signed in account, shaped like the frontend UserAccount type."""
+    """The signed in account, as every session response and `/api/me` return it.
+
+    `branchCode` is null unless the account is counter staff.
+    """
 
     id: UUID
-    name: str
     email: str
+    full_name: str = Field(serialization_alias="fullName")
     role: str
     branch_code: str | None = Field(default=None, serialization_alias="branchCode")
-    active: bool
+    email_verified: bool = Field(serialization_alias="emailVerified")
 
 
 class TokenResponse(CamelModel):
-    """The access token and the account it belongs to."""
+    """The access token and the account it belongs to.
+
+    Signing in and refreshing both return this. The refresh token is not in
+    it. That travels in a cookie the page cannot read.
+    """
 
     access_token: str = Field(serialization_alias="accessToken")
-    token_type: str = Field(default="bearer", serialization_alias="tokenType")
+    token_type: str = Field(default=BEARER_TOKEN_TYPE, serialization_alias="tokenType")
     expires_in: int = Field(serialization_alias="expiresIn")
     user: UserResponse
 
@@ -129,53 +137,6 @@ class HealthResponse(CamelModel):
     # The Cloud Run revision that answered, so a deployment can be confirmed
     # from outside without reading the console.
     revision: str
-
-
-class AllocationRequest(CamelModel):
-    """A booking request posted by the client.
-
-    The period is half open. `endDate` is the day the unit comes back and is
-    not charged, which is the same rule the exclusion constraint enforces.
-    """
-
-    product_model_id: UUID = Field(validation_alias="productModelId")
-    branch_id: UUID = Field(validation_alias="branchId")
-    start_date: date = Field(validation_alias="startDate")
-    end_date: date = Field(validation_alias="endDate")
-    quantity: Annotated[int, Field(ge=MINIMUM_QUANTITY, le=MAXIMUM_QUANTITY)] = 1
-    customer_user_id: UUID | None = Field(default=None, validation_alias="customerUserId")
-
-    @field_validator("end_date")
-    @classmethod
-    def check_period_order(cls, value: date, info: ValidationInfo) -> date:
-        """Reject a reversed period before the domain has to."""
-        start = info.data.get("start_date")
-        if isinstance(start, date) and value <= start:
-            raise ValueError(
-                "endDate must be strictly after startDate. A hire period is half open, "
-                f"so a hire from {start.isoformat()} to {value.isoformat()} has no days in it."
-            )
-        return value
-
-
-class AllocatedAssetResponse(CamelModel):
-    """One physical unit held by the booking."""
-
-    allocation_id: UUID = Field(serialization_alias="allocationId")
-    asset_id: UUID = Field(serialization_alias="assetId")
-    asset_tag: str = Field(serialization_alias="assetTag")
-
-
-class AllocationResponse(CamelModel):
-    """The committed booking returned to the client."""
-
-    reservation_id: UUID = Field(serialization_alias="reservationId")
-    reference: str
-    reservation_line_id: UUID = Field(serialization_alias="reservationLineId")
-    status: str
-    start_date: date = Field(serialization_alias="startDate")
-    end_date: date = Field(serialization_alias="endDate")
-    allocated: list[AllocatedAssetResponse]
 
 
 class ProblemDetail(BaseModel):

@@ -8,19 +8,16 @@
  * in the customer feature folder and not in the shared layer.
  */
 
-import type {
-  ChargeKind,
-  CustomerProfile,
-  RentalStatus,
-  ReservationStatus,
-} from '../../shared/types'
+import type { ReservationStatus } from '../../shared/api/contract'
+import type { ChargeKind, CustomerProfile, RentalStatus } from '../../shared/types'
 
+/** Keyed by the statuses the API sends for a reservation. */
 export const RESERVATION_STATUS_LABEL: Record<ReservationStatus, string> = {
   DRAFT: 'Not finished',
   HELD: 'Held for you',
   CONFIRMED: 'Confirmed',
   COLLECTED: 'Out with you',
-  CLOSED: 'Finished',
+  RETURNED: 'Returned',
   CANCELLED: 'Cancelled',
   NO_SHOW: 'Not collected',
   EXPIRED: 'Expired',
@@ -47,19 +44,3 @@ export const ID_DOC_LABEL: Record<CustomerProfile['idDocType'], string> = {
   PASSPORT: 'Passport',
   DRIVING_LICENCE: 'Driving licence',
 }
-
-/** Bookings in these states have not been collected yet, so they can still
- *  be cancelled by the customer without involving the counter. */
-export const CANCELLABLE_STATUSES: ReservationStatus[] = [
-  'DRAFT',
-  'HELD',
-  'CONFIRMED',
-]
-
-/** Bookings in these states are live: either coming up or out on hire. */
-export const CURRENT_STATUSES: ReservationStatus[] = [
-  'DRAFT',
-  'HELD',
-  'CONFIRMED',
-  'COLLECTED',
-]

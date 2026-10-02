@@ -14,9 +14,10 @@ and the suite would report a green tick for a race it never ran.
 Two variants run, and the second is the one that matters.
 
 WITH THE APPLICATION ROW LOCK
-    `allocate_assets` selects candidates with `SELECT ... FOR UPDATE SKIP
-    LOCKED`. The loser either skips the locked row and finds nothing free, or
-    reaches the insert and is refused there.
+    `allocate_assets` locks candidates through `SqlAssetRepository`, which
+    selects them with `SELECT ... FOR UPDATE SKIP LOCKED`. The loser either
+    skips the locked row and finds nothing free, or reaches the insert and is
+    refused there.
 
 WITH THE APPLICATION ROW LOCK BYPASSED
     The rows are inserted directly with no lock of any kind, which is what a
@@ -50,7 +51,7 @@ import pytest
 from sqlalchemy import Engine
 from sqlmodel import Session
 
-from app.domain.errors import AssetUnavailableConflict
+from app.domain.errors import AllocationConflictError
 from app.domain.period import BookingPeriod
 from app.infrastructure.schema_ddl import OVERLAP_CONSTRAINT_NAME
 from tests.support.contenders import (
@@ -105,7 +106,7 @@ class TestTwoTransactionsFightingOverTheLastUnit:
 
         assert sum(outcome.succeeded for outcome in outcomes) == EXPECTED_WINNERS
         loser = next(outcome for outcome in outcomes if not outcome.succeeded)
-        assert isinstance(loser.error, AssetUnavailableConflict)
+        assert isinstance(loser.error, AllocationConflictError)
         assert count_active_allocations(postgres_session, scenario.asset.id) == 1
 
     def test_the_loser_is_told_it_lost_rather_than_being_handed_a_server_fault(
@@ -126,7 +127,7 @@ class TestTwoTransactionsFightingOverTheLastUnit:
         outcomes = run_race(_contender, _contender)
 
         loser = next(outcome for outcome in outcomes if not outcome.succeeded)
-        assert isinstance(loser.error, AssetUnavailableConflict)
+        assert isinstance(loser.error, AllocationConflictError)
         assert loser.error.detail["period"] == CONTESTED_HIRE.as_postgres_daterange()
 
     def test_two_simultaneous_bookings_take_different_units_when_two_are_free(
