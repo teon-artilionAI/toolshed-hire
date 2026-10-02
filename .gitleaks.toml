@@ -1,0 +1,20 @@
+# Secret scanning rules.
+#
+# I use the default gitleaks rules and add nothing of my own. The allowlist
+# below names the few values that look like secrets and are not. Each one is a
+# throwaway value that only works against a container on the same machine or
+# inside one CI job, and the application refuses to start with any of them
+# outside development and test.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local and CI only placeholder values"
+regexes = [
+  '''development-only-insecure-secret-do-not-deploy''',
+  '''ci_only_jwt_secret_value_not_used_outside_this_job''',
+  '''toolshed_ci_local_only''',
+  '''toolshed_local_only''',
+  '''toolshed-dev-password''',
+]

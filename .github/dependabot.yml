@@ -1,0 +1,45 @@
+# Dependency updates.
+#
+# Updates are raised against develop, the same as any other change, so they go
+# through the integration checks before they can reach a release. The limits are
+# low on purpose. I would sooner review a few updates properly than wave through
+# a pile of them.
+
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - "area: backend"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - "area: frontend"
+
+  - package-ecosystem: docker
+    directory: /backend
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    labels:
+      - "area: infra"
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    labels:
+      - "area: infra"

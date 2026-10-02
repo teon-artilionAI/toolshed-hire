@@ -11,6 +11,17 @@ CORS is configured but is not the primary defence. In production the browser
 talks to Vercel, which rewrites `/api/*` to Cloud Run server side, so there is
 no cross origin request to permit. The middleware exists for local development,
 where the Vite dev server is a genuinely different origin.
+
+The order of the middleware matters and is easy to get backwards, because the
+one added last is the one a request meets first. The security headers are
+outermost, so no response can leave without them. The request context is next.
+It binds the request id, writes the access log and answers an unhandled fault,
+and whatever it sends passes back out through the security headers. CORS is
+innermost.
+
+The interactive documentation and the OpenAPI document are served in
+development and test only. A deployed service that describes every endpoint to
+anyone who asks has done an attacker's reconnaissance for them.
 """
 
 from __future__ import annotations
@@ -24,8 +35,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
 from app.api.errors import register_exception_handlers
+from app.api.request_middleware import RequestContextMiddleware
 from app.api.routers import api_router
-from app.config import settings
+from app.api.security_headers import SecurityHeadersMiddleware
+from app.config import Settings, settings
 from app.infrastructure.database import (
     check_database_reachable,
     check_extension_installed,
@@ -45,6 +58,12 @@ APPLICATION_DESCRIPTION = (
 )
 ALLOWED_METHODS = ["GET", "POST", "PATCH", "PUT"]
 ALLOWED_HEADERS = ["Authorization", "Content-Type"]
+DOCS_PATH = "/docs"
+REDOC_PATH = "/redoc"
+OPENAPI_PATH = "/openapi.json"
+# The two documentation pages are HTML that loads a script, which the JSON only
+# content security policy would block. They are answered without it.
+DOCUMENTATION_PAGE_PATHS = frozenset({DOCS_PATH, REDOC_PATH})
 
 
 def run_startup_checks() -> None:
@@ -91,21 +110,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("shutdown.connection_pool_disposed")
 
 
-def create_app() -> FastAPI:
-    """Build the application with its routers, middleware and error handlers."""
+def create_app(configuration: Settings = settings) -> FastAPI:
+    """Build the application with its routers, middleware and error handlers.
+
+    Args:
+        configuration: The settings that decide what the application exposes.
+            The process settings by default. A test passes its own to build the
+            application a deployed environment would run.
+
+    """
     configure_logging()
+    relaxed = configuration.environment.is_relaxed
     app = FastAPI(
         title=APPLICATION_TITLE,
         version=APPLICATION_VERSION,
         description=APPLICATION_DESCRIPTION,
         lifespan=lifespan,
+        docs_url=DOCS_PATH if relaxed else None,
+        redoc_url=REDOC_PATH if relaxed else None,
+        openapi_url=OPENAPI_PATH if relaxed else None,
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=configuration.cors_origins,
         allow_credentials=True,
         allow_methods=ALLOWED_METHODS,
         allow_headers=ALLOWED_HEADERS,
+    )
+    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        strict_transport=not relaxed,
+        content_security_policy_exempt_paths=DOCUMENTATION_PAGE_PATHS if relaxed else frozenset(),
     )
     register_exception_handlers(app)
     app.include_router(api_router)
@@ -114,7 +150,10 @@ def create_app() -> FastAPI:
         extra={
             "title": APPLICATION_TITLE,
             "version": APPLICATION_VERSION,
-            "cors_origins": settings.cors_origins,
+            "environment": configuration.environment.value,
+            "api_documentation_served": relaxed,
+            "strict_transport_security": not relaxed,
+            "cors_origins": configuration.cors_origins,
         },
     )
     return app

@@ -1,0 +1,19 @@
+# Line endings.
+#
+# I work on Windows and the pipeline and the container run on Linux. Text files
+# are stored with LF so a shell script checked out on either side still runs.
+
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

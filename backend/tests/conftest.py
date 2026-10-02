@@ -43,7 +43,12 @@ from app.config import settings
 from app.infrastructure.database import get_session
 from app.main import app as production_app
 from tests.support.factories import Factory
-from tests.support.pg import truncate_skeleton_tables
+from tests.support.log_capture import (
+    LogCapture,
+    capture_application_log,
+    preserved_logging_configuration,
+)
+from tests.support.pg import truncate_schema_tables
 from tests.support.probe_app import build_role_probe_app
 from tests.support.sqlite_dialect import build_sqlite_engine
 
@@ -159,6 +164,19 @@ def probe_client(session: Session) -> Iterator[TestClient]:
     yield from _client_for(build_role_probe_app(), session)
 
 
+@pytest.fixture
+def application_log() -> Iterator[LogCapture]:
+    """Yield what the application writes through its real log handler.
+
+    The applications the suite uses are built once, before this is attached.
+    Building one inside a test would install the logging configuration afresh
+    and detach the capture, so a test that needs both takes its application
+    from a session fixture.
+    """
+    with capture_application_log() as capture:
+        yield capture
+
+
 # ---------------------------------------------------------------------------
 # The PostgreSQL family. Marked `postgres`, skipped cleanly when absent.
 # ---------------------------------------------------------------------------
@@ -194,6 +212,10 @@ def _apply_migrations() -> None:
     installation problem look like a test failure. The submodules are imported
     by their full names because `backend/alembic` is also a directory, and the
     import sorter classifies the two spellings differently.
+
+    The logging configuration is put back afterwards. The Alembic environment
+    installs its own, which would otherwise switch the application's loggers
+    off for the rest of the session.
     """
     import alembic.command
     import alembic.config
@@ -204,7 +226,8 @@ def _apply_migrations() -> None:
         "test.migrations_started",
         extra={"config": str(ALEMBIC_CONFIG_PATH), "revision": ALEMBIC_HEAD},
     )
-    alembic.command.upgrade(config, ALEMBIC_HEAD)
+    with preserved_logging_configuration():
+        alembic.command.upgrade(config, ALEMBIC_HEAD)
     logger.info("test.migrations_finished", extra={"revision": ALEMBIC_HEAD})
 
 
@@ -243,13 +266,13 @@ def postgres_session(postgres_engine: Engine) -> Iterator[Session]:
     Truncating before as well as after means a test still starts clean when the
     previous run was killed part way through.
     """
-    truncate_skeleton_tables(postgres_engine)
+    truncate_schema_tables(postgres_engine)
     open_session = Session(postgres_engine)
     try:
         yield open_session
     finally:
         open_session.close()
-        truncate_skeleton_tables(postgres_engine)
+        truncate_schema_tables(postgres_engine)
 
 
 @pytest.fixture

@@ -41,3 +41,6 @@ Thumbs.db
 # Application build output
 /frontend/build/
 /backend/.mypy_cache/
+
+# Test and coverage output
+coverage.xml

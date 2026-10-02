@@ -1,0 +1,135 @@
+# Fast checks.
+#
+# These run on every push to every branch, so I find out within a few minutes
+# whether a commit broke something. Nothing here needs a database or a browser.
+# The slower checks that do live in ci-integration.yml and run on pull requests.
+#
+# Third party actions are pinned by commit SHA. The tag each SHA came from is in
+# the comment beside it, and Dependabot keeps both up to date.
+
+name: Fast checks
+
+on:
+  push:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository with full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  backend:
+    name: Backend lint, types, boundaries and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install the backend and its development dependencies
+        run: pip install --editable ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      # The application is checked first, then the seed and provisioning tools,
+      # which are run from this directory and are not part of the image.
+      - name: Type check
+        run: |
+          mypy app
+          mypy seed.py seeding seed_data scripts
+
+      # The domain layer may not import from the layers around it. This is the
+      # check that keeps that true as the code grows.
+      - name: Check the layer import contract
+        run: lint-imports
+
+      - name: Run the tests that need no database
+        run: pytest tests -m "not postgres"
+        env:
+          ENVIRONMENT: test
+
+  frontend:
+    name: Frontend lint, types and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run unit and component tests
+        run: npm run test
+
+  # One job that always runs and reports a single result. Branch protection
+  # requires this job, so a skipped or cancelled job above can never leave a
+  # required check waiting forever.
+  outcome:
+    name: Fast checks outcome
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: always()
+    needs: [secrets, backend, frontend]
+    steps:
+      - name: Fail unless every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "::error title=Fast checks failed::At least one job did not succeed."
+              exit 1
+            fi
+          done

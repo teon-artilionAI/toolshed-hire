@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
 #
-# Deployment preflight guard.
+# Check that every value a deployment needs is present, and fail if one is not.
 #
-# Reports whether every secret and variable the deploy workflow needs is
-# present. The repository must not be permanently red because the cloud
-# accounts do not exist yet, so a missing configuration is a skipped deployment
-# with an explanatory notice, never a failed run.
+# The first version of this script reported a missing value as a notice and let
+# the run go green, because the cloud accounts did not exist yet and a
+# permanently red pipeline helps nobody. They exist now. A deployment that
+# skips itself and reports success is worse than one that fails, so a missing
+# value stops the run and names what is missing.
 #
-# Reads its inputs from the environment, because two of them are secrets and
-# passing a secret as a command line argument puts it in the process table.
-# Only presence is ever tested and no value is ever echoed.
-#
-# Writes "configured=true" or "configured=false" to GITHUB_OUTPUT.
-# Exits 0 either way. A non-zero exit here would defeat the entire purpose.
+# The values arrive as environment variables set by the calling workflow step.
+# Only their presence is checked. Nothing here prints a value.
 
 set -euo pipefail
 
@@ -27,10 +24,15 @@ REQUIRED_VARIABLES=(
   DATABASE_URL_SECRET
   DATABASE_MIGRATION_URL_SECRET
   JWT_SECRET_NAME
+  RESEND_API_KEY_SECRET
+  EMAIL_ALLOWED_RECIPIENT
+  FRONTEND_ORIGIN
+  VERCEL_TOKEN
+  VERCEL_ORG_ID
+  VERCEL_PROJECT_ID
+  SEED_PASSWORD
+  SEED_CUSTOMER_PASSWORD
 )
-
-: "${GITHUB_OUTPUT:?GITHUB_OUTPUT is not set. This script runs inside a GitHub Actions step.}"
-: "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY is not set. This script runs inside a GitHub Actions step.}"
 
 missing=()
 for name in "${REQUIRED_VARIABLES[@]}"; do
@@ -40,23 +42,21 @@ for name in "${REQUIRED_VARIABLES[@]}"; do
 done
 
 if [ "${#missing[@]}" -gt 0 ]; then
-  echo "configured=false" >> "${GITHUB_OUTPUT}"
-  {
-    echo "### Deployment skipped"
-    echo
-    echo "The Google Cloud configuration is not complete yet, so the deploy job"
-    echo "was skipped rather than failed. Missing:"
-    echo
-    for name in "${missing[@]}"; do
-      echo "- \`${name}\`"
-    done
-    echo
-    echo "Follow \`infra/SETUP.md\`, then add them under Settings, Secrets and"
-    echo "variables, Actions."
-  } >> "${GITHUB_STEP_SUMMARY}"
-  echo "::notice title=Deployment skipped::Missing configuration: ${missing[*]}"
-  exit 0
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "### Deployment stopped"
+      echo
+      echo "These configuration values are missing for this environment:"
+      echo
+      for name in "${missing[@]}"; do
+        echo "- \`${name}\`"
+      done
+      echo
+      echo "\`infra/SETUP.md\` lists where each one is set."
+    } >> "${GITHUB_STEP_SUMMARY}"
+  fi
+  echo "::error title=Deployment configuration incomplete::Missing: ${missing[*]}"
+  exit 1
 fi
 
-echo "configured=true" >> "${GITHUB_OUTPUT}"
 echo "All ${#REQUIRED_VARIABLES[@]} required configuration values are present."

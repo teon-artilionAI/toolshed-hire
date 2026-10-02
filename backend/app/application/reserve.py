@@ -7,6 +7,17 @@ it does, which is BR-09 stated as code rather than as a comment.
 The reference number comes from a PostgreSQL sequence created in the migration.
 Deriving it from a row count would produce a duplicate under exactly the
 concurrency this skeleton exists to prove correct.
+
+A reservation belongs to a customer profile and not to an account. The caller
+still names the customer by account, because that is what the token and the
+request carry, and the profile is resolved here.
+
+The price snapshots on the line are copied from the product model (BR-20). The
+money totals are not calculated yet. They are the output of the pricing policy
+(BR-21), which is not built, so they are written as zero rather than as a
+figure worked out some other way that would look right and be wrong. The hold
+expiry is left unset for the same reason. Setting it is BR-12, and it arrives
+with the reservation lifecycle that also expires it.
 """
 
 from __future__ import annotations
@@ -19,13 +30,19 @@ from typing import Final
 from uuid import UUID
 
 from sqlalchemy import text
-from sqlmodel import Session
+from sqlmodel import Session, col, select
 
 from app.application.allocate import AllocatedAsset, AllocationCommand, allocate_assets
 from app.domain.enums import ReservationStatus
 from app.domain.errors import NotFound, ValidationFailure
 from app.domain.period import BookingPeriod
-from app.infrastructure.models import Branch, ProductModel, Reservation, ReservationLine
+from app.infrastructure.models import (
+    Branch,
+    CustomerProfile,
+    ProductModel,
+    Reservation,
+    ReservationLine,
+)
 from app.infrastructure.schema_ddl import REFERENCE_SEQUENCE
 
 logger = logging.getLogger(__name__)
@@ -33,11 +50,17 @@ logger = logging.getLogger(__name__)
 REFERENCE_PREFIX: Final[str] = "TSH-R"
 FIRST_LINE_POSITION: Final[int] = 1
 MAXIMUM_DAYS_AHEAD: Final[int] = 90
+# What every money total carries until the pricing policy exists to fill it in.
+NOT_YET_PRICED: Final[Decimal] = Decimal("0.00")
 
 
 @dataclass(frozen=True, slots=True)
 class ReservationCommand:
-    """A request to book `quantity` units of one product model at one branch."""
+    """A request to book `quantity` units of one product model at one branch.
+
+    `customer_user_id` is the account of the customer the booking is for. The
+    use case resolves it to that customer's profile.
+    """
 
     customer_user_id: UUID
     created_by_user_id: UUID
@@ -72,7 +95,8 @@ def create_reservation_with_allocation(
         The committed reservation, its line and the units held.
 
     Raises:
-        NotFound: If the branch or the product model does not exist.
+        NotFound: If the branch or the product model does not exist, or if
+            the customer account has no customer profile to book against.
         ValidationFailure: If the period starts in the past or too far ahead.
         AssetUnavailableConflict: If the units could not be held. Raised by the
             allocation use case, which has already rolled the transaction back.
@@ -95,6 +119,7 @@ def create_reservation_with_allocation(
             "which does not exist.",
             {"product_model_id": str(command.product_model_id)},
         )
+    profile = _customer_profile_of(session, command.customer_user_id)
 
     reference = _next_reference(session, command.period.start)
     logger.info(
@@ -110,11 +135,15 @@ def create_reservation_with_allocation(
 
     reservation = Reservation(
         reference=reference,
-        customer_user_id=command.customer_user_id,
+        customer_profile_id=profile.id,
         branch_id=command.branch_id,
         status=ReservationStatus.HELD,
         start_date=command.period.start,
         end_date=command.period.end,
+        subtotal_ex_vat=NOT_YET_PRICED,
+        vat_amount=NOT_YET_PRICED,
+        deposit_total=NOT_YET_PRICED,
+        estimated_total_inc_vat=NOT_YET_PRICED,
         created_by_user_id=command.created_by_user_id,
     )
     session.add(reservation)
@@ -126,7 +155,11 @@ def create_reservation_with_allocation(
         quantity=command.quantity,
         line_position=FIRST_LINE_POSITION,
         daily_rate_snapshot=Decimal(product_model.daily_rate),
+        weekly_rate_snapshot=Decimal(product_model.weekly_rate),
         deposit_snapshot=Decimal(product_model.deposit_amount),
+        late_fee_per_day_snapshot=Decimal(product_model.late_fee_per_day),
+        replacement_value_snapshot=Decimal(product_model.replacement_value),
+        line_subtotal_ex_vat=NOT_YET_PRICED,
     )
     session.add(line)
     session.flush()
@@ -159,6 +192,43 @@ def create_reservation_with_allocation(
         },
     )
     return result
+
+
+def _customer_profile_of(session: Session, customer_user_id: UUID) -> CustomerProfile:
+    """Return the customer profile that belongs to an account.
+
+    Raises:
+        NotFound: If the account has no profile. Staff accounts have none, and
+            a booking cannot be owned by an account that is not a customer.
+
+    """
+    logger.debug(
+        "reservation.customer_profile_lookup_started",
+        extra={"customer_user_id": str(customer_user_id)},
+    )
+    statement = select(CustomerProfile).where(
+        col(CustomerProfile.user_account_id) == customer_user_id
+    )
+    profile = session.exec(statement).first()
+    if profile is None:
+        logger.warning(
+            "reservation.customer_profile_missing",
+            extra={
+                "customer_user_id": str(customer_user_id),
+                "attempted": "resolve the customer profile for a reservation",
+            },
+        )
+        raise NotFound(
+            f"Attempted to create a reservation for account {customer_user_id}, which has "
+            "no customer profile. A booking belongs to a customer profile, so name the "
+            "account of a registered customer.",
+            {"customer_user_id": str(customer_user_id)},
+        )
+    logger.debug(
+        "reservation.customer_profile_lookup_finished",
+        extra={"customer_user_id": str(customer_user_id), "customer_profile_id": str(profile.id)},
+    )
+    return profile
 
 
 def _validate_period_window(period: BookingPeriod, current_day: date) -> None:

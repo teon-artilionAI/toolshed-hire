@@ -8,6 +8,17 @@ that carries no stack trace, no SQL and no file path.
 
 The mapping from a domain error to a status code lives here and nowhere else.
 The domain raises meaning, the HTTP layer chooses a number.
+
+Every problem document carries the request id as `requestId`. The same value
+is in the `X-Request-ID` response header and on every log record of the
+request, which is what makes the sentence in the generic 500 body true.
+
+In the deployed application the request middleware is the one that catches an
+unhandled fault, because it has to send the 500 through itself for the response
+to carry the request id and the security headers. It calls
+`handle_unexpected_error` to do so. The same function is still registered for
+`Exception` below, so an application assembled without that middleware answers
+with the same document.
 """
 
 from __future__ import annotations
@@ -31,6 +42,7 @@ from app.domain.errors import (
     NotFound,
     ValidationFailure,
 )
+from app.request_context import current_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +60,8 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     AssetUnavailableConflict: status.HTTP_409_CONFLICT,
 }
 
-# Returned to the caller in place of any unhandled exception detail.
+# Returned to the caller in place of any unhandled exception detail. The
+# correlation id it mentions is the `requestId` member of the same document.
 GENERIC_SERVER_ERROR_DETAIL = (
     "The request could not be completed because of an unexpected server fault. "
     "The fault has been logged with a correlation id."
@@ -72,6 +85,10 @@ def problem_response(
         detail: A sentence describing this occurrence.
         errors: Optional structured context, safe to disclose to the caller.
 
+    Returns:
+        The response, with the id of the current request as `requestId` when
+        the request middleware is installed.
+
     """
     problem = ProblemDetail(
         type=f"{PROBLEM_TYPE_PREFIX}{code}",
@@ -80,10 +97,11 @@ def problem_response(
         detail=detail,
         instance=str(request.url.path),
         errors=errors,
+        request_id=current_request_id(),
     )
     return JSONResponse(
         status_code=status_code,
-        content=problem.model_dump(exclude_none=True),
+        content=problem.model_dump(exclude_none=True, by_alias=True),
         media_type=PROBLEM_MEDIA_TYPE,
     )
 
@@ -160,7 +178,9 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> Response:
     """Log an unhandled exception in full and answer with a bare 500.
 
     The traceback goes to the log, never to the client. A stack trace in a
-    response body is a free map of the application for anyone probing it.
+    response body is a free map of the application for anyone probing it. The
+    log record and the response body carry the same request id, so the caller
+    can quote one value and I can find the traceback it belongs to.
     """
     logger.exception(
         "api.unhandled_exception",

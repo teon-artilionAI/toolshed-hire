@@ -17,7 +17,8 @@ Five statements are proved, in the order a reader should meet them.
    the half open rule enforced at the database rather than in Python.
 4. A released allocation does not block anything. A cancelled booking must give
    its stock back, and it does so by carrying `released_at`, which drops it out
-   of the constraint's partial index while leaving the history intact.
+   of the constraint's partial index while leaving the history intact. The
+   release reason and the release timestamp are only ever set together.
 5. The same period on a different asset is accepted, because the constraint is
    about a physical unit and not about a catalogue entry.
 
@@ -35,10 +36,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app.application.allocate import AllocationCommand, allocate_assets
-from app.domain.enums import AllocationStatus
+from app.domain.enums import ReleaseReason
 from app.domain.errors import AssetUnavailableConflict
 from app.domain.period import BookingPeriod
 from app.infrastructure.schema_ddl import (
+    ALLOCATION_TABLE,
     OVERLAP_CONSTRAINT_NAME,
     RELEASE_STATE_CONSTRAINT_NAME,
     REQUIRED_EXTENSIONS,
@@ -57,7 +59,6 @@ from tests.support.scenarios import build_allocation_scenario
 
 pytestmark = pytest.mark.postgres
 
-ALLOCATIONS_TABLE = "asset_allocations"
 # The worked example month. The ninth to the twelfth ends on the twelfth, and
 # the twelfth to the fifteenth starts on it.
 NINTH = date(2026, 3, 9)
@@ -80,13 +81,13 @@ class TestTheMigrationCreatesWhatTheConstraintNeeds:
     ) -> None:
         assert set(REQUIRED_EXTENSIONS) <= installed_extensions(postgres_session)
 
-    def test_the_overlap_constraint_exists_on_asset_allocations_under_its_expected_name(
+    def test_the_overlap_constraint_exists_on_asset_allocation_under_its_expected_name(
         self, postgres_session: Session
     ) -> None:
-        names = exclusion_constraint_names(postgres_session, ALLOCATIONS_TABLE)
+        names = exclusion_constraint_names(postgres_session, ALLOCATION_TABLE)
         assert OVERLAP_CONSTRAINT_NAME in names, (
             "The exclusion constraint the whole design depends on is absent. Found "
-            f"exclusion constraints {sorted(names)} on {ALLOCATIONS_TABLE}."
+            f"exclusion constraints {sorted(names)} on {ALLOCATION_TABLE}."
         )
 
 
@@ -217,8 +218,8 @@ class TestReleasedAllocationsGiveTheirStockBack:
             line=scenario.line,
             asset=scenario.asset,
             period=FIRST_HIRE,
-            status=AllocationStatus.CANCELLED,
             released_at=datetime.now(UTC),
+            release_reason=ReleaseReason.CANCELLED,
         )
         postgres_session.add(cancelled)
         postgres_session.flush()
@@ -239,26 +240,47 @@ class TestReleasedAllocationsGiveTheirStockBack:
             line=scenario.line,
             asset=scenario.asset,
             period=FIRST_HIRE,
-            status=AllocationStatus.CANCELLED,
             released_at=datetime.now(UTC),
+            release_reason=ReleaseReason.CANCELLED,
         )
         postgres_session.add(cancelled)
         postgres_session.commit()
         stored = postgres_session.get(type(cancelled), cancelled.id)
         assert stored is not None
-        assert stored.status is AllocationStatus.CANCELLED
+        assert stored.release_reason is ReleaseReason.CANCELLED
 
-    def test_an_allocation_cannot_claim_a_released_status_without_a_release_timestamp(
+    def test_an_allocation_cannot_carry_a_release_reason_without_a_release_timestamp(
         self, postgres_session: Session, postgres_factory: Factory
     ) -> None:
+        """A reason with no timestamp would stay inside the constraint while reading as released."""
         scenario = build_allocation_scenario(postgres_factory, FIRST_HIRE)
         postgres_session.add(
             postgres_factory.allocation(
                 line=scenario.line,
                 asset=scenario.asset,
                 period=FIRST_HIRE,
-                status=AllocationStatus.CANCELLED,
                 released_at=None,
+                release_reason=ReleaseReason.CANCELLED,
+            )
+        )
+        with pytest.raises(IntegrityError) as raised:
+            postgres_session.flush()
+        postgres_session.rollback()
+        assert sqlstate_of(raised.value) == CHECK_VIOLATION_SQLSTATE
+        assert constraint_name_of(raised.value) == RELEASE_STATE_CONSTRAINT_NAME
+
+    def test_an_allocation_cannot_carry_a_release_timestamp_without_a_release_reason(
+        self, postgres_session: Session, postgres_factory: Factory
+    ) -> None:
+        """A timestamp with no reason would free the unit and never say why."""
+        scenario = build_allocation_scenario(postgres_factory, FIRST_HIRE)
+        postgres_session.add(
+            postgres_factory.allocation(
+                line=scenario.line,
+                asset=scenario.asset,
+                period=FIRST_HIRE,
+                released_at=datetime.now(UTC),
+                release_reason=None,
             )
         )
         with pytest.raises(IntegrityError) as raised:
