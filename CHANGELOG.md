@@ -9,6 +9,19 @@ the whole design document.
 
 ## [Unreleased]
 
+### Added
+
+- An audit event for every state change, written in the same transaction as the
+  change. If the audit event cannot be written, the change is not made.
+- An email gateway with a Resend adapter and a transactional outbox. A booking
+  is never lost or rolled back because an email could not be sent.
+
+### Changed
+
+- The use cases now depend on ports. Repositories, the unit of work, the clock
+  and the email adapter implement them in the infrastructure layer, and an
+  import contract stops the application layer from importing infrastructure.
+
 ## [0.1.0] - 2026-10-02
 
 The first release that is deployed. It carries no new feature for a customer or
