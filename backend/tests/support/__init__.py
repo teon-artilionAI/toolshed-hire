@@ -15,4 +15,7 @@ them, for the tests that prove what the application role may not do.
 `log_capture` reads what the application wrote through its real log handler,
 and `request_probe` adds a few routes to the real application for the tests of
 the request middleware to aim at.
+
+`clock` holds the clock that stands still, and `memory` holds an in memory unit
+of work, so a use case can be tested with no database behind it.
 """

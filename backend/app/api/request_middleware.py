@@ -6,6 +6,7 @@ This middleware does three things for every HTTP request.
    header is kept, so a caller or a proxy can supply its own. Anything else is
    replaced by a new UUID4. The id is returned in the `X-Request-ID` response
    header, stamped on every log record and quoted in every problem document.
+   The address of the client is kept beside it, for the audit trail.
 2. It writes one access log line when the response is finished, with the
    method, the route template, the status, the duration, the role of the caller
    and the outcome.
@@ -41,6 +42,7 @@ from app.request_context import (
     RequestContext,
     bind_request_context,
     release_request_context,
+    resolve_client_address,
     resolve_request_id,
 )
 
@@ -120,6 +122,19 @@ class RouteTemplates:
         return templates
 
 
+def _client_host_of(scope: Scope) -> str | None:
+    """Return the host the server recorded for the client, if it recorded one.
+
+    The server fills `client` with a host and a port. Started with its proxy
+    headers option, as the container is, it has already replaced the host with
+    the address the platform forwarded.
+    """
+    client = scope.get("client")
+    if not client:
+        return None
+    return str(client[0])
+
+
 def outcome_of(status_code: int | None, *, faulted: bool) -> str:
     """Classify a finished request for the access log.
 
@@ -160,7 +175,8 @@ class RequestContextMiddleware:
             return
 
         context = RequestContext(
-            request_id=resolve_request_id(Headers(scope=scope).get(REQUEST_ID_HEADER))
+            request_id=resolve_request_id(Headers(scope=scope).get(REQUEST_ID_HEADER)),
+            client_address=resolve_client_address(_client_host_of(scope)),
         )
         exchange = _Exchange()
         started_at = time.perf_counter()

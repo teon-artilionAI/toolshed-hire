@@ -19,6 +19,13 @@ before I publish it. A later change adds that test with the authorisation model.
 The second layer also records the role of the account it loaded against the
 current request. The access log reads it from there, which is how one line per
 request can say who made it without the middleware querying the database.
+
+This module is also the composition root. The application layer depends on
+ports and imports nothing from the infrastructure layer, so something has to
+choose the implementations, and that happens in the dependencies at the foot of
+this file. A use case reaches a router already holding the SQL unit of work,
+the system clock and the email gateway, and the router never learns which
+classes those are.
 """
 
 from __future__ import annotations
@@ -30,17 +37,29 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlmodel import Session
 
+from app.application.booking.create_reservation import CreateReservationUseCase
+from app.application.clock import Clock
+from app.application.notification.dispatcher import NotificationDispatcher
+from app.application.notification.ports import NotificationGateway
+from app.application.unit_of_work import UnitOfWork
 from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, AuthorisationFailure, InactiveAccount
+from app.infrastructure.clock import SystemClock
 from app.infrastructure.database import get_session
 from app.infrastructure.models import Branch, UserAccount
 from app.infrastructure.security import read_subject
+from app.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from app.request_context import record_actor_role
 
 logger = logging.getLogger(__name__)
 
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_PREFIX = "Bearer "
+# The attribute of the application state that holds the email gateway. The
+# application factory sets it once, when the application is built.
+NOTIFICATION_GATEWAY_STATE_KEY = "notification_gateway"
+
+_SYSTEM_CLOCK = SystemClock()
 
 SessionDependency = Annotated[Session, Depends(get_session)]
 
@@ -199,3 +218,76 @@ def branch_code_of(session: Session, user: UserAccount) -> str | None:
         )
         return None
     return branch.code
+
+
+# ---------------------------------------------------------------------------
+# The composition root. Each function returns a port, and the body chooses the
+# implementation behind it.
+# ---------------------------------------------------------------------------
+
+
+def get_clock() -> Clock:
+    """Return the system clock. A test overrides this to hold the time still."""
+    return _SYSTEM_CLOCK
+
+
+ClockDependency = Annotated[Clock, Depends(get_clock)]
+
+
+def get_unit_of_work(session: SessionDependency) -> UnitOfWork:
+    """Return a SQL unit of work over the request scoped session.
+
+    The session is borrowed and not owned. The authentication dependency reads
+    the account through the same one, and the request closes it, so the unit of
+    work is told not to.
+    """
+    return SqlAlchemyUnitOfWork(lambda: session, close_on_exit=False)
+
+
+UnitOfWorkDependency = Annotated[UnitOfWork, Depends(get_unit_of_work)]
+
+
+def get_notification_gateway(request: Request) -> NotificationGateway:
+    """Return the email gateway the application was built with.
+
+    Raises:
+        RuntimeError: If the application carries no gateway. The application
+            factory installs one, so this means an application was assembled
+            some other way and then asked to send email.
+
+    """
+    gateway = getattr(request.app.state, NOTIFICATION_GATEWAY_STATE_KEY, None)
+    if not isinstance(gateway, NotificationGateway):
+        raise RuntimeError(
+            "Attempted to send a notification from an application that was built without "
+            f"an email gateway. Set `app.state.{NOTIFICATION_GATEWAY_STATE_KEY}` when the "
+            "application is assembled, as `create_app` does."
+        )
+    return gateway
+
+
+NotificationGatewayDependency = Annotated[NotificationGateway, Depends(get_notification_gateway)]
+
+
+def get_notification_dispatcher(
+    uow: UnitOfWorkDependency, gateway: NotificationGatewayDependency, clock: ClockDependency
+) -> NotificationDispatcher:
+    """Return the dispatcher that sends queued notifications after a commit."""
+    return NotificationDispatcher(uow, gateway, clock)
+
+
+NotificationDispatcherDependency = Annotated[
+    NotificationDispatcher, Depends(get_notification_dispatcher)
+]
+
+
+def get_create_reservation_use_case(
+    uow: UnitOfWorkDependency,
+    clock: ClockDependency,
+    dispatcher: NotificationDispatcherDependency,
+) -> CreateReservationUseCase:
+    """Return the reservation use case, wired to its unit of work, clock and dispatcher."""
+    return CreateReservationUseCase(uow, clock, dispatcher)
+
+
+CreateReservation = Annotated[CreateReservationUseCase, Depends(get_create_reservation_use_case)]
