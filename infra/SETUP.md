@@ -1,300 +1,321 @@
 # Standing up Toolshed Hire from nothing
 
-Every command needed to go from an empty machine to a deployed system. Follow
-it in order. Later steps consume values produced by earlier ones.
+Every step I took to go from no cloud accounts to two environments, staging and
+production. I follow it in order and keep one shell open, because later steps
+use values that earlier steps produce. Steps that need a payment card are
+marked **[CARD]**.
 
-Steps that cost money or need a payment card are marked **[CARD]**. Nothing
-here leaves a free allowance during build, but one account refuses to exist
-without a card and one plan has to change at go-live.
+The repository is public. Every account specific value in these files is a
+shell variable or an obvious placeholder such as `PROJECT_NUMBER`, and I keep
+it that way whenever I edit them.
 
-Three companion files carry the parts that would otherwise bury this one:
+Three companion files carry the parts that would otherwise bury this one.
+`WORKLOAD-IDENTITY-FEDERATION.md` is step 7 in full, with its failure modes.
+`VERCEL-REWRITE.md` is step 8 in full, with the `/api` rewrite and how it
+fails. `OPERATIONS.md` covers local development, what a deployment does and
+how I check it, rollback, costs and tearing it all down.
 
-- `WORKLOAD-IDENTITY-FEDERATION.md`, step 7 in full with its failure modes.
-- `VERCEL-REWRITE.md`, why the single origin rewrite exists and how it fails.
-- `OPERATIONS.md`, local development, costs, rollback and tearing it down.
+## What exists at the end
 
-## 0. Tools and accounts
+| Piece | Staging | Production |
+|---|---|---|
+| GitHub environment | `staging`, from `develop` only | `production`, from `v*` tags, after my approval |
+| Cloud Run service | `toolshed-api-staging` | `toolshed-api-prod` |
+| Deployer identity | `github-deployer-staging` | `github-deployer-prod` |
+| Runtime identity | `toolshed-api-run-staging` | `toolshed-api-run-prod` |
+| Secrets | Four with the prefix `staging-` | Four with the prefix `prod-` |
+| Neon branch | `staging` | `main` |
+| Vercel project | `toolshed-hire-staging` | `toolshed-hire` |
+| Public site | <https://toolshed-hire-staging.vercel.app> | <https://toolshed-hire.vercel.app> |
 
-Install and sign in. The accounts needed are Google Cloud, GitHub, Neon and
-Vercel.
+The two share one Google Cloud project, one Artifact Registry repository, one
+Neon project and one federation pool. Everything that holds data or a
+credential is separate. The cloud side uses the short name `prod` and the
+GitHub environment is called `production`.
+
+## 0. Tools and shell variables
+
+I need accounts with Google Cloud, GitHub, Neon and Vercel, and `gcloud`, `gh`,
+`docker` and Python 3.12 on my machine.
 
 ```bash
-gcloud --version          # Google Cloud CLI
-gh --version              # GitHub CLI
-vercel --version          # Vercel CLI
-docker --version          # for building the image locally
-psql --version            # optional, useful for poking at the database
-```
-
-Set the values this guide reuses and keep the shell open.
-
-```bash
-export PROJECT_ID="toolshed-hire-prod"
-export REGION="europe-west1"
-export AR_REPOSITORY="toolshed-hire"
-export SERVICE_NAME="toolshed-hire-api"
-export GITHUB_REPOSITORY="OWNER/REPO"        # for example teon-artilionAI/ToolshedHire
-export GITHUB_OWNER="${GITHUB_REPOSITORY%%/*}"
+export PROJECT_ID="toolshed-hire"
+export REGION="europe-west2"
+export AR_REPOSITORY="toolshed"
+export GITHUB_REPOSITORY="OWNER/REPO"
+export BILLING_ACCOUNT_ID="BILLING_ACCOUNT_ID"   # listed in step 1
 export POOL_ID="github"
 export PROVIDER_ID="github-actions"
-export DEPLOY_SA="github-deployer"
-export RUNTIME_SA="toolshed-hire-api"
+
+# The address of a service account in this project.
+sa_email() { echo "${1}@${PROJECT_ID}.iam.gserviceaccount.com"; }
 ```
 
-`europe-west1` is used because Neon's free plan has no African region and the
-API makes several database round trips per browser request. Paying the Cape
-Town distance once on the browser leg beats paying it per query, which is the
-trade-off recorded in the Deployment Plan.
+`europe-west2` is London. The database is in AWS London and the API makes
+several database round trips for each request, so I put the API beside it.
+London is a dearer Cloud Run price tier than Belgium. I made that trade on
+purpose and record it here.
 
-## 1. Google Cloud project [CARD]
+## 1. Google Cloud project and billing [CARD]
 
-A billing account is required even when everything stays inside the free
-allowance. Google will not enable Cloud Run without one and it verifies a card.
-Nothing is charged inside the allowance, with the one exception in section 11.
+Google will not enable Cloud Run without a billing account, and a billing
+account needs a card. What the free trial and the Free Tier cover is in the
+costs section of `OPERATIONS.md`.
 
 ```bash
 gcloud auth login
 gcloud projects create "${PROJECT_ID}" --name="Toolshed Hire"
 gcloud config set project "${PROJECT_ID}"
-
 gcloud billing accounts list
-gcloud billing projects link "${PROJECT_ID}" \
-  --billing-account="BILLING_ACCOUNT_ID"
-
-# Capture the project NUMBER. Workload Identity Federation uses the number and
-# not the id, and using the id there is a common and confusing failure.
-export PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" \
-  --format='value(projectNumber)')"
-echo "Project number: ${PROJECT_NUMBER}"
+gcloud billing projects link "${PROJECT_ID}" --billing-account="${BILLING_ACCOUNT_ID}"
+# Workload Identity Federation uses the project NUMBER and not the id.
+export PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
 ```
 
-**Set a budget alert now.** It costs nothing and is the only thing standing
-between a misconfiguration and a surprise.
+## 2. APIs and the budget
+
+```bash
+gcloud services enable --project="${PROJECT_ID}" \
+  run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com \
+  iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com \
+  cloudresourcemanager.googleapis.com logging.googleapis.com billingbudgets.googleapis.com
+```
+
+`iamcredentials` and `sts` are the two that are easy to forget. Without them
+the token exchange in a deployment fails with a message that names neither.
+
+The budget is 30 USD, scoped to this project, with alerts at 20, 50 and 100
+percent. A budget only warns. It does not cap spending. The hard ceiling is the
+instance cap on each Cloud Run service, which the workflows set.
 
 ```bash
 gcloud billing budgets create \
-  --billing-account="BILLING_ACCOUNT_ID" \
-  --display-name="Toolshed Hire guard rail" \
-  --budget-amount=10USD \
-  --threshold-rule=percent=0.5 \
-  --threshold-rule=percent=0.9
+  --billing-account="${BILLING_ACCOUNT_ID}" --display-name="Toolshed Hire" \
+  --budget-amount=30USD --filter-projects="projects/${PROJECT_ID}" \
+  --threshold-rule=percent=0.2 --threshold-rule=percent=0.5 --threshold-rule=percent=1.0
 ```
-
-## 2. Enable the APIs
-
-```bash
-gcloud services enable \
-  run.googleapis.com \
-  artifactregistry.googleapis.com \
-  secretmanager.googleapis.com \
-  iamcredentials.googleapis.com \
-  sts.googleapis.com \
-  cloudresourcemanager.googleapis.com \
-  logging.googleapis.com \
-  --project="${PROJECT_ID}"
-```
-
-`iamcredentials` and `sts` are the two people forget. Without them the deploy
-workflow's token exchange fails with a message that mentions neither.
 
 ## 3. Artifact Registry
 
+One Docker repository, `toolshed`, holding one image, `api`. Both environments
+push to it. The free allowance is 0.5 GB, so a cleanup policy keeps the three
+most recent versions and deletes anything older than seven days.
+
 ```bash
 gcloud artifacts repositories create "${AR_REPOSITORY}" \
-  --repository-format=docker \
-  --location="${REGION}" \
-  --description="Toolshed Hire container images" \
-  --project="${PROJECT_ID}"
-```
+  --repository-format=docker --location="${REGION}" \
+  --description="Toolshed Hire container images" --project="${PROJECT_ID}"
 
-The free allowance is 0.5 GB and each API image is roughly 200 MB, so three
-fill it. Add a cleanup policy so old digests do not accumulate:
-
-```bash
 cat > /tmp/cleanup-policy.json <<'JSON'
 [
-  {"name": "keep-recent", "action": {"type": "Keep"},
-   "mostRecentVersions": {"keepCount": 3}},
-  {"name": "delete-old", "action": {"type": "Delete"},
-   "condition": {"olderThan": "30d"}}
+  {"name": "keep-recent", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 3}},
+  {"name": "delete-old", "action": {"type": "Delete"}, "condition": {"olderThan": "7d"}}
 ]
 JSON
-
 gcloud artifacts repositories set-cleanup-policies "${AR_REPOSITORY}" \
-  --location="${REGION}" --policy=/tmp/cleanup-policy.json \
-  --project="${PROJECT_ID}"
+  --location="${REGION}" --policy=/tmp/cleanup-policy.json --no-dry-run --project="${PROJECT_ID}"
 ```
 
-## 4. Two service accounts, doing two different jobs
+## 4. Four service accounts and their roles
 
-Keeping these separate is the point. The deployer creates revisions and cannot
-read application data. The runtime identity reads its own secrets and cannot
-deploy.
+Each environment has its own deployer and its own runtime identity. A deployer
+creates revisions and pushes images, and cannot read application data. A
+runtime identity writes logs and reads its own secrets, and cannot deploy. A
+deployer may run a revision as its own environment's runtime identity and as no
+other. Nothing is shared, so staging can never read production's secrets.
 
 ```bash
-gcloud iam service-accounts create "${DEPLOY_SA}" \
-  --display-name="GitHub Actions deployer" --project="${PROJECT_ID}"
-
-gcloud iam service-accounts create "${RUNTIME_SA}" \
-  --display-name="Toolshed Hire API runtime" --project="${PROJECT_ID}"
-
-export DEPLOY_SA_EMAIL="${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com"
-export RUNTIME_SA_EMAIL="${RUNTIME_SA}@${PROJECT_ID}.iam.gserviceaccount.com"
+for env_name in staging prod; do
+  deployer="$(sa_email "github-deployer-${env_name}")"
+  runtime="$(sa_email "toolshed-api-run-${env_name}")"
+  gcloud iam service-accounts create "github-deployer-${env_name}" \
+    --display-name="GitHub Actions deployer, ${env_name}" --project="${PROJECT_ID}"
+  gcloud iam service-accounts create "toolshed-api-run-${env_name}" \
+    --display-name="Toolshed Hire API runtime, ${env_name}" --project="${PROJECT_ID}"
+  for role in roles/run.admin roles/artifactregistry.writer; do
+    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+      --member="serviceAccount:${deployer}" --role="${role}"
+  done
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${runtime}" --role="roles/logging.logWriter"
+  gcloud iam service-accounts add-iam-policy-binding "${runtime}" \
+    --member="serviceAccount:${deployer}" --role="roles/iam.serviceAccountUser" --project="${PROJECT_ID}"
+done
 ```
 
-## 5. Neon, and the two connection strings
+## 5. Neon
 
-The free plan needs no card. Create the project at
-<https://console.neon.tech>, choosing a **European region**, for example
-`aws-eu-central-1`, so it sits beside `europe-west1`.
+The free plan needs no card. I create one project in the Neon console, in AWS
+`eu-west-2`, London, beside the API. I choose PostgreSQL 16 deliberately,
+because the version cannot be changed after creation and the console may offer
+a newer one by default. The hosted sign in service Neon offers stays off. This
+system has its own.
 
-Copy **two different connection strings** from the Connection Details panel.
-They are not interchangeable, and the wrong one fails in ways that look like
-flaky networking.
+The default branch `main` is production. I create the branch `staging` from it
+while it is still empty and before any role is provisioned. That order is why
+the two branches have different role passwords. The database on both is
+`neondb`.
 
-| Which | Host contains | Used by | Why |
+**The two roles.** `toolshed_migrate` runs the migrations and the seed.
+`toolshed_app` is what the running API connects as. I create both in SQL with
+`backend/scripts/provision_roles.py` and never in the Neon console. A role made
+in the console joins `neon_superuser`, and it could then rewrite the audit
+table. I run the script once on each branch, as the branch owner, from the
+backend directory with the backend installed. `DATABASE_OWNER_URL` is the
+owner's connection string for that branch, copied from the Neon console. Each
+password is sixteen characters or more, which the script enforces, and differs
+between the branches. The generator in step 6 gives a value that needs no
+escaping inside a connection string. Running the script again is safe and sets
+the passwords again, which is also how I rotate one.
+
+```bash
+cd backend
+export DATABASE_OWNER_URL='OWNER_CONNECTION_STRING_FOR_THIS_BRANCH'
+export APP_ROLE_PASSWORD='APP_ROLE_PASSWORD'
+export MIGRATE_ROLE_PASSWORD='MIGRATE_ROLE_PASSWORD'
+python scripts/provision_roles.py
+```
+
+**The two connection strings.** Each branch has its own endpoint, and I write
+two strings for it in SQLAlchemy form. The pooled host is the endpoint id with
+`-pooler` appended to its first label.
+
+| Which | Role | Used by | Why |
 |---|---|---|---|
-| Pooled | `-pooler` | The running API | Cloud Run scales to several instances and the pooler keeps the total connection count inside the plan allowance |
-| Direct | no `-pooler` | Alembic migrations | The pooler runs in transaction pooling mode and holds no session state, which breaks advisory locks, `CREATE EXTENSION` and some transactional DDL |
+| Pooled | `toolshed_app` | The running API | Cloud Run can run several instances and the pooler keeps the connection count inside the plan allowance |
+| Direct | `toolshed_migrate` | Migrations and the seed, from the runner | The pooler holds no session state, which breaks advisory locks, `CREATE EXTENSION` and some transactional DDL |
 
-Confirm the extension the whole system depends on is permitted:
-
-```bash
-psql "DIRECT_CONNECTION_STRING" \
-  -c "CREATE EXTENSION IF NOT EXISTS btree_gist;" \
-  -c "SELECT extname FROM pg_extension WHERE extname = 'btree_gist';"
+```text
+postgresql+psycopg://toolshed_app:APP_ROLE_PASSWORD@ENDPOINT_ID-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=verify-full&sslrootcert=/etc/ssl/certs/ca-certificates.crt&channel_binding=require
+postgresql+psycopg://toolshed_migrate:MIGRATE_ROLE_PASSWORD@ENDPOINT_ID.eu-west-2.aws.neon.tech/neondb?sslmode=verify-full&sslrootcert=/etc/ssl/certs/ca-certificates.crt&channel_binding=require
 ```
 
-The migration creates it too. Running it here confirms the plan allows it
-before you find out mid deployment. Then rewrite both strings into SQLAlchemy
-form: replace the leading `postgresql://` with `postgresql+psycopg://` and keep
-`?sslmode=require`.
+TLS is verified. I tried `sslrootcert=system` first and it failed with
+"certificate verify failed: unable to get local issuer certificate", because
+the libpq bundled in the psycopg binary wheel does not look in Debian's
+certificate directory. Naming the bundle file works on the runner and in the
+container, which are both Debian based. What I checked on staging once the
+roles were in use is in `OPERATIONS.md`.
 
 ## 6. Secret Manager
 
+Eight secrets, four for each environment, one version each. `ENV` is `staging`
+or `prod`.
+
+| Secret | Holds | Read by |
+|---|---|---|
+| `ENV-database-url` | The pooled string, as `toolshed_app` | The runtime identity |
+| `ENV-jwt-secret` | The signing key | The runtime identity |
+| `ENV-resend-api-key` | The key for the email provider | The runtime identity |
+| `ENV-database-migration-url` | The direct string, as `toolshed_migrate` | The deployer |
+
+The signing key goes straight from the generator into Secret Manager, so no
+person ever sees it, and each environment gets its own. I run this block once
+for `staging` and once for `prod`, each time with that environment's values.
+
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(64))" | tr -d '\n' \
-  | gcloud secrets create toolshed-jwt-secret \
-      --data-file=- --project="${PROJECT_ID}"
-
+env_name="staging"
+python -c "import secrets; print(secrets.token_urlsafe(64), end='')" \
+  | gcloud secrets create "${env_name}-jwt-secret" --data-file=- --project="${PROJECT_ID}"
 printf '%s' 'POOLED_SQLALCHEMY_URL' \
-  | gcloud secrets create toolshed-database-url \
-      --data-file=- --project="${PROJECT_ID}"
-
+  | gcloud secrets create "${env_name}-database-url" --data-file=- --project="${PROJECT_ID}"
 printf '%s' 'DIRECT_SQLALCHEMY_URL' \
-  | gcloud secrets create toolshed-database-migration-url \
-      --data-file=- --project="${PROJECT_ID}"
+  | gcloud secrets create "${env_name}-database-migration-url" --data-file=- --project="${PROJECT_ID}"
+printf '%s' 'RESEND_API_KEY' \
+  | gcloud secrets create "${env_name}-resend-api-key" --data-file=- --project="${PROJECT_ID}"
 ```
 
-`printf` rather than `echo`, because `echo` appends a newline and a connection
-string with a trailing newline fails to parse in a way that reads as a bad
-password. Never reuse a signing key across environments. Now grant read access,
-narrowly.
+I use `printf '%s'` and never `echo`. `echo` appends a newline, and a
+connection string with a trailing newline fails in a way that reads as a wrong
+password. Then I grant read access narrowly. The deployer reads the direct
+string only, to run Alembic and the seed.
 
 ```bash
-# The runtime identity reads only what the running service needs: the pooled
-# connection and the signing key. It is deliberately not granted the direct
-# connection string.
-for secret in toolshed-database-url toolshed-jwt-secret; do
-  gcloud secrets add-iam-policy-binding "${secret}" \
-    --member="serviceAccount:${RUNTIME_SA_EMAIL}" \
+for env_name in staging prod; do
+  for secret in database-url jwt-secret resend-api-key; do
+    gcloud secrets add-iam-policy-binding "${env_name}-${secret}" \
+      --member="serviceAccount:$(sa_email "toolshed-api-run-${env_name}")" \
+      --role="roles/secretmanager.secretAccessor" --project="${PROJECT_ID}"
+  done
+  gcloud secrets add-iam-policy-binding "${env_name}-database-migration-url" \
+    --member="serviceAccount:$(sa_email "github-deployer-${env_name}")" \
     --role="roles/secretmanager.secretAccessor" --project="${PROJECT_ID}"
 done
-
-# The deployer reads only the direct connection string, and only to run
-# Alembic. It never sees the signing key.
-gcloud secrets add-iam-policy-binding toolshed-database-migration-url \
-  --member="serviceAccount:${DEPLOY_SA_EMAIL}" \
-  --role="roles/secretmanager.secretAccessor" --project="${PROJECT_ID}"
 ```
 
 ## 7. Workload Identity Federation
 
-This is the step that costs a day when it goes wrong, because every mistake
-produces the same opaque credentials error. It has five mandatory pieces: a
-pool, an OIDC provider, an attribute mapping, an attribute condition that
-Google will not let you omit, and three IAM bindings.
+No service account key exists anywhere. GitHub proves which job is running and
+Google hands that job a short lived token for one deployer. The commands, the
+reasoning and the failure table are in `WORKLOAD-IDENTITY-FEDERATION.md`. I
+work through that file now and come back with `PROJECT_NUMBER` still set.
 
-**The commands, the reasoning and the failure-to-cause table are in
-`WORKLOAD-IDENTITY-FEDERATION.md`.** Work through that file now, then come
-back here with the provider resource name it prints at the end.
+## 8. Vercel
 
-## 8. GitHub secrets and variables
+Two projects on the Hobby plan, `toolshed-hire` for production and
+`toolshed-hire-staging` for staging, with nothing connected to Git and
+deployment protection switched off. How I set them up is at the top of
+`VERCEL-REWRITE.md`. I come back with the team id, the two project ids and an
+access token for the workflows.
 
-Two secrets and eight variables. Neither secret is a credential in the usual
-sense, but both are stored as secrets so nothing outside the repository can
-read the identity of the deployment target.
+## 9. GitHub environments, secrets and variables
 
-```bash
-gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --repo "${GITHUB_REPOSITORY}" \
-  --body "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
-gh secret set GCP_DEPLOY_SERVICE_ACCOUNT --repo "${GITHUB_REPOSITORY}" \
-  --body "${DEPLOY_SA_EMAIL}"
+I create two environments in the repository settings. `staging` accepts
+deployments from the branch `develop` only. `production` has one required
+reviewer, which is me with self review allowed, and accepts deployments from
+tags matching `v*` only.
 
-gh variable set GCP_PROJECT_ID --repo "${GITHUB_REPOSITORY}" --body "${PROJECT_ID}"
-gh variable set GCP_REGION --repo "${GITHUB_REPOSITORY}" --body "${REGION}"
-gh variable set GCP_ARTIFACT_REGISTRY_REPOSITORY --repo "${GITHUB_REPOSITORY}" --body "${AR_REPOSITORY}"
-gh variable set CLOUD_RUN_SERVICE --repo "${GITHUB_REPOSITORY}" --body "${SERVICE_NAME}"
-gh variable set CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT --repo "${GITHUB_REPOSITORY}" --body "${RUNTIME_SA_EMAIL}"
-gh variable set DATABASE_URL_SECRET_NAME --repo "${GITHUB_REPOSITORY}" --body "toolshed-database-url"
-gh variable set DATABASE_MIGRATION_URL_SECRET_NAME --repo "${GITHUB_REPOSITORY}" --body "toolshed-database-migration-url"
-gh variable set JWT_SECRET_NAME --repo "${GITHUB_REPOSITORY}" --body "toolshed-jwt-secret"
-```
-
-Until all ten exist the deploy workflow skips itself and posts a notice naming
-what is missing, so the repository is never red for want of a cloud account.
-That guard is the `preflight` job in `.github/workflows/deploy.yml`.
-
-Create the `production` environment in the repository settings and set it to
-require a manual approval. That is the deliberate pause before a release, and
-the DevOps section describes it as exactly that rather than as peer review.
-
-## 9. First deployment
-
-The workflow builds the image, pushes it by digest, applies migrations from the
-runner, deploys the revision, then smoke tests `/api/health` and fails the run
-if it does not answer 200 with `"status": "healthy"`.
+Every value belongs to an environment and none to the repository. I run this
+block twice, with the first three lines changed for the second pass.
 
 ```bash
-git push origin main
-gh run watch
+export GH_ENV="staging" CLOUD_ENV="staging"      # then "production" and "prod"
+export FRONTEND_ORIGIN="https://toolshed-hire-staging.vercel.app"   # then https://toolshed-hire.vercel.app
+export VERCEL_PROJECT_ID="VERCEL_PROJECT_ID"     # that environment's project
+export VERCEL_TEAM_ID="VERCEL_TEAM_ID"
+gh_var() { gh variable set "$1" --env "${GH_ENV}" --repo "${GITHUB_REPOSITORY}" --body "$2"; }
+gh_secret() { gh secret set "$1" --env "${GH_ENV}" --repo "${GITHUB_REPOSITORY}" --body "$2"; }
 
-# Read back the service URL, which step 10 needs.
-gcloud run services describe "${SERVICE_NAME}" --region="${REGION}" \
-  --format='value(status.url)'
+gh_var GCP_PROJECT_ID "${PROJECT_ID}"
+gh_var GCP_REGION "${REGION}"
+gh_var GCP_ARTIFACT_REGISTRY_REPOSITORY "${AR_REPOSITORY}"
+gh_var CLOUD_RUN_SERVICE "toolshed-api-${CLOUD_ENV}"
+gh_var CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT "$(sa_email "toolshed-api-run-${CLOUD_ENV}")"
+gh_var DATABASE_URL_SECRET_NAME "${CLOUD_ENV}-database-url"
+gh_var DATABASE_MIGRATION_URL_SECRET_NAME "${CLOUD_ENV}-database-migration-url"
+gh_var JWT_SECRET_NAME "${CLOUD_ENV}-jwt-secret"
+gh_var RESEND_API_KEY_SECRET_NAME "${CLOUD_ENV}-resend-api-key"
+gh_var FRONTEND_ORIGIN "${FRONTEND_ORIGIN}"
+gh_var VERCEL_ORG_ID "${VERCEL_TEAM_ID}"
+gh_var VERCEL_PROJECT_ID "${VERCEL_PROJECT_ID}"
+
+gh_secret GCP_DEPLOY_SERVICE_ACCOUNT "$(sa_email "github-deployer-${CLOUD_ENV}")"
+gh_secret GCP_WORKLOAD_IDENTITY_PROVIDER \
+  "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
+
+# These four are typed at the prompt, so they never sit in shell history.
+for name in VERCEL_TOKEN EMAIL_ALLOWED_RECIPIENT SEED_PASSWORD SEED_CUSTOMER_PASSWORD; do
+  gh secret set "${name}" --env "${GH_ENV}" --repo "${GITHUB_REPOSITORY}"
+done
 ```
 
-## 10. Vercel and the single origin rewrite [CARD at go-live]
+`FRONTEND_ORIGIN` has no trailing slash. `SEED_PASSWORD` goes to the staff and
+admin accounts the seed creates and `SEED_CUSTOMER_PASSWORD` to the customer
+accounts, so one customer login can be published without exposing the others.
+GitHub holds no database credential. The workflows read the connection string
+from Secret Manager when they need it.
 
-Hobby is free and is what the project uses during build. **Hobby forbids
-commercial use**, so the plan moves to Pro at go-live, currently USD 20 per
-member per month.
+A missing value fails the run and names what is missing. Nothing is passed over
+quietly. `infra/scripts/check-deploy-config.sh` checks all eighteen values
+straight after the checkout in both workflows.
 
-```bash
-cd frontend
-vercel link
-vercel env add CLOUD_RUN_API_ORIGIN production
-# Paste the Cloud Run URL from step 9, with no trailing slash, for example
-#   https://toolshed-hire-api-abc123-ew.a.run.app
-vercel env add CLOUD_RUN_API_ORIGIN preview      # optional, same value
-vercel deploy --prod
-```
+## 10. First deployment
 
-**Then verify it**, because a broken rewrite is silent until a user hits it:
+A merge into `develop` starts `.github/workflows/deploy-staging.yml`, and that
+first run creates the Cloud Run service. Nobody creates it by hand. Production
+is deployed by `.github/workflows/deploy-production.yml`, and only by a release
+tag of the form `vX.Y.Z` on `main`, as `CONTRIBUTING.md` describes. The first
+release creates `toolshed-api-prod` the same way.
 
-```bash
-curl -i https://YOUR-VERCEL-DOMAIN/api/health
-```
-
-A 200 with the same body as the Cloud Run URL means the single origin is
-working. Anything else, and what each failure means, is in
-`VERCEL-REWRITE.md`, which also carries the explanation of why the rewrite
-exists at all. That file is where the reasoning lives because `vercel.json` is
-JSON, which permits no comments.
-
-## 11. What it costs
-
-The claim that nothing costs money is false and is not made anywhere. Every
-service runs inside a free allowance during build and demonstration. Two lines
-leave it at go-live, the Vercel plan and European egress, and both are
-quantified under "What actually costs money" in `OPERATIONS.md`.
+What both workflows do, how the first staging deployment went on 2 October
+2026, and what all of this costs are in `OPERATIONS.md`.

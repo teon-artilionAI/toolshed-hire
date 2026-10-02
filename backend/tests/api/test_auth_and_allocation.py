@@ -54,6 +54,12 @@ SHORT_WRONG_PASSWORD: Final[str] = "not-my-pass"
 UNKNOWN_EMAIL: Final[str] = "nobody.at.all@toolshedhire.co.za"
 # One byte past what bcrypt reads, so the request is refused before hashing.
 OVERLONG_PASSWORD_LENGTH: Final[int] = 73
+# Every problem document quotes the id of its own request. Two requests that
+# are compared whole therefore send the same id, so the only thing left to
+# differ is whatever the credential changed.
+SHARED_REQUEST_ID: Final[dict[str, str]] = {
+    "X-Request-ID": "6f1c2b9e-3d4a-4c5b-8e7f-0a1b2c3d4e5f"
+}
 
 
 def payload_for(scenario: AllocationScenario) -> dict[str, object]:
@@ -179,10 +185,14 @@ class TestSignInNeverSaysWhichHalfOfTheCredentialWasWrong:
         self, client: TestClient, customer: UserAccount
     ) -> None:
         wrong_password = client.post(
-            SIGN_IN_PATH, json={"email": customer.email, "password": SHORT_WRONG_PASSWORD}
+            SIGN_IN_PATH,
+            json={"email": customer.email, "password": SHORT_WRONG_PASSWORD},
+            headers=SHARED_REQUEST_ID,
         )
         unknown_account = client.post(
-            SIGN_IN_PATH, json={"email": UNKNOWN_EMAIL, "password": SHORT_WRONG_PASSWORD}
+            SIGN_IN_PATH,
+            json={"email": UNKNOWN_EMAIL, "password": SHORT_WRONG_PASSWORD},
+            headers=SHARED_REQUEST_ID,
         )
         assert wrong_password.status_code == unknown_account.status_code
         assert problem_of(wrong_password) == problem_of(unknown_account)
@@ -192,10 +202,14 @@ class TestSignInNeverSaysWhichHalfOfTheCredentialWasWrong:
     ) -> None:
         overlong = "x" * OVERLONG_PASSWORD_LENGTH
         wrong_password = client.post(
-            SIGN_IN_PATH, json={"email": customer.email, "password": overlong}
+            SIGN_IN_PATH,
+            json={"email": customer.email, "password": overlong},
+            headers=SHARED_REQUEST_ID,
         )
         unknown_account = client.post(
-            SIGN_IN_PATH, json={"email": UNKNOWN_EMAIL, "password": overlong}
+            SIGN_IN_PATH,
+            json={"email": UNKNOWN_EMAIL, "password": overlong},
+            headers=SHARED_REQUEST_ID,
         )
         assert wrong_password.status_code == unknown_account.status_code
         assert problem_of(wrong_password) == problem_of(unknown_account)

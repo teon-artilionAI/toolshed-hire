@@ -1,0 +1,9 @@
+# Findings that were looked at and are not secrets.
+#
+# Each line is one finding, as commit:file:rule:line. Both of these are made up
+# values in the log redaction test, written in the shape of a real token and a
+# real key. The commit after it replaced them with values that are plainly fake.
+# They stay in that one commit's history, so the scan is told about them here
+# instead of being switched off for the file.
+33ce109ef37101ea05f9c709ba588b1a262e48b1:backend/tests/unit/test_log_redaction.py:jwt:36
+33ce109ef37101ea05f9c709ba588b1a262e48b1:backend/tests/unit/test_log_redaction.py:stripe-access-token:42

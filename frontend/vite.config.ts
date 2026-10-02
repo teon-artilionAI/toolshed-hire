@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { ProxyOptions } from 'vite'
@@ -34,6 +36,37 @@ import type { ProxyOptions } from 'vite'
  * The same block is applied to `preview`, which serves the production build.
  * A path that works under `dev` and fails under `preview` is the same class of
  * defect as one that works locally and fails in production.
+ *
+ * WHY THE PREVIEW SERVER SENDS HEADERS
+ * ====================================
+ * Vercel sends the security headers listed in vercel.json with every response,
+ * and the strictest of them is the Content Security Policy. A policy is easy to
+ * write and easy to get wrong, and the way it goes wrong is a blank page in
+ * production that no local run ever showed.
+ *
+ * So `preview` sends the same headers. I read them out of vercel.json when this
+ * file loads, which leaves one copy of the policy and no second list to keep in
+ * step. The browser tests run against `preview`, so they load every screen
+ * under the policy a visitor gets.
+ *
+ * The dev server does not send them. It serves the page with an inline script
+ * for fast refresh and injects each stylesheet as a style element, and the
+ * policy forbids both on purpose. Applying it there would only break `dev`.
+ *
+ * WHY FONTS ARE NEVER INLINED
+ * ===========================
+ * Vite writes a small asset into the bundle as a `data:` address to save a
+ * request. Two subsets of the code font are small enough for that, and a font
+ * loaded from `data:` is refused by `font-src 'self'`. I keep the policy and
+ * change the build, so every font is written out as a file of its own.
+ *
+ * WHY THE POLICY HAS NO style-src-attr
+ * ====================================
+ * One component, the utilisation bar in the admin report, sets a width through
+ * the React `style` prop. React applies that through the style object of the
+ * element and never writes a style attribute, and the policy governs the
+ * attribute only. I loaded every screen under the policy as each role and the
+ * browser reported no violation, so the policy stays without the exception.
  */
 
 /** Where uvicorn listens locally. See backend/README.md. */
@@ -59,9 +92,60 @@ const API_PROXY: Record<string, ProxyOptions> = {
   },
 }
 
+/** The deployment configuration this directory ships to Vercel. */
+const VERCEL_CONFIG_PATH = fileURLToPath(new URL('./vercel.json', import.meta.url))
+
+/** The `source` of the vercel.json header rule that applies to every path. */
+const EVERY_PATH_SOURCE = '/(.*)'
+
+/** Font files, which are always written out and never inlined. */
+const FONT_FILE_PATTERN = /\.(woff2?|ttf|otf|eot)$/i
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Read the headers Vercel sends with every response out of vercel.json.
+ *
+ * @returns The header names and values of the rule whose source is every path.
+ * @throws Error when vercel.json has no such rule or one of its entries is not
+ *   a key and a value. I stop the build there, because a preview that quietly
+ *   sent no headers would let the browser tests pass against no policy at all.
+ */
+function readProductionHeaders(): Record<string, string> {
+  const config: unknown = JSON.parse(readFileSync(VERCEL_CONFIG_PATH, 'utf8'))
+  const rules = isRecord(config) && Array.isArray(config.headers) ? config.headers : []
+  const everyPath: unknown = rules.find(
+    (rule: unknown) => isRecord(rule) && rule.source === EVERY_PATH_SOURCE,
+  )
+  if (!isRecord(everyPath) || !Array.isArray(everyPath.headers) || everyPath.headers.length === 0) {
+    throw new Error(
+      `Tried to read the security headers from ${VERCEL_CONFIG_PATH} and found no ` +
+        `"headers" rule with the source ${EVERY_PATH_SOURCE}. Add that rule back, ` +
+        'because the preview server and Vercel both take their headers from it.',
+    )
+  }
+  const headers: Record<string, string> = {}
+  for (const entry of everyPath.headers as unknown[]) {
+    if (!isRecord(entry) || typeof entry.key !== 'string' || typeof entry.value !== 'string') {
+      throw new Error(
+        `Tried to read the security headers from ${VERCEL_CONFIG_PATH} and found an ` +
+          `entry that is not a "key" and a "value" string. Got ${JSON.stringify(entry)}.`,
+      )
+    }
+    headers[entry.key] = entry.value
+  }
+  return headers
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Returning undefined leaves every other kind of asset to the default rule.
+    assetsInlineLimit: (filePath) => (FONT_FILE_PATTERN.test(filePath) ? false : undefined),
+  },
   server: { proxy: API_PROXY },
-  preview: { proxy: API_PROXY },
+  preview: { proxy: API_PROXY, headers: readProductionHeaders() },
 })

@@ -10,7 +10,9 @@ the loading is in the `seeding` package.
 
 Passwords come from the SEED_PASSWORD environment variable. Outside development
 and test the script refuses to run without it, because seeding a known password
-into a reachable database is a hole nobody notices.
+into a reachable database is a hole nobody notices. When SEED_CUSTOMER_PASSWORD
+is also set, the customer accounts get that one instead, so a customer login
+can be handed out without giving away the staff and admin logins.
 """
 
 from __future__ import annotations

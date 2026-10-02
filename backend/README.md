@@ -26,7 +26,7 @@ first pass at the whole application.
 | `app/application` | Application | Use cases and transaction boundaries. |
 | `app/infrastructure` | Infrastructure | Engine, SQLModel tables, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
-| `app/api` | API | Routers, dependencies, problem responses. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -78,7 +78,10 @@ left exactly as it is. A second run changes nothing and logs
 `seed.nothing_to_do`, and a run against a database in use never resets a
 status, a price or a password. Every account the seed creates gets the
 password in `SEED_PASSWORD`. Outside development and test the script refuses to
-run without it. The data lives in `seed_data` and the loading in `seeding`.
+run without it. If `SEED_CUSTOMER_PASSWORD` is set as well, the customer
+accounts get that password instead, so a demonstration customer login can be
+published without exposing the staff and admin logins. The data lives in
+`seed_data` and the loading in `seeding`.
 
 The design document splits database authority between two roles, so the
 running application can neither change the schema nor rewrite its audit trail.
@@ -126,7 +129,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 `GET http://localhost:8000/api/health` should report
-`{"status": "healthy", "databaseReachable": true, "btreeGistInstalled": true}`.
+`{"status": "healthy", "databaseReachable": true, "btreeGistInstalled": true, "revision": "local"}`.
 
 ## Endpoints
 
@@ -139,6 +142,48 @@ uvicorn app.main:app --reload --port 8000
 
 Every other endpoint added later must declare its roles. The default is deny
 (BR-41).
+
+`/docs`, `/redoc` and `/openapi.json` are served in development and test only.
+In staging and production they answer 404.
+
+## Request ids, logs and headers
+
+Every request has an id. A valid UUID sent in `X-Request-ID` is kept, and
+anything else is replaced by a new UUID4. The same value comes back in the
+`X-Request-ID` response header, as `requestId` in every problem document and
+as `request_id` on every log line written while the request was served. To
+trace a failure I ask for the `requestId` and search the log for it.
+
+Each request writes one access log line, `http.request_completed`, when its
+response is finished.
+
+| Field | Holds |
+|---|---|
+| `method` | The HTTP method. |
+| `route` | The route template, for example `/api/reservations/{reservation_id}`, and `unmatched` when no route matched. Never the requested path. |
+| `status` | The status code that was sent. |
+| `duration_ms` | How long the request took, in milliseconds. |
+| `actor_role` | The stored role of the authenticated caller, or `anonymous`. |
+| `outcome` | `success`, `client_error` or `server_error`. |
+| `request_id` | The id above. |
+
+The line is written at `INFO`, at `WARNING` for a 4xx and at `ERROR` for a 5xx.
+
+Secrets are removed from every log line before it is written (C-42). The value
+of any `extra` key whose name contains `password`, `secret`, `token`,
+`authorization`, `cookie`, `api_key` or `database_url` becomes `[REDACTED]`,
+and the password in any `scheme://user:password@host` address is replaced the
+same way. A harmless key that happens to contain one of those words is redacted
+too, so I name such keys differently.
+
+Every response carries the security headers of C-06 to C-12, which are listed
+in `app/api/security_headers.py`. `Strict-Transport-Security` is sent in
+staging and production only, and `Cache-Control: no-store` whenever the request
+carried an `Authorization` header or a cookie.
+
+`GET /api/health` also reports `revision`. Cloud Run sets `K_REVISION` on every
+instance, so the field names the revision that answered. Anywhere else it is
+`local`.
 
 ## The constraint
 
@@ -170,6 +215,9 @@ Every value comes from the environment. See `.env.example`. Outside
 development and test the process refuses to start while `JWT_SECRET` is still
 the placeholder or `DATABASE_URL` still points at localhost, because a
 deployment that boots on a known secret is a hole nobody notices.
+
+`ENVIRONMENT` is `development`, `test`, `staging` or `production`. Staging is
+held to every check production is.
 
 ## Checks
 

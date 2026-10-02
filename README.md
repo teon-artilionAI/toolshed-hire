@@ -33,7 +33,7 @@ I am building this in stages, and this section says what is real today.
 | Design document | Submitted for Task 1. The final copy is in [`docs/task1`](docs/task1). |
 | Prototype | All 24 screens exist in `frontend/` and run on fixture data. |
 | API | A walking skeleton. It signs a user in, enforces roles, and allocates tagged assets against PostgreSQL with the overlap constraint. |
-| Hosting | Not deployed yet. |
+| Hosting | Live. Production is at <https://toolshed-hire.vercel.app> and is released from version tags. Staging follows `develop` at <https://toolshed-hire-staging.vercel.app>. |
 
 The Task 2 build replaces the fixture data screen by screen and takes the system
 live. Each piece of that work is an issue with its own branch, and the

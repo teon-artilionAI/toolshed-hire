@@ -14,6 +14,13 @@ One rule applies at every call site. A key passed through `extra` may not be
 one of the names LogRecord already owns, listed in RESERVED_RECORD_KEYS below.
 The standard library raises KeyError rather than overwriting, so `extra={"name":
 branch.name}` fails at runtime. Use a qualified key such as `branch_name`.
+
+Two filters sit on the handler, so they see every record whichever logger wrote
+it. The first stamps the id of the request being served onto the record, which
+is what lets one request be followed through the log. The second removes
+secrets and is described in `app.log_redaction`. They are on the handler and
+not on a logger because a filter on a logger is skipped for records that reach
+it from a child logger.
 """
 
 from __future__ import annotations
@@ -22,7 +29,10 @@ import json
 import logging
 import sys
 from datetime import UTC, datetime
-from typing import Final
+from typing import Final, TextIO
+
+from app.log_redaction import RedactionFilter, scrub_text
+from app.request_context import current_request_id
 
 # Attributes LogRecord always carries. Anything else on the record arrived
 # through `extra` and is therefore application context worth emitting.
@@ -51,6 +61,20 @@ SEVERITY_BY_LEVEL: Final[dict[int, str]] = {
 # noisy at request volume, so it is left at WARNING.
 ACCESS_LOGGER_NAME = "uvicorn.access"
 
+# The key every record written during a request carries.
+REQUEST_ID_KEY: Final[str] = "request_id"
+
+
+class RequestIdFilter(logging.Filter):
+    """Stamp the id of the request being served onto every record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Add the request id when there is one and always let the record through."""
+        request_id = current_request_id()
+        if request_id is not None:
+            setattr(record, REQUEST_ID_KEY, request_id)
+        return True
+
 
 class JsonFormatter(logging.Formatter):
     """Render a log record as one JSON object on one line."""
@@ -68,23 +92,42 @@ class JsonFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key not in _STANDARD_RECORD_KEYS and not key.startswith("_"):
                 payload[key] = value
+        # A traceback only becomes text here, after the filters have run, so
+        # it is scrubbed here. A driver error can quote the address it tried.
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = scrub_text(self.formatException(record.exc_info))
         if record.stack_info:
-            payload["stack"] = self.formatStack(record.stack_info)
+            payload["stack"] = scrub_text(self.formatStack(record.stack_info))
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 
+def build_handler(stream: TextIO) -> logging.Handler:
+    """Build the one handler the application logs through.
+
+    The formatter and both filters are attached here and nowhere else, so a
+    test that wants to read what the application would really have written can
+    build the same handler over a stream of its own.
+
+    Args:
+        stream: Where the JSON lines are written.
+
+    """
+    handler = logging.StreamHandler(stream=stream)
+    handler.setFormatter(JsonFormatter())
+    handler.addFilter(RequestIdFilter())
+    handler.addFilter(RedactionFilter(_STANDARD_RECORD_KEYS))
+    return handler
+
+
 def configure_logging(level: int = logging.INFO) -> None:
-    """Install the JSON formatter on the root logger.
+    """Install the JSON handler on the root logger.
 
     Args:
         level: The threshold for the root logger. Handlers already attached are
             replaced, so calling this twice does not double every line.
 
     """
-    handler = logging.StreamHandler(stream=sys.stdout)
-    handler.setFormatter(JsonFormatter())
+    handler = build_handler(sys.stdout)
 
     root = logging.getLogger()
     for existing in list(root.handlers):

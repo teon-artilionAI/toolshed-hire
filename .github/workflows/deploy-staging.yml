@@ -1,0 +1,184 @@
+# Staging deployment.
+#
+# Every merge into develop is deployed to staging without anyone touching it.
+# The image is built and pushed by digest, the staging database is migrated and
+# seeded, the API revision is deployed and smoke tested, and then the frontend
+# is built and deployed and checked through its own domain.
+#
+# The setup this depends on is written out command by command in
+# infra/SETUP.md and infra/WORKLOAD-IDENTITY-FEDERATION.md. The longer shell
+# steps live in infra/scripts so each one can be read and run on its own.
+#
+# There is no service account key in this repository and there must never be
+# one. The runner proves its identity with the short lived OIDC token GitHub
+# mints for the job, and Google exchanges that for a short lived access token.
+
+name: Deploy to staging
+
+on:
+  push:
+    branches:
+      - develop
+
+# Two deployments must never run at once, and a queued deployment must never be
+# cancelled part way through a migration.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for Workload Identity Federation. Without it the runner cannot
+  # mint the OIDC token and the auth step fails immediately.
+  id-token: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  IMAGE_NAME: api
+  HEALTH_PATH: /api/health
+  ENVIRONMENT_NAME: staging
+  # Staging is capped at one instance. It only ever serves me.
+  CLOUD_RUN_MAX_INSTANCES: "1"
+
+jobs:
+  deploy:
+    name: Build, migrate, seed, deploy and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # The deployment secrets belong to this environment, not to the repository,
+    # and the environment only accepts runs from develop.
+    environment:
+      name: staging
+      url: ${{ vars.FRONTEND_ORIGIN }}
+
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.GCP_ARTIFACT_REGISTRY_REPOSITORY }}
+      SERVICE_NAME: ${{ vars.CLOUD_RUN_SERVICE }}
+      RUNTIME_SERVICE_ACCOUNT: ${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
+      DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET_NAME }}
+      DATABASE_MIGRATION_URL_SECRET: ${{ vars.DATABASE_MIGRATION_URL_SECRET_NAME }}
+      JWT_SECRET_NAME: ${{ vars.JWT_SECRET_NAME }}
+      RESEND_API_KEY_SECRET: ${{ vars.RESEND_API_KEY_SECRET_NAME }}
+      FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # The secrets are read here, inside the job that names the environment,
+      # because a separate job would not see environment secrets.
+      - name: Check that every required secret and variable is present
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+          SEED_CUSTOMER_PASSWORD: ${{ secrets.SEED_CUSTOMER_PASSWORD }}
+        run: bash infra/scripts/check-deploy-config.sh
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up the gcloud CLI
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push the image
+        id: build
+        run: bash infra/scripts/build-and-push-image.sh
+
+      - name: Set up Python for the migration and seed steps
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install .
+
+      # Migrations run here, from the runner, before any new revision exists.
+      # If this step fails, the running service is untouched.
+      - name: Apply database migrations
+        run: bash infra/scripts/apply-migrations.sh
+
+      - name: Seed the reference fleet and demonstration accounts
+        env:
+          SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+          SEED_CUSTOMER_PASSWORD: ${{ secrets.SEED_CUSTOMER_PASSWORD }}
+        run: bash infra/scripts/seed-database.sh
+
+      - name: Deploy the revision to Cloud Run
+        id: api
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+          EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+        run: bash infra/scripts/deploy-api.sh
+
+      # A new revision normally takes traffic as it is deployed. If traffic was
+      # pinned to an older revision by a manual rollback, it would not, and the
+      # smoke test below would pass against the old code. This makes the latest
+      # revision the serving one whatever state the service was left in.
+      - name: Make sure the new revision is the one serving
+        run: bash infra/scripts/promote-api.sh
+
+      # Without this, a green run would mean only that gcloud accepted the
+      # request, which is a much weaker claim than it looks.
+      - name: Smoke test the API
+        env:
+          SERVICE_URL: ${{ steps.api.outputs.check_url }}
+        run: bash infra/scripts/smoke-test.sh
+
+      - name: Set up Node for the frontend build
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build and deploy the frontend
+        id: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          API_ORIGIN: ${{ steps.api.outputs.service_url }}
+        run: bash infra/scripts/deploy-frontend.sh
+
+      # The same health check, this time through the frontend domain. It only
+      # passes if the /api rewrite reaches the API, which is the path every
+      # browser request takes.
+      - name: Smoke test the API through the frontend domain
+        env:
+          SERVICE_URL: ${{ env.FRONTEND_ORIGIN }}
+        run: bash infra/scripts/smoke-test.sh
+
+      - name: Record the deployment in the run summary
+        if: always()
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+          DEPLOYMENT_URL: ${{ steps.frontend.outputs.deployment_url }}
+        run: |
+          {
+            echo "### Staging deployment"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Image | \`${IMAGE_DIGEST:-not built}\` |"
+            echo "| Service | \`${SERVICE_NAME}\` in \`${REGION}\` |"
+            echo "| Frontend | ${FRONTEND_ORIGIN} |"
+            echo "| Vercel deployment | ${DEPLOYMENT_URL:-not deployed} |"
+          } >> "${GITHUB_STEP_SUMMARY}"

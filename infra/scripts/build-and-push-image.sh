@@ -8,7 +8,7 @@
 # that makes that guarantee.
 #
 # Required environment:
-#   REGION                        Artifact Registry location, for example europe-west1
+#   REGION                        Artifact Registry location, for example europe-west2
 #   PROJECT_ID                    Google Cloud project id
 #   ARTIFACT_REGISTRY_REPOSITORY  Repository name inside that location
 #   IMAGE_NAME                    Image name inside that repository

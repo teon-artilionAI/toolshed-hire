@@ -47,16 +47,15 @@
 #
 # BASE IMAGE PINNING
 # ==================
-# The base is pinned to a specific minor tag rather than a digest. Pinning to a
-# digest is stronger and is the follow-up, and the digest is obtained with:
+# The base is pinned by digest as well as by tag. The tag says which Python and
+# which Debian release the image is, and the digest fixes the exact bytes, so a
+# rebuild next month cannot quietly pick up a different base. Dependabot raises
+# a pull request when the tag moves to a new digest. To read the current one:
 #
 #   docker buildx imagetools inspect python:3.12-slim-bookworm
-#
-# A digest is deliberately not invented here, because a wrong digest fails the
-# build with a message that says nothing useful about why.
 
 # ---------------------------------------------------------------- build stage
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS builder
 
 # Where the dependency tree is assembled. The whole directory is copied into
 # the final stage, so nothing pip leaves behind travels with it.
@@ -93,7 +92,7 @@ COPY app ./app
 RUN pip install .
 
 # ---------------------------------------------------------------- final stage
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
 
 # libpq5 is the PostgreSQL client runtime library. It is a shared library and
 # not a build toolchain, so it does not violate the "no toolchain in the final

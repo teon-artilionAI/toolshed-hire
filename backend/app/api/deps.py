@@ -12,8 +12,13 @@ claim. An access token minted before a demotion therefore stops granting the
 old permissions the moment the row changes, rather than at expiry.
 
 Every endpoint must depend on one of the role dependencies. An endpoint with no
-declared policy is a defect (BR-41), and the route policy test in the test
-suite is what makes that statement enforceable rather than aspirational.
+declared policy is a defect (BR-41). Nothing enforces that yet. No test walks
+the route table to check it, so today the rule holds because I read each router
+before I publish it. A later change adds that test with the authorisation model.
+
+The second layer also records the role of the account it loaded against the
+current request. The access log reads it from there, which is how one line per
+request can say who made it without the middleware querying the database.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from app.domain.errors import AuthenticationFailure, AuthorisationFailure, Inact
 from app.infrastructure.database import get_session
 from app.infrastructure.models import Branch, UserAccount
 from app.infrastructure.security import read_subject
+from app.request_context import record_actor_role
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +96,7 @@ def get_authenticated_user(token: TokenDependency, session: SessionDependency) -
             "Attempted to authenticate with a token whose subject does not name an account.",
             {"reason": "unknown-subject"},
         )
+    record_actor_role(account.role.value)
     logger.debug("auth.user_loaded", extra={"user_id": str(account.id), "role": account.role.value})
     return account
 

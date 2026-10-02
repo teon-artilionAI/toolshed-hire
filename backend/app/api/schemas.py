@@ -126,6 +126,9 @@ class HealthResponse(CamelModel):
     environment: str
     database_reachable: bool = Field(serialization_alias="databaseReachable")
     btree_gist_installed: bool = Field(serialization_alias="btreeGistInstalled")
+    # The Cloud Run revision that answered, so a deployment can be confirmed
+    # from outside without reading the console.
+    revision: str
 
 
 class AllocationRequest(CamelModel):
@@ -181,6 +184,10 @@ class ProblemDetail(BaseModel):
     `type` is a stable slug, not a resolvable URL, because this API is not a
     public specification and inventing a documentation URL that does not exist
     is worse than a slug that does.
+
+    `requestId` is an extension member. It is the same value as the
+    `X-Request-ID` response header and the `request_id` on every log record of
+    the request, so a caller who quotes it has named the exact log lines.
     """
 
     type: str
@@ -189,3 +196,4 @@ class ProblemDetail(BaseModel):
     detail: str
     instance: str | None = None
     errors: dict[str, object] | None = None
+    request_id: str | None = Field(default=None, serialization_alias="requestId")

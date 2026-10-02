@@ -24,9 +24,22 @@ the whole design document.
   insert on the audit table and nothing else, so the audit trail cannot be
   rewritten by the application that writes it.
 - Reference sequences for rentals and damage reports.
+- Automatic deployment to a staging environment on every merge into `develop`,
+  and deployment to production from a `vX.Y.Z` tag on `main` through a candidate
+  revision that is smoke tested before it takes traffic.
+- A request id on every request, returned in `X-Request-ID`, written to every
+  log line and included in every error response.
+- One structured access log line per request, with secrets redacted from all
+  log output.
+- Security headers on the API and the frontend, including a Content Security
+  Policy.
+- The deployed revision in the health response.
 
 ### Changed
 
+- The container base image is pinned by digest.
+- The interactive API documentation is served only in development and test.
+- A deployment with missing configuration now fails instead of skipping.
 - The two original test workflows are replaced by `ci-fast.yml` and
   `ci-integration.yml`.
 - The database schema is now the documented baseline of seventeen tables with
