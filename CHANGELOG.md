@@ -30,6 +30,15 @@ the whole design document.
   client address.
 - A declared access policy on every route. The application refuses to start if
   a route has none.
+- A real session in the frontend. The access token is held in memory only, a
+  reload restores the session through the refresh cookie, and screens are
+  guarded by role.
+- A notice on every screen that is not connected to the API yet, saying that it
+  still shows sample data.
+
+### Removed
+
+- The demonstration role switcher and the on screen list of sample accounts.
 
 ### Changed
 
