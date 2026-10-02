@@ -9,6 +9,13 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-02
+
+The first release that is deployed. It carries no new feature for a customer or
+a counter assistant yet. It puts the foundations in place, which are the branch
+model and checks, the documented database schema, a seeded fleet, and a pipeline
+that takes a merge to staging and a release tag to production.
+
 ### Added
 
 - Branching workflow, pull request template and issue forms.
