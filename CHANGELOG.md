@@ -22,9 +22,19 @@ the whole design document.
   loading, error and empty states and an error boundary. The wire types are
   generated from the API's OpenAPI document.
 - Browser tests that run against the real API and a seeded database.
+- Sessions. Sign in returns a short lived access token and sets an HttpOnly
+  refresh cookie that is rotated on every use. Presenting a refresh token that
+  has already been used revokes the whole session family. Sign out revokes on
+  the server.
+- Account lockout after five failed sign ins, and throttling per email and per
+  client address.
+- A declared access policy on every route. The application refuses to start if
+  a route has none.
 
 ### Changed
 
+- Sign in moved from `POST /api/auth/sign-in` to `POST /api/auth/login`, the
+  path the design document names.
 - The use cases now depend on ports. Repositories, the unit of work, the clock
   and the email adapter implement them in the infrastructure layer, and an
   import contract stops the application layer from importing infrastructure.
