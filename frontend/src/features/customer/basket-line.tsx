@@ -15,6 +15,8 @@ import { money } from '../../shared/format'
 import { Notice } from '../../shared/ui'
 import type { BranchAvailability } from './availability'
 import { fleetAt } from './availability'
+import { modelSlug } from './catalogue-data'
+import { modelDetailHref } from './catalogue-links'
 import { QuantityStepper } from './catalogue-ui'
 
 export default function BasketLine({
@@ -49,7 +51,7 @@ export default function BasketLine({
       <div className="flex flex-wrap items-start justify-between gap-md">
         <div className="min-w-0">
           <Link
-            to={`/model/${model.id}?from=${startIso}&to=${endIso}&branch=${branchCode}`}
+            to={modelDetailHref(modelSlug(model), { from: startIso, to: endIso }, branchCode)}
             className="inline-flex min-h-[2.75rem] cursor-pointer items-center text-base font-semibold text-ink underline decoration-line underline-offset-4 transition-colors duration-200 hover:decoration-accent"
           >
             {model.name}

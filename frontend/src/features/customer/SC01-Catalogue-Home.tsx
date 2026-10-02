@@ -1,83 +1,66 @@
 /**
  * SC-01 Catalogue Home.
  *
- * The public shop window and the entry point to everything else. A
- * customer arrives with a job and two dates, so the dates come first and
- * the catalogue answers against them: every count on this screen is for
- * the period in the picker, not a vague "in stock".
+ * The public shop window and the entry point to everything else. A customer
+ * arrives with a job and two dates, so the dates come first and the search
+ * they lead to answers against them.
+ *
+ * The screen reads three lists from the API. The branches fill the branch
+ * chooser, the categories fill "Browse by job", and one small page of models
+ * fills the shop window. None of those says what is free. Availability is only
+ * ever answered for a period, so it lives on SC-02, one press of the search
+ * button away, and this screen makes no claim about it.
+ *
+ * The search form does not wait for any of the three. A customer can pick
+ * dates and search while the lists are still loading, or after one has failed.
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, MapPin, Search, ShieldCheck, Truck } from 'lucide-react'
-import { assets, branches, categories } from '../../shared/fixtures'
-import type { BranchCode } from '../../shared/types'
-import { formatDate, money } from '../../shared/format'
-import { EmptyState, PageHeader, StatTile } from '../../shared/ui'
-import { availabilityEverywhere, totalAvailable } from './availability'
-import { DEFAULT_END, DEFAULT_START, validatePeriod } from './hire-period'
-import { catalogue, categoryIconFor, hireDays, modelsInCategory } from './catalogue-data'
-import { BranchSelect, ModelBanner, PeriodFields } from './catalogue-ui'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { MapPin, Search, ShieldCheck, Truck } from 'lucide-react'
+import { catalogueQueries } from '../../shared/api/catalogue-queries'
+import { PageHeader } from '../../shared/ui'
+import { todayInBranchTime } from '../../shared/today'
+import { ANY_BRANCH, BranchSelect, PeriodFields } from './catalogue-ui'
+import { defaultPeriod, describePeriod, hireDays, validatePeriod } from './hire-period'
+import { CatalogueStats, CategoryGrid, FeaturedModels } from './SC01-Catalogue-Sections'
 
 /** How many models the shop window puts up front before the customer
  *  starts filtering properly on SC-02. */
 const FEATURED_COUNT = 6
 
-/** Long enough to read as work being done, short enough not to be a wait. */
-const AVAILABILITY_CHECK_MS = 220
+const BRANCHES_UNAVAILABLE =
+  'We could not load the branch list. You can still search every branch.'
 
 const TRUST_POINTS = [
   { icon: ShieldCheck, text: 'Every unit is checked in and out, so what you book is the unit you get.' },
-  { icon: MapPin, text: 'Three branches across Cape Town, with stock shown per branch.' },
+  { icon: MapPin, text: 'Three branches across Cape Town, with availability shown per branch.' },
   { icon: Truck, text: 'Collect from the branch that has it, not the one that ran out.' },
 ]
 
 export default function CatalogueHome() {
   const navigate = useNavigate()
-  const [startIso, setStartIso] = useState(DEFAULT_START)
-  const [endIso, setEndIso] = useState(DEFAULT_END)
-  const [branchCode, setBranchCode] = useState<BranchCode | 'ALL'>('ALL')
-  const [checking, setChecking] = useState(false)
+  // Read once when the screen opens, so the dates do not shift under a
+  // customer who leaves the page open past midnight.
+  const [today] = useState(() => todayInBranchTime())
+  const [startIso, setStartIso] = useState(() => defaultPeriod(today).startIso)
+  const [endIso, setEndIso] = useState(() => defaultPeriod(today).endIso)
+  const [branchCode, setBranchCode] = useState<string>(ANY_BRANCH)
 
-  const periodError = validatePeriod(startIso, endIso)
+  const branches = useQuery(catalogueQueries.branches())
+  const categories = useQuery(catalogueQueries.categories())
+  const featured = useQuery(catalogueQueries.models({ pageSize: FEATURED_COUNT }))
+
+  const periodError = validatePeriod(startIso, endIso, today)
   const usablePeriod = periodError === null
-
-  // Re-checking the yard whenever the dates move. The prototype has no back
-  // end, so this stands in for the request the built system will make.
-  useEffect(() => {
-    if (!usablePeriod) return
-    setChecking(true)
-    const timer = window.setTimeout(() => setChecking(false), AVAILABILITY_CHECK_MS)
-    return () => window.clearTimeout(timer)
-  }, [startIso, endIso, usablePeriod])
-
-  const featured = useMemo(() => {
-    if (!usablePeriod) return []
-    return catalogue
-      .map((model) => ({
-        model,
-        rows: availabilityEverywhere(model.id, startIso, endIso),
-        free: totalAvailable(model.id, startIso, endIso),
-      }))
-      .sort((a, b) => b.free - a.free || a.model.name.localeCompare(b.model.name))
-      .slice(0, FEATURED_COUNT)
-  }, [startIso, endIso, usablePeriod])
-
-  const unitsFree = useMemo(
-    () =>
-      usablePeriod
-        ? catalogue.reduce((sum, m) => sum + totalAvailable(m.id, startIso, endIso), 0)
-        : 0,
-    [startIso, endIso, usablePeriod],
-  )
-
-  const days = hireDays(startIso, endIso)
-  const periodLabel = `${formatDate(startIso)} to ${formatDate(endIso)}`
+  const days = usablePeriod ? hireDays(startIso, endIso) : null
+  const periodLabel = describePeriod(startIso, endIso)
 
   function searchNow() {
     if (!usablePeriod) return
     const params = new URLSearchParams({ from: startIso, to: endIso })
-    if (branchCode !== 'ALL') params.set('branch', branchCode)
+    if (branchCode !== ANY_BRANCH) params.set('branch', branchCode)
     navigate(`/search?${params.toString()}`)
   }
 
@@ -86,7 +69,7 @@ export default function CatalogueHome() {
       <PageHeader
         screenId="SC-01"
         title="Hire tools and plant across Cape Town"
-        subtitle="Pick your dates first. Everything below shows what is genuinely free for those days at each of our three branches."
+        subtitle="Pick your dates first. The search then shows what is genuinely free for those days at each of our three branches."
       />
 
       <section className="card mb-lg overflow-hidden">
@@ -128,20 +111,23 @@ export default function CatalogueHome() {
                 idPrefix="home"
                 startIso={startIso}
                 endIso={endIso}
+                minIso={today}
                 onChangeStart={setStartIso}
                 onChangeEnd={setEndIso}
-                error={periodError}
+                startError={periodError ?? undefined}
               />
               <BranchSelect
                 id="home-branch"
+                branches={branches.data?.items ?? []}
                 value={branchCode}
                 onChange={setBranchCode}
                 allLabel="Any branch"
+                error={branches.isError ? BRANCHES_UNAVAILABLE : undefined}
               />
             </div>
             <div className="mt-md flex flex-wrap items-center justify-between gap-md">
               <p className="text-sm text-slate-soft" aria-live="polite">
-                {usablePeriod
+                {days !== null && periodLabel
                   ? `${days} ${days === 1 ? 'day' : 'days'}, ${periodLabel}.`
                   : 'Fix the dates above and we will check all three branches.'}
               </p>
@@ -154,106 +140,20 @@ export default function CatalogueHome() {
         </div>
       </section>
 
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile
-          label="Units free for your dates"
-          value={checking ? '...' : unitsFree}
-          hint={`Out of ${assets.length} individually tagged units`}
-          tone={unitsFree > 0 ? 'good' : 'warn'}
-        />
-        <StatTile
-          label="Models in the catalogue"
-          value={catalogue.length}
-          hint={`Across ${categories.length} categories`}
-        />
-        <StatTile label="Branches" value={branches.length} hint="Woodstock, Stikland and Firgrove" />
-        <StatTile label="Days in this hire" value={days} hint={periodLabel} />
-      </div>
-
-      <section className="mb-lg" aria-labelledby="categories-heading">
-        <h2 id="categories-heading" className="mb-md text-lg font-semibold text-ink">
-          Browse by job
-        </h2>
-        <ul className="grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-          {categories.map((category) => {
-            const Icon = categoryIconFor(category.slug)
-            const count = modelsInCategory(category.id).length
-            return (
-              <li key={category.id}>
-                <Link
-                  to={`/search?category=${category.slug}&from=${startIso}&to=${endIso}`}
-                  className="card flex h-full cursor-pointer items-start gap-md p-md transition-shadow duration-200 hover:shadow-raised"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-accent-wash">
-                    <Icon className="h-5 w-5 text-ink" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-base font-semibold text-ink">{category.name}</span>
-                    <span className="tabular mt-xs block text-sm text-slate-soft">
-                      {count} {count === 1 ? 'model' : 'models'}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-
-      <section aria-labelledby="featured-heading">
-        <div className="mb-md flex flex-wrap items-end justify-between gap-sm">
-          <h2 id="featured-heading" className="text-lg font-semibold text-ink">
-            Free for {periodLabel}
-          </h2>
-          <Link to={`/search?from=${startIso}&to=${endIso}`} className="btn-secondary px-md">
-            See the full catalogue
-            <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-          </Link>
-        </div>
-
-        {featured.length === 0 ? (
-          <div className="card">
-            <EmptyState
-              title="Nothing to show for these dates yet"
-              body="Choose a collection date of today or later and a return date after it, and the catalogue will fill in."
-            />
-          </div>
-        ) : (
-          <ul className="grid gap-md sm:grid-cols-2 lg:grid-cols-3" aria-busy={checking}>
-            {featured.map(({ model, rows, free }) => {
-              const branchesWithStock = rows.filter((r) => r.availableUnits > 0)
-              return (
-                <li key={model.id}>
-                  <Link
-                    to={`/model/${model.id}?from=${startIso}&to=${endIso}`}
-                    className="card flex h-full cursor-pointer flex-col transition-shadow duration-200 hover:shadow-raised"
-                  >
-                    <ModelBanner model={model} />
-                    <div className="flex flex-1 flex-col p-md">
-                      <p className="tabular text-lg font-semibold text-ink">
-                        {money(model.dailyRate)}
-                        <span className="text-sm font-normal text-slate-soft"> per day</span>
-                      </p>
-                      <p className="mt-xs text-sm text-slate-soft">
-                        Deposit {money(model.depositAmount)}
-                      </p>
-                      <p className="mt-sm flex-1 text-sm text-slate-soft">
-                        {free > 0
-                          ? `${free} free at ${branchesWithStock.length} of ${rows.length} branches for these dates.`
-                          : 'None free for these dates. Open it to see the next free day.'}
-                      </p>
-                      <span className="mt-md inline-flex items-center gap-xs text-sm font-semibold text-ink">
-                        See dates and book
-                        <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      </span>
-                    </div>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+      <CatalogueStats
+        branches={branches}
+        categories={categories}
+        models={featured}
+        days={days}
+        periodLabel={periodLabel}
+      />
+      <CategoryGrid categories={categories} startIso={startIso} endIso={endIso} />
+      <FeaturedModels
+        models={featured}
+        count={FEATURED_COUNT}
+        startIso={startIso}
+        endIso={endIso}
+      />
     </>
   )
 }

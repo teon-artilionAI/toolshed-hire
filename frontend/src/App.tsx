@@ -2,10 +2,10 @@
  * The router.
  *
  * Every screen in the documented inventory gets an address here, from the
- * first commit, whether or not its module exists yet. That is deliberate:
- * the prototype, the journey map and the built system are all marked on
- * reconciling with one another, and a screen that is reachable in one and
- * missing from another is a finding.
+ * first commit, whether or not its module exists yet. That is deliberate.
+ * The prototype, the journey map and the built system have to reconcile with
+ * one another, and a screen that is reachable in one and missing from another
+ * is a finding.
  *
  * Screen modules load lazily, one chunk each, so the first paint carries
  * only the screen being looked at. All twenty four are present; an id with
@@ -13,17 +13,21 @@
  * is what a newly added inventory entry looks like before its screen lands.
  *
  * DEV-01 is routed from the same table and is not one of the twenty four. It
- * is the connectivity panel at /system, which is the only screen in this
- * application that calls the API. Keeping it in this table rather than adding
- * a second routing mechanism beside it is the whole reason the table exists.
+ * is the connectivity panel at /system. Keeping it in this table rather than
+ * adding a second routing mechanism beside it is the whole reason the table
+ * exists.
+ *
+ * Every screen renders inside an error boundary. A screen that throws shows the
+ * shared error state in its place, and the shell and its navigation stay up.
  */
 
 import { Suspense, lazy, useEffect } from 'react'
 import type { ComponentType } from 'react'
-import { Link, Route, Routes } from 'react-router-dom'
+import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import { SCREENS, ROLE_HOME, ROLE_LABEL } from './shared/navigation'
 import type { ScreenDef } from './shared/navigation'
 import AppShell from './shared/AppShell'
+import { ScreenErrorBoundary } from './shared/error-boundary'
 import { SessionProvider, useSession } from './shared/session'
 import { PageHeader } from './shared/ui'
 import Placeholder from './features/placeholder'
@@ -114,15 +118,21 @@ function ScreenRoute({
   screen: ScreenDef
   Screen: ComponentType
 }) {
+  const { pathname } = useLocation()
   useEffect(() => {
     document.title = `${screen.name} | Toolshed Hire`
   }, [screen])
 
   return (
     <AppShell variant={screen.role}>
-      <Suspense fallback={<ScreenSkeleton />}>
-        <Screen />
-      </Suspense>
+      {/* Keyed by the path, so a failure on one address is gone on the next.
+          The query string is left out on purpose. A search that changes its
+          filters must not lose its place. */}
+      <ScreenErrorBoundary key={pathname}>
+        <Suspense fallback={<ScreenSkeleton />}>
+          <Screen />
+        </Suspense>
+      </ScreenErrorBoundary>
     </AppShell>
   )
 }

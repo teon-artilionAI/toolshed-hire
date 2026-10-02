@@ -4,96 +4,89 @@
  * They live here rather than in `shared/ui` because nothing outside the
  * customer flow needs them, and rather than in one screen because the
  * period picker and the availability chip have to read identically on the
- * home page, the search results and the basket. A customer who sees "2
- * free at Bellville" in three different wordings stops believing any of
- * them.
+ * home page, the search results and the basket. A customer who sees "free at
+ * Bellville" in three different wordings stops believing any of them.
  *
- * There is no photography in the prototype, so each model carries an
- * `imageTone` gradient as its stand-in. The name always sits on a solid
- * scrim rather than on the gradient itself, because white text over the
- * lighter tones would fail contrast.
+ * Nothing here fetches or imports data. Each piece is handed what it shows, so
+ * the screens on the API pass what the API sent and the basket passes its
+ * fixtures until it moves over.
+ *
+ * A model may arrive without a photograph, so the banner always draws a plain
+ * gradient and lays the photograph over it when there is one. The name sits on
+ * a solid scrim in both cases, because white text straight on an image would
+ * fail contrast.
  */
 
 import type { ChangeEvent } from 'react'
-import { Ban, CircleCheck, Minus, Plus, TriangleAlert } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { TODAY, branches } from '../../shared/fixtures'
-import type { BranchCode, ProductModel } from '../../shared/types'
+import { Ban, CircleCheck, Minus, Plus } from 'lucide-react'
 import { Field } from '../../shared/ui'
-import type { BranchAvailability } from './availability'
 import { MAX_HIRE_DAYS } from './hire-period'
 
+/** The value a branch filter holds when no branch has been chosen. */
+export const ANY_BRANCH = 'ALL'
+
 /**
- * The gradient stand-in for photography, with the model name on a scrim.
- * Decorative, so it is hidden from assistive technology; the name is real
+ * The stand-in for photography, with the model name on a scrim. The image is
+ * decorative, so it is hidden from assistive technology. The name is real
  * text and is read normally.
  */
 export function ModelBanner({
-  model,
+  name,
+  manufacturer,
+  imagePath,
   height = 'h-32',
 }: {
-  model: ProductModel
+  name: string
+  manufacturer: string
+  /** Same origin path to the photograph, or null when there is none. */
+  imagePath: string | null
   height?: string
 }) {
   return (
     <div
-      className={`relative flex ${height} items-end overflow-hidden rounded-t-lg bg-gradient-to-br ${model.imageTone}`}
+      className={`relative flex ${height} items-end overflow-hidden rounded-t-lg bg-gradient-to-br from-slate-600 to-slate-800`}
     >
-      <div className="w-full bg-ink/80 px-md py-sm">
-        <p className="text-sm font-semibold leading-tight text-white">
-          {model.name}
-        </p>
-        <p className="mt-xs font-mono text-xs text-white/80">
-          {model.manufacturer}
-        </p>
+      {imagePath && (
+        <img
+          src={imagePath}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      <div className="relative w-full bg-ink/80 px-md py-sm">
+        <p className="text-sm font-semibold leading-tight text-white">{name}</p>
+        <p className="mt-xs font-mono text-xs text-white/80">{manufacturer}</p>
       </div>
     </div>
   )
 }
 
-type ChipTone = 'free' | 'tight' | 'none'
-
-const CHIP_CLASS: Record<ChipTone, string> = {
-  free: 'bg-status-available-wash text-status-available',
-  tight: 'bg-status-due-wash text-status-due',
-  none: 'bg-status-overdue-wash text-status-overdue',
-}
-
-const CHIP_ICON: Record<ChipTone, LucideIcon> = {
-  free: CircleCheck,
-  tight: TriangleAlert,
-  none: Ban,
-}
-
-function chipToneFor(available: number, wanted: number): ChipTone {
-  if (available <= 0) return 'none'
-  return available < wanted ? 'tight' : 'free'
-}
-
 /**
- * How many units are free at one branch. Never colour alone: the count and
- * a word are always present, and an icon backs them up.
+ * Whether one branch can supply the tool for the dates asked about. It says
+ * free or not free and never how many, because the API does not tell a
+ * customer the count. Never colour alone. The words are always present and an
+ * icon backs them up.
  */
 export function AvailabilityChip({
-  row,
-  wanted = 1,
+  branchName,
+  available,
 }: {
-  row: BranchAvailability
-  wanted?: number
+  branchName: string
+  available: boolean
 }) {
-  const tone = chipToneFor(row.availableUnits, wanted)
-  const Icon = CHIP_ICON[tone]
-  const label =
-    row.fleetUnits === 0
-      ? 'Not kept here'
-      : row.availableUnits === 0
-        ? 'None free'
-        : `${row.availableUnits} free`
+  const Icon = available ? CircleCheck : Ban
   return (
-    <span className={`pill ${CHIP_CLASS[tone]}`}>
+    <span
+      className={`pill ${
+        available
+          ? 'bg-status-available-wash text-status-available'
+          : 'bg-status-overdue-wash text-status-overdue'
+      }`}
+    >
       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span className="tabular">
-        {row.branch.name}: {label}
+      <span>
+        {branchName}: {available ? 'Free' : 'Not free'}
       </span>
     </span>
   )
@@ -101,22 +94,31 @@ export function AvailabilityChip({
 
 /**
  * Collection and return dates. Used on every screen in this flow, always
- * with real labels tied to the inputs and a single shared error message.
+ * with real labels tied to the inputs. Each date carries its own message, so
+ * a refusal from the API lands under the field it is about.
  */
 export function PeriodFields({
   idPrefix,
   startIso,
   endIso,
+  minIso,
+  maxDays = MAX_HIRE_DAYS,
   onChangeStart,
   onChangeEnd,
-  error,
+  startError,
+  endError,
 }: {
   idPrefix: string
   startIso: string
   endIso: string
+  /** The earliest collection date the picker offers, as `YYYY-MM-DD`. */
+  minIso: string
+  /** The longest hire, used in the help text. */
+  maxDays?: number
   onChangeStart: (value: string) => void
   onChangeEnd: (value: string) => void
-  error?: string | null
+  startError?: string
+  endError?: string
 }) {
   const startId = `${idPrefix}-from`
   const endId = `${idPrefix}-to`
@@ -125,20 +127,23 @@ export function PeriodFields({
 
   return (
     <>
-      <Field label="Collect on" htmlFor={startId} error={error ?? undefined}>
+      <Field label="Collect on" htmlFor={startId} error={startError}>
         <input
           id={startId}
           type="date"
           className="field-input cursor-pointer"
           value={startIso}
-          min={TODAY}
+          min={minIso}
+          aria-invalid={startError ? true : undefined}
+          aria-describedby={startError ? `${startId}-error` : undefined}
           onChange={read(onChangeStart)}
         />
       </Field>
       <Field
         label="Bring back on"
         htmlFor={endId}
-        help={`Up to ${MAX_HIRE_DAYS} days. You are charged to the morning you return it.`}
+        help={`Up to ${maxDays} days. You are charged to the morning you return it.`}
+        error={endError}
       >
         <input
           id={endId}
@@ -146,6 +151,8 @@ export function PeriodFields({
           className="field-input cursor-pointer"
           value={endIso}
           min={startIso}
+          aria-invalid={endError ? true : undefined}
+          aria-describedby={endError ? `${endId}-help ${endId}-error` : `${endId}-help`}
           onChange={read(onChangeEnd)}
         />
       </Field>
@@ -215,32 +222,63 @@ export function QuantityStepper({
   )
 }
 
-/** Branch chooser. `allLabel` turns it into an optional filter. */
-export function BranchSelect({
+/** What the branch chooser needs to know about a branch. */
+export interface BranchOption<Code extends string = string> {
+  code: Code
+  name: string
+}
+
+/**
+ * Branch chooser. `allLabel` turns it into an optional filter.
+ *
+ * The value can come from an address bar, so it may name a branch the list
+ * does not hold, or the list may still be on its way. Either way the control
+ * shows an option for the value it was given and never quietly shows a
+ * different branch from the one in force.
+ */
+export function BranchSelect<Code extends string>({
   id,
   label = 'Collect from',
+  branches,
   value,
   onChange,
   allLabel,
+  placeholder = 'Loading branches',
+  help,
+  error,
 }: {
   id: string
   label?: string
-  value: BranchCode | 'ALL'
-  onChange: (value: BranchCode | 'ALL') => void
+  branches: readonly BranchOption<Code>[]
+  value: Code | typeof ANY_BRANCH | ''
+  onChange: (value: Code | typeof ANY_BRANCH) => void
   allLabel?: string
+  /** Shown as the only option while there are no branches to offer. */
+  placeholder?: string
+  help?: string
+  error?: string
 }) {
+  const known = value === ANY_BRANCH || branches.some((branch) => branch.code === value)
+  const describedBy = [help ? `${id}-help` : '', error ? `${id}-error` : ''].join(' ').trim()
   return (
-    <Field label={label} htmlFor={id}>
+    <Field label={label} htmlFor={id} help={help} error={error}>
       <select
         id={id}
         className="field-input cursor-pointer"
         value={value}
-        onChange={(e) => onChange(e.target.value as BranchCode | 'ALL')}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy || undefined}
+        onChange={(e) => {
+          const chosen = branches.find((branch) => branch.code === e.target.value)
+          onChange(chosen ? chosen.code : ANY_BRANCH)
+        }}
       >
-        {allLabel && <option value="ALL">{allLabel}</option>}
-        {branches.map((b) => (
-          <option key={b.code} value={b.code}>
-            {b.name}
+        {allLabel && <option value={ANY_BRANCH}>{allLabel}</option>}
+        {!allLabel && value === '' && <option value="">{placeholder}</option>}
+        {!known && value !== '' && <option value={value}>Chosen branch</option>}
+        {branches.map((branch) => (
+          <option key={branch.code} value={branch.code}>
+            {branch.name}
           </option>
         ))}
       </select>

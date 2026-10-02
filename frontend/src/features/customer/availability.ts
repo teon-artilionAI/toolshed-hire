@@ -1,11 +1,10 @@
 /**
- * Availability arithmetic for the customer flow.
+ * Availability arithmetic for the hire basket, SC-04.
  *
- * The whole point of Toolshed Hire is that the same spanner cannot be
- * promised to two people at once, so this module is where the prototype
- * either earns that claim or does not. Every number the customer sees on
- * SC-01 to SC-04 is derived here from the assets, reservations and rentals
- * fixtures. Nothing is hard coded and nothing is invented.
+ * SC-01 to SC-03 ask the API what is free and no longer come here. The basket
+ * has not moved over yet, so every number it shows is still derived here from
+ * the assets, reservations and rentals fixtures. Nothing is hard coded and
+ * nothing is invented. This module goes when the basket moves to the API.
  *
  * A unit at a branch is free on a given day when all three hold:
  *
@@ -36,7 +35,7 @@ import type {
 } from '../../shared/types'
 import { isOverdue } from '../../shared/format'
 import { reasonFor } from './availability-reason'
-import { AVAILABILITY_HORIZON_DAYS, addDays, eachDay } from './hire-period'
+import { eachDay } from './hire-period'
 
 /** Units in these states are off the fleet and never appear as free. */
 const OFF_FLEET: ReadonlySet<AssetStatus> = new Set<AssetStatus>([
@@ -53,16 +52,6 @@ const HOLDS_STOCK: ReadonlySet<ReservationStatus> = new Set<ReservationStatus>([
   'CONFIRMED',
   'COLLECTED',
 ])
-
-/**
- * Driving order between the three branches, nearest first. Used only to
- * word the "try another branch" suggestion, never as hire data.
- */
-const BRANCH_NEIGHBOURS: Record<BranchCode, BranchCode[]> = {
-  CBD: ['BEL', 'SOM'],
-  BEL: ['CBD', 'SOM'],
-  SOM: ['BEL', 'CBD'],
-}
 
 /** When a unit currently on hire is due back, for hires still running to
  *  time. A unit missing from this map cannot be promised a return date. */
@@ -209,64 +198,4 @@ export function availabilityAt(
       availableUnits,
     }),
   }
-}
-
-/** Availability of one model at every branch, in fixture branch order. */
-export function availabilityEverywhere(
-  modelId: Uuid,
-  startIso: string,
-  endIso: string,
-): BranchAvailability[] {
-  return branches.map((b) => availabilityAt(modelId, b.code, startIso, endIso))
-}
-
-/** Total units of a model free anywhere for the period. */
-export function totalAvailable(modelId: Uuid, startIso: string, endIso: string): number {
-  return availabilityEverywhere(modelId, startIso, endIso).reduce(
-    (sum, row) => sum + row.availableUnits,
-    0,
-  )
-}
-
-/**
- * The closest branch that can actually supply the quantity asked for, so
- * a customer told "not here" is told where instead rather than left stuck.
- */
-export function nearestBranchWithStock(
-  modelId: Uuid,
-  from: BranchCode,
-  startIso: string,
-  endIso: string,
-  quantity = 1,
-): BranchAvailability | null {
-  for (const code of BRANCH_NEIGHBOURS[from]) {
-    const row = availabilityAt(modelId, code, startIso, endIso)
-    if (row.availableUnits >= quantity) return row
-  }
-  return null
-}
-
-export interface DayAvailability {
-  date: string
-  availableUnits: number
-  serviceableUnits: number
-}
-
-/** The day by day strip on SC-03. One entry per day, starting at `startIso`. */
-export function availabilityStrip(
-  modelId: Uuid,
-  branchCode: BranchCode,
-  startIso: string,
-  days = AVAILABILITY_HORIZON_DAYS,
-): DayAvailability[] {
-  const fleet = fleetAt(modelId, branchCode)
-  const serviceableUnits = fleet.filter((a) => !OFF_FLEET.has(a.status)).length
-  return Array.from({ length: days }, (_, offset) => {
-    const date = addDays(startIso, offset)
-    return {
-      date,
-      availableUnits: countForDay(fleet, branchCode, modelId, date).free,
-      serviceableUnits,
-    }
-  })
 }

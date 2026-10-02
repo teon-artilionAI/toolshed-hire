@@ -1,10 +1,11 @@
 /**
- * Reading a branch out of the address bar.
+ * Reading a fixture branch out of the address bar, for the hire basket.
  *
- * Every customer screen takes its branch from a query string, and a query
- * string is user input. An unrecognised code falls back to a sensible
- * default rather than reaching the availability engine, which throws on an
- * unknown branch by design.
+ * The basket takes its branch from a query string, and a query string is user
+ * input. An unrecognised code falls back to a sensible default rather than
+ * reaching the fixture availability arithmetic, which throws on an unknown
+ * branch by design. The screens on the API do not use this. They pass the
+ * code on and let the API judge it.
  */
 
 import type { BranchCode } from '../../shared/types'
@@ -21,9 +22,4 @@ function isBranchCode(value: string | null): value is BranchCode {
 /** A single branch, defaulting to Cape Town CBD. */
 export function readBranch(value: string | null): BranchCode {
   return isBranchCode(value) ? value : DEFAULT_BRANCH
-}
-
-/** A branch filter, where "no branch" means every branch. */
-export function readBranchFilter(value: string | null): BranchCode | 'ALL' {
-  return isBranchCode(value) ? value : 'ALL'
 }

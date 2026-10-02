@@ -3,9 +3,9 @@
  *
  * Every entry maps one to one onto a screen in the Task 1 journey map, and
  * the SC identifiers are carried through to the interface itself. That
- * matters because the documentation, the prototype and the built system are
- * all marked on reconciling with each other, and a screen that exists in
- * one and not the others is a finding.
+ * matters because the documentation, the prototype and the built system have
+ * to reconcile with each other, and a screen that exists in one and not the
+ * others is a finding.
  */
 
 import type { Role } from './types'
@@ -38,7 +38,7 @@ export const SCREENS: ScreenDef[] = [
   // Customer, SC-01 to SC-09
   { id: 'SC-01', path: '/', name: 'Catalogue Home', navLabel: 'Catalogue', role: 'customer', publicAccess: true, inNav: true, icon: 'Home' },
   { id: 'SC-02', path: '/search', name: 'Availability Search Results', navLabel: 'Search', role: 'customer', publicAccess: true, inNav: true, icon: 'Search' },
-  { id: 'SC-03', path: '/model/:modelId', name: 'Product Model Detail', role: 'customer', publicAccess: true },
+  { id: 'SC-03', path: '/model/:slug', name: 'Product Model Detail', role: 'customer', publicAccess: true },
   { id: 'SC-04', path: '/basket', name: 'Hire Basket and Booking Review', navLabel: 'Basket', role: 'customer', publicAccess: true, inNav: true, icon: 'ShoppingCart' },
   { id: 'SC-05', path: '/register', name: 'Register', role: 'customer', publicAccess: true },
   { id: 'SC-06', path: '/signin', name: 'Sign In and Password Reset', role: 'customer', publicAccess: true },

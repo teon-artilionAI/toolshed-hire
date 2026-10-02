@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react'
 import { FlaskConical } from 'lucide-react'
 import { Notice, StatusPill } from '../../shared/ui'
-import type { ApiError } from '../../shared/api'
+import type { ApiError } from '../../shared/api-problem'
 
 /**
  * Where an asynchronous call has got to.
@@ -78,9 +78,9 @@ export function FailureNotice({ error, what }: { error: ApiError; what: string }
       <Notice tone="warn" title="The backend is not running">
         <p>{`${what} did not get through. ${error.detail}`}</p>
         <p className="mt-sm">
-          This is the only screen that needs the API. The other twenty four read from fixtures
-          and are unaffected. Start it from the backend directory with its virtual environment
-          active:
+          This screen and the catalogue screens need the API. The screens that still read from
+          fixtures are unaffected. Start it from the backend directory with its virtual
+          environment active:
         </p>
         <p className="mt-xs break-all font-mono text-xs">{START_BACKEND_COMMAND}</p>
       </Notice>

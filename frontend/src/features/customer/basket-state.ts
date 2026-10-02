@@ -7,15 +7,15 @@
  * hammers", and which two tags they get is the counter's business at
  * checkout, not the customer's at booking.
  *
- * The prototype has no back end, so the basket is seeded rather than
- * restored. It is seeded deliberately: one line that the default branch can
- * supply and one it cannot, so both the happy path and the conflict path
- * are on screen the moment the screen opens.
+ * The basket does not call the API yet, so it is seeded and not restored. It
+ * is seeded deliberately, with one line that the default branch can supply
+ * and one it cannot, so both the happy path and the conflict path are on
+ * screen the moment the screen opens.
  */
 
 import { reservations } from '../../shared/fixtures'
 import type { Uuid } from '../../shared/types'
-import { catalogue, modelById } from './catalogue-data'
+import { catalogue, modelById, modelBySlug } from './catalogue-data'
 
 export interface BasketItem {
   modelId: Uuid
@@ -40,13 +40,22 @@ export function nextReference(): string {
   return `TSH-R-26-${String(highest + 1).padStart(6, '0')}`
 }
 
-/** The demonstration basket, plus whatever SC-03 sent through in the query. */
-export function seedBasket(addModelId: string | null, addQuantity: number): BasketItem[] {
+/**
+ * The demonstration basket, plus whatever SC-03 sent through in the query.
+ *
+ * SC-03 reads from the API and names a model by its slug. The basket still
+ * runs on fixtures, so it accepts a slug as well as a fixture id and adds the
+ * model when the fixtures hold it. A model that only the API knows is left
+ * out until the basket itself moves over.
+ */
+export function seedBasket(addModelRef: string | null, addQuantity: number): BasketItem[] {
   const seeded: BasketItem[] = catalogue
     .filter((model) => DEMO_SKUS.includes(model.sku))
     .map((model) => ({ modelId: model.id, quantity: 1 }))
 
-  if (!addModelId || !modelById(addModelId)) return seeded
+  const added = addModelRef ? (modelById(addModelRef) ?? modelBySlug(addModelRef)) : undefined
+  if (!added) return seeded
+  const addModelId = added.id
 
   const existing = seeded.find((line) => line.modelId === addModelId)
   if (existing) {

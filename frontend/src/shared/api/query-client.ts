@@ -1,0 +1,99 @@
+/**
+ * The server state cache and the rules it runs under.
+ *
+ * One `QueryClient` is made in main.tsx and every screen reads through it.
+ * The rules sit here, in one file, so a screen cannot quietly pick its own.
+ *
+ * THE RETRY RULE
+ * ==============
+ * A read is tried again only when the API was never reached. That means
+ * nothing answered, or the edge in front of the API said it could not get
+ * there. It is tried at most twice more, with a wait that doubles each time.
+ * An answer from the API itself is never retried. A 4xx is the API saying no,
+ * and asking again gets the same no. A 5xx with a problem document is a fault
+ * the API already logged, and hammering it does not help.
+ *
+ * A write is never retried here. A POST that timed out may still have reached
+ * the server, and sending it again without an idempotency key could book the
+ * same tool twice.
+ *
+ * HOW FRESH EACH KIND OF DATA IS
+ * ==============================
+ * Catalogue data, meaning branches, categories and models, changes a few times
+ * a week. I treat it as fresh for a minute, so moving between screens does not
+ * ask for the same list again.
+ *
+ * Availability is the opposite. It can change while a customer is reading the
+ * page, so it is stale the moment it arrives. A screen that shows a cached
+ * answer always refetches it at the same time, on mount and on focus, and a
+ * failed refetch is shown as a failure and not hidden behind the old answer.
+ */
+
+import { QueryClient } from '@tanstack/react-query'
+import { isApiError } from '../api-problem'
+
+/** How many times a failed read is tried again before the failure is shown. */
+export const MAX_QUERY_RETRIES = 2
+
+/** The wait before the first retry. Each later wait is double the one before. */
+export const RETRY_BASE_DELAY_MS = 500
+
+/** The longest a single wait between tries may grow to. */
+export const RETRY_MAX_DELAY_MS = 4000
+
+/** How long catalogue data counts as fresh. */
+export const CATALOGUE_FRESH_MS = 60_000
+
+/** Availability is never fresh. Every use of a cached answer refetches it. */
+export const AVAILABILITY_FRESH_MS = 0
+
+/** The first segment of every catalogue query key. */
+export const CATALOGUE_KEY = 'catalogue'
+
+/** The first segment of every availability query key. */
+export const AVAILABILITY_KEY = 'availability'
+
+/**
+ * Decide whether a failed read is worth another try.
+ *
+ * @param failureCount How many tries have already been made again. Zero on the
+ *   first failure.
+ * @param error What the read threw.
+ * @returns True only for a transport or gateway failure with tries left.
+ */
+export function shouldRetry(failureCount: number, error: unknown): boolean {
+  if (failureCount >= MAX_QUERY_RETRIES) return false
+  return isApiError(error) && error.isBackendUnreachable
+}
+
+/**
+ * How long to wait before the next try.
+ *
+ * @param failureCount Zero before the first retry, one before the second.
+ * @returns The wait in milliseconds, doubling each time up to the ceiling.
+ */
+export function retryDelay(failureCount: number): number {
+  return Math.min(RETRY_BASE_DELAY_MS * 2 ** failureCount, RETRY_MAX_DELAY_MS)
+}
+
+/** Build the cache with the rules above. Tests make their own from this too,
+ *  so a test runs under the same rules the application does. */
+export function createQueryClient(): QueryClient {
+  const client = new QueryClient({
+    defaultOptions: {
+      // `always` means a request is attempted even when the browser thinks it
+      // is offline. The default would park the query with nothing to show. This
+      // way it fails as a transport failure and the screen says so.
+      queries: { retry: shouldRetry, retryDelay, networkMode: 'always' },
+      mutations: { retry: false, networkMode: 'always' },
+    },
+  })
+  client.setQueryDefaults([CATALOGUE_KEY], { staleTime: CATALOGUE_FRESH_MS })
+  client.setQueryDefaults([AVAILABILITY_KEY], {
+    staleTime: AVAILABILITY_FRESH_MS,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
+  })
+  return client
+}

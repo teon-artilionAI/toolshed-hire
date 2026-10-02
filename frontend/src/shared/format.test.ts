@@ -17,6 +17,7 @@ import {
   humanise,
   isOverdue,
   money,
+  moneyTimes,
 } from './format'
 
 /** The no-break spaces a locale formatter likes to use between digit groups. */
@@ -53,6 +54,81 @@ describe('money', () => {
 
   it('never shows the ISO currency code', () => {
     expect(money(450)).not.toContain('ZAR')
+  })
+})
+
+describe('money, given a string as the API sends it', () => {
+  it('writes the figure the same way it writes a number', () => {
+    expect(money('280.00')).toMatch(/^R 280[,.]00$/)
+    expect(money('280.00')).toBe(money(280))
+    expect(money('1234567.89')).toBe(money(1234567.89))
+  })
+
+  it('shows the cents exactly as they arrived', () => {
+    expect(money('0.10')).toMatch(/^R 0[,.]10$/)
+    expect(money('19.99')).toMatch(/^R 19[,.]99$/)
+    expect(money('0.00')).toMatch(/^R 0[,.]00$/)
+  })
+
+  it('keeps every digit of an amount too large for a float to hold', () => {
+    // As a float this is 9007199254740993.57, which rounds to a neighbour and
+    // would show a different figure from the one that was sent.
+    const digitsOnly = money('9007199254740993.57').replace(/\D/g, '')
+
+    expect(digitsOnly).toBe('900719925474099357')
+  })
+
+  it('pads a figure written with fewer than two decimals', () => {
+    expect(money('280')).toBe(money('280.00'))
+    expect(money('280.5')).toBe(money('280.50'))
+  })
+
+  it('writes a negative amount with its sign', () => {
+    expect(money('-45.50')).toBe(money(-45.5))
+  })
+
+  it('uses plain spaces and never the ISO currency code', () => {
+    expect(money('1234567.89')).not.toMatch(NO_BREAK_SPACES)
+    expect(money('1234567.89')).not.toContain('ZAR')
+  })
+
+  it.each(['', 'abc', '12.345', '1,200.00', 'R 280.00', '1e3'])(
+    'refuses "%s" and does not guess at a figure',
+    (amount) => {
+      expect(() => money(amount)).toThrow(RangeError)
+    },
+  )
+})
+
+describe('moneyTimes', () => {
+  it('multiplies a rate by a number of days', () => {
+    expect(moneyTimes('340.00', 4)).toBe('1360.00')
+  })
+
+  it('does the sum in whole cents, so nothing drifts', () => {
+    // As floats, 0.1 times 3 is 0.30000000000000004.
+    expect(moneyTimes('0.10', 3)).toBe('0.30')
+    expect(moneyTimes('19.99', 3)).toBe('59.97')
+  })
+
+  it('carries cents into rand', () => {
+    expect(moneyTimes('0.75', 2)).toBe('1.50')
+  })
+
+  it('is nothing when multiplied by zero', () => {
+    expect(moneyTimes('340.00', 0)).toBe('0.00')
+  })
+
+  it('gives back a string that money can show', () => {
+    expect(money(moneyTimes('185.00', 8))).toBe(money(1480))
+  })
+
+  it.each([-1, 1.5, Number.NaN])('refuses to multiply by %s', (times) => {
+    expect(() => moneyTimes('340.00', times)).toThrow(RangeError)
+  })
+
+  it('refuses an amount that is not money', () => {
+    expect(() => moneyTimes('lots', 2)).toThrow(RangeError)
   })
 })
 
