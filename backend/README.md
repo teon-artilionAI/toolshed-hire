@@ -27,7 +27,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, and `catalogue_deps.py` is its read side half. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -45,9 +45,9 @@ keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
-| `identity` | `Actor`, `Branch`, `CustomerProfile` | `BranchRepository`, `CustomerRepository` | `SqlBranchRepository`, `SqlCustomerRepository` |
-| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository` | `SqlProductModelRepository` |
-| `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets` | `SqlAssetRepository` |
+| `identity` | `Actor`, `Branch`, `CustomerProfile` | `BranchRepository`, `CustomerRepository`, `BranchDirectory` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory` |
+| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue` | `SqlProductModelRepository`, `SqlCatalogueQuery` |
+| `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine` | `ReservationRepository`, `CreateReservationUseCase` | `SqlReservationRepository` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
 
@@ -97,7 +97,9 @@ the client address when the server knows one.
 A use case is a class with one `execute(command)` method. It takes the unit of
 work, a clock and anything else it needs through its constructor. The router
 never builds one. `app/api/deps.py` does, and it is the only module that knows
-which implementation stands behind each port.
+which implementation stands behind each port a use case writes through. The
+query objects of the read side are chosen the same way in
+`app/api/catalogue_deps.py`.
 
 ### Adapter
 
@@ -135,6 +137,51 @@ instants in UTC and works out the business day in `Africa/Johannesburg`, so a
 booking made at half past midnight in Cape Town belongs to the new day. The
 tests use a clock that stands still, and one test reads the source of both
 layers to make sure neither calls `datetime.now()` or `date.today()`.
+
+## The read side
+
+A visitor with no account browses the catalogue and asks where a model is free
+for a period (FR-02, FR-03, FR-04). Nothing is written, so there is no unit of
+work, no lock and no audit event. A read goes through a query object.
+
+| Port in the application layer | Query object in the infrastructure layer |
+|---|---|
+| `BranchDirectory` | `SqlBranchDirectory` |
+| `CatalogueQuery` | `SqlCatalogueQuery` |
+| `AvailabilityQuery` | `SearchAvailabilityQuery` |
+
+A query object selects columns and returns small frozen dataclasses that the
+application layer defines, in the `read_models.py` of each module. It never
+returns a table row. None of those dataclasses has a field for an asset tag, a
+serial number or a number of units, so a customer cannot be told stock (US-07).
+The single model question counts free units inside the database and returns
+only whether there are enough.
+
+Two services hold the rules that are not SQL. `BrowseCatalogue` refuses an
+unknown category and answers an unpublished model as not found.
+`SearchAvailability` builds the period as a `BookingPeriod` and checks it with
+`ensure_within_booking_window`, so a search and a booking agree about BR-02 to
+BR-05. The day it is comes from the clock.
+
+A unit is free for a period when its status is `AVAILABLE` and it holds no
+active allocation whose half open period overlaps the one asked about (BR-10).
+The availability list answers for every model on the page and every active
+branch in one statement. The condition is written with the same
+`daterange(start_date, end_date, '[)') &&` expression as the exclusion
+constraint, under `released_at IS NULL`, so the GiST index behind the
+constraint can serve it, and the partial index `ix_asset_available` finds the
+hireable units. An availability search issues the count and the page, plus one
+lookup for a category and one for a branch when the search names them, whatever
+the page holds. `app/infrastructure/availability_search.py` says how the
+planner runs the statement and what slows down first as the fleet grows.
+
+The order of a list comes from the `ModelSort` enumeration, which the query
+object maps to columns. No part of a request is ever placed in a statement
+(C-28).
+
+Every query logs when it starts and when it finishes, with its filters, its row
+count and its duration. The text a visitor searched for is logged by its length
+only.
 
 ## The schema
 
@@ -241,9 +288,61 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/auth/sign-in` | Public, it issues the credential. |
 | GET | `/api/me` | Any active account. |
 | POST | `/api/allocations` | Any active account. A customer may only book for themselves. |
+| GET | `/api/branches` | Public by declaration. |
+| GET | `/api/catalogue/categories` | Public by declaration. |
+| GET | `/api/catalogue/models` | Public by declaration. |
+| GET | `/api/catalogue/models/{slug}` | Public by declaration. |
+| GET | `/api/catalogue/availability` | Public by declaration. |
+| GET | `/api/catalogue/models/{slug}/availability` | Public by declaration. |
 
 Every other endpoint added later must declare its roles. The default is deny
-(BR-41).
+(BR-41). The six public read routes say so in code. Each depends on
+`public_access` from `app/api/deps.py`, and a test fails if one of them stops.
+
+### The public catalogue and availability routes
+
+All six return JSON with camelCase member names. Money is a string with two
+decimals, for example `"280.00"`, and never a number. A date is `YYYY-MM-DD`
+and a time of day is `HH:MM`.
+
+| Path | Query | Returns |
+|---|---|---|
+| `/api/branches` | none | `items`, the active branches ordered by name. |
+| `/api/catalogue/categories` | none | `items`, the active categories, each parent followed by its children. `modelCount` counts published models and a parent includes its children. |
+| `/api/catalogue/models` | `category`, `q`, `sort`, `page`, `pageSize` | `items`, `page`, `pageSize`, `total`, for published models only. |
+| `/api/catalogue/models/{slug}` | none | One published model, with `longDescription` and `lateFeePerDay`. 404 for an unknown or unpublished slug. |
+| `/api/catalogue/availability` | `from`, `to`, the five above, `branch` | `from`, `to`, `hireDays`, `items`, `page`, `pageSize`, `total`. Each item is a `model` and one `available` boolean for every active branch. |
+| `/api/catalogue/models/{slug}/availability` | `from`, `to`, `quantity` | `from`, `to`, `hireDays`, `quantity`, `branches`. A branch is available when at least `quantity` units are free. |
+
+`category` is a category slug and a parent includes its children. `q` is at
+least 2 characters and is matched against the name, the manufacturer and the
+model number in any case. `sort` is `name`, `dailyRateAsc` or `dailyRateDesc`.
+`page` counts from 1 and `pageSize` is 1 to 50, 24 when left out. `branch` is a
+branch code and keeps only the models free at that branch. `quantity` is 1 to
+10. `from` and `to` are half open, so `to` is the day the equipment comes back
+and is free again.
+
+A refused parameter is a 422 problem document. The type ends in
+`request-validation-failure` and `errors.fields` holds one sentence for each
+refused field, keyed by where the value came from and its name in the query,
+for example `query.to` or `query.pageSize`. The shape is the same whether the
+value could not be read or a rule refused it. The rules are that `to` is after
+`from`, the period is at most 28 days and within the hire limits of the model
+on the single model route, `from` is not in the past and not more than 90 days
+ahead, and the category, the branch and the sort order are known.
+
+The four catalogue routes answer `Cache-Control: public, max-age=60`. The two
+availability routes answer `no-store`, because the answer can be wrong a second
+after it is given. A request that carried a credential is always answered
+`no-store`.
+
+`openapi.json` in this directory is the OpenAPI document of the API, kept so
+the frontend can generate its types from it. I write it from Python and not by
+redirecting standard output, because the application logs to standard output.
+
+```bash
+ENVIRONMENT=test python -c "import json, pathlib; from app.main import create_app; pathlib.Path('openapi.json').write_text(json.dumps(create_app().openapi(), indent=2) + '\\n', encoding='utf-8')"
+```
 
 `/docs`, `/redoc` and `/openapi.json` are served in development and test only.
 In staging and production they answer 404.
