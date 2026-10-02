@@ -25,12 +25,13 @@ first pass at the whole application.
 
 | Path | Layer | Holds |
 |---|---|---|
-| `app/domain` | Domain | Entities as plain dataclasses, `BookingPeriod`, enumerations, errors. No framework, no SQL, no IO. |
+| `app/domain` | Domain | Entities as plain dataclasses, `BookingPeriod`, `Money`, enumerations, errors. No framework, no SQL, no IO. |
+| `app/domain/policies` | Domain | The rules that can be swapped. `PricingPolicy` and its two implementations. |
 | `app/application` | Application | Use cases, transaction boundaries and ports. One package per module, plus the unit of work, the clock and the audit log, which every module shares. |
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half and `identity_deps.py` wires the session use cases. `access_policy.py` is the deny by default check. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases and `pricing_deps.py` chooses the pricing policy. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -43,7 +44,7 @@ layers, the application layer imports the domain and nothing else, and the API
 layer is the only one that imports everything, because it is where the pieces
 are put together.
 
-The design document describes eight modules. Five have code so far, and each
+The design document describes eight modules. Six have code so far, and each
 keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
@@ -53,16 +54,17 @@ keeps the same name in every layer it appears in.
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine` | `ReservationRepository`, `CreateReservationUseCase` | `SqlReservationRepository` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
+| `money` | `Money`, `PricingPolicy`, `StandardPricingPolicy`, `FixedRatePricingPolicy`, `LineSnapshot`, `HireQuote` | `QuoteHire` | none yet, a quote writes nothing |
 
-`hire`, `money` and `reporting` gain their packages when their first use case
-is built. The audit trail belongs to no module, because every module writes to
+`hire` and `reporting` gain their packages when their first use case is built.
+The audit trail belongs to no module, because every module writes to
 it, so it has a file of its own in each layer. The throttle in
 `app/application/throttle.py` and the ownership scope in
 `app/application/ownership.py` belong to no module for the same reason.
 
-## The two patterns in place
+## The three patterns in place
 
-The design document names four patterns. Two are built.
+The design document names four patterns. Three are built.
 
 ### Repository with Unit of Work
 
@@ -134,6 +136,51 @@ Only a booking confirmation writes a notification row. The existing flow
 creates a held reservation, so that is where the confirmation is queued today.
 It moves to the confirmation use case when that is built.
 
+### Strategy
+
+BR-21 says a hire price is produced by a pricing policy and not by arithmetic
+scattered through the system. `PricingPolicy` is a port in
+`app/domain/policies`, and `StandardPricingPolicy` is the one implementation
+that runs. `app/api/pricing_deps.py` builds it once at start-up and hands the
+same one to every request. `FixedRatePricingPolicy` is its counterpart for
+tests. It charges one fixed amount for a unit, so a test of a booking can state
+its price in a line.
+
+```python
+quote = policy.quote(line, period, discount_percent)
+```
+
+`line` is a `LineSnapshot`, which is the daily rate, the weekly rate, the
+deposit and the quantity as they were copied (BR-20). The policy never sees the
+catalogue, so a price worked out from a snapshot at R280 does not move when the
+catalogue goes to R310. The trade discount is an input as well. The policy
+never looks one up.
+
+The rule for one unit is the lower of two totals. Complete weeks at the weekly
+rate with the days left over at the daily rate, or every day at the daily rate.
+A hire shorter than a week has no complete week, so it is charged by the day.
+The quantity multiplies that, the discount comes off as a percentage, and VAT
+goes on what is left. `BookingPeriod.whole_weeks` and `remainder_days` do the
+counting, and the week is seven days, named once as `WEEK_LENGTH_DAYS` on the
+policy.
+
+Three things live in exactly one place because of it.
+
+- `StandardPricingPolicy.quote` is the only place a rate is multiplied by a
+  number of days. `tests/unit/test_one_place_for_a_price.py` parses every
+  module of `app` to keep it so.
+- `VAT_RATE_PERCENT` in `app/domain/vat.py` is the only place the VAT rate is
+  written, as `Decimal("15.00")`. Hire rates exclude VAT. A deposit carries
+  none (BR-23).
+- `Money.rounded` is the only place an amount is rounded, half up to the cent.
+
+`Money` holds a `Decimal` and refuses a float wherever one is offered, as an
+amount, as a multiplier or in a comparison (BR-22). An amount stays exact while
+it is being worked on. The amount charged after the discount and the VAT on it
+are each rounded once from the exact figure, because those are the two amounts
+a charge is written with. The total is their sum and the discount shown is the
+subtotal less the amount charged, so the figures on a quote add up to the cent.
+
 ### The clock
 
 Nothing in the domain or the application layer reads the time from the
@@ -164,9 +211,11 @@ only whether there are enough.
 
 Two services hold the rules that are not SQL. `BrowseCatalogue` refuses an
 unknown category and answers an unpublished model as not found.
-`SearchAvailability` builds the period as a `BookingPeriod` and checks it with
-`ensure_within_booking_window`, so a search and a booking agree about BR-02 to
-BR-05. The day it is comes from the clock.
+`SearchAvailability` checks the period through
+`app/application/availability/hire_request.py`, which builds it as a
+`BookingPeriod` and checks it with `ensure_within_booking_window`. `QuoteHire`
+goes through the same module, so a search, a quote and a booking agree about
+BR-02 to BR-05. The day it is comes from the clock.
 
 A unit is free for a period when its status is `AVAILABLE` and it holds no
 active allocation whose half open period overlaps the one asked about (BR-10).
@@ -429,6 +478,7 @@ uvicorn app.main:app --reload --port 8000
 | GET | `/api/catalogue/models/{slug}` | Public by declaration. |
 | GET | `/api/catalogue/availability` | Public by declaration. |
 | GET | `/api/catalogue/models/{slug}/availability` | Public by declaration. |
+| GET | `/api/catalogue/models/{slug}/quote` | Public by declaration. |
 
 Every endpoint added later must declare its policy. The default is deny
 (BR-41), the application refuses to start on a route that declares nothing, and
@@ -449,9 +499,9 @@ answer errors as `application/problem+json`.
 and `GET /api/me` returns the same object. `role` is `customer`, `counter` or
 `admin`. `branchCode` is null unless the account is counter staff.
 
-### The public catalogue and availability routes
+### The public catalogue, availability and quote routes
 
-All six return JSON with camelCase member names. Money is a string with two
+All seven return JSON with camelCase member names. Money is a string with two
 decimals, for example `"280.00"`, and never a number. A date is `YYYY-MM-DD`
 and a time of day is `HH:MM`.
 
@@ -463,6 +513,7 @@ and a time of day is `HH:MM`.
 | `/api/catalogue/models/{slug}` | none | One published model, with `longDescription` and `lateFeePerDay`. 404 for an unknown or unpublished slug. |
 | `/api/catalogue/availability` | `from`, `to`, the five above, `branch` | `from`, `to`, `hireDays`, `items`, `page`, `pageSize`, `total`. Each item is a `model` and one `available` boolean for every active branch. |
 | `/api/catalogue/models/{slug}/availability` | `from`, `to`, `quantity` | `from`, `to`, `hireDays`, `quantity`, `branches`. A branch is available when at least `quantity` units are free. |
+| `/api/catalogue/models/{slug}/quote` | `from`, `to`, `quantity` | What the hire will cost, described below. 404 for an unknown or unpublished slug. |
 
 `category` is a category slug and a parent includes its children. `q` is at
 least 2 characters and is matched against the name, the manufacturer and the
@@ -481,10 +532,60 @@ value could not be read or a rule refused it. The rules are that `to` is after
 on the single model route, `from` is not in the past and not more than 90 days
 ahead, and the category, the branch and the sort order are known.
 
+A sentence in `detail` or under `errors.fields` is put on a customer's screen
+as it is written. So it says what to do, for example "The hire has to start
+today or later." or "A hire can be at most 28 days.", and it names no business
+rule and repeats no raw value (NFR-12). That holds for a value the framework
+refused as well. `app/api/field_messages.py` replaces the framework's sentence
+for a query parameter with a plain one, chosen by the kind of refusal. The
+rule and the values that were tried go to the log instead, on the
+`api.request_validation_failed` and `api.domain_error` lines, as `rule`,
+`detail` and `refused_as`. `tests/api/test_plain_refusals.py` asks every one
+of these routes for every refusal it can give and fails if a sentence contains
+`BR-`, `NFR-`, `start=` or `end=`.
+
+The quote route answers what a hire of `quantity` units will cost (FR-05).
+
+```json
+{
+  "from": "2026-10-09", "to": "2026-10-19", "hireDays": 10, "quantity": 2,
+  "perUnit": {
+    "dailyRate": "280.00", "weeklyRate": "1120.00",
+    "wholeWeeks": 1, "remainderDays": 3,
+    "basis": "weekly",
+    "amountExVat": "1960.00"
+  },
+  "subtotalExVat": "3920.00",
+  "discountPercent": "0.00",
+  "discountAmount": "0.00",
+  "vatRate": "15.00",
+  "vatAmount": "588.00",
+  "totalIncVat": "4508.00",
+  "depositPerUnit": "1200.00",
+  "depositTotal": "2400.00",
+  "lateFeePerDay": "120.00"
+}
+```
+
+`basis` is `weekly` when the weeks and the days left over came to less than
+every day at the daily rate, and `daily` when the daily total was lower or the
+same. `vatAmount` is worked out on the subtotal after the discount.
+`totalIncVat` leaves the deposit out, because a deposit is held and returned
+and not charged. The period and the quantity are held to the same limits as on
+the single model availability route, so a quote is never given for a hire that
+could not then be booked.
+
+The route applies no trade discount. It is public, so it does not know who is
+asking. The dependencies that read an account are the role policies, and a
+route that is public and depends on one of them as well is refused at
+start-up. Reading the account some other way would step around that check, so
+the route does not. `QuoteHire` takes the discount as an input, and the booking
+flow, which knows the customer, passes the one on their profile.
+
 The four catalogue routes answer `Cache-Control: public, max-age=60`. The two
-availability routes answer `no-store`, because the answer can be wrong a second
-after it is given. A request that carried a credential is always answered
-`no-store`.
+availability routes and the quote route answer `no-store`, because the answer
+can be wrong a second after it is given. A request that carried a credential
+is always answered `no-store`.
 
 `openapi.json` in this directory is the OpenAPI document of the API, kept so
 the frontend can generate its types from it. I write it from Python and not by
