@@ -1,15 +1,15 @@
-"""An in memory unit of work for the session use cases, and the two fakes they take.
+"""An in memory unit of work for the identity use cases, and the two fakes they take.
 
 `IdentityMemoryUnitOfWork` extends the in memory unit of work in `memory` with
-the three things signing in needs, which are accounts, refresh sessions and
-throttle counters. It keeps them the same way. Work is only kept when `commit`
-is called and is thrown away when the block is left without one, which is what
-lets a test prove that a refused sign in still saves its failure count.
+the things signing in and the account use cases need, which are accounts,
+refresh sessions, throttle counters and the details of a customer. It keeps
+them the same way. Work is only kept when `commit` is called and is thrown
+away when the block is left without one, which is what lets a test prove that
+a refused sign in still saves its failure count.
 
-The two fakes stand in for the cryptography. `CountingPasswordVerifier`
-compares against a readable stand in for a hash and remembers every call, so a
-test can assert that each path verified exactly once. `FakeAccessTokenIssuer`
-hands back a value that is plainly not a token.
+The fakes that stand in for the cryptography are in `memory_crypto` and are
+exported from here as well, because the session tests have always found them
+here. The repository of a customer's own details is in `memory_customers`.
 
 None of this makes any attempt at locking. The row locks are proved against
 PostgreSQL in tests/integration.
@@ -23,21 +23,22 @@ from datetime import datetime
 from typing import Final, Self
 from uuid import UUID, uuid4
 
-from app.application.identity.ports import IssuedAccessToken
+from app.application.identity.ports import EmailAlreadyRegistered
 from app.domain.account import Account
+from app.domain.customer_account import CustomerDetails
 from app.domain.enums import RevokeReason, UserRole
 from app.domain.session import RefreshSession
 from tests.support.memory import InMemoryUnitOfWork, MemoryStore
+from tests.support.memory_crypto import (
+    FAKE_ACCESS_LIFETIME_SECONDS,
+    CountingPasswordVerifier,
+    FakeAccessTokenIssuer,
+    fake_hash,
+)
+from tests.support.memory_customers import AccountCustomers
 
-FAKE_HASH_PREFIX: Final[str] = "stand-in-hash-of:"
-FAKE_ACCESS_LIFETIME_SECONDS: Final[int] = 900
 KNOWN_PASSWORD: Final[str] = "correct-horse-battery-staple"
 KNOWN_EMAIL: Final[str] = "nomsa.dlamini@example.co.za"
-
-
-def fake_hash(plain_password: str) -> str:
-    """Return the readable stand in the counting verifier treats as a hash."""
-    return f"{FAKE_HASH_PREFIX}{plain_password}"
 
 
 @dataclass
@@ -47,13 +48,22 @@ class IdentityRecords:
     accounts: dict[UUID, Account] = field(default_factory=dict)
     sessions: dict[UUID, RefreshSession] = field(default_factory=dict)
     counters: dict[tuple[str, datetime], int] = field(default_factory=dict)
+    details: dict[UUID, CustomerDetails] = field(default_factory=dict)
 
 
 @dataclass
 class IdentityStore:
-    """The committed accounts, sessions and counters."""
+    """The committed accounts, sessions, counters and customer details.
+
+    Attributes:
+        committed: What has been committed so far.
+        address_taken_at_write: When True, writing a new account fails the way
+            it does when another registration took the address a moment before.
+
+    """
 
     committed: IdentityRecords = field(default_factory=IdentityRecords)
+    address_taken_at_write: bool = False
 
     def add_account(
         self,
@@ -90,8 +100,9 @@ class IdentityStore:
 class _Accounts:
     """The account repository over the working copy."""
 
-    def __init__(self, working: IdentityRecords) -> None:
-        """Bind to the working copy of one transaction."""
+    def __init__(self, identity: IdentityStore, working: IdentityRecords) -> None:
+        """Bind to the store and to the working copy of one transaction."""
+        self._identity = identity
         self._working = working
 
     def find_by_email_for_update(self, email: str) -> Account | None:
@@ -101,9 +112,45 @@ class _Accounts:
                 return copy.deepcopy(account)
         return None
 
+    def find_by_email_verification_hash_for_update(self, token_hash: str) -> Account | None:
+        """Return a copy of the account holding this verification token hash, if any."""
+        for account in self._working.accounts.values():
+            pending = account.email_verification
+            if pending is not None and pending.token_hash == token_hash:
+                return copy.deepcopy(account)
+        return None
+
+    def find_by_password_reset_hash_for_update(self, token_hash: str) -> Account | None:
+        """Return a copy of the account holding this reset token hash, if any."""
+        for account in self._working.accounts.values():
+            pending = account.password_reset
+            if pending is not None and pending.token_hash == token_hash:
+                return copy.deepcopy(account)
+        return None
+
     def get(self, account_id: UUID) -> Account | None:
         """Return a copy of the account with this key, if there is one."""
         return copy.deepcopy(self._working.accounts.get(account_id))
+
+    def get_for_update(self, account_id: UUID) -> Account | None:
+        """Return a copy of the account with this key, if there is one."""
+        return self.get(account_id)
+
+    def add(self, account: Account) -> None:
+        """Keep a copy of a new account, or fail as a lost race for its address does."""
+        if self._identity.address_taken_at_write:
+            raise EmailAlreadyRegistered
+        self._working.accounts[account.id] = copy.deepcopy(account)
+
+    def save_security_state(self, account: Account) -> None:
+        """Keep the password hash, the verification, the two tokens and the lockout."""
+        stored = self._working.accounts[account.id]
+        stored.password_hash = account.password_hash
+        stored.email_verified_at = account.email_verified_at
+        stored.email_verification = account.email_verification
+        stored.password_reset = account.password_reset
+        stored.failed_login_count = account.failed_login_count
+        stored.locked_until = account.locked_until
 
     def save_login_state(self, account: Account) -> None:
         """Keep the failure count, the lock and the last sign in."""
@@ -154,6 +201,20 @@ class _Sessions:
             session.revoked_reason = reason
         return len(live)
 
+    def revoke_all_for_account(
+        self, *, user_account_id: UUID, reason: RevokeReason, at: datetime
+    ) -> int:
+        """Revoke every live session of an account and return how many there were."""
+        live = [
+            session
+            for session in self._working.sessions.values()
+            if session.user_account_id == user_account_id and session.revoked_at is None
+        ]
+        for session in live:
+            session.revoked_at = at
+            session.revoked_reason = reason
+        return len(live)
+
 
 class _RateLimits:
     """The throttle counters over the working copy."""
@@ -175,13 +236,22 @@ class _RateLimits:
             del self._working.counters[key]
         return len(expired)
 
+    def total_since(self, bucket_key_hash: str, since: datetime) -> int:
+        """Return the sum of the counters of a bucket whose windows began at or after `since`."""
+        return sum(
+            count
+            for (bucket, window_started_at), count in self._working.counters.items()
+            if bucket == bucket_key_hash and window_started_at >= since
+        )
+
 
 class IdentityMemoryUnitOfWork(InMemoryUnitOfWork):
-    """The in memory unit of work, with accounts, sessions and counters as well."""
+    """The in memory unit of work, with accounts, sessions, counters and details as well."""
 
     accounts: _Accounts
     sessions: _Sessions
     rate_limits: _RateLimits
+    customers: AccountCustomers
 
     def __init__(self, store: MemoryStore, identity: IdentityStore) -> None:
         """Bind the unit of work to the two stores it commits into."""
@@ -207,45 +277,13 @@ class IdentityMemoryUnitOfWork(InMemoryUnitOfWork):
         self._bind_identity()
 
     def _bind_identity(self) -> None:
-        """Point the three identity repositories at one working copy."""
+        """Point the identity repositories at one working copy."""
         working = copy.deepcopy(self.identity.committed)
         self._identity_working = working
-        self.accounts = _Accounts(working)
+        self.accounts = _Accounts(self.identity, working)
         self.sessions = _Sessions(working)
         self.rate_limits = _RateLimits(working)
-
-
-@dataclass
-class CountingPasswordVerifier:
-    """Compares against the stand in hash and remembers every call it was given.
-
-    Attributes:
-        calls: The stored hash handed to each call, in order. None is a call
-            made for an account that could not be checked.
-
-    """
-
-    calls: list[str | None] = field(default_factory=list)
-
-    def verify(self, plain_password: str, stored_hash: str | None) -> bool:
-        """Record the call and answer whether the password matches the stand in."""
-        self.calls.append(stored_hash)
-        return stored_hash is not None and stored_hash == fake_hash(plain_password)
-
-
-@dataclass
-class FakeAccessTokenIssuer:
-    """Issues a value that is plainly not a token, and remembers who it was for."""
-
-    issued_for: list[UUID] = field(default_factory=list)
-
-    def issue(self, account: Account, issued_at: datetime) -> IssuedAccessToken:
-        """Return a made up access token for the account."""
-        self.issued_for.append(account.id)
-        return IssuedAccessToken(
-            value=f"made-up-access-token-for-{account.role.value.lower()}",
-            expires_in=FAKE_ACCESS_LIFETIME_SECONDS,
-        )
+        self.customers = AccountCustomers(self.store, self.working_records(), working)
 
 
 __all__ = [

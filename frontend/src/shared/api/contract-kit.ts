@@ -24,6 +24,12 @@ export type Paths = paths
 export type JsonOf<Operation extends { responses: { 200: { content: { 'application/json': unknown } } } }> =
   Operation['responses'][200]['content']['application/json']
 
+/** The JSON body of the 202 answer of one operation. A route answers 202 when
+ *  it has taken the request and sends the email that follows on its own. */
+export type AcceptedJsonOf<
+  Operation extends { responses: { 202: { content: { 'application/json': unknown } } } },
+> = Operation['responses'][202]['content']['application/json']
+
 /** The JSON body one operation accepts. */
 export type BodyOf<Operation extends { requestBody: { content: { 'application/json': unknown } } }> =
   Operation['requestBody']['content']['application/json']

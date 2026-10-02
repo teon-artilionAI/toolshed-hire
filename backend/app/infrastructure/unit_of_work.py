@@ -39,7 +39,8 @@ from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
 from app.infrastructure.identity import SqlBranchRepository, SqlCustomerRepository
-from app.infrastructure.identity_accounts import SqlAccountRepository, SqlSessionRepository
+from app.infrastructure.identity_accounts import SqlAccountRepository
+from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
 from app.infrastructure.rate_limit import SqlRateLimitStore
 

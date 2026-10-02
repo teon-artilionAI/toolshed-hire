@@ -8,8 +8,12 @@
  * in the customer feature folder and not in the shared layer.
  */
 
-import type { ReservationStatus } from '../../shared/api/contract'
-import type { ChargeKind, CustomerProfile, RentalStatus } from '../../shared/types'
+import type {
+  AccountStatus,
+  CustomerType,
+  IdDocumentType,
+  ReservationStatus,
+} from '../../shared/api/contract'
 
 /** Keyed by the statuses the API sends for a reservation. */
 export const RESERVATION_STATUS_LABEL: Record<ReservationStatus, string> = {
@@ -23,24 +27,20 @@ export const RESERVATION_STATUS_LABEL: Record<ReservationStatus, string> = {
   EXPIRED: 'Expired',
 }
 
-export const RENTAL_STATUS_LABEL: Record<RentalStatus, string> = {
-  OPEN: 'Out with you',
-  OVERDUE: 'Overdue',
-  PARTIALLY_RETURNED: 'Part returned',
-  RETURNED: 'Returned',
-  SETTLED: 'Settled',
-}
-
-export const CHARGE_KIND_LABEL: Record<ChargeKind, string> = {
-  HIRE: 'Hire charge',
-  DEPOSIT: 'Deposit held',
-  LATE_FEE: 'Late fee',
-  DAMAGE: 'Damage charge',
-  REFUND: 'Deposit released',
-}
-
-export const ID_DOC_LABEL: Record<CustomerProfile['idDocType'], string> = {
+export const ID_DOC_LABEL: Record<IdDocumentType, string> = {
   SA_ID: 'South African ID',
   PASSPORT: 'Passport',
   DRIVING_LICENCE: 'Driving licence',
+}
+
+/** Where an account stands, in the words a customer reads. */
+export const ACCOUNT_STATUS_LABEL: Record<AccountStatus, string> = {
+  ACTIVE: 'Good standing',
+  ON_HOLD: 'On hold',
+  BLACKLISTED: 'Closed to new bookings',
+}
+
+export const CUSTOMER_TYPE_LABEL: Record<CustomerType, string> = {
+  INDIVIDUAL: 'Individual',
+  TRADE: 'Trade account',
 }

@@ -15,11 +15,17 @@
  * them on at once. That same rule is what moves a person on after a
  * successful sign in, so there is one path and not two.
  *
- * Password reset is a later change. Its state is still here, reachable from
- * the form and from `?reset=1`, and it says plainly that it is not available.
+ * Password reset is two more states of this screen, both in
+ * password-reset-panels.tsx. Asking for a link is reached from the form and
+ * from `?reset=1`. Choosing a new password is where the link in the email
+ * lands, at `/signin#reset=<token>`. The screen takes the token out of the
+ * address at once and keeps it only until the API has answered for it.
+ *
+ * A reset link is followed even by somebody who is signed in, because it is
+ * the one thing on this screen they may still have come for.
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -27,24 +33,33 @@ import { ErrorState } from '../../shared/async-states'
 import { NEXT_PARAMETER, landingFor } from '../../shared/screen-access'
 import { Card, Notice, PageHeader } from '../../shared/ui'
 import { useSession } from '../../shared/use-session'
-import { PasswordField, TextField, isEmailWellFormed } from './customer-fields'
-import { PasswordResetUnavailable } from './password-reset-panels'
+import { PasswordField, TextField } from './customer-fields'
+import { isEmailWellFormed } from './customer-rules'
+import { PasswordResetCompletion, PasswordResetRequest } from './password-reset-panels'
 import { describeSignInFailure } from './sign-in-failure'
 import type { SignInFailure } from './sign-in-failure'
+import { RESET_LINK_NAME, useLinkToken } from './use-link-token'
 
-type Mode = 'signin' | 'reset'
+/**
+ * - `signin`: the sign in form.
+ * - `resetRequest`: asking for a reset link.
+ * - `resetComplete`: choosing a new password, from the link in the email.
+ */
+type Mode = 'signin' | 'resetRequest' | 'resetComplete'
 
-/** The query parameter a reset link opens this screen with. */
+/** The query parameter that opens this screen on asking for a reset link. */
 const RESET_PARAMETER = 'reset'
 
 const TITLE: Record<Mode, string> = {
   signin: 'Sign in to Toolshed Hire',
-  reset: 'Reset your password',
+  resetRequest: 'Reset your password',
+  resetComplete: 'Choose a new password',
 }
 
 const SUBTITLE: Record<Mode, string> = {
   signin: 'Your bookings, deposits and hire history are behind this door.',
-  reset: 'Resetting a password from here is not available yet.',
+  resetRequest: 'Tell us the email address on your account and we will send it a link.',
+  resetComplete: 'The link in your email brought you here. It works once.',
 }
 
 function SignInPanel({ onForgot }: { onForgot: () => void }) {
@@ -174,20 +189,46 @@ function ArrivalNotice({ expired, hasNext }: { expired: boolean; hasNext: boolea
 export default function SignIn() {
   const { user, endedBecause } = useSession()
   const [params] = useSearchParams()
-  const [mode, setMode] = useState<Mode>(params.get(RESET_PARAMETER) ? 'reset' : 'signin')
+  const link = useLinkToken(RESET_LINK_NAME)
+  const [mode, setMode] = useState<Mode>(() => {
+    if (link.token !== null) return 'resetComplete'
+    return params.get(RESET_PARAMETER) ? 'resetRequest' : 'signin'
+  })
   const next = params.get(NEXT_PARAMETER)
 
-  if (user) return <Navigate to={landingFor(user.role, next)} replace />
+  // A reset link opened while the screen was already on the page.
+  if (link.token !== null && mode !== 'resetComplete') setMode('resetComplete')
+
+  // When one state replaces another, the button that was pressed has gone.
+  // Focus moves to the heading of the new state, so it is read out and a
+  // keyboard carries on from there. The first state is left alone.
+  const top = useRef<HTMLDivElement>(null)
+  const shownMode = useRef(mode)
+  useEffect(() => {
+    if (shownMode.current === mode) return
+    shownMode.current = mode
+    top.current?.focus()
+  }, [mode])
+
+  /** Leave the reset states. The token goes with them, spent or not. */
+  function leaveReset(to: Mode) {
+    link.forget()
+    setMode(to)
+  }
+
+  if (user && mode !== 'resetComplete') return <Navigate to={landingFor(user.role, next)} replace />
 
   return (
     <>
-      <PageHeader screenId="SC-06" title={TITLE[mode]} subtitle={SUBTITLE[mode]} />
+      <div ref={top} tabIndex={-1}>
+        <PageHeader screenId="SC-06" title={TITLE[mode]} subtitle={SUBTITLE[mode]} />
+      </div>
 
       <div className="mx-auto w-full max-w-lg">
         {mode === 'signin' && (
           <>
             <ArrivalNotice expired={endedBecause === 'expired'} hasNext={next !== null} />
-            <SignInPanel onForgot={() => setMode('reset')} />
+            <SignInPanel onForgot={() => setMode('resetRequest')} />
             <p className="mt-lg text-center text-sm text-slate-soft">
               No account yet?{' '}
               <Link
@@ -201,7 +242,16 @@ export default function SignIn() {
           </>
         )}
 
-        {mode === 'reset' && <PasswordResetUnavailable onBackToSignIn={() => setMode('signin')} />}
+        {mode === 'resetRequest' && <PasswordResetRequest onBackToSignIn={() => setMode('signin')} />}
+
+        {mode === 'resetComplete' && (
+          <PasswordResetCompletion
+            token={link.token}
+            onSpent={link.forget}
+            onSignIn={() => leaveReset('signin')}
+            onAskAgain={() => leaveReset('resetRequest')}
+          />
+        )}
       </div>
     </>
   )

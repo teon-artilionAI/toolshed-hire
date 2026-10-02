@@ -9,6 +9,12 @@ this side of it knows which provider is in use, so changing supplier changes
 one adapter and nothing else. A gateway never raises for a delivery that did
 not happen. It returns a receipt that says so, because a failed email is an
 outcome to record and not a reason to fail the booking it belongs to.
+
+A gateway can also say whether it would deliver to an address at all. An
+environment may be set up to send mail to one address only, and a screen that
+has just promised somebody a message needs to know when none is coming. The
+answer depends on how the gateway is configured and on the address, and on
+nothing else.
 """
 
 from __future__ import annotations
@@ -58,6 +64,10 @@ class NotificationGateway(Protocol):
         A provider error, a timeout and a refused recipient all come back as a
         failed receipt. The method does not raise for any of them.
         """
+        ...
+
+    def delivers_to(self, address: str) -> bool:
+        """Return True when a message for this address would be handed to the provider."""
         ...
 
 

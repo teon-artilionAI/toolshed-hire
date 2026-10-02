@@ -116,6 +116,26 @@ class TooManyAttempts(DomainError):
         self.retry_after_seconds = retry_after_seconds
 
 
+class VerificationLinkInvalid(DomainError):
+    """A verification token was unknown, already used or out of time.
+
+    The three cases are answered alike, in one sentence, so the answer does
+    not say whether the token ever existed. The API maps this to HTTP 400.
+    """
+
+    code = "verification-link-invalid"
+
+
+class ResetLinkInvalid(DomainError):
+    """A password reset token was unknown, already used or out of time.
+
+    The three cases are answered alike, as they are for a verification token.
+    The API maps this to HTTP 400.
+    """
+
+    code = "reset-link-invalid"
+
+
 class OriginNotAllowed(DomainError):
     """A request authenticated by a cookie came from an origin that is not this site.
 

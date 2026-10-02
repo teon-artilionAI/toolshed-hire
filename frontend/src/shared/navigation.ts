@@ -18,7 +18,8 @@ import type { Role } from './types'
 
 export interface ScreenDef {
   /** Identifier from the documented screen inventory, for example SC-01.
-   *  A development screen carries a DEV- identifier instead, see `devOnly`. */
+   *  A development screen carries a DEV- identifier instead, see `devOnly`,
+   *  and a supporting page an INFO- one, see `supporting`. */
   id: string
   path: string
   name: string
@@ -46,6 +47,13 @@ export interface ScreenDef {
    * never listed as a screen of the product.
    */
   devOnly?: boolean
+  /**
+   * A page the product needs that is not one of the numbered screens, such as
+   * the privacy notice. It is routed and guarded from this table like every
+   * screen. It is never counted among the twenty four and never shown in a
+   * menu. The shell links to it from the footer of every screen.
+   */
+  supporting?: boolean
 }
 
 export const SCREENS: ScreenDef[] = [
@@ -54,11 +62,11 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-02', path: '/search', name: 'Availability Search Results', navLabel: 'Search', role: 'customer', publicAccess: true, live: true, inNav: true, icon: 'Search' },
   { id: 'SC-03', path: '/model/:slug', name: 'Product Model Detail', role: 'customer', publicAccess: true, live: true },
   { id: 'SC-04', path: '/basket', name: 'Hire Basket and Booking Review', navLabel: 'Basket', role: 'customer', publicAccess: true, live: true, inNav: true, icon: 'ShoppingCart' },
-  { id: 'SC-05', path: '/register', name: 'Register', role: 'customer', publicAccess: true, live: false },
+  { id: 'SC-05', path: '/register', name: 'Register', role: 'customer', publicAccess: true, live: true },
   { id: 'SC-06', path: '/signin', name: 'Sign In and Password Reset', role: 'customer', publicAccess: true, live: true },
   { id: 'SC-07', path: '/reservations', name: 'My Reservations', navLabel: 'My Hires', role: 'customer', live: true, inNav: true, icon: 'CalendarDays' },
   { id: 'SC-08', path: '/reservations/:reservationId', name: 'Reservation Detail and Cancellation', role: 'customer', live: true },
-  { id: 'SC-09', path: '/account', name: 'My Account and Hire History', navLabel: 'Account', role: 'customer', live: false, inNav: true, icon: 'User' },
+  { id: 'SC-09', path: '/account', name: 'My Account and Hire History', navLabel: 'Account', role: 'customer', live: true, inNav: true, icon: 'User' },
 
   // Counter staff, SC-10 to SC-18
   { id: 'SC-10', path: '/counter', name: 'Counter Dashboard', navLabel: 'Today', role: 'counter', live: false, inNav: true, icon: 'LayoutDashboard' },
@@ -79,6 +87,15 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-23', path: '/admin/users', name: 'User and Role Management', navLabel: 'Users', role: 'admin', live: false, inNav: true, icon: 'ShieldCheck' },
   { id: 'SC-24', path: '/admin/audit', name: 'Audit and Notification Log', navLabel: 'Audit', role: 'admin', live: false, inNav: true, icon: 'ScrollText' },
 
+  // Supporting pages. Not among the twenty-four numbered screens.
+  // The identifier stays outside the SC series for the same reason the
+  // development screen's does, so the numbered inventory still maps one-to-one
+  // to the interface specification.
+  //
+  // The privacy notice is public, because a visitor has to be able to read it
+  // before they register. It holds words and no data, so it counts as live.
+  { id: 'INFO-01', path: '/privacy', name: 'Privacy Notice', role: 'customer', publicAccess: true, live: true, supporting: true },
+
   // Development. Not one of the twenty-four numbered screens.
   // The identifier stays outside the SC series so the numbered inventory remains
   // stable and maps one-to-one to the interface specification.
@@ -93,12 +110,12 @@ export const SCREENS: ScreenDef[] = [
 /**
  * The screens belonging to a role.
  *
- * Development screens are excluded. This function answers a question about the
- * product, and the count it returns is one of the things the documentation is
- * reconciled against.
+ * Development screens and supporting pages are excluded. This function answers
+ * a question about the numbered screens, and the count it returns is one of
+ * the things the documentation is reconciled against.
  */
 export function screensForRole(role: Role): ScreenDef[] {
-  return SCREENS.filter((s) => s.role === role && !s.devOnly)
+  return SCREENS.filter((s) => s.role === role && !s.devOnly && !s.supporting)
 }
 
 export function screenById(id: string): ScreenDef | undefined {
@@ -116,6 +133,15 @@ export const CATALOGUE_PATH = '/'
 
 /** The sign in screen, where a person goes when a screen needs an account. */
 export const SIGN_IN_PATH = '/signin'
+
+/** The registration screen, where a visitor opens an account. */
+export const REGISTER_PATH = '/register'
+
+/** The customer's own account screen. */
+export const ACCOUNT_PATH = '/account'
+
+/** The privacy notice, linked from the footer of every screen. */
+export const PRIVACY_PATH = '/privacy'
 
 /** Landing path when a role signs in. */
 export const ROLE_HOME: Record<Role, string> = {

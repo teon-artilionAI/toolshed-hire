@@ -26,3 +26,13 @@ export const SIGN_IN: PublicRoute = {
   path: '/signin',
   heading: 'Sign in to Toolshed Hire',
 }
+
+export const REGISTER: PublicRoute = {
+  path: '/register',
+  heading: 'Create your hire account',
+}
+
+export const PRIVACY: PublicRoute = {
+  path: '/privacy',
+  heading: 'Privacy notice',
+}

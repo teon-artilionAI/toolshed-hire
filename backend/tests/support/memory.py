@@ -266,6 +266,17 @@ class InMemoryUnitOfWork:
         self._bind(copy.deepcopy(self.store.committed))
         self.store.journal.append(ROLLBACK)
 
+    def working_records(self) -> Records:
+        """Return the working copy of the open transaction.
+
+        Raises:
+            RuntimeError: If the unit of work is not open.
+
+        """
+        if self._working is None:
+            raise RuntimeError("Attempted to read an in memory unit of work that is not open.")
+        return self._working
+
     def _bind(self, working: Records) -> None:
         """Point every repository at one working copy."""
         self._working = working

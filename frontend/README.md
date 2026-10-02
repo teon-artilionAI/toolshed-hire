@@ -2,7 +2,7 @@
 
 I built the browser application with React, TypeScript and Vite. It contains
 the twenty-four numbered customer, counter-staff and administration screens,
-plus one development-only system page.
+plus a privacy notice and one development-only system page.
 
 ## Numbered screens
 
@@ -12,8 +12,9 @@ The screens are moving from sample data to the API one group at a time.
 |---|---|
 | `SC-01` Catalogue Home, `SC-02` Availability Search Results, `SC-03` Product Model Detail | The API, through the data layer described below |
 | `SC-04` Hire Basket and Booking Review, `SC-07` My Reservations, `SC-08` Reservation Detail and Cancellation | The API, through the reservation routes described under Booking a hire |
-| `SC-06` Sign In | The API, through the session described below |
-| `SC-05` and `SC-09` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-06` Sign In and Password Reset | The API, through the session described below and the reset routes described under Registration and account security |
+| `SC-05` Register, `SC-09` My Account and Hire History | The API, through the routes described under Registration and account security |
+| `SC-10` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -22,11 +23,16 @@ and that nothing changed there is saved. The notice is
 `src/shared/sample-data-notice.tsx`, and the flag is the only thing that
 decides whether it shows. Connecting a screen means changing its flag to true.
 
-Two things are not available yet and say so. `SC-05` Register shows its form
-and states that an account cannot be created online yet, before anyone types
-and again when the form passes every check. The password reset state of
-`SC-06` states that reset is not available and takes no email address.
-Neither reports a success that did not happen.
+One part of a connected screen has no data yet and says so. The hire history
+and charges on `SC-09` wait for a later change, so that card shows no figure
+and no sample. It says that hires and charges appear once equipment has been
+collected.
+
+The privacy notice at `/privacy` is `INFO-01`. It is a supporting page and not
+one of the numbered screens. It is routed and guarded from the same inventory,
+through the `supporting` flag, and it is never counted among the twenty-four
+and never shown in a menu. The shell links to it from the footer of every
+screen.
 
 ## Session
 
@@ -86,6 +92,11 @@ The pieces are small and each has one job.
 A screen gets `user`, `role`, `signedIn`, `signIn` and `signOut` from
 `useSession`. The account is the one the API describes. There is no second
 user shape and no way to change role or branch from the browser.
+
+`useSession` also has `endSessionHere`, which ends the session without leaving
+the screen. One screen uses it. A password reset ends every session of the
+account on the server, so a person who was signed in while they reset it is
+signed out of that page as well.
 
 ### Guards and the menu
 
@@ -203,7 +214,13 @@ commits as `../backend/openapi.json`.
 - The six reservation routes are in the document, and their types are built
   from the generated file like every other. They sit in
   `api/contract-booking.ts` to keep each file short, and `contract.ts` passes
-  them on. No wire type is written by hand.
+  them on.
+- The registration and account routes are agreed and are not in the document
+  yet. Their types are in `api/contract-account.ts`, and they are the only
+  wire types written by hand. Every name in them is the one the agreed
+  contract uses. Once the routes are in the document, run `npm run api:types`
+  and rebuild those types from the generated file, the way
+  `contract-booking.ts` does.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -238,6 +255,9 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   be read as the price.
 - A reservation is never fresh. A hold lapses by itself and the counter can
   move a booking on, so a status read a while ago may no longer be the status.
+- The customer's own profile is never fresh either. A branch can put the
+  account on hold, and a link opened in another tab can confirm the email
+  address.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -389,6 +409,85 @@ found state for that and for a reference that does not exist. The charges card
 shows no figure. It says that charges appear once the equipment has been
 collected, because hires and charges are a later change.
 
+On a phone the list is not a table of six columns. Below 640 pixels each
+booking is drawn as a block of its own, with every value on its own line and
+the name of its column beside it, so nothing has to be scrolled sideways. It
+is still one table in the document. `reservation-table.tsx` and
+`reservation-row.tsx` change how it is drawn, and each part states its role so
+a screen reader hears a table at every width.
+
+### Registration and account security
+
+`SC-05`, the reset states of `SC-06`, and `SC-09` read and write through
+`api/account.ts`, which has one function for each route.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-05` | `POST /api/auth/register` | "Check your email", with one sentence that is the same whoever the address belongs to |
+| `SC-05`, from a link | `POST /api/auth/email-verification` | That the address is confirmed, or that the link no longer works |
+| `SC-06` | `POST /api/auth/password-reset/request` | One message, the same whoever the address belongs to |
+| `SC-06`, from a link | `POST /api/auth/password-reset/complete` | That the password has changed and every device has been signed out, or that the link no longer works |
+| `SC-09` | `GET /api/me/profile` | The customer's own profile |
+| `SC-09` | `PATCH /api/me/profile` | The profile the server answered with |
+| `SC-09` | `POST /api/auth/email-verification/resend` | That the link was sent again |
+
+- The browser does not know which addresses have accounts. Registration and
+  the reset request are answered the same way for every address, and the
+  screens say the same thing for every address.
+- The registration form asks for the last four characters of the identity
+  document and never the whole number. It says that the counter checks the
+  full document at collection. It sends exactly the members the route asks
+  for. The rules and the body are in `register-form.ts`.
+- The branches in the registration form are the ones `GET /api/branches`
+  lists. The first one stands in until the person chooses another.
+- The password rule is twelve characters or more, in the browser and on the
+  server. The number is `MIN_PASSWORD_LENGTH` in `api/account.ts`.
+- When the API answers `emailDeliverable: false`, the screen says that this
+  demonstration only delivers email to one address, so the link cannot reach
+  the person, and what they can still do. That note is
+  `email-delivery-note.tsx`, and registration, the reset request and the
+  resend all use it.
+- A 422 puts each message under the field it names, through
+  `api/problem-fields.ts`, and lists any message about a field the form has no
+  input for. A 429 says how long to wait, from `Retry-After`. Anything else is
+  the shared error state. `account-failure.ts` sorts the failure and
+  `account-failure-notice.tsx` draws it.
+- `SC-09` sends only the fields the customer changed, and checks only those.
+  The name, the contact and billing details and the company details can be
+  changed. The email address, the identity document, the account standing,
+  the discount and the customer type are shown read only, with a sentence
+  saying who changes them.
+- A 404 from the profile route means the account has no customer profile,
+  which is what a member of staff gets. The screen says so plainly.
+
+#### The token in a link
+
+A verification link ends `#verify=<token>` and a reset link ends
+`#reset=<token>`. The token is in the fragment, which a browser never sends to
+a server, so it reaches no server log and no `Referer` header.
+
+`use-link-token.ts` takes the token out of the address as soon as the screen
+is on the page. It replaces the history entry, so the back button does not
+bring the token back. From then on the token is in the state of the one screen
+that uses it. It is never logged and never put in web storage, and it is
+dropped once the API has answered for it. The client logs the method and the
+path of a request and never its body.
+
+A reset link is followed even when somebody is signed in. A verification link
+is posted once, and that holds in development too, where React runs each
+effect twice.
+
+#### Accessibility of these screens
+
+Each change of state is announced. When a form is replaced by its answer,
+focus moves to the heading of the new state, through `state-heading.tsx`. On
+`SC-06` focus moves to the top of the screen when one state replaces another.
+A request in flight is said in a polite status. Every error is tied to its
+field with `aria-describedby`, and every link and button is a 44 pixel target.
+
+`SC-09` used to push the whole page wider than a narrow phone. Its grid now
+lets each cell shrink, and long names and addresses wrap.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -467,6 +566,11 @@ is how the router, the session and the cache work together.
 session routes send. The session lives in a module, so `src/test/setup.ts`
 puts it back to how it starts after every test.
 
+`src/test/account-samples.ts` has a customer profile and the answers the
+registration and account routes send. `src/test/render-app.tsx` can read the
+fragment of the address as well as the path, which is how a test checks that
+the token of a link was taken out of it.
+
 I pin the time zone to `Africa/Johannesburg` in `vitest.config.ts`, so dates
 format the same way on any machine.
 
@@ -485,7 +589,13 @@ npx playwright install chromium
 
 `e2e/smoke.spec.ts` and `e2e/accessibility.spec.ts` run with or without the
 backend. With no backend, the catalogue home and the search are scanned in
-their failed state.
+their failed state, and the registration form with its branch menu in its
+failed state. The privacy notice is scanned too.
+
+`e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
+My Hires and My Account at 360 pixels wide and checks that nothing has to be
+scrolled sideways. It is the one browser spec that answers the API itself,
+because a layout check should not depend on what a database holds.
 
 `e2e/catalogue.spec.ts` needs the real backend with seeded data on port 8000.
 It follows a visitor from picking dates on the home screen, through the search
@@ -537,12 +647,27 @@ releases what it made, so the units are free for the next run. A journey that
 fails half way leaves what it had made, and the next run books whichever model
 is still free. What the two specs share is in `e2e/booking.ts`.
 
+`e2e/account.spec.ts` needs the registration and account routes. In its first
+journey a visitor registers with an address nobody has used, is told to check
+their email, signs in with the new account, opens My Account, is told the
+address is not confirmed, and corrects their phone number. In its second a
+visitor asks for a password reset and sees the one message the screen has for
+that. The spec asks `GET /api/me/profile` with no token first. A 404 or a 405
+there means the routes are not there, and both journeys skip themselves. Each
+run registers an account of its own in each browser project, with an address
+built from the time, and touches no seeded account. It follows no link from an
+email, because the address is not one this system delivers to. The component
+tests cover where the links land.
+
 The customers, the password rule and the sign in are in `e2e/customer.ts`, and
 the dates are counted from today at the branches by `e2e/hire-dates.ts`.
 
-One run makes ten sign ins. `session.spec.ts` signs the first customer in four
-times, twice in each browser project, and the booking journey twice more. The
-second customer is signed in four times, twice by each reservation spec. The
+One run makes twelve sign ins. `session.spec.ts` signs the first customer in
+four times, twice in each browser project, and the booking journey twice more.
+The second customer is signed in four times, twice by each reservation spec.
+`account.spec.ts` signs in each of the two accounts it registers once, and
+those count against addresses of their own. It also makes two registrations
+and two reset requests, which the API throttles for one client address. The
 API allows ten sign in attempts for one email address in a fixed window of
 fifteen minutes, and thirty for one client address, and counts the ones that
 succeed. So a second run inside the same window takes the first customer past
@@ -550,7 +675,7 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all three skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all four skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

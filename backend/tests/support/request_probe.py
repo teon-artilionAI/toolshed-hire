@@ -52,6 +52,9 @@ DEPLOYED_JWT_SECRET: Final[str] = "a-signing-key-used-only-by-the-test-suite-012
 DEPLOYED_DATABASE_URL: Final[str] = (
     "postgresql+psycopg://toolshed_app:not_a_real_password@ep-example-pooler.example.test/toolshed"
 )
+# Where the links in the account messages point. A deployed environment has to
+# be given the public address of its site, and this stands in for one.
+DEPLOYED_FRONTEND_ORIGIN: Final[str] = "https://toolshed-hire.example.test"
 
 
 def settings_for(environment: Environment, **overrides: str) -> Settings:
@@ -71,6 +74,7 @@ def settings_for(environment: Environment, **overrides: str) -> Settings:
         "ENVIRONMENT": environment.value,
         "JWT_SECRET": DEPLOYED_JWT_SECRET,
         "DATABASE_URL": DEPLOYED_DATABASE_URL,
+        "FRONTEND_ORIGIN": DEPLOYED_FRONTEND_ORIGIN,
         **overrides,
     }
     return Settings(_env_file=None, **values)
@@ -116,6 +120,7 @@ def build_request_probe_app(configuration: Settings | None = None) -> FastAPI:
 __all__ = [
     "BROKEN_STREAM_ROUTE_TEMPLATE",
     "DEPLOYED_DATABASE_URL",
+    "DEPLOYED_FRONTEND_ORIGIN",
     "DEPLOYED_JWT_SECRET",
     "FAULT_DATABASE_PASSWORD",
     "FAULT_MESSAGE",

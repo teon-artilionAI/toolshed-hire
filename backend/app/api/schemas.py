@@ -56,6 +56,23 @@ def wire_role(role: UserRole) -> str:
     return ROLE_TO_WIRE[role]
 
 
+def normalised_email_address(value: str) -> str:
+    """Return an address in lower case, or refuse anything that is not local@domain.
+
+    Raises:
+        ValueError: If the value has no local part, no `@` or no dot in its
+            domain. Every request that carries an address checks it here.
+
+    """
+    candidate = value.strip().lower()
+    local, separator, domain = candidate.partition("@")
+    if not separator or not local or "." not in domain or domain.startswith("."):
+        raise ValueError(
+            f"email must be an address of the form name@example.co.za. Received {value!r}."
+        )
+    return candidate
+
+
 class CamelModel(BaseModel):
     """Base model that serialises snake_case fields as camelCase on the wire."""
 
@@ -90,14 +107,7 @@ class LoginRequest(BaseModel):
     @classmethod
     def check_email_shape(cls, value: str) -> str:
         """Normalise the address and reject anything that is not local@domain."""
-        candidate = value.strip().lower()
-        local, separator, domain = candidate.partition("@")
-        if not separator or not local or "." not in domain or domain.startswith("."):
-            raise ValueError(
-                "email must be an address of the form name@example.co.za. "
-                f"Received {value!r}."
-            )
-        return candidate
+        return normalised_email_address(value)
 
 
 class UserResponse(CamelModel):

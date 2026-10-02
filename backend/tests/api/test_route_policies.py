@@ -47,6 +47,7 @@ from tests.support.probe_app import (
 from tests.support.tokens import authorization_header, mint_access_token
 
 ALL_ROLES: Final[frozenset[UserRole]] = frozenset(UserRole)
+CUSTOMER_ROLE: Final[frozenset[UserRole]] = frozenset({UserRole.CUSTOMER})
 REFUSALS: Final[frozenset[int]] = frozenset(
     {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}
 )
@@ -60,7 +61,14 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "POST /api/auth/login": (AccessKind.PUBLIC, frozenset()),
     "POST /api/auth/refresh": (AccessKind.REFRESH_COOKIE, frozenset()),
     "POST /api/auth/logout": (AccessKind.REFRESH_COOKIE, frozenset()),
+    "POST /api/auth/register": (AccessKind.PUBLIC, frozenset()),
+    "POST /api/auth/email-verification": (AccessKind.PUBLIC, frozenset()),
+    "POST /api/auth/email-verification/resend": (AccessKind.ROLES, ALL_ROLES),
+    "POST /api/auth/password-reset/request": (AccessKind.PUBLIC, frozenset()),
+    "POST /api/auth/password-reset/complete": (AccessKind.PUBLIC, frozenset()),
     "GET /api/me": (AccessKind.ROLES, ALL_ROLES),
+    "GET /api/me/profile": (AccessKind.ROLES, CUSTOMER_ROLE),
+    "PATCH /api/me/profile": (AccessKind.ROLES, CUSTOMER_ROLE),
     "POST /api/reservations": (AccessKind.ROLES, ALL_ROLES),
     "POST /api/reservations/{id}/hold": (AccessKind.ROLES, ALL_ROLES),
     "POST /api/reservations/{id}/confirm": (AccessKind.ROLES, ALL_ROLES),
@@ -90,6 +98,7 @@ EVERYONE: Final[frozenset[Caller]] = frozenset(Caller)
 SIGNED_IN: Final[frozenset[Caller]] = EVERYONE - {Caller.ANONYMOUS}
 STAFF: Final[frozenset[Caller]] = frozenset({Caller.COUNTER, Caller.ADMIN})
 ADMIN_ONLY: Final[frozenset[Caller]] = frozenset({Caller.ADMIN})
+CUSTOMER_ONLY: Final[frozenset[Caller]] = frozenset({Caller.CUSTOMER})
 API: Final[str] = "api"
 PROBE: Final[str] = "probe"
 
@@ -123,7 +132,14 @@ class MatrixRow:
 MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("health", API, "GET", "/api/health", EVERYONE),
     MatrixRow("auth", API, "POST", "/api/auth/login", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/register", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/email-verification", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/email-verification/resend", SIGNED_IN),
+    MatrixRow("auth", API, "POST", "/api/auth/password-reset/request", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/password-reset/complete", EVERYONE),
     MatrixRow("identity", API, "GET", "/api/me", SIGNED_IN),
+    MatrixRow("identity", API, "GET", "/api/me/profile", CUSTOMER_ONLY),
+    MatrixRow("identity", API, "PATCH", "/api/me/profile", CUSTOMER_ONLY),
     MatrixRow("booking", API, "GET", "/api/reservations", SIGNED_IN),
     MatrixRow("booking", API, "POST", "/api/reservations", SIGNED_IN),
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
@@ -133,7 +149,7 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("administrator only", PROBE, "GET", ADMIN_PATH, ADMIN_ONLY),
     MatrixRow("administrator, read again", PROBE, "GET", FRESH_ADMIN_PATH, ADMIN_ONLY),
     MatrixRow("counter and administrator", PROBE, "GET", COUNTER_PATH, STAFF),
-    MatrixRow("customer only", PROBE, "GET", CUSTOMER_PATH, frozenset({Caller.CUSTOMER})),
+    MatrixRow("customer only", PROBE, "GET", CUSTOMER_PATH, CUSTOMER_ONLY),
 )
 CELLS: Final[list[tuple[MatrixRow, Caller]]] = [
     (row, caller) for row in MATRIX for caller in Caller

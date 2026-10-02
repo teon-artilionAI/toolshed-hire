@@ -14,7 +14,10 @@ address it came from (C-17). Going over either is answered with a wait and no
 password is checked.
 
 A refusal is still a change. The failure count moves and an audit event is
-written, so the unit of work is committed before the refusal is raised.
+written, so the unit of work is committed before the refusal is raised. A
+wrong password is also counted in a window that slides with the clock, under
+a salted hash of the account key. The account is told how many failures the
+last fifteen minutes hold and locks on the fifth (BR-46).
 
 The counting and the password check are two transactions, one after the other.
 Counting locks the two counter rows, and a password check takes a quarter of a
@@ -35,6 +38,7 @@ from uuid import UUID
 
 from app.application.audit import audit_event_for
 from app.application.clock import Clock
+from app.application.identity.attempts import address_subject, seconds_to_wait
 from app.application.identity.ports import AccessTokenIssuer, PasswordVerifier
 from app.application.identity.sessions import (
     ACCOUNT_ENTITY_TYPE,
@@ -42,10 +46,10 @@ from app.application.identity.sessions import (
     SessionGrant,
     grant_session,
 )
-from app.application.throttle import Throttle, ThrottleRule
+from app.application.throttle import SlidingWindow, Throttle, ThrottleRule
 from app.application.unit_of_work import UnitOfWork
 from app.application.use_case import UseCase
-from app.domain.account import Account
+from app.domain.account import FAILED_LOGIN_WINDOW, Account
 from app.domain.errors import InvalidCredentials, TooManyAttempts
 from app.domain.session import RefreshSession, hash_refresh_token, mint_refresh_token
 
@@ -62,9 +66,8 @@ LOGIN_EMAIL_RULE: Final[ThrottleRule] = ThrottleRule(
 LOGIN_ADDRESS_RULE: Final[ThrottleRule] = ThrottleRule(
     name="login-address", limit=LOGIN_ATTEMPTS_PER_ADDRESS, window=LOGIN_WINDOW
 )
-# What every client whose address the server could not work out is counted
-# under. They share one window, which errs towards refusing.
-UNKNOWN_ADDRESS_SUBJECT: Final[str] = "unknown-address"
+# The failed sign ins of one account, counted over the span of the lockout rule.
+LOGIN_FAILURES: Final[SlidingWindow] = SlidingWindow("login-failure", FAILED_LOGIN_WINDOW)
 
 LOGIN_FAILED_ACTION: Final[str] = "auth.login_failed"
 LOGIN_SUCCEEDED_ACTION: Final[str] = "auth.login_succeeded"
@@ -180,7 +183,11 @@ class SignInUseCase(UseCase[SignInCommand, SessionGrant]):
             extra={"client_address_known": command.client.address is not None},
         )
         with self._uow as uow:
-            retry_after = self._seconds_to_wait(uow, email, command.client, now)
+            counted = (
+                (self._rules.email, email),
+                (self._rules.address, address_subject(command.client)),
+            )
+            retry_after = seconds_to_wait(self._throttle, uow.rate_limits, counted, now)
             uow.commit()
         if retry_after:
             logger.warning("auth.login_throttled", extra={"retry_after_seconds": retry_after})
@@ -196,20 +203,6 @@ class SignInUseCase(UseCase[SignInCommand, SessionGrant]):
         )
         return outcome
 
-    def _seconds_to_wait(
-        self, uow: UnitOfWork, email: str, client: ClientDetails, now: datetime
-    ) -> int:
-        """Count the attempt in both windows and return the wait, or zero when allowed."""
-        address = str(client.address) if client.address is not None else UNKNOWN_ADDRESS_SUBJECT
-        verdicts = [
-            self._throttle.check(uow.rate_limits, self._rules.email, email, now),
-            self._throttle.check(uow.rate_limits, self._rules.address, address, now),
-        ]
-        return max(
-            (verdict.retry_after_seconds for verdict in verdicts if not verdict.allowed),
-            default=0,
-        )
-
     def _attempt(
         self, uow: UnitOfWork, email: str, command: SignInCommand, now: datetime
     ) -> SessionGrant | LoginFailure:
@@ -224,7 +217,10 @@ class SignInUseCase(UseCase[SignInCommand, SessionGrant]):
         if account is None or barred is not None:
             return self._refuse(uow, account, barred or LoginFailure.UNKNOWN_EMAIL, now)
         if not password_matches:
-            account.record_failed_login(now)
+            failures = self._throttle.count_in_span(
+                uow.rate_limits, LOGIN_FAILURES, str(account.id), now
+            )
+            account.record_failed_login(now, failures_in_window=failures)
             uow.accounts.save_login_state(account)
             return self._refuse(uow, account, LoginFailure.WRONG_PASSWORD, now)
 

@@ -10,13 +10,20 @@ hole that would otherwise stay invisible until it is exploited.
 from __future__ import annotations
 
 import logging
-from enum import Enum
 
 from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
-from app.application.identity.sign_in import LOGIN_ATTEMPTS_PER_ADDRESS, LOGIN_ATTEMPTS_PER_EMAIL
-from app.config_checks import check_login_limits, describe_failure, force_psycopg_driver
+from app.config_checks import (
+    FRONTEND_ORIGIN_VARIABLE,
+    check_attempt_limits,
+    describe_failure,
+    force_psycopg_driver,
+    resolve_frontend_origin,
+)
+from app.config_environment import ConfigurationError as ConfigurationError
+from app.config_environment import Environment as Environment
+from app.config_limits import AttemptLimitSettings
 
 logger = logging.getLogger(__name__)
 
@@ -39,31 +46,11 @@ RESEND_API_KEY_PLACEHOLDER = "not-configured-yet"
 DEFAULT_EMAIL_FROM = "Toolshed Hire <onboarding@resend.dev>"
 
 
-class Environment(str, Enum):
-    """The deployment environment the process believes it is running in."""
+class Settings(AttemptLimitSettings):
+    """Validated configuration values, one field per environment variable.
 
-    DEVELOPMENT = "development"
-    TEST = "test"
-    STAGING = "staging"
-    PRODUCTION = "production"
-
-    @property
-    def is_relaxed(self) -> bool:
-        """Return True when placeholder secrets are tolerated.
-
-        This is the one question every start-up check asks. Staging answers it
-        the same way production does, so a check written against it cannot
-        treat the two differently by accident.
-        """
-        return self in (Environment.DEVELOPMENT, Environment.TEST)
-
-
-class ConfigurationError(RuntimeError):
-    """Raised when the environment cannot produce a usable configuration."""
-
-
-class Settings(BaseSettings):
-    """Validated configuration values, one field per environment variable."""
+    The attempt limits are declared in `AttemptLimitSettings`.
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -102,6 +89,11 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGINS",
         description="Comma separated list of browser origins allowed to call the API",
     )
+    frontend_origin_raw: str | None = Field(
+        default=None,
+        validation_alias=FRONTEND_ORIGIN_VARIABLE,
+        description="The public address of the site, which the account messages link to",
+    )
     revision: str = Field(
         default=LOCAL_REVISION,
         validation_alias="K_REVISION",
@@ -121,16 +113,6 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="EMAIL_ALLOWED_RECIPIENT",
         description="When set, the only address the service will send email to",
-    )
-    login_attempts_per_email: int = Field(
-        default=LOGIN_ATTEMPTS_PER_EMAIL,
-        validation_alias="LOGIN_ATTEMPTS_PER_EMAIL",
-        description="Sign in attempts one email address may make in a window",
-    )
-    login_attempts_per_address: int = Field(
-        default=LOGIN_ATTEMPTS_PER_ADDRESS,
-        validation_alias="LOGIN_ATTEMPTS_PER_ADDRESS",
-        description="Sign in attempts one client address may make in a window",
     )
 
     @field_validator("database_url")
@@ -216,20 +198,40 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def keep_login_limits_within_bounds(self) -> Settings:
-        """Refuse a sign in limit under the floor, or one raised where the service is deployed."""
-        check_login_limits(
-            per_email=self.login_attempts_per_email,
-            per_address=self.login_attempts_per_address,
+    def keep_attempt_limits_within_bounds(self) -> Settings:
+        """Refuse a limit under the floor, or one raised where the service is deployed."""
+        check_attempt_limits(
+            self.attempt_limits(),
             environment=self.environment.value,
             relaxed=self.environment.is_relaxed,
         )
+        return self
+
+    @model_validator(mode="after")
+    def know_where_the_account_links_point(self) -> Settings:
+        """Refuse to start when the origin of the account links cannot be worked out."""
+        _ = self.frontend_origin
         return self
 
     @property
     def cors_origins(self) -> list[str]:
         """Return the configured browser origins as a list."""
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+
+    @property
+    def frontend_origin(self) -> str:
+        """Return where the account links point, which is the one CORS origin when unset.
+
+        Raises:
+            ValueError: If there is no usable origin for this environment.
+
+        """
+        return resolve_frontend_origin(
+            configured=self.frontend_origin_raw,
+            cors_origins=self.cors_origins,
+            environment=self.environment.value,
+            relaxed=self.environment.is_relaxed,
+        )
 
     @property
     def email_configured(self) -> bool:
@@ -247,8 +249,8 @@ class Settings(BaseSettings):
         which would turn "set", the lifetime in minutes and the state of the
         email key into the placeholder and lose the facts this record exists
         to show. The one permitted recipient is an address, so the record says
-        whether a restriction is on and not who it names. The two sign in
-        limits keep the names of their settings, which hold none of the three.
+        whether a restriction is on and not who it names. The attempt limits
+        keep the names of their settings, which hold none of the three.
         """
         return {
             "environment": self.environment.value,
@@ -258,11 +260,11 @@ class Settings(BaseSettings):
             "jwt_signing_key": "set" if self.jwt_secret else "missing",
             "access_lifetime_minutes": self.access_token_minutes,
             "cors_origins": self.cors_origins,
+            "frontend_origin": self.frontend_origin,
             "email_delivery": "configured" if self.email_configured else "not-configured",
             "email_sender": self.email_from,
             "email_recipient_restriction": "on" if self.email_allowed_recipient else "off",
-            "login_attempts_per_email": self.login_attempts_per_email,
-            "login_attempts_per_address": self.login_attempts_per_address,
+            **self.attempt_limit_values(),
         }
 
 
@@ -285,13 +287,11 @@ def load_settings() -> Settings:
     try:
         return Settings()
     except ValidationError as exc:
+        aliases = (field.validation_alias for field in Settings.model_fields.values())
+        variables = ", ".join(str(alias) for alias in aliases)
         raise ConfigurationError(
             "Failed to load backend configuration from the environment. "
-            "Attempted to read DATABASE_URL, JWT_SECRET, JWT_ALGORITHM, "
-            "ACCESS_TOKEN_MINUTES, ENVIRONMENT, CORS_ORIGINS, K_REVISION, "
-            "RESEND_API_KEY, EMAIL_FROM, EMAIL_ALLOWED_RECIPIENT, "
-            "LOGIN_ATTEMPTS_PER_EMAIL and LOGIN_ATTEMPTS_PER_ADDRESS. "
-            f"Cause: {describe_failure(exc)}"
+            f"Attempted to read {variables}. Cause: {describe_failure(exc)}"
         ) from None
 
 

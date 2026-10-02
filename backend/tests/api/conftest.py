@@ -16,6 +16,10 @@ or a lifetime can be run out without waiting for it.
 reservation routes on that clock, so a hold can be run out in a line, and it
 sends through the fake gateway of the `email_gateway` fixture, so a test can
 read what was sent.
+
+`account_api` and `home_branch` serve the tests of registration, the two
+account links and the profile. The client sends through the same fake gateway
+and hashes each distinct password once for the whole run.
 """
 
 from __future__ import annotations
@@ -29,10 +33,13 @@ from sqlmodel import Session
 
 from app.api.deps import get_notification_gateway
 from app.config import Environment
+from app.infrastructure.models import Branch
 from app.infrastructure.notification import FakeEmailGateway
 from app.main import app as production_app
+from tests.support.accounts_api import HOME_BRANCH_CODE, account_client
 from tests.support.booking_api import BookingClient
 from tests.support.clock import FixedClock
+from tests.support.factories import Factory
 from tests.support.request_probe import build_request_probe_app, settings_for
 from tests.support.sessions import session_client
 
@@ -92,3 +99,20 @@ def booking(
     with session_client(session, still_clock) as client:
         production_app.dependency_overrides[get_notification_gateway] = lambda: email_gateway
         yield BookingClient(client, still_clock)
+
+
+@pytest.fixture
+def home_branch(session: Session, factory: Factory) -> Branch:
+    """Return the committed branch a customer registers at, which is CBD."""
+    branch = factory.branch(code=HOME_BRANCH_CODE)
+    session.commit()
+    return branch
+
+
+@pytest.fixture
+def account_api(
+    session: Session, still_clock: FixedClock, email_gateway: FakeEmailGateway
+) -> Iterator[TestClient]:
+    """Yield the account and profile routes, sending through the fake gateway of the test."""
+    with account_client(session, still_clock, email_gateway) as client:
+        yield client

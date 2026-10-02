@@ -14,7 +14,19 @@ import type { ScreenDef } from './navigation'
 import { SAMPLE_DATA_TITLE, SampleDataNotice } from './sample-data-notice'
 
 /** The screens that read from the API today. */
-const LIVE_SCREEN_IDS = ['SC-01', 'SC-02', 'SC-03', 'SC-04', 'SC-06', 'SC-07', 'SC-08', 'DEV-01']
+const LIVE_SCREEN_IDS = [
+  'SC-01',
+  'SC-02',
+  'SC-03',
+  'SC-04',
+  'SC-05',
+  'SC-06',
+  'SC-07',
+  'SC-08',
+  'SC-09',
+  'INFO-01',
+  'DEV-01',
+]
 
 /** Any screen will do. The tests set the flag themselves on a copy of it. */
 function basket(): ScreenDef {

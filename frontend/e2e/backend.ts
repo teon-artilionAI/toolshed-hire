@@ -15,6 +15,9 @@
  *
  * The booking spec needs the reservation routes on top of the session ones,
  * and asks a third question about those.
+ *
+ * The account spec needs the registration and account routes, and asks a
+ * fourth question about those.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -122,6 +125,42 @@ export async function reservationRoutesArePresent(request: APIRequestContext): P
     throw new Error(
       `${REQUIRE_BACKEND_VARIABLE} is set, so the reservation routes have to be there, and ` +
         `GET ${RESERVATION_PROBE_PATH} answered ${status}. A skipped spec would hide that.`,
+    )
+  }
+  return present
+}
+
+/** One of the registration and account routes. If it is there, the others
+ *  were built with it. */
+const ACCOUNT_PROBE_PATH = '/api/me/profile'
+
+/** The reason shown beside a skipped account spec in the report. */
+export const ACCOUNT_ROUTES_NEEDED =
+  `This needs the registration and account routes on the real backend, and GET ${ACCOUNT_PROBE_PATH} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that ' +
+  'can register a customer, reset a password and read and change a profile.'
+
+/**
+ * Ask whether the backend has the registration and account routes.
+ *
+ * I ask for the profile with no token. A backend that has the route refuses
+ * that with a 401, which is an answer from the route and so proves it exists.
+ * A backend that does not have it answers 404 or 405. The account spec signs a
+ * new customer in, so the session routes have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the session routes, and
+ *   the profile route answered for itself. An absent backend is a false and
+ *   not a throw.
+ */
+export async function accountRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await sessionRoutesArePresent(request))) return false
+  const response = await request.get(ACCOUNT_PROBE_PATH, { timeout: HEALTH_TIMEOUT_MS })
+  const status = response.status()
+  const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+  if (!present && BACKEND_IS_REQUIRED) {
+    throw new Error(
+      `${REQUIRE_BACKEND_VARIABLE} is set, so the registration and account routes have to be ` +
+        `there, and GET ${ACCOUNT_PROBE_PATH} answered ${status}. A skipped spec would hide that.`,
     )
   }
   return present

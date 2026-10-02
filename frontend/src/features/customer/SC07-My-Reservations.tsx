@@ -23,6 +23,10 @@
  * The line above the list is a polite status. It says that the list is
  * loading and then how many bookings there are, so a person who cannot see
  * the list change still hears that it did.
+ *
+ * On a phone each booking is drawn as a block of its own and not as a row of
+ * six columns, so nothing has to be scrolled sideways. reservation-table.tsx
+ * has the table and says how.
  */
 
 import { useRef } from 'react'
@@ -35,12 +39,13 @@ import { reservationQueries } from '../../shared/api/reservation-queries'
 import { DEFAULT_RESERVATION_PAGE_SIZE, RESERVATION_STATUSES } from '../../shared/api/reservations'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import Pagination from '../../shared/pagination'
-import { DataTable, PageHeader } from '../../shared/ui'
+import { PageHeader } from '../../shared/ui'
 import { useSession } from '../../shared/use-session'
 import { RESERVATION_STATUS_LABEL } from './customer-labels'
 import { NothingToList, UnfinishedLeftOut } from './reservation-list-notes'
 import type { NothingToListReason } from './reservation-list-notes'
 import { ReservationRow } from './reservation-row'
+import { ReservationTable } from './reservation-table'
 
 const FIRST_PAGE = 1
 const STATUS_PARAMETER = 'status'
@@ -226,14 +231,11 @@ export default function MyReservations() {
                 onClearFilter={() => show(null, FIRST_PAGE)}
               />
             ) : (
-              <DataTable
-                caption="Your bookings, newest first"
-                columns={['Booking', 'Hire dates', 'Collect from', 'Status', 'Total with VAT', 'Details']}
-              >
+              <ReservationTable caption="Your bookings, newest first">
                 {shown.map((reservation) => (
                   <ReservationRow key={reservation.id} reservation={reservation} />
                 ))}
-              </DataTable>
+              </ReservationTable>
             )}
             {data.items.length > 0 && (
               <Pagination

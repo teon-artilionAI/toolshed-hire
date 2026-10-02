@@ -9,6 +9,8 @@
  *
  * The reveal toggle lives here too. It is a 44 by 44 target inside the
  * field, which is what a thumb needs on a phone at a counter.
+ *
+ * The checks a form runs on what was typed are in customer-rules.ts.
  */
 
 import { useState } from 'react'
@@ -16,40 +18,9 @@ import type { ReactNode } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { Field } from '../../shared/ui'
 
-export const MIN_PASSWORD_LENGTH = 10
-
-/** Strip the spaces and dashes people type into phone and ID numbers. */
-export function stripSeparators(value: string): string {
-  return value.replace(/[\s-]/g, '')
-}
-
-export function isEmailWellFormed(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim())
-}
-
-/** Ten digits starting with a zero, which is how South Africans write a
- *  mobile number. Spaces and dashes are forgiven. */
-export function isMobileWellFormed(value: string): boolean {
-  return /^0\d{9}$/.test(stripSeparators(value))
-}
-
-export function isThirteenDigits(value: string): boolean {
-  return /^\d{13}$/.test(stripSeparators(value))
-}
-
-/** Returns the problem with a password, or undefined when it is fine. */
-export function passwordProblem(value: string): string | undefined {
-  if (!value.trim()) return 'Choose a password so you can sign in again later.'
-  if (value.length < MIN_PASSWORD_LENGTH) {
-    return `Passwords need at least ${MIN_PASSWORD_LENGTH} characters. Yours has ${value.length}.`
-  }
-  if (!/\d/.test(value)) return 'Add at least one number to your password.'
-  return undefined
-}
-
 /** The ids `Field` gives its help and error paragraphs, so a control can
  *  point at whichever of them is on screen. */
-export function describedBy(
+function describedBy(
   id: string,
   hasHelp: boolean,
   hasError: boolean,
@@ -85,10 +56,15 @@ export function TextField({
   type = 'text',
   inputMode,
   placeholder,
+  maxLength,
+  disabled,
 }: ControlProps & {
   type?: 'text' | 'email' | 'tel'
   inputMode?: 'text' | 'email' | 'tel' | 'numeric'
   placeholder?: string
+  /** The most characters the box takes. */
+  maxLength?: number
+  disabled?: boolean
 }) {
   return (
     <Field label={label} htmlFor={id} help={help} error={error}>
@@ -100,6 +76,8 @@ export function TextField({
         placeholder={placeholder}
         autoComplete={autoComplete}
         required={required}
+        maxLength={maxLength}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
@@ -120,13 +98,15 @@ export function SelectField({
   help,
   error,
   options,
-}: ControlProps & { options: { value: string; label: string }[] }) {
+  disabled,
+}: ControlProps & { options: { value: string; label: string }[]; disabled?: boolean }) {
   return (
     <Field label={label} htmlFor={id} help={help} error={error}>
       <select
         id={id}
         name={id}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         aria-invalid={error ? true : undefined}
