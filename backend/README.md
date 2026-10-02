@@ -78,7 +78,10 @@ left exactly as it is. A second run changes nothing and logs
 `seed.nothing_to_do`, and a run against a database in use never resets a
 status, a price or a password. Every account the seed creates gets the
 password in `SEED_PASSWORD`. Outside development and test the script refuses to
-run without it. The data lives in `seed_data` and the loading in `seeding`.
+run without it. If `SEED_CUSTOMER_PASSWORD` is set as well, the customer
+accounts get that password instead, so a demonstration customer login can be
+published without exposing the staff and admin logins. The data lives in
+`seed_data` and the loading in `seeding`.
 
 The design document splits database authority between two roles, so the
 running application can neither change the schema nor rewrite its audit trail.

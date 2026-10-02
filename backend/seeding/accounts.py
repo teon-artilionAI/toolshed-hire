@@ -17,6 +17,7 @@ from typing import Final
 from sqlmodel import Session, col, select
 
 from app.config import settings
+from app.domain.enums import UserRole
 from app.infrastructure.models import Branch, CustomerProfile, UserAccount
 from app.infrastructure.security import hash_password
 from seeding.errors import SeedDataError
@@ -26,6 +27,7 @@ from seeding.report import SeedTally
 logger = logging.getLogger("seed")
 
 SEED_PASSWORD_VARIABLE: Final[str] = "SEED_PASSWORD"
+SEED_CUSTOMER_PASSWORD_VARIABLE: Final[str] = "SEED_CUSTOMER_PASSWORD"
 DEVELOPMENT_SEED_PASSWORD: Final[str] = "toolshed-dev-password"
 ACCOUNT_KIND = "user_account"
 CUSTOMER_PROFILE_KIND = "customer_profile"
@@ -55,13 +57,39 @@ def resolve_seed_password() -> str:
     return DEVELOPMENT_SEED_PASSWORD
 
 
+def resolve_customer_seed_password() -> str | None:
+    """Return the separate password for seeded customers, or None when there is none.
+
+    A demonstration customer login is meant to be handed out, and the staff and
+    admin logins are not. Giving customers their own password lets one be
+    published without giving away the other. When the variable is unset, every
+    seeded account carries the same password, which is what a local database
+    wants.
+    """
+    return os.environ.get(SEED_CUSTOMER_PASSWORD_VARIABLE) or None
+
+
 def load_accounts(
-    session: Session, branches: dict[str, Branch], password: str, tally: SeedTally
+    session: Session,
+    branches: dict[str, Branch],
+    password: str,
+    tally: SeedTally,
+    customer_password: str | None = None,
 ) -> dict[str, UserAccount]:
     """Insert the accounts that are missing and return all of them by email address.
 
-    The password is hashed once and only when at least one account has to be
-    created, because a bcrypt hash is slow by design and a second run needs none.
+    Each password is hashed once and only when an account that needs it has to
+    be created, because a bcrypt hash is slow by design and a second run needs
+    none.
+
+    Args:
+        session: An open session. The caller owns the commit.
+        branches: The seeded branches by code.
+        password: The plain password for staff and admin accounts, and for
+            customers too when no separate customer password is given.
+        tally: Where the created and found counts are recorded.
+        customer_password: The plain password for customer accounts, when they
+            are to differ from staff.
 
     Raises:
         SeedDataError: If an account names a branch that is not in the data.
@@ -73,10 +101,15 @@ def load_accounts(
     by_email = {account.email.lower(): account for account in session.exec(statement).all()}
     missing = [seed for seed in ACCOUNTS if seed.email not in by_email]
     if missing:
-        password_hash = hash_password(password)
         verified_at = datetime.now(UTC)
+        hashes: dict[str, str] = {}
         for seed in missing:
-            account = _account_from(seed, branches, password_hash, verified_at)
+            plain = password
+            if seed.role is UserRole.CUSTOMER and customer_password is not None:
+                plain = customer_password
+            if plain not in hashes:
+                hashes[plain] = hash_password(plain)
+            account = _account_from(seed, branches, hashes[plain], verified_at)
             session.add(account)
             by_email[seed.email] = account
             logger.info("seed.user_created", extra={"email": seed.email, "role": seed.role.value})
