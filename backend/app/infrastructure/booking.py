@@ -6,17 +6,25 @@ is written before its lines, because a line carries a foreign key to it.
 The reference number comes from a PostgreSQL sequence created in the migration.
 Deriving it from a row count would produce a duplicate under exactly the
 concurrency the allocation path exists to survive.
+
+`find_summary` is where ownership is enforced (BR-42). A restricted scope
+becomes a join to the customer profile and a condition on its account, in the
+same statement that looks the reservation up. A reservation that belongs to
+somebody else is therefore never read, so nothing can be said about it.
 """
 
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
 from sqlalchemy import text
-from sqlmodel import Session
+from sqlmodel import Session, col, select
 
+from app.application.booking.read_models import ReservationSummary
+from app.application.ownership import OwnerScope
 from app.domain import booking as domain
-from app.infrastructure.models import Reservation, ReservationLine
+from app.infrastructure.models import CustomerProfile, Reservation, ReservationLine
 from app.infrastructure.schema_ddl import REFERENCE_SEQUENCE
 
 logger = logging.getLogger(__name__)
@@ -53,6 +61,33 @@ class SqlReservationRepository:
         reference = domain.format_reference(year, int(next_value))
         logger.debug("booking.reference_draw_finished", extra={"reference": reference})
         return reference
+
+    def find_summary(self, reservation_id: UUID, scope: OwnerScope) -> ReservationSummary | None:
+        """Return one reservation, if it exists and the scope lets the reader see it."""
+        statement = select(Reservation).where(col(Reservation.id) == reservation_id)
+        if scope.customer_user_id is not None:
+            statement = statement.join(
+                CustomerProfile, col(CustomerProfile.id) == col(Reservation.customer_profile_id)
+            ).where(col(CustomerProfile.user_account_id) == scope.customer_user_id)
+        row = self._session.exec(statement).first()
+        logger.debug(
+            "booking.reservation_lookup_finished",
+            extra={
+                "reservation_id": str(reservation_id),
+                "restricted_to_owner": scope.is_restricted,
+                "found": row is not None,
+            },
+        )
+        if row is None:
+            return None
+        return ReservationSummary(
+            id=row.id,
+            reference=row.reference,
+            status=row.status,
+            branch_id=row.branch_id,
+            start_date=row.start_date,
+            end_date=row.end_date,
+        )
 
 
 def _reservation_row(reservation: domain.Reservation) -> Reservation:

@@ -13,6 +13,9 @@ than a fault.
 The router does no work of its own beyond the HTTP boundary. It validates the
 request, decides whose booking it is and hands a command to the use case, which
 arrives already wired to its unit of work, its clock and its dispatcher.
+
+A booking is a write to a branch, so the branch scope is checked here before
+the use case runs (BR-43). Counter staff may book at their own branch only.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from app.api.schemas import AllocatedAssetResponse, AllocationRequest, Allocatio
 from app.application.booking.create_reservation import CreateReservationCommand
 from app.domain.enums import UserRole
 from app.domain.errors import AuthorisationFailure, ValidationFailure
-from app.domain.identity import Actor
+from app.domain.identity import Actor, ensure_branch_scope
 from app.domain.period import BookingPeriod, InvalidBookingPeriod
 from app.infrastructure.models import UserAccount
 
@@ -63,6 +66,8 @@ def post_allocation(
     Raises:
         ValidationFailure: If the period is not a valid hire period.
         AuthorisationFailure: If a customer tries to book on someone else's behalf.
+        BranchScopeError: If counter staff try to book at a branch that is not
+            their own. Mapped to HTTP 403.
         AllocationConflictError: If no free unit exists. Mapped to HTTP 409.
 
     """
@@ -70,7 +75,8 @@ def post_allocation(
     customer_user_id = _resolve_customer(user, payload)
     # Read before the use case runs. The commit expires the loaded account, and
     # the role recorded in the audit trail is the one held at this moment.
-    actor = Actor(user_id=user.id, role=user.role)
+    actor = Actor(user_id=user.id, role=user.role, branch_id=user.branch_id)
+    ensure_branch_scope(actor, payload.branch_id)
 
     logger.info(
         "allocations.request_received",

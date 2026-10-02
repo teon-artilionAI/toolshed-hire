@@ -1,9 +1,9 @@
 """The HTTP boundary: the layered auth chain, and the conflict that must be 409.
 
 Authority is read from the database on every request and never from a token
-claim. A token says who the caller is, not what they may do, so a role change or
-a deactivation takes effect on the very next request rather than whenever the
-token happens to expire.
+claim. The token does carry the role and the branch, and the dependency chain
+does not rely on either, so a role change or a deactivation takes effect on the
+very next request rather than whenever the token happens to expire.
 
 Losing a race for the last unit is a normal outcome, so it is answered with 409
 and a problem document. A 500 there would tell the client the server broke, when
@@ -40,9 +40,10 @@ from tests.support.tokens import (
 )
 
 ME_PATH: Final[str] = "/api/me"
-SIGN_IN_PATH: Final[str] = "/api/auth/sign-in"
+SIGN_IN_PATH: Final[str] = "/api/auth/login"
 ALLOCATIONS_PATH: Final[str] = "/api/allocations"
 AUTHENTICATION_PROBLEM: Final[str] = "authentication-failure"
+INVALID_CREDENTIALS_PROBLEM: Final[str] = "invalid-credentials"
 AUTHORISATION_PROBLEM: Final[str] = "authorisation-failure"
 INACTIVE_PROBLEM: Final[str] = "inactive-account"
 CONFLICT_PROBLEM: Final[str] = "asset-unavailable"
@@ -117,7 +118,9 @@ class TestTokenVerification:
         assert body["id"] == str(customer.id)
         assert body["email"] == customer.email
         assert body["role"] == "customer"
-        assert body["active"] is True
+        assert body["fullName"] == customer.full_name
+        assert body["branchCode"] is None
+        assert body["emailVerified"] is False
 
     def test_an_expired_token_is_refused_with_401(
         self, client: TestClient, customer: UserAccount
@@ -179,7 +182,7 @@ class TestSignInNeverSaysWhichHalfOfTheCredentialWasWrong:
             SIGN_IN_PATH, json={"email": customer.email, "password": SHORT_WRONG_PASSWORD}
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert problem_code(response) == AUTHENTICATION_PROBLEM
+        assert problem_code(response) == INVALID_CREDENTIALS_PROBLEM
 
     def test_an_unknown_address_and_a_wrong_password_return_the_same_document(
         self, client: TestClient, customer: UserAccount
@@ -216,7 +219,7 @@ class TestSignInNeverSaysWhichHalfOfTheCredentialWasWrong:
 
 
 class TestRolesAreDatabaseAuthoritative:
-    """The third and fourth layers, and the reason the token carries no role."""
+    """The third and fourth layers, and why the role claim in the token is not relied on."""
 
     def test_a_customer_is_refused_by_an_administrator_only_endpoint_with_403(
         self, probe_client: TestClient, customer: UserAccount

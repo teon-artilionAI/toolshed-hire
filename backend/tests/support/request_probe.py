@@ -7,6 +7,11 @@ middleware and its real error handlers, and adds three routes under
 `/api/probe`. Nothing about the middleware is rebuilt here, which is the point.
 A copy of the wiring would only prove the copy.
 
+The probe routes declare that they are public, like every other route. They are
+mounted after the factory has checked the route table, so nothing would stop
+them being added without a policy, and a probe that set that example would be
+a poor one.
+
 `settings_for` builds the settings a deployed environment would load, so the
 same factory can be asked for the application staging or production would run.
 """
@@ -17,9 +22,10 @@ import logging
 from collections.abc import Iterator
 from typing import Final
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import StreamingResponse
 
+from app.api.deps import public_access
 from app.config import Environment, Settings
 from app.main import create_app
 
@@ -79,7 +85,7 @@ def build_request_probe_app(configuration: Settings | None = None) -> FastAPI:
 
     """
     application = create_app() if configuration is None else create_app(configuration)
-    probe = APIRouter(prefix=PROBE_PREFIX)
+    probe = APIRouter(prefix=PROBE_PREFIX, dependencies=[Depends(public_access)])
 
     @probe.get("/reservations/{reservation_id}")
     def read_reservation(reservation_id: str) -> dict[str, str]:

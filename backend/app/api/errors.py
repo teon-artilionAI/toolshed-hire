@@ -24,6 +24,10 @@ to carry the request id and the security headers. It calls
 `handle_unexpected_error` to do so. The same function is still registered for
 `Exception` below, so an application assembled without that middleware answers
 with the same document.
+
+Two refusals carry something beside the document. A throttled caller is told
+how long to wait in `Retry-After`. A refused refresh clears the refresh cookie,
+so the browser stops presenting a token that no longer works.
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.refresh_cookie import refresh_cookie_of
 from app.api.schemas import ProblemDetail
 from app.application.refusal import refused_parameter_of
 from app.domain.errors import (
@@ -47,8 +52,12 @@ from app.domain.errors import (
     BranchScopeError,
     DomainError,
     InactiveAccount,
+    InvalidCredentials,
     NotFound,
+    OriginNotAllowed,
+    SessionExpired,
     StateTransitionError,
+    TooManyAttempts,
     ValidationFailure,
 )
 from app.request_context import current_request_id
@@ -62,6 +71,7 @@ REQUEST_VALIDATION_DETAIL = "The request body or query string did not pass valid
 # Where a refused read parameter came from. Every read takes its parameters
 # from the query string, and FastAPI names its own refusals the same way.
 QUERY_LOCATION = "query"
+RETRY_AFTER_HEADER = "Retry-After"
 
 # One entry per domain error. A domain error absent from this table would fall
 # through to the catch all and be reported as a 500, so the table is total.
@@ -69,6 +79,10 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     ValidationFailure: status.HTTP_422_UNPROCESSABLE_ENTITY,
     NotFound: status.HTTP_404_NOT_FOUND,
     AuthenticationFailure: status.HTTP_401_UNAUTHORIZED,
+    InvalidCredentials: status.HTTP_401_UNAUTHORIZED,
+    SessionExpired: status.HTTP_401_UNAUTHORIZED,
+    TooManyAttempts: status.HTTP_429_TOO_MANY_REQUESTS,
+    OriginNotAllowed: status.HTTP_403_FORBIDDEN,
     AuthorisationFailure: status.HTTP_403_FORBIDDEN,
     InactiveAccount: status.HTTP_403_FORBIDDEN,
     BranchScopeError: status.HTTP_403_FORBIDDEN,
@@ -169,13 +183,20 @@ async def handle_domain_error(request: Request, exc: Exception) -> Response:
             "detail": exc.detail,
         },
     )
-    return problem_response(
+    response = problem_response(
         request=request,
         status_code=status_code,
         code=exc.code,
         detail=exc.message,
         errors=dict(exc.detail) or None,
     )
+    if isinstance(exc, TooManyAttempts):
+        response.headers[RETRY_AFTER_HEADER] = str(exc.retry_after_seconds)
+    if isinstance(exc, SessionExpired):
+        cookie = refresh_cookie_of(request)
+        if cookie is not None:
+            cookie.clear_on(response)
+    return response
 
 
 async def handle_http_exception(request: Request, exc: Exception) -> Response:

@@ -1,7 +1,7 @@
 """Health endpoint.
 
-Deliberately public. It is the one endpoint with no role policy, because the
-smoke test in each deployment and any uptime check call it with no credential.
+Public by declaration, because the smoke test in each deployment and any
+uptime check call it with no credential.
 It reports what it actually verified rather than a bare "ok": whether the database
 answered, and whether `btree_gist` is installed, since the exclusion constraint
 that prevents double booking cannot exist without it.
@@ -16,16 +16,16 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import SessionDependency
+from app.api.deps import SessionDependency, public_access
 from app.api.schemas import HealthResponse
 from app.config import settings
 from app.infrastructure.database import check_database_reachable, check_extension_installed
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["health"])
+router = APIRouter(tags=["health"], dependencies=[Depends(public_access)])
 
 STATUS_HEALTHY = "healthy"
 STATUS_DEGRADED = "degraded"

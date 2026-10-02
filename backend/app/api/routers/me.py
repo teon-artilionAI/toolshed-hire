@@ -3,7 +3,7 @@
 This is the endpoint the React client calls immediately after sign in, and it
 is the one that proves the whole chain: a bearer token from the browser, a
 verified signature, an account loaded from PostgreSQL, an active check and a
-role check, and a body shaped like the frontend UserAccount type.
+role check, and the same `User` body that signing in and refreshing return.
 
 The role in the response is read from the database row, not from the token.
 """
@@ -14,7 +14,8 @@ import logging
 
 from fastapi import APIRouter, status
 
-from app.api.deps import AnyRoleUser, SessionDependency, branch_code_of
+from app.api.deps import AnyRoleUser, SessionDependency
+from app.api.identity_deps import branch_code_of
 from app.api.schemas import UserResponse, wire_role
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def read_me(user: AnyRoleUser, session: SessionDependency) -> UserResponse:
         session: The request scoped session, used to resolve the branch code.
 
     Returns:
-        The account in the shape the frontend UserAccount type expects.
+        The account, in the shape every session response carries it in.
 
     """
     logger.info(
@@ -45,9 +46,9 @@ def read_me(user: AnyRoleUser, session: SessionDependency) -> UserResponse:
     )
     return UserResponse(
         id=user.id,
-        name=user.full_name,
         email=user.email,
+        full_name=user.full_name,
         role=wire_role(user.role),
         branch_code=branch_code_of(session, user),
-        active=user.is_active,
+        email_verified=user.email_verified_at is not None,
     )
