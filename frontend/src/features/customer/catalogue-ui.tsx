@@ -11,56 +11,17 @@
  * the screens on the API pass what the API sent and the basket passes its
  * fixtures until it moves over.
  *
- * A model may arrive without a photograph, so the banner always draws a plain
- * gradient and lays the photograph over it when there is one. The name sits on
- * a solid scrim in both cases, because white text straight on an image would
- * fail contrast.
+ * The picture of a model, and what stands in for it when there is no
+ * photograph, is in model-picture.tsx.
  */
 
 import type { ChangeEvent } from 'react'
-import { Ban, CircleCheck, Minus, Plus } from 'lucide-react'
+import { AlertCircle, Ban, CircleCheck, Minus, Plus } from 'lucide-react'
 import { Field } from '../../shared/ui'
 import { MAX_HIRE_DAYS } from './hire-period'
 
 /** The value a branch filter holds when no branch has been chosen. */
 export const ANY_BRANCH = 'ALL'
-
-/**
- * The stand-in for photography, with the model name on a scrim. The image is
- * decorative, so it is hidden from assistive technology. The name is real
- * text and is read normally.
- */
-export function ModelBanner({
-  name,
-  manufacturer,
-  imagePath,
-  height = 'h-32',
-}: {
-  name: string
-  manufacturer: string
-  /** Same origin path to the photograph, or null when there is none. */
-  imagePath: string | null
-  height?: string
-}) {
-  return (
-    <div
-      className={`relative flex ${height} items-end overflow-hidden rounded-t-lg bg-gradient-to-br from-slate-600 to-slate-800`}
-    >
-      {imagePath && (
-        <img
-          src={imagePath}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      )}
-      <div className="relative w-full bg-ink/80 px-md py-sm">
-        <p className="text-sm font-semibold leading-tight text-white">{name}</p>
-        <p className="mt-xs font-mono text-xs text-white/80">{manufacturer}</p>
-      </div>
-    </div>
-  )
-}
 
 /**
  * Whether one branch can supply the tool for the dates asked about. It says
@@ -163,7 +124,9 @@ export function PeriodFields({
 /**
  * How many of a model to hire. Steppers rather than a bare number field,
  * because this is used one handed on a phone at a counter. Both buttons
- * are a full 44 by 44 with 8px between them.
+ * are a full 44 by 44 with 8px between them. A refusal from the API is shown
+ * under the control and tied to the number, the way `Field` ties one to its
+ * input.
  */
 export function QuantityStepper({
   id,
@@ -172,6 +135,7 @@ export function QuantityStepper({
   max,
   onChange,
   min = 1,
+  error,
 }: {
   id: string
   /** What is being counted, so each stepper on a page reads differently
@@ -181,6 +145,8 @@ export function QuantityStepper({
   max: number
   onChange: (next: number) => void
   min?: number
+  /** Why the quantity was refused, when it was. */
+  error?: string
 }) {
   const clamp = (next: number) => onChange(Math.min(Math.max(min, next), Math.max(min, max)))
   return (
@@ -206,6 +172,8 @@ export function QuantityStepper({
           value={value}
           min={min}
           max={max}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
           onChange={(e) => clamp(Number.parseInt(e.target.value, 10) || min)}
         />
         <button
@@ -218,6 +186,12 @@ export function QuantityStepper({
           <span className="sr-only">One more {itemLabel}</span>
         </button>
       </div>
+      {error && (
+        <p className="field-error" id={`${id}-error`}>
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </p>
+      )}
     </div>
   )
 }

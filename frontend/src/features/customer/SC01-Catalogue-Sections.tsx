@@ -16,7 +16,7 @@ import { money } from '../../shared/format'
 import { EmptyState, StatTile } from '../../shared/ui'
 import { modelDetailHref, searchHref } from './catalogue-links'
 import { categoryIconFor } from './category-icons'
-import { ModelBanner } from './catalogue-ui'
+import { ModelBanner } from './model-picture'
 
 /** Skeleton blocks to draw while the categories are on their way. */
 const CATEGORY_SKELETON_COUNT = 8
@@ -133,7 +133,7 @@ export function CategoryGrid({
           aria-busy={categories.isFetching}
         >
           {stocked.map((category) => {
-            const Icon = categoryIconFor(category.slug)
+            const Icon = categoryIconFor(category.code)
             return (
               <li key={category.code}>
                 <Link
@@ -216,6 +216,7 @@ export function FeaturedModels({
                 <ModelBanner
                   name={model.name}
                   manufacturer={model.manufacturer}
+                  categoryCode={model.categoryCode}
                   imagePath={model.imagePath}
                 />
                 <div className="flex flex-1 flex-col p-md">

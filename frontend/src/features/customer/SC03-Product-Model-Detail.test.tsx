@@ -2,17 +2,16 @@
  * Tests for SC-03 Product Model Detail, with the network replaced at `fetch`.
  *
  * The screen is opened on the address of one model. Each test sets how the
- * model, the branches and the availability routes answer, and then reads the
- * page the way a customer would.
+ * model, the branches, the availability and the quote routes answer, and then
+ * reads the page the way a customer would. The price on the booking card has
+ * its own file, SC03-Booking-Card.test.tsx.
  */
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse, mockApi, neverAnswers, problemResponse } from '../../test/api-mock'
-import type { ApiMock, RouteTable } from '../../test/api-mock'
 import {
-  BRANCHES,
   MODEL_AVAILABILITY,
   PLATE_COMPACTOR_DETAIL,
   TEST_DEFAULT_RETURN,
@@ -20,29 +19,17 @@ import {
   TEST_TODAY,
   branchAnswers,
 } from '../../test/catalogue-samples'
-import { renderScreen } from '../../test/render-screen'
-import ModelDetail from './SC03-Product-Model-Detail'
-
-const SLUG = 'cp-100-plate-compactor'
-const MODEL_ROUTE = `GET /api/catalogue/models/${SLUG}`
-const AVAILABILITY_ROUTE = `GET /api/catalogue/models/${SLUG}/availability`
-const BRANCHES_ROUTE = 'GET /api/branches'
-const DATED = `/model/${SLUG}?from=${TEST_TODAY}&to=${TEST_DEFAULT_RETURN}`
-
-const WORKING: RouteTable = {
-  [MODEL_ROUTE]: () => jsonResponse(PLATE_COMPACTOR_DETAIL),
-  [BRANCHES_ROUTE]: () => jsonResponse(BRANCHES),
-  [AVAILABILITY_ROUTE]: () => jsonResponse(MODEL_AVAILABILITY),
-}
-
-function openModel(at: string = DATED) {
-  return renderScreen(<ModelDetail />, { path: '/model/:slug', at })
-}
-
-function lastAvailabilityQuestion(network: ApiMock): URLSearchParams {
-  const requests = network.requestsTo(AVAILABILITY_ROUTE)
-  return requests[requests.length - 1].query
-}
+import { MODEL_PLACEHOLDER_TEST_ID } from './model-picture'
+import {
+  AVAILABILITY_ROUTE,
+  DATED,
+  MODEL_ROUTE,
+  QUOTE_ROUTE,
+  SLUG,
+  WORKING,
+  lastQuestion,
+  openModel,
+} from './SC03-test-kit'
 
 /** The value shown against one term in the price and specification list. */
 function specification(term: string): HTMLElement {
@@ -94,7 +81,7 @@ describe('once the model has loaded', () => {
     openModel('/model/cp-100-plate-compactor?from=2026-03-20&to=2026-03-23')
 
     await screen.findByText('Free at Cape Town CBD')
-    const asked = lastAvailabilityQuestion(network)
+    const asked = lastQuestion(network, AVAILABILITY_ROUTE)
     expect(asked.get('from')).toBe('2026-03-20')
     expect(asked.get('to')).toBe('2026-03-23')
     expect(asked.get('quantity')).toBe('1')
@@ -118,13 +105,13 @@ describe('once the model has loaded', () => {
     expect(document.body).not.toHaveTextContent(/in the fleet/i)
   })
 
-  it('works out the hire charge at the daily rate, with the deposit apart', async () => {
+  it('stands a placeholder in for the photograph, called by the name of the tool', async () => {
     mockApi(WORKING)
     openModel()
 
-    expect(await screen.findByText('1 for 4 days at the daily rate')).toBeVisible()
-    expect(screen.getByText(/^R 1.360[,.]00$/)).toBeVisible()
-    expect(screen.getByText(/Plus R 1.500[,.]00 deposit, refunded on return\./)).toBeVisible()
+    const picture = await screen.findByRole('figure', { name: 'CP 100 Plate Compactor' })
+    expect(within(picture).getByTestId(MODEL_PLACEHOLDER_TEST_ID)).toBeInTheDocument()
+    expect(within(picture).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it('offers the basket for the first branch when it is free there', async () => {
@@ -138,7 +125,7 @@ describe('once the model has loaded', () => {
     )
   })
 
-  it('asks again when the quantity changes, and prices the new quantity', async () => {
+  it('asks again when the quantity changes', async () => {
     const user = userEvent.setup()
     const network = mockApi(WORKING)
     openModel()
@@ -146,9 +133,9 @@ describe('once the model has loaded', () => {
     await screen.findByText('Free at Cape Town CBD')
     await user.click(screen.getByRole('button', { name: 'One more CP 100 Plate Compactor' }))
 
-    await waitFor(() => expect(lastAvailabilityQuestion(network).get('quantity')).toBe('2'))
-    expect(screen.getByText('2 for 4 days at the daily rate')).toBeVisible()
-    expect(screen.getByText(/^R 2.720[,.]00$/)).toBeVisible()
+    await waitFor(() =>
+      expect(lastQuestion(network, AVAILABILITY_ROUTE).get('quantity')).toBe('2'),
+    )
   })
 
   it('asks again when a date changes', async () => {
@@ -158,8 +145,9 @@ describe('once the model has loaded', () => {
     await screen.findByText('Free at Cape Town CBD')
     fireEvent.change(screen.getByLabelText('Bring back on'), { target: { value: '2026-03-14' } })
 
-    await waitFor(() => expect(lastAvailabilityQuestion(network).get('to')).toBe('2026-03-14'))
-    expect(screen.getByText('1 for 2 days at the daily rate')).toBeVisible()
+    await waitFor(() =>
+      expect(lastQuestion(network, AVAILABILITY_ROUTE).get('to')).toBe('2026-03-14'),
+    )
   })
 
   it('links back to the search for the same dates', async () => {
@@ -211,6 +199,7 @@ describe('when the address names no model we hire', () => {
       ...WORKING,
       'GET /api/catalogue/models/no-such-tool': () => problemResponse(404),
       'GET /api/catalogue/models/no-such-tool/availability': () => problemResponse(404),
+      'GET /api/catalogue/models/no-such-tool/quote': () => problemResponse(404),
     })
     openModel('/model/no-such-tool')
 
@@ -265,35 +254,34 @@ describe('when the availability check fails', () => {
   })
 
   it('shows the message for each date the API refuses, under that date', async () => {
-    mockApi({
-      ...WORKING,
-      [AVAILABILITY_ROUTE]: () =>
-        problemResponse(422, {
-          errors: {
-            from: 'Collection cannot be in the past.',
-            to: 'The return date must be after the collection date.',
+    const refusal = () =>
+      problemResponse(422, {
+        errors: {
+          fields: {
+            'query.from': 'The hire has to start today or later.',
+            'query.to': 'The return date has to be after the start date.',
           },
-        }),
-    })
+        },
+      })
+    mockApi({ ...WORKING, [AVAILABILITY_ROUTE]: refusal, [QUOTE_ROUTE]: refusal })
     openModel('/model/cp-100-plate-compactor?from=2026-03-01&to=2026-02-20')
 
-    expect(await screen.findByText('Collection cannot be in the past.')).toBeVisible()
-    expect(screen.getByText('The return date must be after the collection date.')).toBeVisible()
+    expect(await screen.findByText('The hire has to start today or later.')).toBeVisible()
+    expect(screen.getByText('The return date has to be after the start date.')).toBeVisible()
     expect(screen.getByLabelText('Collect on')).toBeInvalid()
     expect(screen.getByRole('alert')).toHaveTextContent('We cannot check those details')
     expect(screen.getByRole('button', { name: 'Add to my hire basket' })).toBeDisabled()
-    expect(screen.getByText('Choose your dates to see the hire charge.')).toBeVisible()
   })
 
   it('does not crash on a date that is not a date', async () => {
-    mockApi({
-      ...WORKING,
-      [AVAILABILITY_ROUTE]: () =>
-        problemResponse(422, { errors: { from: 'Input should be a valid date.' } }),
-    })
+    const refusal = () =>
+      problemResponse(422, {
+        errors: { fields: { 'query.from': 'Enter a valid date, in the form YYYY-MM-DD.' } },
+      })
+    mockApi({ ...WORKING, [AVAILABILITY_ROUTE]: refusal, [QUOTE_ROUTE]: refusal })
     openModel('/model/cp-100-plate-compactor?from=banana&to=2026-03-16')
 
-    expect(await screen.findByText('Input should be a valid date.')).toBeVisible()
+    expect(await screen.findByText('Enter a valid date, in the form YYYY-MM-DD.')).toBeVisible()
     expect(screen.getByRole('heading', { level: 1, name: 'CP 100 Plate Compactor' })).toBeVisible()
   })
 })

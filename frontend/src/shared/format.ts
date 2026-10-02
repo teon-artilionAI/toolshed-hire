@@ -18,7 +18,6 @@ const RAND = new Intl.NumberFormat('en-ZA', {
  *  by hand, such as "280", still reads. */
 const WIRE_MONEY = /^(-?)(\d+)(?:\.(\d{1,2}))?$/
 
-const CENTS_PER_RAND = 100n
 const CENT_DIGITS = 2
 
 interface ExactMoney {
@@ -74,27 +73,39 @@ export function money(amount: number | string): string {
 }
 
 /**
- * Multiply a money string by a whole number, exactly.
+ * Whether a money string is nothing at all, for example "0.00".
  *
- * A hire charge is a rate times a number of days times a number of units. I do
- * that sum in whole cents, so three days at "0.10" is "0.30" and not a float
- * that is almost it.
+ * A screen uses it to leave out a line that would only say zero, such as a
+ * discount nobody was given.
  *
- * @param amount Money as the API writes it.
- * @param times How many. A whole number of zero or more.
- * @returns The product as a money string with two decimals.
- * @throws RangeError when `amount` is not money or `times` is not a whole
- *   number of zero or more.
+ * @throws RangeError when the string is not money as the API writes it.
  */
-export function moneyTimes(amount: string, times: number): string {
-  if (!Number.isInteger(times) || times < 0) {
-    throw new RangeError(`Cannot multiply money by ${times}. Expected a whole number of zero or more.`)
+export function isNoMoney(amount: string): boolean {
+  const { whole, cents } = parseWireMoney(amount)
+  return whole === 0n && Number(cents) === 0
+}
+
+/** A percentage as the API writes it. Digits with up to two decimals. */
+const WIRE_PERCENT = /^\d+(?:\.\d{1,2})?$/
+
+const PERCENT = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 2 })
+
+/**
+ * Format a percentage the API sent, so "15.00" reads as "15%".
+ *
+ * Decimals that are all zeros are dropped and any others are kept, so "12.50"
+ * reads as twelve and a half percent.
+ *
+ * @param rate A percentage as the API sends it, such as "15.00".
+ * @throws RangeError when the string is not a percentage as the API writes it.
+ */
+export function percent(rate: string): string {
+  if (!WIRE_PERCENT.test(rate.trim())) {
+    throw new RangeError(
+      `Cannot read "${rate}" as a percentage. Expected digits with up to two decimals, for example "15.00".`,
+    )
   }
-  const { negative, whole, cents } = parseWireMoney(amount)
-  const totalCents = (whole * CENTS_PER_RAND + BigInt(cents)) * BigInt(times)
-  const rand = totalCents / CENTS_PER_RAND
-  const remainder = (totalCents % CENTS_PER_RAND).toString().padStart(CENT_DIGITS, '0')
-  return `${negative && totalCents !== 0n ? '-' : ''}${rand}.${remainder}`
+  return `${PERCENT.format(Number(rate))}%`
 }
 
 const DATE_LONG = new Intl.DateTimeFormat('en-ZA', {

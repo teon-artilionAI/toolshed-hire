@@ -299,6 +299,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalogue/models/{slug}/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return what a hire of one model will cost
+         * @description Return the price of hiring `quantity` units of one model for the period.
+         *
+         *     Raises:
+         *         NotFound: If no published model carries the slug. Mapped to HTTP 404.
+         *         ValidationFailure: If the period or the quantity is refused, or the
+         *             period is outside the hire limits of the model. Mapped to HTTP 422.
+         */
+        get: operations["read_model_quote_api_catalogue_models__slug__quote_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -686,6 +711,55 @@ export interface components {
             requestId?: string | null;
         };
         /**
+         * QuoteBasis
+         * @description Which of the two totals a quote charged for one unit, as a response spells it.
+         * @enum {string}
+         */
+        QuoteBasis: "weekly" | "daily";
+        /**
+         * QuoteResponse
+         * @description What a hire will cost.
+         *
+         *     `totalIncVat` is the hire charge. The deposit is not in it, because a
+         *     deposit is held and returned and not charged. `vatAmount` is worked out on
+         *     the subtotal after the discount.
+         */
+        QuoteResponse: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Hiredays */
+            hireDays: number;
+            /** Quantity */
+            quantity: number;
+            perUnit: components["schemas"]["UnitQuoteResponse"];
+            /** Subtotalexvat */
+            subtotalExVat: string;
+            /** Discountpercent */
+            discountPercent: string;
+            /** Discountamount */
+            discountAmount: string;
+            /** Vatrate */
+            vatRate: string;
+            /** Vatamount */
+            vatAmount: string;
+            /** Totalincvat */
+            totalIncVat: string;
+            /** Depositperunit */
+            depositPerUnit: string;
+            /** Deposittotal */
+            depositTotal: string;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+        };
+        /**
          * TokenResponse
          * @description The access token and the account it belongs to.
          *
@@ -703,6 +777,27 @@ export interface components {
             /** Expiresin */
             expiresIn: number;
             user: components["schemas"]["UserResponse"];
+        };
+        /**
+         * UnitQuoteResponse
+         * @description What one unit costs for the period, and how that was arrived at.
+         *
+         *     `basis` is `weekly` when the complete weeks at the weekly rate and the
+         *     days left over at the daily rate came to less than every day at the daily
+         *     rate, and `daily` otherwise.
+         */
+        UnitQuoteResponse: {
+            /** Dailyrate */
+            dailyRate: string;
+            /** Weeklyrate */
+            weeklyRate: string;
+            /** Wholeweeks */
+            wholeWeeks: number;
+            /** Remainderdays */
+            remainderDays: number;
+            basis: components["schemas"]["QuoteBasis"];
+            /** Amountexvat */
+            amountExVat: string;
         };
         /**
          * UserResponse
@@ -1126,6 +1221,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelAvailabilityResponse"];
+                };
+            };
+            /** @description No published model carries this slug. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_model_quote_api_catalogue_models__slug__quote_get: {
+        parameters: {
+            query: {
+                /** @description The first day of the hire. */
+                from: string;
+                /** @description The day the equipment comes back. It is free again that day. */
+                to: string;
+                /** @description How many units are wanted. */
+                quantity?: number;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteResponse"];
                 };
             };
             /** @description No published model carries this slug. */

@@ -15,9 +15,10 @@ import {
   formatDateShort,
   formatDateTime,
   humanise,
+  isNoMoney,
   isOverdue,
   money,
-  moneyTimes,
+  percent,
 } from './format'
 
 /** The no-break spaces a locale formatter likes to use between digit groups. */
@@ -100,36 +101,37 @@ describe('money, given a string as the API sends it', () => {
   )
 })
 
-describe('moneyTimes', () => {
-  it('multiplies a rate by a number of days', () => {
-    expect(moneyTimes('340.00', 4)).toBe('1360.00')
+describe('isNoMoney', () => {
+  it.each(['0.00', '0', '-0.00', '000.0'])('says "%s" is nothing', (amount) => {
+    expect(isNoMoney(amount)).toBe(true)
   })
 
-  it('does the sum in whole cents, so nothing drifts', () => {
-    // As floats, 0.1 times 3 is 0.30000000000000004.
-    expect(moneyTimes('0.10', 3)).toBe('0.30')
-    expect(moneyTimes('19.99', 3)).toBe('59.97')
-  })
-
-  it('carries cents into rand', () => {
-    expect(moneyTimes('0.75', 2)).toBe('1.50')
-  })
-
-  it('is nothing when multiplied by zero', () => {
-    expect(moneyTimes('340.00', 0)).toBe('0.00')
-  })
-
-  it('gives back a string that money can show', () => {
-    expect(money(moneyTimes('185.00', 8))).toBe(money(1480))
-  })
-
-  it.each([-1, 1.5, Number.NaN])('refuses to multiply by %s', (times) => {
-    expect(() => moneyTimes('340.00', times)).toThrow(RangeError)
+  it.each(['0.01', '1.00', '-12.50'])('says "%s" is something', (amount) => {
+    expect(isNoMoney(amount)).toBe(false)
   })
 
   it('refuses an amount that is not money', () => {
-    expect(() => moneyTimes('lots', 2)).toThrow(RangeError)
+    expect(() => isNoMoney('lots')).toThrow(RangeError)
   })
+})
+
+describe('percent', () => {
+  it('drops decimals that are all zeros', () => {
+    expect(percent('15.00')).toBe('15%')
+    expect(percent('0.00')).toBe('0%')
+  })
+
+  it('keeps decimals that say something', () => {
+    expect(percent('12.50')).toMatch(/^12[,.]5%$/)
+    expect(percent('7.25')).toMatch(/^7[,.]25%$/)
+  })
+
+  it.each(['', 'fifteen', '15%', '-5.00', '1.234'])(
+    'refuses "%s" and does not guess at a rate',
+    (rate) => {
+      expect(() => percent(rate)).toThrow(RangeError)
+    },
+  )
 })
 
 describe('formatDate', () => {
