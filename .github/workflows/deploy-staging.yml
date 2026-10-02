@@ -129,6 +129,13 @@ jobs:
           EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
         run: bash infra/scripts/deploy-api.sh
 
+      # A new revision normally takes traffic as it is deployed. If traffic was
+      # pinned to an older revision by a manual rollback, it would not, and the
+      # smoke test below would pass against the old code. This makes the latest
+      # revision the serving one whatever state the service was left in.
+      - name: Make sure the new revision is the one serving
+        run: bash infra/scripts/promote-api.sh
+
       # Without this, a green run would mean only that gcloud accepted the
       # request, which is a much weaker claim than it looks.
       - name: Smoke test the API
