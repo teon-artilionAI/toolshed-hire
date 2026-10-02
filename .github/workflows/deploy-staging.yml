@@ -79,6 +79,7 @@ jobs:
           EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+          SEED_CUSTOMER_PASSWORD: ${{ secrets.SEED_CUSTOMER_PASSWORD }}
         run: bash infra/scripts/check-deploy-config.sh
 
       - name: Authenticate to Google Cloud
@@ -118,6 +119,7 @@ jobs:
       - name: Seed the reference fleet and demonstration accounts
         env:
           SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+          SEED_CUSTOMER_PASSWORD: ${{ secrets.SEED_CUSTOMER_PASSWORD }}
         run: bash infra/scripts/seed-database.sh
 
       - name: Deploy the revision to Cloud Run
@@ -145,6 +147,7 @@ jobs:
         id: frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          API_ORIGIN: ${{ steps.api.outputs.service_url }}
         run: bash infra/scripts/deploy-frontend.sh
 
       # The same health check, this time through the frontend domain. It only
