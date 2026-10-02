@@ -12,6 +12,9 @@
  * A healthy backend is not enough for the session spec. It needs the session
  * routes, and a backend can be up and answering without having them. So that
  * spec asks a second question, about one of those routes by name.
+ *
+ * The booking spec needs the reservation routes on top of the session ones,
+ * and asks a third question about those.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -84,6 +87,41 @@ export async function sessionRoutesArePresent(request: APIRequestContext): Promi
     throw new Error(
       `${REQUIRE_BACKEND_VARIABLE} is set, so the session routes have to be there, and ` +
         `POST ${SESSION_PROBE_PATH} answered ${status}. A skipped spec would hide that.`,
+    )
+  }
+  return present
+}
+
+/** One of the reservation routes. If it is there, the others were built with it. */
+const RESERVATION_PROBE_PATH = '/api/reservations'
+
+/** The reason shown beside a skipped booking spec in the report. */
+export const RESERVATION_ROUTES_NEEDED =
+  `This needs the reservation routes on the real backend, and GET ${RESERVATION_PROBE_PATH} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that ' +
+  'can create, hold, confirm, cancel, list and read a reservation.'
+
+/**
+ * Ask whether the backend has the reservation routes.
+ *
+ * I ask for the list with no token. A backend that has the route refuses that
+ * with a 401, which is an answer from the route and so proves it exists. A
+ * backend that does not have it answers 404 or 405. The booking spec signs a
+ * customer in, so the session routes have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the session routes, and
+ *   the reservation route answered for itself. An absent backend is a false
+ *   and not a throw.
+ */
+export async function reservationRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await sessionRoutesArePresent(request))) return false
+  const response = await request.get(RESERVATION_PROBE_PATH, { timeout: HEALTH_TIMEOUT_MS })
+  const status = response.status()
+  const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+  if (!present && BACKEND_IS_REQUIRED) {
+    throw new Error(
+      `${REQUIRE_BACKEND_VARIABLE} is set, so the reservation routes have to be there, and ` +
+        `GET ${RESERVATION_PROBE_PATH} answered ${status}. A skipped spec would hide that.`,
     )
   }
   return present
