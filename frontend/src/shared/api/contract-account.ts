@@ -1,50 +1,35 @@
 /**
  * The registration and account wire types.
  *
- * These are the one set of wire types I wrote by hand. The routes they
- * describe are agreed and are being built, and they are not in the OpenAPI
- * document yet, so there is nothing to generate them from. Every name, every
- * member and every word in a union below is the one the agreed contract uses.
- * Once the routes are in the document these become types built from the
- * generated schema, the way contract-booking.ts builds the reservation types,
- * and a name that drifted stops the application compiling.
+ * They are built from the generated schema the way every other wire type is,
+ * so a route, a field or a value the backend changes stops the application
+ * compiling until it follows. They live apart from contract.ts only to keep
+ * each file a size that can be read in one sitting.
  *
  * Nothing imports this file but contract.ts. The application imports these
  * types from there, like every other wire type.
  */
 
-import type { IsoDate } from './contract-kit'
+import type { AcceptedJsonOf, BodyOf, IsoDate, JsonOf, Paths, Refine, Schemas } from './contract-kit'
 
-/** The identity documents the counter accepts. */
-export type IdDocumentType = 'SA_ID' | 'PASSPORT' | 'DRIVING_LICENCE'
+/** The identity documents the counter accepts. The backend calls this `IdDocType`. */
+export type IdDocumentType = Schemas['IdDocType']
 
 /** Whether a customer hires as a member of the public or as a trade account. */
-export type CustomerType = 'INDIVIDUAL' | 'TRADE'
+export type CustomerType = Schemas['CustomerType']
 
 /** Where a customer account stands. Only the branch changes it. */
-export type AccountStatus = 'ACTIVE' | 'ON_HOLD' | 'BLACKLISTED'
+export type AccountStatus = Schemas['AccountStatus']
 
 /**
  * The body `POST /api/auth/register` accepts.
  *
  * `idDocumentLast4` is exactly four letters or digits. The whole document
- * number is never sent. `acceptsPrivacyNotice` must be true. The API refuses a
- * member it does not know with a 422, so nothing else may be added here.
+ * number is never sent. `acceptsPrivacyNotice` can only be true, and the
+ * generated type says so. The API refuses a member it does not know with a
+ * 422, so nothing else may be added here.
  */
-export interface RegisterRequest {
-  email: string
-  password: string
-  fullName: string
-  phone: string
-  idDocumentType: IdDocumentType
-  idDocumentLast4: string
-  billingAddressLine1: string
-  billingSuburb: string
-  billingCity: string
-  billingPostalCode: string
-  homeBranchCode: string
-  acceptsPrivacyNotice: boolean
-}
+export type RegisterRequest = BodyOf<Paths['/api/auth/register']['post']>
 
 /**
  * What register, the resend of a verification link and a password reset
@@ -54,25 +39,18 @@ export interface RegisterRequest {
  * address and the one in question is not it. It says nothing about whether the
  * address has an account.
  */
-export interface EmailDelivery {
-  emailDeliverable: boolean
-}
+export type EmailDelivery = AcceptedJsonOf<Paths['/api/auth/register']['post']> &
+  AcceptedJsonOf<Paths['/api/auth/email-verification/resend']['post']> &
+  AcceptedJsonOf<Paths['/api/auth/password-reset/request']['post']>
 
 /** The body `POST /api/auth/email-verification` accepts. */
-export interface VerifyEmailRequest {
-  token: string
-}
+export type VerifyEmailRequest = BodyOf<Paths['/api/auth/email-verification']['post']>
 
 /** The body `POST /api/auth/password-reset/request` accepts. */
-export interface PasswordResetRequest {
-  email: string
-}
+export type PasswordResetRequest = BodyOf<Paths['/api/auth/password-reset/request']['post']>
 
 /** The body `POST /api/auth/password-reset/complete` accepts. */
-export interface CompletePasswordResetRequest {
-  token: string
-  newPassword: string
-}
+export type CompletePasswordResetRequest = BodyOf<Paths['/api/auth/password-reset/complete']['post']>
 
 /**
  * `GET /api/me/profile`, and what `PATCH /api/me/profile` answers with.
@@ -81,40 +59,31 @@ export interface CompletePasswordResetRequest {
  * example "10.00". `companyName` and `vatNumber` are null when the customer
  * gave none.
  */
-export interface MyProfile {
-  fullName: string
-  email: string
-  emailVerified: boolean
-  phone: string
-  customerType: CustomerType
-  companyName: string | null
-  vatNumber: string | null
-  idDocumentType: IdDocumentType
-  idDocumentLast4: string
-  billingAddressLine1: string
-  billingSuburb: string
-  billingCity: string
-  billingPostalCode: string
-  accountStatus: AccountStatus
-  tradeDiscountPercent: string
-  noShowCount: number
-  homeBranchCode: string
-  memberSince: IsoDate
-}
+export type MyProfile = Refine<
+  JsonOf<Paths['/api/me/profile']['get']> & JsonOf<Paths['/api/me/profile']['patch']>,
+  { memberSince: IsoDate }
+>
 
 /**
  * The body `PATCH /api/me/profile` accepts. Any of these and nothing else.
  *
  * A member that is left out is left as it is. The API refuses any other
  * member with a 422 that names it.
+ *
+ * The generated type lets every member be null, because the backend reads a
+ * missing member and a null one the same way. Only `companyName` and
+ * `vatNumber` mean anything as null, which is how they are cleared. The other
+ * six are required on a profile, so the screens send them as text or not at
+ * all, and here they can only be text.
  */
-export interface UpdateMyProfileRequest {
-  fullName?: string
-  phone?: string
-  billingAddressLine1?: string
-  billingSuburb?: string
-  billingCity?: string
-  billingPostalCode?: string
-  companyName?: string | null
-  vatNumber?: string | null
-}
+export type UpdateMyProfileRequest = Refine<
+  BodyOf<Paths['/api/me/profile']['patch']>,
+  {
+    fullName?: string
+    phone?: string
+    billingAddressLine1?: string
+    billingSuburb?: string
+    billingCity?: string
+    billingPostalCode?: string
+  }
+>

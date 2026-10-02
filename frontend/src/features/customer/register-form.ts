@@ -185,8 +185,20 @@ export function validateRegistration(
  * password stays in the browser. Spaces around a value are dropped, a phone
  * number goes as digits, and the document ending goes in capitals, which is
  * how the counter reads it off the document.
+ *
+ * The API takes `acceptsPrivacyNotice` as true and as nothing else, so a form
+ * whose notice is not ticked has no body at all.
+ *
+ * @throws Error When the privacy notice is not accepted. `validateRegistration`
+ *   refuses that form, so reaching here with it is a defect in the screen.
  */
 export function toRegisterRequest(form: RegistrationForm): RegisterRequest {
+  if (!form.acceptsPrivacyNotice) {
+    throw new Error(
+      'Tried to build a registration body from a form whose privacy notice is not accepted. ' +
+        'validateRegistration refuses that form, so the screen should not have sent it.',
+    )
+  }
   return {
     email: form.email.trim(),
     password: form.password,
@@ -199,6 +211,6 @@ export function toRegisterRequest(form: RegistrationForm): RegisterRequest {
     billingCity: form.billingCity.trim(),
     billingPostalCode: form.billingPostalCode.trim(),
     homeBranchCode: form.homeBranchCode,
-    acceptsPrivacyNotice: form.acceptsPrivacyNotice,
+    acceptsPrivacyNotice: true,
   }
 }

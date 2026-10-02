@@ -99,6 +99,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a customer account and send the verification link
+         * @description Open a customer account, or answer in the same way when the address has one.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_register_api_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prove an email address with the token of a verification link
+         * @description Redeem a verification token. It works once.
+         *
+         *     Raises:
+         *         VerificationLinkInvalid: If the token is unknown, used or out of
+         *             time. HTTP 400.
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_email_verification_api_auth_email_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email-verification/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the signed in account its verification link again
+         * @description Issue a new verification link, or do nothing for a verified account.
+         *
+         *     Raises:
+         *         TooManyAttempts: If the account is throttled. HTTP 429.
+         */
+        post: operations["post_verification_resend_api_auth_email_verification_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for a password reset link
+         * @description Send a reset link to an address that has an account, and say nothing either way.
+         *
+         *     Raises:
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_password_reset_request_api_auth_password_reset_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose a new password with the token of a reset link
+         * @description Set the new password, end every session of the account and lift any lock.
+         *
+         *     Raises:
+         *         ResetLinkInvalid: If the token is unknown, used or out of time. HTTP 400.
+         *         ValidationFailure: If the new password is refused. HTTP 422.
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_password_reset_completion_api_auth_password_reset_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -124,6 +244,37 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the signed in customer's own details
+         * @description Return the caller's profile and the account behind it.
+         *
+         *     Raises:
+         *         NotFound: If the account has no customer profile. HTTP 404.
+         */
+        get: operations["read_profile_api_me_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the signed in customer's contact and billing details
+         * @description Change the fields that were sent, all of them or none.
+         *
+         *     Raises:
+         *         NotFound: If the account has no customer profile. HTTP 404.
+         *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
+         */
+        patch: operations["patch_profile_api_me_profile_patch"];
         trace?: never;
     };
     "/api/reservations": {
@@ -430,6 +581,12 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccountStatus
+         * @description Customer account standing. ON_HOLD is set by the no-show rule (BR-18).
+         * @enum {string}
+         */
+        AccountStatus: "ACTIVE" | "ON_HOLD" | "BLACKLISTED";
+        /**
          * AvailabilityPageResponse
          * @description One page of an availability search.
          *
@@ -562,6 +719,23 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /**
+         * CustomerType
+         * @description Whether a customer hires as a member of the public or as a trade account.
+         * @enum {string}
+         */
+        CustomerType: "INDIVIDUAL" | "TRADE";
+        /**
+         * EmailDeliverableResponse
+         * @description Whether a message for the address would be delivered in this environment.
+         *
+         *     False when the environment only delivers mail to one address and this is
+         *     not it. It never depends on whether the address has an account.
+         */
+        EmailDeliverableResponse: {
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -583,6 +757,12 @@ export interface components {
             /** Revision */
             revision: string;
         };
+        /**
+         * IdDocType
+         * @description The identity document a customer presented. Only its last four digits are kept.
+         * @enum {string}
+         */
+        IdDocType: "SA_ID" | "PASSPORT" | "DRIVING_LICENCE";
         /**
          * LoginRequest
          * @description Credentials posted to the sign in endpoint.
@@ -734,6 +914,24 @@ export interface components {
             imagePath: string | null;
         };
         /**
+         * PasswordResetCompletionRequest
+         * @description The token of a reset link and the password chosen with it.
+         */
+        PasswordResetCompletionRequest: {
+            /** Token */
+            token: string;
+            /** Newpassword */
+            newPassword: string;
+        };
+        /**
+         * PasswordResetRequest
+         * @description The address a reset link is asked for.
+         */
+        PasswordResetRequest: {
+            /** Email */
+            email: string;
+        };
+        /**
          * ProblemDetail
          * @description An RFC 9457 problem document.
          *
@@ -760,6 +958,76 @@ export interface components {
             errors?: Record<string, unknown> | null;
             /** Requestid */
             requestId?: string | null;
+        };
+        /**
+         * ProfileResponse
+         * @description A customer's own details.
+         *
+         *     `accountStatus`, `tradeDiscountPercent` and `noShowCount` are shown and
+         *     cannot be changed by the customer.
+         */
+        ProfileResponse: {
+            /** Fullname */
+            fullName: string;
+            /** Email */
+            email: string;
+            /** Emailverified */
+            emailVerified: boolean;
+            /** Phone */
+            phone: string;
+            customerType: components["schemas"]["CustomerType"];
+            /** Companyname */
+            companyName: string | null;
+            /** Vatnumber */
+            vatNumber: string | null;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingaddressline1 */
+            billingAddressLine1: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            /** Billingpostalcode */
+            billingPostalCode: string;
+            accountStatus: components["schemas"]["AccountStatus"];
+            /** Tradediscountpercent */
+            tradeDiscountPercent: string;
+            /** Noshowcount */
+            noShowCount: number;
+            /** Homebranchcode */
+            homeBranchCode: string;
+            /**
+             * Membersince
+             * Format: date
+             */
+            memberSince: string;
+        };
+        /**
+         * ProfileUpdateRequest
+         * @description The contact and billing fields a customer may change, each of them optional.
+         *
+         *     A field that is left out is left alone. `companyName` and `vatNumber` may
+         *     be sent as null or as an empty string to clear them.
+         */
+        ProfileUpdateRequest: {
+            /** Fullname */
+            fullName?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Billingaddressline1 */
+            billingAddressLine1?: string | null;
+            /** Billingsuburb */
+            billingSuburb?: string | null;
+            /** Billingcity */
+            billingCity?: string | null;
+            /** Billingpostalcode */
+            billingPostalCode?: string | null;
+            /** Companyname */
+            companyName?: string | null;
+            /** Vatnumber */
+            vatNumber?: string | null;
         };
         /**
          * QuoteBasis
@@ -809,6 +1077,41 @@ export interface components {
             depositTotal: string;
             /** Latefeeperday */
             lateFeePerDay: string;
+        };
+        /**
+         * RegisterRequest
+         * @description What a person sends to open a customer account.
+         *
+         *     Only the last four characters of the identity document are sent. The full
+         *     number never reaches the service.
+         */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Fullname */
+            fullName: string;
+            /** Phone */
+            phone: string;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingaddressline1 */
+            billingAddressLine1: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            /** Billingpostalcode */
+            billingPostalCode: string;
+            /** Homebranchcode */
+            homeBranchCode: string;
+            /**
+             * Acceptsprivacynotice
+             * @constant
+             */
+            acceptsPrivacyNotice: true;
         };
         /**
          * ReservationLineRequest
@@ -928,6 +1231,14 @@ export interface components {
          * @enum {string}
          */
         ReservationStatus: "DRAFT" | "HELD" | "CONFIRMED" | "COLLECTED" | "RETURNED" | "CANCELLED" | "NO_SHOW" | "EXPIRED";
+        /**
+         * TokenRequest
+         * @description The token of a verification link.
+         */
+        TokenRequest: {
+            /** Token */
+            token: string;
+        };
         /**
          * TokenResponse
          * @description The access token and the account it belongs to.
@@ -1139,6 +1450,217 @@ export interface operations {
             };
         };
     };
+    post_register_api_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliverableResponse"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_email_verification_api_auth_email_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The token is unknown, already used or out of time. The answer is the same for all three. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_verification_resend_api_auth_email_verification_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliverableResponse"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_password_reset_request_api_auth_password_reset_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliverableResponse"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_password_reset_completion_api_auth_password_reset_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetCompletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The token is unknown, already used or out of time. The answer is the same for all three. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_me_api_me_get: {
         parameters: {
             query?: never;
@@ -1155,6 +1677,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
+    read_profile_api_me_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description The account has no customer profile. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_profile_api_me_profile_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description The account has no customer profile. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

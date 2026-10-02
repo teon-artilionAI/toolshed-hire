@@ -161,8 +161,9 @@ export function completePasswordReset(token: string, newPassword: string): Promi
 /**
  * GET /api/me/profile. The signed in customer's own profile.
  *
- * @throws ApiError with status 404 when the account has no customer profile,
- *   which is the case for a member of staff.
+ * @throws ApiError with status 404 when a customer account has no customer
+ *   profile, and 403 for a member of staff, whose role the route does not
+ *   admit. No staff screen asks for it.
  */
 export function getMyProfile(signal?: AbortSignal): Promise<MyProfile> {
   return api.get(PROFILE_ENDPOINT, readMyProfile, { signal })

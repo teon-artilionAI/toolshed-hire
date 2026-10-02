@@ -204,4 +204,8 @@ describe('the body a registration is sent as', () => {
   it('leaves the password exactly as it was typed', () => {
     expect(toRegisterRequest({ ...GOOD, password: '  spaced out pw  ' }).password).toBe('  spaced out pw  ')
   })
+
+  it('refuses to build a body when the privacy notice is not accepted', () => {
+    expect(() => toRegisterRequest({ ...GOOD, acceptsPrivacyNotice: false })).toThrow(/privacy notice/)
+  })
 })
