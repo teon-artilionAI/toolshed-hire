@@ -10,6 +10,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api-problem'
 import type { ApiFailureKind } from '../api-problem'
 import { jsonResponse, mockApi, problemResponse } from '../../test/api-mock'
+import {
+  CANCELLED,
+  CONFIRMED,
+  LIST_ROUTE,
+  REFERENCE,
+  RESERVATION_ID,
+  pageOf,
+} from '../../test/reservation-samples'
 import { listBranches } from './catalogue'
 import { catalogueQueries } from './catalogue-queries'
 import {
@@ -21,6 +29,7 @@ import {
   retryDelay,
   shouldRetry,
 } from './query-client'
+import { rememberReservation, reservationQueries } from './reservation-queries'
 
 function failure(kind: ApiFailureKind, status: number | null): ApiError {
   return new ApiError({ kind, status, title: 'Test', detail: 'Test', requestPath: '/api/test' })
@@ -106,8 +115,36 @@ describe('the freshness rules', () => {
     expect(defaults.refetchOnReconnect).toBe('always')
   })
 
+  it.each([
+    ['a list of reservations', reservationQueries.list({ page: 1 }).queryKey],
+    ['one reservation', reservationQueries.detail(REFERENCE).queryKey],
+  ])('never treat %s as fresh, and refetch it on every use', (_what, queryKey) => {
+    const defaults = createQueryClient().getQueryDefaults(queryKey)
+
+    expect(defaults.staleTime).toBe(0)
+    expect(defaults.refetchOnMount).toBe('always')
+    expect(defaults.refetchOnWindowFocus).toBe('always')
+    expect(defaults.refetchOnReconnect).toBe('always')
+  })
+
   it('never retry a write', () => {
     expect(createQueryClient().getDefaultOptions().mutations?.retry).toBe(false)
+  })
+})
+
+describe('the answer of a reservation write', () => {
+  it('is kept under the id and under the reference, and puts every list out of date', async () => {
+    mockApi({ [LIST_ROUTE]: () => jsonResponse(pageOf([CONFIRMED])) })
+    const client = createQueryClient()
+    const list = reservationQueries.list({ page: 1 })
+    await client.fetchQuery(list)
+    expect(client.getQueryState(list.queryKey)?.isInvalidated).toBe(false)
+
+    rememberReservation(client, CANCELLED)
+
+    expect(client.getQueryData(reservationQueries.detail(RESERVATION_ID).queryKey)).toEqual(CANCELLED)
+    expect(client.getQueryData(reservationQueries.detail(REFERENCE).queryKey)).toEqual(CANCELLED)
+    expect(client.getQueryState(list.queryKey)?.isInvalidated).toBe(true)
   })
 })
 

@@ -12,16 +12,18 @@
  *
  * The API client writes a structured line to the console for every request it
  * makes, and the session writes one for every change of state. That is what I
- * want in a browser and noise in a test run, so I drop the lines whose event
- * name starts with `api.` or `session.` and let everything else through. A
- * warning from React still prints.
+ * want in a browser and noise in a test run, and the basket writes one for
+ * every change too. So I drop the lines whose event name starts with `api.`,
+ * `session.` or `basket.` and let everything else through. A warning from
+ * React still prints.
  *
  * After each test I put back anything a test replaced on the global object,
  * such as `fetch`, and return the clock to real time. I also put the session
  * back to how it starts, because it lives in a module and would otherwise
- * carry a signed in account from one test into the next. Web storage is
- * emptied for the same reason, because the session keeps its two markers
- * there.
+ * carry a signed in account from one test into the next. The hire basket
+ * lives in a module too, so it is emptied as well. Web storage is cleared for
+ * the same reason, because the session keeps its two markers there and the
+ * basket keeps a copy of itself.
  *
  * Every test starts in a browser that has held a session before, which means
  * the session hint is set and start-up asks the API whether there is a
@@ -34,11 +36,12 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import type { MockInstance } from 'vitest'
+import { resetBasketForTests } from '../shared/basket-store'
 import { MARKER_VALUE, SESSION_HINT_KEY } from '../shared/session-markers'
 import { resetSessionForTests } from '../shared/session-store'
 
-/** The prefixes of the event names the API client and the session log. */
-const QUIET_EVENT_PREFIXES = ['api.', 'session.']
+/** The prefixes of the event names the API client, the session and the basket log. */
+const QUIET_EVENT_PREFIXES = ['api.', 'session.', 'basket.', 'booking.']
 
 const CONSOLE_LEVELS = ['info', 'warn', 'error'] as const
 
@@ -61,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   resetSessionForTests()
+  resetBasketForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
   consoleSpies.forEach((spy) => spy.mockRestore())

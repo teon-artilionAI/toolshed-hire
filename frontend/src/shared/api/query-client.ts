@@ -31,6 +31,10 @@
  * A quote runs under the same rule. A price the server worked out a while ago
  * may no longer be the price, and a customer must never read an old one as the
  * figure they will pay.
+ *
+ * A reservation runs under it too. A hold lapses by itself after thirty
+ * minutes and the counter can move a booking on, so a status read a while ago
+ * may no longer be the status.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -60,9 +64,13 @@ export const AVAILABILITY_KEY = 'availability'
 /** The first segment of every quote query key. */
 export const QUOTE_KEY = 'quote'
 
+/** The first segment of every reservation query key. */
+export const RESERVATIONS_KEY = 'reservations'
+
 /** What never fresh means to the cache. The answer is stale when it arrives,
  *  and it is asked for again whenever a screen mounts, the window regains
- *  focus or the network comes back. Availability and quotes both run on it. */
+ *  focus or the network comes back. Availability, quotes and reservations all
+ *  run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -108,5 +116,6 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([CATALOGUE_KEY], { staleTime: CATALOGUE_FRESH_MS })
   client.setQueryDefaults([AVAILABILITY_KEY], NEVER_FRESH)
   client.setQueryDefaults([QUOTE_KEY], NEVER_FRESH)
+  client.setQueryDefaults([RESERVATIONS_KEY], NEVER_FRESH)
   return client
 }

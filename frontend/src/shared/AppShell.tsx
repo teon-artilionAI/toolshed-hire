@@ -14,6 +14,10 @@
  * may use those too. The rule for the menu is `navFor` in screen-access.ts.
  *
  * The shell also owns the notice that says a screen still shows sample data.
+ *
+ * The count beside the basket in the customer header is how many units the
+ * hire basket holds. It comes from the basket itself, in basket-store.ts, so
+ * it is right on every screen and after a reload.
  */
 
 import type { ReactNode } from 'react'
@@ -21,12 +25,14 @@ import { Link, NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { LogOut, ShoppingCart } from 'lucide-react'
 import { catalogueQueries } from './api/catalogue-queries'
+import { basketUnitCount } from './basket-store'
 import type { ScreenDef } from './navigation'
 import { CATALOGUE_PATH, SIGN_IN_PATH } from './navigation'
 import { SampleDataNotice } from './sample-data-notice'
 import { navFor } from './screen-access'
 import { BrandMark, MobileTabBar, NavIcon, SkipLink } from './shell-nav'
 import { MAX_TAB_BAR_ITEMS, navItemClass } from './shell-nav-style'
+import { useBasket } from './use-basket'
 import { useSession } from './use-session'
 
 /** Who you are, and the way out. Shared by both staff sidebars. */
@@ -118,7 +124,8 @@ function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { i
 }
 
 function CustomerHeader({ items }: { items: ScreenDef[] }) {
-  const { user, basketCount, signOut, signingOut } = useSession()
+  const { user, signOut, signingOut } = useSession()
+  const basketCount = basketUnitCount(useBasket())
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-md px-md py-sm">

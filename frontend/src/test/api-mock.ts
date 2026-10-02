@@ -16,6 +16,7 @@ import type { Mock } from 'vitest'
 const PROBLEM_MEDIA_TYPE = 'application/problem+json'
 const REQUEST_ID_HEADER = 'X-Request-ID'
 const HTTP_NOT_IMPLEMENTED = 501
+const HTTP_CREATED = 201
 const HTTP_NO_CONTENT = 204
 /** What every problem `type` the API sends starts with. */
 const PROBLEM_TYPE_PREFIX = 'https://toolshedhire.co.za/problems/'
@@ -53,6 +54,15 @@ export interface ApiMock {
 export function jsonResponse(body: unknown, requestId = 'req-test-0001'): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
+    headers: { 'Content-Type': 'application/json', [REQUEST_ID_HEADER]: requestId },
+  })
+}
+
+/** A 201 with a JSON body, which is how the API answers a reservation it has
+ *  just created. */
+export function createdResponse(body: unknown, requestId = 'req-test-0201'): Response {
+  return new Response(JSON.stringify(body), {
+    status: HTTP_CREATED,
     headers: { 'Content-Type': 'application/json', [REQUEST_ID_HEADER]: requestId },
   })
 }

@@ -9,6 +9,11 @@
  * Under the fields is the price, which is the server's quote for the same
  * dates and quantity. It is in SC03-Quote-Panel.tsx.
  *
+ * The tool can go in the hire basket only when both answers are in for what
+ * the card shows. The branch said free, and the quote came back. A price that
+ * failed to load holds the basket back just as a branch that is not free does.
+ * The button and what follows a press are in SC03-Add-To-Basket.tsx.
+ *
  * The API is the judge of the dates and the quantity. What it refuses comes
  * back as a 422 and each message is shown under the field it is about. The
  * availability route and the quote route are asked the same question, so
@@ -16,9 +21,7 @@
  * the same field.
  */
 
-import { Link } from 'react-router-dom'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { ShoppingCart } from 'lucide-react'
 import { MAX_QUANTITY, MIN_QUANTITY } from '../../shared/api/catalogue'
 import type {
   BranchList,
@@ -36,6 +39,7 @@ import { ErrorState } from '../../shared/async-states'
 import { Card, Notice, StatusPill } from '../../shared/ui'
 import { ANY_BRANCH, BranchSelect, PeriodFields, QuantityStepper } from './catalogue-ui'
 import { describePeriod } from './hire-period'
+import AddToBasket from './SC03-Add-To-Basket'
 import QuotePanel from './SC03-Quote-Panel'
 
 /** The fields this card shows a message under. */
@@ -89,17 +93,12 @@ export default function BookingCard({
     here && !here.available
       ? (answers.find((branch) => branch.available && branch.branchCode !== branchCode) ?? null)
       : null
-  const canBook = here !== null && here.available
+  // Both answers are for the dates and the quantity on the card, because each
+  // is cached under them. A change to either takes the old answer down.
+  const priced = queryPhase(quote) === 'ready' && quote.data !== undefined
+  const canAdd = here !== null && here.available && priced
 
   const periodLabel = describePeriod(startIso, endIso)
-
-  const basketParams = new URLSearchParams({
-    add: model.slug,
-    qty: String(quantity),
-    from: startIso,
-    to: endIso,
-    branch: branchCode,
-  })
 
   return (
     <Card title="Book this tool">
@@ -201,17 +200,20 @@ export default function BookingCard({
         )}
       </div>
 
-      {canBook ? (
-        <Link to={`/basket?${basketParams.toString()}`} className="btn-primary mt-md w-full">
-          <ShoppingCart className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Add to my hire basket
-        </Link>
-      ) : (
-        <button type="button" className="btn-primary mt-md w-full" disabled>
-          <ShoppingCart className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Add to my hire basket
-        </button>
-      )}
+      <AddToBasket
+        model={model}
+        startIso={startIso}
+        endIso={endIso}
+        branchCode={branchCode}
+        quantity={quantity}
+        branches={branches.data?.items ?? []}
+        canAdd={canAdd}
+        onUseBasketTerms={(terms) => {
+          onChangeStart(terms.from)
+          onChangeEnd(terms.to)
+          onChangeBranch(terms.branchCode)
+        }}
+      />
     </Card>
   )
 }

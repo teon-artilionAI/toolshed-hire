@@ -53,11 +53,11 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-01', path: '/', name: 'Catalogue Home', navLabel: 'Catalogue', role: 'customer', publicAccess: true, live: true, inNav: true, icon: 'Home' },
   { id: 'SC-02', path: '/search', name: 'Availability Search Results', navLabel: 'Search', role: 'customer', publicAccess: true, live: true, inNav: true, icon: 'Search' },
   { id: 'SC-03', path: '/model/:slug', name: 'Product Model Detail', role: 'customer', publicAccess: true, live: true },
-  { id: 'SC-04', path: '/basket', name: 'Hire Basket and Booking Review', navLabel: 'Basket', role: 'customer', publicAccess: true, live: false, inNav: true, icon: 'ShoppingCart' },
+  { id: 'SC-04', path: '/basket', name: 'Hire Basket and Booking Review', navLabel: 'Basket', role: 'customer', publicAccess: true, live: true, inNav: true, icon: 'ShoppingCart' },
   { id: 'SC-05', path: '/register', name: 'Register', role: 'customer', publicAccess: true, live: false },
   { id: 'SC-06', path: '/signin', name: 'Sign In and Password Reset', role: 'customer', publicAccess: true, live: true },
-  { id: 'SC-07', path: '/reservations', name: 'My Reservations', navLabel: 'My Hires', role: 'customer', live: false, inNav: true, icon: 'CalendarDays' },
-  { id: 'SC-08', path: '/reservations/:reservationId', name: 'Reservation Detail and Cancellation', role: 'customer', live: false },
+  { id: 'SC-07', path: '/reservations', name: 'My Reservations', navLabel: 'My Hires', role: 'customer', live: true, inNav: true, icon: 'CalendarDays' },
+  { id: 'SC-08', path: '/reservations/:reservationId', name: 'Reservation Detail and Cancellation', role: 'customer', live: true },
   { id: 'SC-09', path: '/account', name: 'My Account and Hire History', navLabel: 'Account', role: 'customer', live: false, inNav: true, icon: 'User' },
 
   // Counter staff, SC-10 to SC-18

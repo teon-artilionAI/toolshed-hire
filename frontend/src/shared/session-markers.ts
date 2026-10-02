@@ -1,10 +1,14 @@
 /**
  * The two markers the session keeps in web storage.
  *
- * This is the only file in the application that touches web storage. Each
- * marker is a fixed word under a fixed key in `localStorage`. Neither names an
- * account and neither holds a token. The access token is never written to web
- * storage, and the refresh token is in a cookie this code cannot read.
+ * This is the only file that touches web storage for the session, and the
+ * only one that touches `localStorage` at all. Each marker is a fixed word
+ * under a fixed key there. Neither names an account and neither holds a token.
+ * The access token is never written to web storage, and the refresh token is
+ * in a cookie this code cannot read.
+ *
+ * The hire basket is the one other thing kept in web storage. It has a file of
+ * its own, basket-storage.ts, and a key of its own in `sessionStorage`.
  *
  * THE SESSION HINT
  * ================
@@ -40,7 +44,7 @@ export const SIGN_OUT_OWED_KEY = 'toolshed.sign-out-owed'
 /** What every marker holds. Only its presence is ever read. */
 export const MARKER_VALUE = 'yes'
 
-/** Every key the application may leave in web storage. */
+/** Every key the session may leave in web storage. */
 export const SESSION_MARKER_KEYS: readonly string[] = [SESSION_HINT_KEY, SIGN_OUT_OWED_KEY]
 
 /** What went wrong with web storage, in words fit for a log line. */

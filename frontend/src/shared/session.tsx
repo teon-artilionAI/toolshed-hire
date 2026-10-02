@@ -21,13 +21,17 @@
  * exactly one of the two acts.
  *
  * In both cases everything cached from the server is dropped, so the next
- * person at this browser is never shown what the last one loaded.
+ * person at this browser is never shown what the last one loaded. Signing out
+ * also empties the hire basket, for the same reason. A session that ends by
+ * itself leaves the basket alone, because the same person is about to sign in
+ * again and carry on with it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { clearBasket } from './basket-store'
 import { CATALOGUE_PATH, SIGN_IN_PATH } from './navigation'
 import { screenForPath, signInAddress } from './screen-access'
 import {
@@ -58,7 +62,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { pathname, search } = useLocation()
-  const [basketCount, setBasketCount] = useState(0)
   const [signingOut, setSigningOut] = useState(false)
   const expiryHandled = useRef(false)
 
@@ -75,6 +78,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!signingOut || pathname !== CATALOGUE_PATH) return
     void endSession().then(() => {
       queryClient.clear()
+      clearBasket()
       setSigningOut(false)
     })
   }, [signingOut, pathname, queryClient])
@@ -101,12 +105,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       role: snapshot.user?.role ?? null,
       endedBecause: snapshot.endedBecause,
       signingOut,
-      basketCount,
       signIn,
       signOut,
-      setBasketCount,
     }),
-    [snapshot, signingOut, basketCount, signOut],
+    [snapshot, signingOut, signOut],
   )
 
   return (

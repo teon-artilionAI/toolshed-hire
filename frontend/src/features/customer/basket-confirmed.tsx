@@ -1,60 +1,66 @@
 /**
- * The confirmation SC-04 shows once a hire has been booked.
+ * Step three of a booking on SC-04. The hire is confirmed.
  *
- * It repeats the figures rather than assuming the customer remembers them,
- * names the branch and the day, and says what to bring. A confirmation that
- * only says "thank you" leaves the customer ringing the branch to ask what
- * happens next.
+ * This is shown only for a reservation the server says is confirmed, and the
+ * sentence about the confirmation email is written only then. It gives the
+ * reference, names the branch and the day, says what to bring, and repeats
+ * the server's figures. A confirmation that only says "thank you" leaves the
+ * customer ringing the branch to ask what happens next.
  */
 
+import type { RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import type { Branch } from '../../shared/types'
+import type { Reservation } from '../../shared/api/contract'
 import { formatDate } from '../../shared/format'
-import { Card, Notice, PageHeader } from '../../shared/ui'
-import BasketTotals from './basket-totals'
+import { Card, Notice } from '../../shared/ui'
+import { StepHeading } from './booking-steps'
+import { MY_RESERVATIONS_PATH, reservationHref } from './reservation-links'
+import { ReservationLines, ReservationTermsCard, ReservationTotals } from './reservation-figures'
 
 export default function BasketConfirmed({
-  reference,
-  branch,
-  startIso,
-  itemCount,
-  hireTotal,
-  depositTotal,
-  days,
+  reservation,
+  headingRef,
 }: {
-  reference: string
-  branch: Branch
-  startIso: string
-  itemCount: number
-  hireTotal: number
-  depositTotal: number
-  days: number
+  reservation: Reservation
+  headingRef: RefObject<HTMLHeadingElement | null>
 }) {
+  const confirmed = reservation.status === 'CONFIRMED'
   return (
     <>
-      <PageHeader
-        screenId="SC-04"
-        title="Your hire is booked"
-        subtitle={`Collect from ${branch.name} on ${formatDate(startIso)}.`}
-      />
-      <Notice tone="success" title={`Booking ${reference} is confirmed`}>
-        <p>
-          We have emailed the confirmation and held {itemCount}{' '}
-          {itemCount === 1 ? 'item' : 'items'} for you. Bring the card you are paying with and
-          your ID when you collect.
-        </p>
-      </Notice>
-      <Card title="What you owe at the counter" className="mt-lg">
-        <BasketTotals hireTotal={hireTotal} depositTotal={depositTotal} days={days} />
-        <div className="mt-lg flex flex-wrap gap-sm">
-          <Link to="/reservations" className="btn-primary px-lg">
-            See my hires
-          </Link>
-          <Link to="/" className="btn-secondary px-lg">
-            Hire something else
-          </Link>
+      <StepHeading headingRef={headingRef}>Step 3 of 3. Your hire is confirmed</StepHeading>
+      {confirmed && (
+        <Notice tone="success" title={`Booking ${reservation.reference} is confirmed`}>
+          <p>
+            A confirmation email is on its way to you. Collect from {reservation.branchName} on{' '}
+            {formatDate(reservation.from)}, and bring your ID and the card you are paying with.
+          </p>
+        </Notice>
+      )}
+      <div className="mt-lg grid gap-lg lg:grid-cols-5">
+        <div className="flex min-w-0 flex-col gap-lg lg:col-span-3">
+          <ReservationTermsCard reservation={reservation} />
+          <Card title="What you booked">
+            <ReservationLines reservation={reservation} />
+          </Card>
         </div>
-      </Card>
+        <div className="min-w-0 lg:col-span-2">
+          <Card title="What it costs">
+            <ReservationTotals reservation={reservation} />
+            <p className="mt-md text-sm text-slate-soft">You pay at the counter when you collect.</p>
+            <div className="mt-lg flex flex-wrap gap-sm">
+              <Link to={MY_RESERVATIONS_PATH} className="btn-primary px-lg">
+                See my hires
+              </Link>
+              <Link to={reservationHref(reservation.reference)} className="btn-secondary px-lg">
+                View this booking
+              </Link>
+              <Link to="/" className="btn-secondary px-lg">
+                Hire something else
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </div>
     </>
   )
 }

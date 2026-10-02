@@ -2,8 +2,8 @@
  * Tests for what happens to a session after it has begun.
  *
  * Its token stops working and is renewed, or cannot be. The person signs out,
- * and stays signed out even when the server never heard. And through all of it
- * the token stays in memory and nowhere else.
+ * and stays signed out even when the server never heard. Where the token is
+ * kept through all of it is in web-storage.test.ts.
  *
  * As in session-store.test.ts, only `fetch` is replaced.
  */
@@ -26,12 +26,7 @@ import {
   tokenRefused,
 } from '../test/session-samples'
 import { renewSession, sessionSnapshot, signIn, signOut, startSession } from './session-store'
-import {
-  MARKER_VALUE,
-  SESSION_HINT_KEY,
-  SESSION_MARKER_KEYS,
-  SIGN_OUT_OWED_KEY,
-} from './session-markers'
+import { MARKER_VALUE, SIGN_OUT_OWED_KEY } from './session-markers'
 
 const RENEWED_TOKEN = 'renewed-access-token-2c8e4d6f'
 const PASSWORD = 'a-password-typed-by-a-person'
@@ -245,48 +240,6 @@ describe('a sign out the server never heard', () => {
     await signOut()
 
     expect(sessionSnapshot().status).toBe('signedOut')
-    setItem.mockRestore()
-  })
-})
-
-describe('where the token is kept', () => {
-  it('is never in web storage, a cookie or the snapshot, and storage holds two fixed markers at most', async () => {
-    const setItem = vi.spyOn(Storage.prototype, 'setItem')
-    const network = mockApi({
-      [REFRESH_ROUTE]: () => jsonResponse(grantFor(CUSTOMER, RENEWED_TOKEN)),
-      [LOGIN_ROUTE]: () => jsonResponse(grantFor(CUSTOMER)),
-      [LOGOUT_ROUTE]: unreachable,
-      [ME_ROUTE]: meAccepting(RENEWED_TOKEN),
-    })
-
-    // Every path that handles a token. Start-up, sign in, a renewal after a
-    // refusal, a sign out the server never hears, and one it confirms.
-    await startSession()
-    await signIn(CUSTOMER.email, PASSWORD)
-    await getCurrentUser()
-    const whileSignedIn = JSON.stringify(sessionSnapshot())
-    const storedWhileSignedIn = stored()
-    await signOut()
-    const storedWhileOwed = stored()
-    network.setRoute(LOGOUT_ROUTE, () => noContentResponse())
-    await signIn(CUSTOMER.email, PASSWORD)
-    await signOut()
-
-    // Signed in, the hint and nothing else. After the failed sign out, the
-    // marker that it is owed and nothing else. After the confirmed one, nothing.
-    expect(storedWhileSignedIn).toEqual({ [SESSION_HINT_KEY]: MARKER_VALUE })
-    expect(storedWhileOwed).toEqual({ [SIGN_OUT_OWED_KEY]: MARKER_VALUE })
-    expect(stored()).toEqual({})
-    // Every write, to either store, was one of the two keys and the fixed word.
-    expect(setItem.mock.calls.length).toBeGreaterThan(0)
-    for (const [key, value] of setItem.mock.calls) {
-      expect(SESSION_MARKER_KEYS).toContain(key)
-      expect(value).toBe(MARKER_VALUE)
-    }
-    expect(window.sessionStorage).toHaveLength(0)
-    expect(document.cookie).toBe('')
-    expect(whileSignedIn).not.toContain(ACCESS_TOKEN)
-    expect(whileSignedIn).not.toContain(RENEWED_TOKEN)
     setItem.mockRestore()
   })
 })

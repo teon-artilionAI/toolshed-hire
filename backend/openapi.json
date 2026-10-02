@@ -144,23 +144,23 @@
         }
       }
     },
-    "/api/allocations": {
+    "/api/reservations": {
       "post": {
         "tags": [
-          "allocations"
+          "booking"
         ],
-        "summary": "Hold specific assets for a hire period",
-        "description": "Create a held reservation and allocate specific assets to it.\n\nArgs:\n    payload: The product model, branch, half open period and quantity.\n    user: The active account making the request.\n    use_case: The reservation use case. It owns the commit.\n\nReturns:\n    The committed reservation with the tagged units held.\n\nRaises:\n    ValidationFailure: If the period is not a valid hire period.\n    AuthorisationFailure: If a customer tries to book on someone else's behalf.\n    BranchScopeError: If counter staff try to book at a branch that is not\n        their own. Mapped to HTTP 403.\n    AllocationConflictError: If no free unit exists. Mapped to HTTP 409.",
-        "operationId": "post_allocation_api_allocations_post",
+        "summary": "Create a draft reservation",
+        "description": "Create a priced draft. Nothing is held until it is put on hold.\n\nRaises:\n    AuthorisationFailure: If a customer names a customer profile. HTTP 403.\n    BranchScopeError: If counter staff book at another branch. HTTP 403.\n    AccountOnHoldError: If the customer's account is on hold. HTTP 403.\n    ValidationFailure: If a field is refused. HTTP 422, naming the field.",
+        "operationId": "post_reservation_api_reservations_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AllocationRequest"
+                "$ref": "#/components/schemas/CreateReservationRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -168,13 +168,450 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AllocationResponse"
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "List reservations, newest first",
+        "description": "Return one page of the reservations the caller may see.\n\nRaises:\n    AuthorisationFailure: If a customer narrows the list to another\n        customer or to a branch. Mapped to HTTP 403.\n    ValidationFailure: If the branch code is not the code of a trading\n        branch. Mapped to HTTP 422, naming `branch`.",
+        "operationId": "list_reservations_api_reservations_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ReservationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only reservations in this status.",
+              "title": "Status"
+            },
+            "description": "Only reservations in this status."
+          },
+          {
+            "name": "customerProfileId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this customer's. Staff only.",
+              "title": "Customerprofileid"
+            },
+            "description": "Only this customer's. Staff only."
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A branch code. Only reservations collected there. Staff only.",
+              "title": "Branch"
+            },
+            "description": "A branch code. Only reservations collected there. Staff only."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "How many reservations a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many reservations a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/{id}/hold": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Put a draft on hold, taking named units for thirty minutes",
+        "description": "Hold every unit the reservation asks for, or none of them (BR-09).\n\nRaises:\n    NotFound: If there is no such reservation for this caller. HTTP 404.\n    AllocationConflictError: If a line cannot be fully allocated. HTTP 409.\n    StateTransitionError: If the reservation is not a draft. HTTP 409.",
+        "operationId": "post_hold_api_reservations__id__hold_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
           },
           "409": {
-            "description": "No free unit exists for the requested period."
+            "description": "The move is not permitted from the status the reservation is in, or a unit could not be held for the period.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The dates of the draft can no longer be booked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/{id}/confirm": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Confirm a held reservation",
+        "description": "Confirm inside the hold, and send the booking confirmation (BR-19).\n\nRaises:\n    NotFound: If there is no such reservation for this caller. HTTP 404.\n    StateTransitionError: If the hold has run out or the move is not\n        permitted. HTTP 409.\n    EmailNotVerifiedError: If the customer's address is not verified.\n        HTTP 403.",
+        "operationId": "post_confirmation_api_reservations__id__confirm_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move is not permitted from the status the reservation is in, or a unit could not be held for the period.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/{id}/cancellation": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Cancel a reservation and release its units",
+        "description": "Cancel the reservation. Nothing is deleted and nothing is charged.\n\nRaises:\n    NotFound: If there is no such reservation for this caller. HTTP 404.\n    StateTransitionError: If it can no longer be cancelled. HTTP 409.",
+        "operationId": "post_cancellation_api_reservations__id__cancellation_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CancellationRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move is not permitted from the status the reservation is in, or a unit could not be held for the period.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/{id}": {
+      "get": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Return one reservation, by its key or its reference",
+        "description": "Return the reservation, or 404 when it does not exist or is not the caller's.\n\nRaises:\n    NotFound: If there is no such reservation for this caller. Mapped to\n        HTTP 404.",
+        "operationId": "read_reservation_api_reservations__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -735,135 +1172,6 @@
   },
   "components": {
     "schemas": {
-      "AllocatedAssetResponse": {
-        "properties": {
-          "allocationId": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Allocationid"
-          },
-          "assetId": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Assetid"
-          },
-          "assetTag": {
-            "type": "string",
-            "title": "Assettag"
-          }
-        },
-        "type": "object",
-        "required": [
-          "allocationId",
-          "assetId",
-          "assetTag"
-        ],
-        "title": "AllocatedAssetResponse",
-        "description": "One physical unit held by the booking."
-      },
-      "AllocationRequest": {
-        "properties": {
-          "productModelId": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Productmodelid"
-          },
-          "branchId": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Branchid"
-          },
-          "startDate": {
-            "type": "string",
-            "format": "date",
-            "title": "Startdate"
-          },
-          "endDate": {
-            "type": "string",
-            "format": "date",
-            "title": "Enddate"
-          },
-          "quantity": {
-            "type": "integer",
-            "maximum": 10.0,
-            "minimum": 1.0,
-            "title": "Quantity",
-            "default": 1
-          },
-          "customerUserId": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Customeruserid"
-          }
-        },
-        "type": "object",
-        "required": [
-          "productModelId",
-          "branchId",
-          "startDate",
-          "endDate"
-        ],
-        "title": "AllocationRequest",
-        "description": "A booking request posted by the client.\n\nThe period is half open. `endDate` is the day the unit comes back and is\nnot charged, which is the same rule the exclusion constraint enforces."
-      },
-      "AllocationResponse": {
-        "properties": {
-          "reservationId": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Reservationid"
-          },
-          "reference": {
-            "type": "string",
-            "title": "Reference"
-          },
-          "reservationLineId": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Reservationlineid"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "startDate": {
-            "type": "string",
-            "format": "date",
-            "title": "Startdate"
-          },
-          "endDate": {
-            "type": "string",
-            "format": "date",
-            "title": "Enddate"
-          },
-          "allocated": {
-            "items": {
-              "$ref": "#/components/schemas/AllocatedAssetResponse"
-            },
-            "type": "array",
-            "title": "Allocated"
-          }
-        },
-        "type": "object",
-        "required": [
-          "reservationId",
-          "reference",
-          "reservationLineId",
-          "status",
-          "startDate",
-          "endDate",
-          "allocated"
-        ],
-        "title": "AllocationResponse",
-        "description": "The committed booking returned to the client."
-      },
       "AvailabilityPageResponse": {
         "properties": {
           "from": {
@@ -998,6 +1306,25 @@
         "title": "BranchResponse",
         "description": "One trading branch."
       },
+      "CancellationRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "CancellationRequest",
+        "description": "Why a reservation is being cancelled, when the caller wants to say."
+      },
       "CategoryListResponse": {
         "properties": {
           "items": {
@@ -1065,6 +1392,68 @@
         ],
         "title": "CategoryResponse",
         "description": "One active category. `parentCode` is null for a top level category."
+      },
+      "CreateReservationRequest": {
+        "properties": {
+          "branchCode": {
+            "type": "string",
+            "maxLength": 4,
+            "minLength": 1,
+            "title": "Branchcode"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ReservationLineRequest"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Lines"
+          },
+          "customerProfileId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customerprofileid"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "branchCode",
+          "from",
+          "to",
+          "lines"
+        ],
+        "title": "CreateReservationRequest",
+        "description": "A request for a draft reservation.\n\nThe period is half open. `to` is the day the equipment comes back and is\nnot charged. `customerProfileId` is for staff, who book for a named\ncustomer. A customer leaves it null and books for themselves."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1576,6 +1965,290 @@
         ],
         "title": "QuoteResponse",
         "description": "What a hire will cost.\n\n`totalIncVat` is the hire charge. The deposit is not in it, because a\ndeposit is held and returned and not charged. `vatAmount` is worked out on\nthe subtotal after the discount."
+      },
+      "ReservationLineRequest": {
+        "properties": {
+          "modelSlug": {
+            "type": "string",
+            "maxLength": 140,
+            "minLength": 1,
+            "title": "Modelslug"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "modelSlug",
+          "quantity"
+        ],
+        "title": "ReservationLineRequest",
+        "description": "One model and how many of it."
+      },
+      "ReservationLineResponse": {
+        "properties": {
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "dailyRate": {
+            "type": "string",
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "type": "string",
+            "title": "Weeklyrate"
+          },
+          "depositPerUnit": {
+            "type": "string",
+            "title": "Depositperunit"
+          },
+          "lineSubtotalExVat": {
+            "type": "string",
+            "title": "Linesubtotalexvat"
+          },
+          "allocatedCount": {
+            "type": "integer",
+            "title": "Allocatedcount"
+          },
+          "assetTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assettags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "modelSlug",
+          "modelName",
+          "quantity",
+          "dailyRate",
+          "weeklyRate",
+          "depositPerUnit",
+          "lineSubtotalExVat",
+          "allocatedCount",
+          "assetTags"
+        ],
+        "title": "ReservationLineResponse",
+        "description": "One line of a reservation, with the rates it was priced at."
+      },
+      "ReservationPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReservationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "ReservationPageResponse",
+        "description": "One page of reservations, newest first."
+      },
+      "ReservationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReservationStatus"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "hireDays": {
+            "type": "integer",
+            "title": "Hiredays"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ReservationLineResponse"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "subtotalExVat": {
+            "type": "string",
+            "title": "Subtotalexvat"
+          },
+          "discountPercent": {
+            "type": "string",
+            "title": "Discountpercent"
+          },
+          "vatAmount": {
+            "type": "string",
+            "title": "Vatamount"
+          },
+          "estimatedTotalIncVat": {
+            "type": "string",
+            "title": "Estimatedtotalincvat"
+          },
+          "depositTotal": {
+            "type": "string",
+            "title": "Deposittotal"
+          },
+          "holdExpiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holdexpiresat"
+          },
+          "confirmedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmedat"
+          },
+          "cancelledAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelledat"
+          },
+          "cancellationReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellationreason"
+          },
+          "canHold": {
+            "type": "boolean",
+            "title": "Canhold"
+          },
+          "canConfirm": {
+            "type": "boolean",
+            "title": "Canconfirm"
+          },
+          "canCancel": {
+            "type": "boolean",
+            "title": "Cancancel"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "reference",
+          "status",
+          "branchCode",
+          "branchName",
+          "from",
+          "to",
+          "hireDays",
+          "lines",
+          "subtotalExVat",
+          "discountPercent",
+          "vatAmount",
+          "estimatedTotalIncVat",
+          "depositTotal",
+          "holdExpiresAt",
+          "confirmedAt",
+          "cancelledAt",
+          "cancellationReason",
+          "canHold",
+          "canConfirm",
+          "canCancel",
+          "customerName",
+          "createdAt"
+        ],
+        "title": "ReservationResponse",
+        "description": "One reservation, as the caller is allowed to see it.\n\n`subtotalExVat` is the hire after the trade discount, and `vatAmount` is\nworked out on it, so the two add up to `estimatedTotalIncVat`. The deposit\nis not in that total, because a deposit is held and given back."
+      },
+      "ReservationStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "HELD",
+          "CONFIRMED",
+          "COLLECTED",
+          "RETURNED",
+          "CANCELLED",
+          "NO_SHOW",
+          "EXPIRED"
+        ],
+        "title": "ReservationStatus",
+        "description": "Reservation lifecycle status, governed by the State pattern in the domain."
       },
       "TokenResponse": {
         "properties": {

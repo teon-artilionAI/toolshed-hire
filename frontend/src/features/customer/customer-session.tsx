@@ -1,19 +1,21 @@
 /**
- * The sample profile behind the three customer screens that are not connected
- * to the API yet, My Hires, a booking, and My Account.
+ * The sample profile behind My Account, the one customer screen behind a
+ * sign in that is not connected to the API yet. My Hires and the booking
+ * detail read the signed in customer's own bookings from the API and no
+ * longer come here.
  *
- * The session says who is signed in, and that is real. The bookings, charges
- * and identification detail these screens show are still sample data, kept
- * against sample customers. This joins the two by email address, so the seeded
- * customer account sees the sample bookings made in its name.
+ * The session says who is signed in, and that is real. The hires, charges and
+ * identification detail My Account shows are still sample data, kept against
+ * sample customers. This joins the two by email address, so the seeded
+ * customer account sees the sample profile made in its name.
  *
  * An account with no sample profile is shown nothing, and is told why. I never
- * fall back to somebody else's sample bookings, because that would put another
+ * fall back to somebody else's sample profile, because that would put another
  * person's name and charges in front of a signed in customer as their own.
  *
  * The guard in App.tsx has already dealt with a signed out person and with a
- * staff account before any of these screens render. All of this goes when the
- * screens read the signed in customer's own bookings from the API.
+ * staff account before the screen renders. All of this goes when My Account
+ * reads the signed in customer's own profile from the API.
  */
 
 import { Link } from 'react-router-dom'

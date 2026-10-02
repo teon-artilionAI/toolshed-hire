@@ -6,7 +6,6 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { modelBySlug, modelSlug } from './catalogue-data'
 import { modelDetailHref, searchHref } from './catalogue-links'
 import {
   defaultPeriod,
@@ -162,20 +161,5 @@ describe('the links between the catalogue screens', () => {
     expect(searchHref({ from: '2026-03-12', to: '2026-03-16' }, 'compaction')).toBe(
       '/search?from=2026-03-12&to=2026-03-16&category=compaction',
     )
-  })
-})
-
-describe('the slug of a fixture model, for the basket', () => {
-  it('is the slug the seeded catalogue gives the same model', () => {
-    const hammer = modelBySlug('gbh-2-26-dre-rotary-hammer')
-    const generator = modelBySlug('6-5-kva-petrol-generator')
-
-    expect(hammer?.name).toBe('GBH 2-26 DRE Rotary Hammer')
-    expect(generator?.name).toBe('6.5 kVA Petrol Generator')
-    expect(hammer && modelSlug(hammer)).toBe('gbh-2-26-dre-rotary-hammer')
-  })
-
-  it('finds nothing for a slug the fixtures do not hold', () => {
-    expect(modelBySlug('eu22i-inverter-generator')).toBeUndefined()
   })
 })
