@@ -9,6 +9,12 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
+The customer journey. A visitor can browse the catalogue and check availability
+across the three branches, and a signed in customer can price, hold, confirm
+and cancel a reservation.
+
 ### Added
 
 - An audit event for every state change, written in the same transaction as the
