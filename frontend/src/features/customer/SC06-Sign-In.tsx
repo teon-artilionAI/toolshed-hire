@@ -1,55 +1,62 @@
 /**
  * SC-06 Sign In and Password Reset.
  *
- * One screen, three states: signing in, asking for a reset link, and
- * choosing the new password once the link has been followed. They live
- * together because they are one job from the customer's side, which is
- * getting back into the account. A reset link opens this screen with
- * ?reset=1, so the third state is reachable without inventing a route.
+ * Signing in sends the email address and password that were typed to the API.
+ * The answer is a session, kept by shared/session-store.ts. This screen keeps
+ * neither the password nor the token.
  *
- * Signing in genuinely changes the session, so the rest of the prototype
- * behaves as that role afterwards.
+ * A person arrives here in one of three ways, and the screen says which. They
+ * chose to sign in. They opened a screen that needs an account, and the guard
+ * sent them here with that address in `?next=`. Or their session ended while
+ * they were working. In the last two cases they are taken back to where they
+ * were once they are signed in. Otherwise they land on the home of their role.
+ *
+ * Somebody who is already signed in has no use for this screen, so it sends
+ * them on at once. That same rule is what moves a person on after a
+ * successful sign in, so there is one path and not two.
+ *
+ * Password reset is a later change. Its state is still here, reachable from
+ * the form and from `?reset=1`, and it says plainly that it is not available.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { FlaskConical } from 'lucide-react'
-import { users } from '../../shared/fixtures'
-import { ROLE_HOME, ROLE_LABEL } from '../../shared/navigation'
-import { useSession } from '../../shared/session'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
+import { ErrorState } from '../../shared/async-states'
+import { NEXT_PARAMETER, landingFor } from '../../shared/screen-access'
 import { Card, Notice, PageHeader } from '../../shared/ui'
+import { useSession } from '../../shared/use-session'
 import { PasswordField, TextField, isEmailWellFormed } from './customer-fields'
-import {
-  ChooseNewPasswordPanel,
-  ForgotPasswordPanel,
-} from './password-reset-panels'
+import { PasswordResetUnavailable } from './password-reset-panels'
+import { describeSignInFailure } from './sign-in-failure'
+import type { SignInFailure } from './sign-in-failure'
 
-type Mode = 'signin' | 'forgot' | 'reset'
+type Mode = 'signin' | 'reset'
+
+/** The query parameter a reset link opens this screen with. */
+const RESET_PARAMETER = 'reset'
 
 const TITLE: Record<Mode, string> = {
   signin: 'Sign in to Toolshed Hire',
-  forgot: 'Reset your password',
-  reset: 'Choose a new password',
+  reset: 'Reset your password',
 }
 
 const SUBTITLE: Record<Mode, string> = {
   signin: 'Your bookings, deposits and hire history are behind this door.',
-  forgot: 'We will email a link that lets you set a new password.',
-  reset: 'Pick something you have not used on this account before.',
+  reset: 'Resetting a password from here is not available yet.',
 }
 
-/** Customers land on their hires rather than the catalogue, because the
- *  reason to sign in is almost always to check a booking. */
-const CUSTOMER_LANDING = '/reservations'
-
 function SignInPanel({ onForgot }: { onForgot: () => void }) {
-  const { signInAs } = useSession()
-  const navigate = useNavigate()
+  const { signIn } = useSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitted, setSubmitted] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<SignInFailure | null>(null)
+  // State updates land after the event that caused them. This flag is set in
+  // the same tick as the request, so a second press can never start another.
+  const inFlight = useRef(false)
 
   const emailError = !email.trim()
     ? 'Enter the email address on your account.'
@@ -58,41 +65,48 @@ function SignInPanel({ onForgot }: { onForgot: () => void }) {
       : undefined
   const passwordError = !password ? 'Enter your password.' : undefined
 
+  async function attempt(): Promise<void> {
+    setSubmitted(true)
+    if (emailError || passwordError || inFlight.current) return
+    inFlight.current = true
+    setBusy(true)
+    setFailure(null)
+    try {
+      // On success the session changes and the screen above sends the person
+      // on, so there is nothing more to do here.
+      await signIn(email.trim(), password)
+    } catch (cause) {
+      setFailure(describeSignInFailure(cause))
+      setBusy(false)
+    } finally {
+      inFlight.current = false
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitted(true)
-    setFormError(null)
-    if (emailError || passwordError) return
-
-    const account = users.find(
-      (user) => user.email.toLowerCase() === email.trim().toLowerCase(),
-    )
-    if (!account) {
-      setFormError(
-        'Those details do not match an account. Check the email address, or create an account.',
-      )
-      return
-    }
-    if (!account.active) {
-      setFormError(
-        `The account for ${account.email} has been deactivated. Ask a branch manager to switch it back on.`,
-      )
-      return
-    }
-
-    signInAs(account.role)
-    navigate(
-      account.role === 'customer' ? CUSTOMER_LANDING : ROLE_HOME[account.role],
-    )
+    void attempt()
   }
 
   return (
     <Card title="Sign in">
       <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-md">
-        {formError && (
+        {failure?.kind === 'refused' && (
           <Notice tone="error" title="We could not sign you in">
-            <p>{formError}</p>
+            <p>{failure.message}</p>
           </Notice>
+        )}
+        {failure?.kind === 'wait' && (
+          <Notice tone="error" title="Too many attempts">
+            <p>{failure.message}</p>
+          </Notice>
+        )}
+        {failure?.kind === 'fault' && (
+          <ErrorState
+            heading="We could not sign you in"
+            error={failure.error}
+            onRetry={() => void attempt()}
+          />
         )}
         <TextField
           id="signin-email"
@@ -116,91 +130,78 @@ function SignInPanel({ onForgot }: { onForgot: () => void }) {
           error={submitted ? passwordError : undefined}
         />
         <div className="flex flex-wrap items-center gap-sm">
-          <button type="submit" className="btn-primary px-lg">
-            Sign in
+          <button type="submit" className="btn-primary px-lg" disabled={busy}>
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {busy ? 'Signing in' : 'Sign in'}
           </button>
           <button type="button" className="btn-ghost px-md" onClick={onForgot}>
             Forgotten your password?
           </button>
         </div>
+        <p className="sr-only" role="status">
+          {busy ? 'Signing in, please wait' : ''}
+        </p>
       </form>
     </Card>
   )
 }
 
-/** Marking this prototype means signing in as three different people. The
- *  addresses are on screen so nobody has to go digging for them, and the
- *  panel is labelled as a demonstration aid so it is never mistaken for
- *  part of the product. */
-function PrototypeNote() {
+/** Why the person is on this screen, when it was not their own idea. */
+function ArrivalNotice({ expired, hasNext }: { expired: boolean; hasNext: boolean }) {
+  if (expired) {
+    return (
+      <div className="mb-lg">
+        <Notice tone="warn" title="Your session has ended">
+          <p>
+            {hasNext
+              ? 'Sign in again and we will take you back to where you were.'
+              : 'Sign in again to carry on.'}
+          </p>
+        </Notice>
+      </div>
+    )
+  }
+  if (!hasNext) return null
   return (
-    <div className="mt-lg rounded-lg border-2 border-dashed border-slate-faint bg-muted p-md">
-      <p className="flex items-center gap-sm font-mono text-xs uppercase tracking-wide text-slate-soft">
-        <FlaskConical className="h-4 w-4 shrink-0" aria-hidden="true" />
-        Prototype note
-      </p>
-      <p className="mt-sm text-sm text-slate-soft">
-        There is no back end yet, so any password is accepted. These are the
-        accounts that exist.
-      </p>
-      <ul className="mt-sm flex flex-col gap-xs text-sm text-ink">
-        {users.map((user) => (
-          <li key={user.id} className="flex flex-wrap items-baseline gap-x-sm">
-            <span className="font-mono text-xs">{user.email}</span>
-            <span className="text-xs text-slate-soft">
-              {ROLE_LABEL[user.role]}
-              {user.active ? '' : ', deactivated'}
-            </span>
-          </li>
-        ))}
-      </ul>
+    <div className="mb-lg">
+      <Notice tone="info" title="Sign in to carry on">
+        <p>That screen needs an account. Once you are signed in we will take you straight to it.</p>
+      </Notice>
     </div>
   )
 }
 
 export default function SignIn() {
+  const { user, endedBecause } = useSession()
   const [params] = useSearchParams()
-  const [mode, setMode] = useState<Mode>(params.get('reset') ? 'reset' : 'signin')
-  const [resetEmail, setResetEmail] = useState<string | null>(null)
+  const [mode, setMode] = useState<Mode>(params.get(RESET_PARAMETER) ? 'reset' : 'signin')
+  const next = params.get(NEXT_PARAMETER)
+
+  if (user) return <Navigate to={landingFor(user.role, next)} replace />
 
   return (
     <>
       <PageHeader screenId="SC-06" title={TITLE[mode]} subtitle={SUBTITLE[mode]} />
 
       <div className="mx-auto w-full max-w-lg">
-        {mode === 'signin' && <SignInPanel onForgot={() => setMode('forgot')} />}
-
-        {mode === 'forgot' && (
-          <ForgotPasswordPanel
-            onBackToSignIn={() => setMode('signin')}
-            onHaveLink={(email) => {
-              setResetEmail(email)
-              setMode('reset')
-            }}
-          />
-        )}
-
-        {mode === 'reset' && (
-          <ChooseNewPasswordPanel
-            email={resetEmail}
-            onDone={() => setMode('signin')}
-          />
-        )}
-
         {mode === 'signin' && (
-          <p className="mt-lg text-center text-sm text-slate-soft">
-            No account yet?{' '}
-            <Link
-              to="/register"
-              className="cursor-pointer font-medium text-ink underline transition-colors duration-200 hover:text-slate"
-            >
-              Create one in about two minutes
-            </Link>
-            .
-          </p>
+          <>
+            <ArrivalNotice expired={endedBecause === 'expired'} hasNext={next !== null} />
+            <SignInPanel onForgot={() => setMode('reset')} />
+            <p className="mt-lg text-center text-sm text-slate-soft">
+              No account yet?{' '}
+              <Link
+                to="/register"
+                className="cursor-pointer font-medium text-ink underline transition-colors duration-200 hover:text-slate"
+              >
+                Go to the registration screen
+              </Link>
+              .
+            </p>
+          </>
         )}
 
-        <PrototypeNote />
+        {mode === 'reset' && <PasswordResetUnavailable onBackToSignIn={() => setMode('signin')} />}
       </div>
     </>
   )

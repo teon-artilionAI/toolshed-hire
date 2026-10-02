@@ -10,12 +10,16 @@
  * beside the field they belong to, and the summary at the top jumps to the
  * first one, which is the quickest route through a long form on a phone.
  * The rules themselves live in register-form.ts.
+ *
+ * Opening an account online is a later change, and the API has no route for it
+ * yet. The form is here so its questions and its validation can be seen. It
+ * says so before anyone types, and a form that passes every check is answered
+ * with the same plain statement. It never reports an account as created.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
 import { branches } from '../../shared/fixtures'
 import { Card, Notice, PageHeader } from '../../shared/ui'
 import type { BranchCode } from '../../shared/types'
@@ -39,11 +43,8 @@ import type {
   RegistrationField,
   RegistrationForm,
 } from './register-form'
-import { RegisterSuccessCard } from './register-success-card'
 
-/** How long the fake account creation takes, so the loading state is real
- *  enough to see rather than a flash. */
-const SAVE_DELAY_MS = 700
+const UNAVAILABLE_TITLE = 'Creating an account online is not available yet'
 
 export default function Register() {
   const [form, setForm] = useState<RegistrationForm>(EMPTY_REGISTRATION)
@@ -51,7 +52,7 @@ export default function Register() {
     Partial<Record<RegistrationField, boolean>>
   >({})
   const [submitted, setSubmitted] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'saving' | 'done'>('idle')
+  const [refused, setRefused] = useState(false)
 
   const errors = validateRegistration(form)
   const shownErrors: RegistrationErrors = {}
@@ -63,12 +64,6 @@ export default function Register() {
   const problems = REGISTRATION_FIELD_ORDER.filter(
     (field) => errors[field],
   ).map((field) => ({ id: field, message: errors[field] as string }))
-
-  useEffect(() => {
-    if (status !== 'saving') return
-    const timer = window.setTimeout(() => setStatus('done'), SAVE_DELAY_MS)
-    return () => window.clearTimeout(timer)
-  }, [status])
 
   function markTouched(field: RegistrationField) {
     setTouched((current) => ({ ...current, [field]: true }))
@@ -84,24 +79,8 @@ export default function Register() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitted(true)
-    if (problems.length > 0) return
-    setStatus('saving')
+    setRefused(problems.length === 0)
   }
-
-  if (status === 'done') {
-    return (
-      <>
-        <PageHeader
-          screenId="SC-05"
-          title="Your account is ready"
-          subtitle={`We have sent a confirmation to ${form.email.trim()}.`}
-        />
-        <RegisterSuccessCard form={form} />
-      </>
-    )
-  }
-
-  const saving = status === 'saving'
 
   return (
     <>
@@ -112,6 +91,26 @@ export default function Register() {
       />
 
       <div className="mx-auto w-full max-w-2xl">
+        <div className="mb-lg">
+          <Notice tone="warn" title={UNAVAILABLE_TITLE}>
+            <p>
+              You can see what we will ask for, but this form cannot be sent yet. Nothing you type
+              here is saved and no account is opened.
+            </p>
+          </Notice>
+        </div>
+
+        {refused && problems.length === 0 && (
+          <div className="mb-lg">
+            <Notice tone="error" title="We have not opened an account">
+              <p>
+                Your answers passed every check, but creating an account online is not available
+                yet. Nothing was saved and nothing was sent.
+              </p>
+            </Notice>
+          </div>
+        )}
+
         {submitted && problems.length > 0 && (
           <div className="mb-lg">
             <Notice
@@ -264,19 +263,13 @@ export default function Register() {
           </div>
 
           <div className="mt-lg flex flex-wrap items-center gap-sm">
-            <button type="submit" className="btn-primary px-lg" disabled={saving}>
-              {saving && (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              )}
-              {saving ? 'Creating your account' : 'Create my account'}
+            <button type="submit" className="btn-primary px-lg">
+              Check my answers
             </button>
             <Link to="/signin" className="btn-ghost px-md">
               I already have an account
             </Link>
           </div>
-          <p className="sr-only" role="status" aria-live="polite">
-            {saving ? 'Creating your account, please wait' : ''}
-          </p>
         </form>
       </div>
     </>

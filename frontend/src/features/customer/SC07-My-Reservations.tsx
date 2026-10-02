@@ -19,7 +19,7 @@ import {
   PageHeader,
   StatTile,
 } from '../../shared/ui'
-import { SignInRequired, useCustomerProfile } from './customer-session'
+import { NoSampleProfile, useCustomerProfile } from './customer-session'
 import { CURRENT_STATUSES, RESERVATION_STATUS_LABEL } from './customer-labels'
 import { rentalForReservation } from './reservation-maths'
 import { ReservationRow } from './reservation-row'
@@ -75,7 +75,7 @@ export default function MyReservations() {
     return (
       <>
         <PageHeader screenId="SC-07" title="My hires" />
-        <SignInRequired what="your hires" />
+        <NoSampleProfile what="your hires" />
       </>
     )
   }

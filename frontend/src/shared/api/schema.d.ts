@@ -28,7 +28,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/auth/sign-in": {
+    "/api/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -38,23 +38,61 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Exchange credentials for an access token
-         * @description Verify credentials and issue an access token.
-         *
-         *     Args:
-         *         payload: The email address and password as typed.
-         *         session: The request scoped database session.
-         *
-         *     Returns:
-         *         The access token, its lifetime and the account it belongs to.
+         * Exchange credentials for an access token and a refresh cookie
+         * @description Verify credentials, open a session and issue both tokens.
          *
          *     Raises:
-         *         AuthenticationFailure: If no account matches or the password is wrong.
-         *         InactiveAccount: If the credentials are right but the account is
-         *             deactivated. Reported separately from a wrong password because the
-         *             holder needs to know to contact an administrator.
+         *         InvalidCredentials: If the sign in was refused. Mapped to HTTP 401.
+         *         TooManyAttempts: If the caller is throttled. Mapped to HTTP 429.
          */
-        post: operations["post_sign_in_api_auth_sign_in_post"];
+        post: operations["post_login_api_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the refresh cookie for a new access token and a new cookie
+         * @description Rotate the refresh token and issue a new access token.
+         *
+         *     Raises:
+         *         SessionExpired: If the cookie is missing or no longer good. Mapped to
+         *             HTTP 401, with the cookie cleared.
+         */
+        post: operations["post_refresh_api_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke the session of the refresh cookie and clear the cookie
+         * @description Revoke the session the cookie names, if any, and clear the cookie.
+         *
+         *     The answer is 204 whether or not there was a cookie and whether or not it
+         *     named a live session.
+         */
+        post: operations["post_logout_api_auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -77,7 +115,7 @@ export interface paths {
          *         session: The request scoped session, used to resolve the branch code.
          *
          *     Returns:
-         *         The account in the shape the frontend UserAccount type expects.
+         *         The account, in the shape every session response carries it in.
          */
         get: operations["read_me_api_me_get"];
         put?: never;
@@ -112,6 +150,8 @@ export interface paths {
          *     Raises:
          *         ValidationFailure: If the period is not a valid hire period.
          *         AuthorisationFailure: If a customer tries to book on someone else's behalf.
+         *         BranchScopeError: If counter staff try to book at a branch that is not
+         *             their own. Mapped to HTTP 403.
          *         AllocationConflictError: If no free unit exists. Mapped to HTTP 409.
          */
         post: operations["post_allocation_api_allocations_post"];
@@ -468,6 +508,33 @@ export interface components {
             revision: string;
         };
         /**
+         * LoginRequest
+         * @description Credentials posted to the sign in endpoint.
+         *
+         *     The address is checked structurally rather than with a full RFC 5322
+         *     parser. Deliverability is proved by the verification email, not by a
+         *     regular expression, so a validation library here would be a dependency
+         *     that buys nothing.
+         *
+         *     The password carries no minimum length. It deliberately did once, and that
+         *     was a defect: a wrong password of eleven characters came back as a 422
+         *     naming the length rule, while a wrong password of twelve came back as a 401.
+         *     That difference is an oracle. It tells an attacker something about the value
+         *     they submitted, and it contradicts control C-14 in the security section,
+         *     which states that an unknown address and a wrong password are answered
+         *     identically in body, status and timing. Length policy applies when a
+         *     password is chosen, not when one is presented, so it lives in
+         *     `security.hash_password` (BR-45) and not here. The maximum stays, because it
+         *     is a property of bcrypt rather than a rule about the account, and it applies
+         *     to the unknown address and the wrong password alike.
+         */
+        LoginRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /**
          * ModelAvailabilityResponse
          * @description Where one model is free for a period, in the quantity asked for.
          */
@@ -619,42 +686,18 @@ export interface components {
             requestId?: string | null;
         };
         /**
-         * SignInRequest
-         * @description Credentials posted to the sign in endpoint.
-         *
-         *     The address is checked structurally rather than with a full RFC 5322
-         *     parser. Deliverability is proved by the verification email, not by a
-         *     regular expression, so a validation library here would be a dependency
-         *     that buys nothing.
-         *
-         *     The password carries no minimum length. It deliberately did once, and that
-         *     was a defect: a wrong password of eleven characters came back as a 422
-         *     naming the length rule, while a wrong password of twelve came back as a 401.
-         *     That difference is an oracle. It tells an attacker something about the value
-         *     they submitted, and it contradicts control C-14 in the security section,
-         *     which states that an unknown address and a wrong password are answered
-         *     identically in body, status and timing. Length policy applies when a
-         *     password is chosen, not when one is presented, so it lives in
-         *     `security.hash_password` (BR-45) and not here. The maximum stays, because it
-         *     is a property of bcrypt rather than a rule about the account, and it applies
-         *     to the unknown address and the wrong password alike.
-         */
-        SignInRequest: {
-            /** Email */
-            email: string;
-            /** Password */
-            password: string;
-        };
-        /**
          * TokenResponse
          * @description The access token and the account it belongs to.
+         *
+         *     Signing in and refreshing both return this. The refresh token is not in
+         *     it. That travels in a cookie the page cannot read.
          */
         TokenResponse: {
             /** Accesstoken */
             accessToken: string;
             /**
              * Tokentype
-             * @default bearer
+             * @default Bearer
              */
             tokenType: string;
             /** Expiresin */
@@ -663,7 +706,9 @@ export interface components {
         };
         /**
          * UserResponse
-         * @description The signed in account, shaped like the frontend UserAccount type.
+         * @description The signed in account, as every session response and `/api/me` return it.
+         *
+         *     `branchCode` is null unless the account is counter staff.
          */
         UserResponse: {
             /**
@@ -671,16 +716,16 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Name */
-            name: string;
             /** Email */
             email: string;
+            /** Fullname */
+            fullName: string;
             /** Role */
             role: string;
             /** Branchcode */
             branchCode?: string | null;
-            /** Active */
-            active: boolean;
+            /** Emailverified */
+            emailVerified: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -724,7 +769,7 @@ export interface operations {
             };
         };
     };
-    post_sign_in_api_auth_sign_in_post: {
+    post_login_api_auth_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -733,7 +778,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SignInRequest"];
+                "application/json": components["schemas"]["LoginRequest"];
             };
         };
         responses: {
@@ -746,6 +791,13 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
+            /** @description The sign in was refused. The body is the same whatever the reason. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -754,6 +806,72 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_refresh_api_auth_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description The refresh cookie is missing, unknown, expired, revoked or already used. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request named an origin that is not one of the configured ones. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request named an origin that is not one of the configured ones. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

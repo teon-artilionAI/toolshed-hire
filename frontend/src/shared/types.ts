@@ -1,14 +1,15 @@
 /**
- * Domain types for the Toolshed Hire prototype.
+ * Domain types for the screens that still read sample data.
  *
- * These mirror the entities and enumerations in the Task 1 canonical model
- * so that the prototype, the ERD and the design class diagram describe one
- * system. Where a name differs from the documentation, the documentation is
- * wrong and should be corrected rather than the type renamed.
+ * These mirror the entities and enumerations in the canonical model, so that
+ * the screens, the ERD and the design class diagram describe one system.
+ * Where a name differs from the documentation, the documentation is wrong and
+ * should be corrected rather than the type renamed.
  *
- * The prototype has no back end. Data comes from fixtures and mutations are
- * held in memory, which is what Task 1 asks for: design and interaction,
- * with dummy data, and no back end coding required.
+ * A screen that uses these reads from fixtures.ts and keeps its changes in
+ * memory. A screen on the API uses the wire types in api/contract.ts instead.
+ * The signed in account is one of those. `UserAccount` below is only the row
+ * shape of the sample staff list on the user management screen.
  */
 
 export type Uuid = string

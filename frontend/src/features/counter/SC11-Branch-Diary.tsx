@@ -20,11 +20,11 @@ import {
   PageHeader,
   StatusPill,
 } from '../../shared/ui'
-import { useSession } from '../../shared/session'
 import { TODAY, branches } from '../../shared/fixtures'
 import { formatDate, formatDateTime } from '../../shared/format'
 import type { BranchCode } from '../../shared/types'
 import * as desk from './counter-desk-data'
+import { useHomeBranch } from './home-branch'
 import DiaryWeek from './SC11-Week-Grid'
 import NoShowAction from './SC11-No-Show-Action'
 
@@ -34,7 +34,11 @@ const OUT_COLUMNS = ['Booking', 'Customer', 'Tools', 'Where it stands', 'Action'
 const BACK_COLUMNS = ['Hire', 'Customer', 'Tools', 'Due back', 'Where it stands']
 
 export default function BranchDiary() {
-  const { branch, setBranchCode } = useSession()
+  // The select below is a view filter. It starts at the branch on the account
+  // and changes only which branch this screen lists.
+  const home = useHomeBranch()
+  const [branchCode, setBranchCode] = useState<BranchCode>(home.code)
+  const branch = desk.branchByCode(branchCode)
   const [view, setView] = useState<DiaryView>('day')
   const [anchor, setAnchor] = useState(TODAY)
   const [noShows, setNoShows] = useState<ReadonlySet<string>>(new Set())

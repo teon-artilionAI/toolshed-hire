@@ -21,7 +21,7 @@ import {
   PageHeader,
   StatusPill,
 } from '../../shared/ui'
-import { SignInRequired, useCustomerProfile } from './customer-session'
+import { NoSampleProfile, useCustomerProfile } from './customer-session'
 import { RESERVATION_STATUS_LABEL } from './customer-labels'
 import { CancellationPanel } from './reservation-cancel-panel'
 import { HireProgressCard } from './reservation-hire-card'
@@ -57,7 +57,7 @@ export default function ReservationDetail() {
     return (
       <>
         <PageHeader screenId="SC-08" title="Booking detail" />
-        <SignInRequired what="this booking" />
+        <NoSampleProfile what="this booking" />
       </>
     )
   }

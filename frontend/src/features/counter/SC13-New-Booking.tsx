@@ -11,13 +11,13 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarPlus, Plus } from 'lucide-react'
 import { Card, EmptyState, Field, Notice, PageHeader, StatusPill } from '../../shared/ui'
-import { useSession } from '../../shared/session'
 import { TODAY, branches, customers, productModels } from '../../shared/fixtures'
 import { daysBetween, money } from '../../shared/format'
 import type { BranchCode } from '../../shared/types'
 import { addDays, modelById } from './counter-desk-data'
 import type { BookingLineDraft } from './counter-availability'
 import { allocateLine, nextReservationReference } from './counter-availability'
+import { useHomeBranch } from './home-branch'
 import LineEditor from './SC13-Line-Editor'
 import BookingConfirmed from './SC13-Booking-Confirmed'
 
@@ -34,7 +34,7 @@ function newLine(): BookingLineDraft {
 }
 
 export default function NewBooking() {
-  const { branch } = useSession()
+  const branch = useHomeBranch()
   const [customerId, setCustomerId] = useState('')
   const [branchCode, setBranchCode] = useState<BranchCode>(branch.code)
   const [startDate, setStartDate] = useState(TODAY)

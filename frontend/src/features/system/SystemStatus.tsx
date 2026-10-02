@@ -3,41 +3,44 @@
  *
  * WHY THIS SCREEN EXISTS
  * ======================
- * Four of the five load bearing decisions in this build were proved against
- * real infrastructure. The fifth was not: the React client had never called the
- * API at all. Every screen read from fixtures, there was no fetch anywhere in
- * the source, and the dev server had no proxy. So the claim that the browser
- * sees a single origin, with `/api/*` rewritten to Cloud Run server side and a
- * refresh cookie that can honestly be `SameSite=Strict`, was an assertion in a
- * document rather than something that had ever happened. That is precisely the
- * kind of decision that works locally and fails in production, or the reverse.
+ * The whole design rests on the browser seeing a single origin, with `/api/*`
+ * rewritten to Cloud Run server side and a refresh cookie that can honestly be
+ * `SameSite=Strict`. That is precisely the kind of decision that works locally
+ * and fails in production, or the reverse. I wanted a page that shows it
+ * happening, so nobody has to take it on trust.
  *
- * This screen closes that gap and nothing more. It calls the real health
- * endpoint, signs in against the real sign in endpoint with a seeded account,
- * calls the protected `/api/me` with the token it was given, and then shows the
- * origin the browser actually used next to the path it actually requested, so a
+ * This screen does that and nothing more. It calls the real health endpoint,
+ * calls the protected `/api/me` as whoever is signed in, and shows the origin
+ * the browser actually used next to the path it actually requested, so a
  * reader can see for themselves that they are the same origin.
  *
- * IT IS NOT ONE OF THE TWENTY FOUR
- * ================================
- * SC-01 to SC-24 reconcile one to one with the documented screen inventory and
- * are untouched. This screen is DEV-01, deliberately outside that series, and
- * it is excluded from the screenshot capture that feeds the Task 1 appendix.
- * The numbered screens are moving onto the API one group at a time. SC-01 to
- * SC-03 call it now and the rest still read from fixtures.
+ * IT HAS NO SIGN IN OF ITS OWN
+ * ============================
+ * It used to sign in by itself, outside the session, with a seeded account
+ * written into the page. Now it uses the session like every other screen. A
+ * person signs in on the sign in screen and comes back, and the call to
+ * `/api/me` carries the token of the session through the client. The screen
+ * never sees that token, which is the point of where the session keeps it.
  *
- * The API being absent is the normal state during document work, so every call
- * here fails into an explanation rather than a blank page.
+ * IT IS NOT A SCREEN OF THE PRODUCT
+ * =================================
+ * SC-01 to SC-24 are the screens of the product. This one is DEV-01,
+ * deliberately outside that series, and it is in no navigation menu.
+ *
+ * The API is often not running while the interface is being worked on, so
+ * every call here fails into an explanation and not a blank page.
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, Notice, PageHeader, StatusPill } from '../../shared/ui'
-import { PasswordField, TextField } from '../customer/customer-fields'
 import { asApiError } from '../../shared/api-problem'
+import { getCurrentUser } from '../../shared/api/auth'
 import { apiPath, resolvedApiUrl } from '../../shared/api/client'
-import type { ApiUserAccount, HealthReport, SignInResult } from '../../shared/api/contract'
-import { getCurrentUser, getHealth, signIn } from '../../shared/api/system'
+import type { HealthReport, SessionUser } from '../../shared/api/contract'
+import { getHealth } from '../../shared/api/system'
+import { signInAddress } from '../../shared/screen-access'
+import { useSession } from '../../shared/use-session'
 import {
   DevelopmentScreenBanner,
   FactRow,
@@ -46,24 +49,11 @@ import {
 } from './system-panels'
 import type { Loadable } from './system-panels'
 
-/** The account seeded by backend/seed.py, and the password that script uses
- *  when SEED_PASSWORD is unset in development. Both are development values and
- *  neither exists in any deployed environment. */
-const SEEDED_EMAIL = 'w.adonis@buildright.co.za'
-const SEEDED_PASSWORD = 'toolshed-dev-password'
-
 const HEALTH_ENDPOINT = '/health'
-const SIGN_IN_ENDPOINT = '/auth/sign-in'
 const ME_ENDPOINT = '/me'
 
-/** How much of the token to show. Enough to see one was issued, not enough to
- *  be worth copying out of a screenshot. */
-const TOKEN_PREVIEW_LENGTH = 24
-
-interface SignedInState {
-  result: SignInResult
-  me: ApiUserAccount
-}
+/** The address of this screen, so signing in brings the person back here. */
+const SYSTEM_PATH = '/system'
 
 /** The health of the API and of the database behind it. */
 function HealthCard({ health }: { health: Loadable<HealthReport> }) {
@@ -104,85 +94,85 @@ function HealthCard({ health }: { health: Loadable<HealthReport> }) {
   )
 }
 
-/** Sign in for real, then call the protected endpoint with what came back. */
-function IdentityCard({
-  email,
-  password,
-  session,
-  onEmailChange,
-  onPasswordChange,
-  onSubmit,
-}: {
-  email: string
-  password: string
-  session: Loadable<SignedInState>
-  onEmailChange: (value: string) => void
-  onPasswordChange: (value: string) => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-}) {
-  const busy = session.state === 'loading'
+/** One account, as `/api/me` reports it. */
+function AccountRows({ account }: { account: SessionUser }) {
   return (
-    <Card title={`POST ${apiPath(SIGN_IN_ENDPOINT)} then GET ${apiPath(ME_ENDPOINT)}`}>
-      <form noValidate onSubmit={onSubmit} className="flex flex-col gap-md">
-        <TextField
-          id="system-email"
-          label="Email address"
-          type="email"
-          inputMode="email"
-          autoComplete="username"
-          value={email}
-          onChange={onEmailChange}
-          help="A seeded development account. Change it to prove a wrong one is refused."
+    <>
+      <LiteralRow label="Name" value={account.fullName} />
+      <LiteralRow label="Email" value={account.email} />
+      <LiteralRow
+        label="Branch"
+        value={account.branchCode ?? 'none, which is correct for this role'}
+      />
+      <div className="mt-sm flex flex-wrap items-center gap-sm">
+        <StatusPill status="AVAILABLE" label={`Role ${account.role}`} />
+        <StatusPill
+          status={account.emailVerified ? 'AVAILABLE' : 'RESERVED'}
+          label={account.emailVerified ? 'Email verified' : 'Email not verified'}
         />
-        <PasswordField
-          id="system-password"
-          label="Password"
-          autoComplete="current-password"
-          value={password}
-          onChange={onPasswordChange}
-        />
-        <div>
-          <button type="submit" className="btn-primary px-lg" disabled={busy}>
-            {busy ? 'Signing in' : 'Sign in against the API'}
-          </button>
-        </div>
-      </form>
+      </div>
+    </>
+  )
+}
 
-      {session.state === 'failed' && (
+/** Call the protected endpoint as whoever the session says is signed in. */
+function IdentityCard({
+  me,
+  onCallAgain,
+}: {
+  me: Loadable<SessionUser>
+  onCallAgain: () => void
+}) {
+  const { user } = useSession()
+
+  if (!user) {
+    return (
+      <Card title={`The session, then GET ${apiPath(ME_ENDPOINT)}`}>
+        <Notice tone="info" title="Nobody is signed in">
+          <p>
+            This card calls the protected endpoint with the token the session holds, so it needs a
+            session. Sign in and you are brought straight back here.
+          </p>
+        </Notice>
+        <Link to={signInAddress(SYSTEM_PATH)} className="btn-primary mt-md px-md">
+          Sign in
+        </Link>
+      </Card>
+    )
+  }
+
+  const calling = me.state === 'loading'
+  return (
+    <Card title={`The session, then GET ${apiPath(ME_ENDPOINT)}`}>
+      <p className="text-sm text-slate-soft">
+        The session holds an access token in memory and this screen cannot read it. The client
+        attaches it to the call below.
+      </p>
+      <button
+        type="button"
+        className="btn-secondary mt-md px-md"
+        onClick={onCallAgain}
+        disabled={calling}
+      >
+        {calling ? 'Calling' : `Call ${apiPath(ME_ENDPOINT)} again`}
+      </button>
+
+      {me.state === 'failed' && (
         <div className="mt-md">
-          <FailureNotice error={session.error} what="The sign in" />
+          <FailureNotice error={me.error} what="The call to the protected endpoint" />
         </div>
       )}
 
-      {session.state === 'ready' && (
+      {me.state === 'ready' && (
         <div className="mt-md">
           <Notice tone="success" title="The protected endpoint answered">
             <p>
-              The token issued by {apiPath(SIGN_IN_ENDPOINT)} was presented to{' '}
-              {apiPath(ME_ENDPOINT)}, which loaded the account from PostgreSQL and read the role
-              from the row rather than from the token.
+              The token the session holds was presented to {apiPath(ME_ENDPOINT)}, which loaded the
+              account from PostgreSQL and read the role from the row and not from the token.
             </p>
           </Notice>
           <div className="mt-md">
-            <LiteralRow
-              label="Access token"
-              value={`${session.value.result.accessToken.slice(0, TOKEN_PREVIEW_LENGTH)}… (${
-                session.value.result.tokenType
-              }, expires in ${session.value.result.expiresIn} s)`}
-            />
-            <LiteralRow label="Name" value={session.value.me.name} />
-            <LiteralRow label="Email" value={session.value.me.email} />
-            <LiteralRow
-              label="Branch"
-              value={session.value.me.branchCode ?? 'none, which is correct for this role'}
-            />
-          </div>
-          <div className="mt-sm flex flex-wrap items-center gap-sm">
-            <StatusPill status="AVAILABLE" label={`Role ${session.value.me.role}`} />
-            <StatusPill
-              status={session.value.me.active ? 'AVAILABLE' : 'QUARANTINED'}
-              label={session.value.me.active ? 'Active' : 'Deactivated'}
-            />
+            <AccountRows account={me.value} />
           </div>
         </div>
       )}
@@ -190,8 +180,8 @@ function IdentityCard({
   )
 }
 
-/** The point of the whole screen: the page origin and the request origin, side
- *  by side, read from the browser rather than asserted. */
+/** The point of the whole screen. The page origin and the request origin, side
+ *  by side, read from the browser and not asserted. */
 function OriginCard() {
   const pageOrigin = window.location.origin
   const healthUrl = resolvedApiUrl(HEALTH_ENDPOINT)
@@ -222,10 +212,10 @@ function OriginCard() {
 }
 
 export default function SystemStatus() {
+  const { user } = useSession()
   const [health, setHealth] = useState<Loadable<HealthReport>>({ state: 'idle' })
-  const [session, setSession] = useState<Loadable<SignedInState>>({ state: 'idle' })
-  const [email, setEmail] = useState(SEEDED_EMAIL)
-  const [password, setPassword] = useState(SEEDED_PASSWORD)
+  const [me, setMe] = useState<Loadable<SessionUser>>({ state: 'idle' })
+  const signedInUserId = user?.id ?? null
 
   const checkHealth = useCallback(async (): Promise<void> => {
     setHealth({ state: 'loading' })
@@ -236,28 +226,32 @@ export default function SystemStatus() {
     }
   }, [])
 
+  const checkIdentity = useCallback(async (): Promise<void> => {
+    setMe({ state: 'loading' })
+    try {
+      setMe({ state: 'ready', value: await getCurrentUser() })
+    } catch (cause) {
+      setMe({ state: 'failed', error: asApiError(cause, apiPath(ME_ENDPOINT)) })
+    }
+  }, [])
+
   useEffect(() => {
     void checkHealth()
   }, [checkHealth])
 
-  async function handleSignIn(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    setSession({ state: 'loading' })
-    try {
-      const result = await signIn(email, password)
-      const me = await getCurrentUser(result.accessToken)
-      setSession({ state: 'ready', value: { result, me } })
-    } catch (cause) {
-      setSession({ state: 'failed', error: asApiError(cause, apiPath(SIGN_IN_ENDPOINT)) })
-    }
-  }
+  // The protected call is made as soon as there is somebody to make it as, and
+  // again when a different account signs in.
+  useEffect(() => {
+    if (signedInUserId === null) return
+    void checkIdentity()
+  }, [signedInUserId, checkIdentity])
 
   return (
     <>
       <PageHeader
         screenId="DEV-01"
         title="System connectivity"
-        subtitle="Proves that the browser reaches the API through one origin, that the database answers, and that a real credential opens a protected endpoint."
+        subtitle="Checks that the browser reaches the API through one origin, that the database answers, and that the session opens a protected endpoint."
         actions={
           <button type="button" className="btn-secondary px-md" onClick={() => void checkHealth()}>
             Check again
@@ -267,23 +261,16 @@ export default function SystemStatus() {
 
       <DevelopmentScreenBanner>
         <p>
-          This screen is not part of the twenty four numbered screens. SC-01 to SC-24 are the
-          documented inventory. This one exists to prove the path from the browser to PostgreSQL,
-          and it is excluded from the screenshot capture that feeds the document appendix.
+          This is a development page for checking connectivity. It is not a screen of the
+          product and it is in no menu. It follows one request from the browser, through the
+          API, to PostgreSQL and back.
         </p>
       </DevelopmentScreenBanner>
 
       <div className="flex flex-col gap-lg">
         <OriginCard />
         <HealthCard health={health} />
-        <IdentityCard
-          email={email}
-          password={password}
-          session={session}
-          onEmailChange={setEmail}
-          onPasswordChange={setPassword}
-          onSubmit={(event) => void handleSignIn(event)}
-        />
+        <IdentityCard me={me} onCallAgain={() => void checkIdentity()} />
       </div>
     </>
   )

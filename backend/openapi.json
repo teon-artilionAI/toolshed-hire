@@ -28,19 +28,19 @@
         }
       }
     },
-    "/api/auth/sign-in": {
+    "/api/auth/login": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Exchange credentials for an access token",
-        "description": "Verify credentials and issue an access token.\n\nArgs:\n    payload: The email address and password as typed.\n    session: The request scoped database session.\n\nReturns:\n    The access token, its lifetime and the account it belongs to.\n\nRaises:\n    AuthenticationFailure: If no account matches or the password is wrong.\n    InactiveAccount: If the credentials are right but the account is\n        deactivated. Reported separately from a wrong password because the\n        holder needs to know to contact an administrator.",
-        "operationId": "post_sign_in_api_auth_sign_in_post",
+        "summary": "Exchange credentials for an access token and a refresh cookie",
+        "description": "Verify credentials, open a session and issue both tokens.\n\nRaises:\n    InvalidCredentials: If the sign in was refused. Mapped to HTTP 401.\n    TooManyAttempts: If the caller is throttled. Mapped to HTTP 429.",
+        "operationId": "post_login_api_auth_login_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SignInRequest"
+                "$ref": "#/components/schemas/LoginRequest"
               }
             }
           },
@@ -57,6 +57,12 @@
               }
             }
           },
+          "401": {
+            "description": "The sign in was refused. The body is the same whatever the reason."
+          },
+          "429": {
+            "description": "Too many attempts. `Retry-After` carries the wait in seconds."
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -70,13 +76,59 @@
         }
       }
     },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Exchange the refresh cookie for a new access token and a new cookie",
+        "description": "Rotate the refresh token and issue a new access token.\n\nRaises:\n    SessionExpired: If the cookie is missing or no longer good. Mapped to\n        HTTP 401, with the cookie cleared.",
+        "operationId": "post_refresh_api_auth_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The refresh cookie is missing, unknown, expired, revoked or already used."
+          },
+          "403": {
+            "description": "The request named an origin that is not one of the configured ones."
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke the session of the refresh cookie and clear the cookie",
+        "description": "Revoke the session the cookie names, if any, and clear the cookie.\n\nThe answer is 204 whether or not there was a cookie and whether or not it\nnamed a live session.",
+        "operationId": "post_logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The request named an origin that is not one of the configured ones."
+          }
+        }
+      }
+    },
     "/api/me": {
       "get": {
         "tags": [
           "identity"
         ],
         "summary": "Return the signed in account",
-        "description": "Return the account behind the presented access token.\n\nArgs:\n    user: The active account, resolved by the layered auth dependencies.\n    session: The request scoped session, used to resolve the branch code.\n\nReturns:\n    The account in the shape the frontend UserAccount type expects.",
+        "description": "Return the account behind the presented access token.\n\nArgs:\n    user: The active account, resolved by the layered auth dependencies.\n    session: The request scoped session, used to resolve the branch code.\n\nReturns:\n    The account, in the shape every session response carries it in.",
         "operationId": "read_me_api_me_get",
         "responses": {
           "200": {
@@ -98,7 +150,7 @@
           "allocations"
         ],
         "summary": "Hold specific assets for a hire period",
-        "description": "Create a held reservation and allocate specific assets to it.\n\nArgs:\n    payload: The product model, branch, half open period and quantity.\n    user: The active account making the request.\n    use_case: The reservation use case. It owns the commit.\n\nReturns:\n    The committed reservation with the tagged units held.\n\nRaises:\n    ValidationFailure: If the period is not a valid hire period.\n    AuthorisationFailure: If a customer tries to book on someone else's behalf.\n    AllocationConflictError: If no free unit exists. Mapped to HTTP 409.",
+        "description": "Create a held reservation and allocate specific assets to it.\n\nArgs:\n    payload: The product model, branch, half open period and quantity.\n    user: The active account making the request.\n    use_case: The reservation use case. It owns the commit.\n\nReturns:\n    The committed reservation with the tagged units held.\n\nRaises:\n    ValidationFailure: If the period is not a valid hire period.\n    AuthorisationFailure: If a customer tries to book on someone else's behalf.\n    BranchScopeError: If counter staff try to book at a branch that is not\n        their own. Mapped to HTTP 403.\n    AllocationConflictError: If no free unit exists. Mapped to HTTP 409.",
         "operationId": "post_allocation_api_allocations_post",
         "requestBody": {
           "content": {
@@ -970,6 +1022,28 @@
         "title": "HealthResponse",
         "description": "What the health endpoint reports about its own dependencies."
       },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 5,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "description": "Credentials posted to the sign in endpoint.\n\nThe address is checked structurally rather than with a full RFC 5322\nparser. Deliverability is proved by the verification email, not by a\nregular expression, so a validation library here would be a dependency\nthat buys nothing.\n\nThe password carries no minimum length. It deliberately did once, and that\nwas a defect: a wrong password of eleven characters came back as a 422\nnaming the length rule, while a wrong password of twelve came back as a 401.\nThat difference is an oracle. It tells an attacker something about the value\nthey submitted, and it contradicts control C-14 in the security section,\nwhich states that an unknown address and a wrong password are answered\nidentically in body, status and timing. Length policy applies when a\npassword is chosen, not when one is presented, so it lives in\n`security.hash_password` (BR-45) and not here. The maximum stays, because it\nis a property of bcrypt rather than a rule about the account, and it applies\nto the unknown address and the wrong password alike."
+      },
       "ModelAvailabilityResponse": {
         "properties": {
           "from": {
@@ -1323,28 +1397,6 @@
         "title": "ProblemDetail",
         "description": "An RFC 9457 problem document.\n\n`type` is a stable slug, not a resolvable URL, because this API is not a\npublic specification and inventing a documentation URL that does not exist\nis worse than a slug that does.\n\n`requestId` is an extension member. It is the same value as the\n`X-Request-ID` response header and the `request_id` on every log record of\nthe request, so a caller who quotes it has named the exact log lines."
       },
-      "SignInRequest": {
-        "properties": {
-          "email": {
-            "type": "string",
-            "maxLength": 254,
-            "minLength": 5,
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 72,
-            "title": "Password"
-          }
-        },
-        "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
-        "title": "SignInRequest",
-        "description": "Credentials posted to the sign in endpoint.\n\nThe address is checked structurally rather than with a full RFC 5322\nparser. Deliverability is proved by the verification email, not by a\nregular expression, so a validation library here would be a dependency\nthat buys nothing.\n\nThe password carries no minimum length. It deliberately did once, and that\nwas a defect: a wrong password of eleven characters came back as a 422\nnaming the length rule, while a wrong password of twelve came back as a 401.\nThat difference is an oracle. It tells an attacker something about the value\nthey submitted, and it contradicts control C-14 in the security section,\nwhich states that an unknown address and a wrong password are answered\nidentically in body, status and timing. Length policy applies when a\npassword is chosen, not when one is presented, so it lives in\n`security.hash_password` (BR-45) and not here. The maximum stays, because it\nis a property of bcrypt rather than a rule about the account, and it applies\nto the unknown address and the wrong password alike."
-      },
       "TokenResponse": {
         "properties": {
           "accessToken": {
@@ -1354,7 +1406,7 @@
           "tokenType": {
             "type": "string",
             "title": "Tokentype",
-            "default": "bearer"
+            "default": "Bearer"
           },
           "expiresIn": {
             "type": "integer",
@@ -1371,7 +1423,7 @@
           "user"
         ],
         "title": "TokenResponse",
-        "description": "The access token and the account it belongs to."
+        "description": "The access token and the account it belongs to.\n\nSigning in and refreshing both return this. The refresh token is not in\nit. That travels in a cookie the page cannot read."
       },
       "UserResponse": {
         "properties": {
@@ -1380,13 +1432,13 @@
             "format": "uuid",
             "title": "Id"
           },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
           "email": {
             "type": "string",
             "title": "Email"
+          },
+          "fullName": {
+            "type": "string",
+            "title": "Fullname"
           },
           "role": {
             "type": "string",
@@ -1403,21 +1455,21 @@
             ],
             "title": "Branchcode"
           },
-          "active": {
+          "emailVerified": {
             "type": "boolean",
-            "title": "Active"
+            "title": "Emailverified"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "name",
           "email",
+          "fullName",
           "role",
-          "active"
+          "emailVerified"
         ],
         "title": "UserResponse",
-        "description": "The signed in account, shaped like the frontend UserAccount type."
+        "description": "The signed in account, as every session response and `/api/me` return it.\n\n`branchCode` is null unless the account is counter staff."
       },
       "ValidationError": {
         "properties": {

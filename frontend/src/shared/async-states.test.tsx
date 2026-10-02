@@ -51,6 +51,13 @@ describe('ErrorState', () => {
     expect(within(alert).getByText(/Something went wrong on our side/)).toBeVisible()
   })
 
+  it('takes a whole heading for an action that failed, where nothing was being loaded', () => {
+    render(<ErrorState heading="We could not sign you in" error={failure('transport', null, null)} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('We could not sign you in')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('We could not load')
+  })
+
   it('tells a person to check their connection when the API was not reached', () => {
     render(<ErrorState what="the catalogue" error={failure('transport', null, null)} />)
 

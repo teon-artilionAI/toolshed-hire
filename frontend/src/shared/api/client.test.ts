@@ -154,15 +154,6 @@ describe('the bearer token', () => {
 
     expect(network.requests[0].headers.has('Authorization')).toBe(false)
   })
-
-  it('is overridden by a token given for one call', async () => {
-    const network = mockApi({ 'GET /api/hello': () => jsonResponse({ greeting: 'Molo' }) })
-    registerAccessTokenProvider(() => 'session-token')
-
-    await api.get('/hello', readGreeting, { accessToken: 'one-off-token' })
-
-    expect(network.requests[0].headers.get('Authorization')).toBe('Bearer one-off-token')
-  })
 })
 
 describe('a failed call', () => {

@@ -22,7 +22,7 @@ import type {
   UserAccount,
 } from '../../shared/types'
 import { Card, Field, Notice, PageHeader, StatTile } from '../../shared/ui'
-import { useSession } from '../../shared/session'
+import { useSession } from '../../shared/use-session'
 import StaffAccountForm from './StaffAccountForm'
 import StaffAccountsTable from './StaffAccountsTable'
 import CustomerHolds from './CustomerHolds'
@@ -46,6 +46,13 @@ interface Feedback {
 export default function UserManagement() {
   const { user: signedInUser } = useSession()
   const [accounts, setAccounts] = useState<UserAccount[]>(users)
+  // The staff list is still sample data, and the signed in account is real.
+  // The email address is the one thing both have, so that is how I find the
+  // row that stands for the person using the screen.
+  const signedInEmail = signedInUser?.email.toLowerCase()
+  const signedInAccountId = accounts.find(
+    (account) => account.email.toLowerCase() === signedInEmail,
+  )?.id
   const [customerList, setCustomerList] = useState<CustomerProfile[]>(customers)
   const [customerQuery, setCustomerQuery] = useState('')
   const [formOpen, setFormOpen] = useState(false)
@@ -111,7 +118,7 @@ export default function UserManagement() {
   }
 
   function toggleActive(account: UserAccount) {
-    if (account.active && account.id === signedInUser?.id) {
+    if (account.active && account.id === signedInAccountId) {
       refuse(
         'You cannot switch off your own account',
         'Ask another admin to do it, so nobody locks themselves out of this screen by accident.',
@@ -233,7 +240,7 @@ export default function UserManagement() {
         <Card title="Staff accounts">
           <StaffAccountsTable
             staff={staff}
-            signedInUserId={signedInUser?.id}
+            signedInUserId={signedInAccountId}
             onChangeRole={changeRole}
             onChangeBranch={changeBranch}
             onToggleActive={toggleActive}
