@@ -19,6 +19,9 @@ on:
   push:
     branches:
       - develop
+      # Temporary, while I bring the first deployment up from this branch. This
+      # line goes before the pull request is merged.
+      - feature/004-deploy-pipeline-and-request-context
 
 # Two deployments must never run at once, and a queued deployment must never be
 # cancelled part way through a migration.
