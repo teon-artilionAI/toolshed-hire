@@ -51,6 +51,7 @@ STANDING_IN_WORDS: Final[Mapping[ReservationStatus, str]] = {
 HOLD_MOVE: Final[str] = "hold"
 CONFIRM_MOVE: Final[str] = "confirm"
 CANCEL_MOVE: Final[str] = "cancel"
+COLLECT_MOVE: Final[str] = "collect"
 EXPIRE_MOVE: Final[str] = "expire"
 # What each move would have done, as a customer reads it in a refusal.
 PUT_ON_HOLD: Final[str] = "put on hold"
@@ -60,6 +61,17 @@ COLLECTED: Final[str] = "collected"
 EXPIRED: Final[str] = "expired"
 MARKED_AS_NOT_COLLECTED: Final[str] = "marked as not collected"
 CLOSED: Final[str] = "closed"
+
+
+def refusal_sentence(status: ReservationStatus, attempted: str) -> str:
+    """Return the sentence a move refused from a status is answered with.
+
+    Args:
+        status: Where the reservation stands.
+        attempted: What the move would have done, in plain words.
+
+    """
+    return f"This reservation {STANDING_IN_WORDS[status]}, so it cannot be {attempted}."
 
 
 class UnitAllocator(Protocol):
@@ -158,7 +170,7 @@ class ReservationState:
 
         """
         raise StateTransitionError(
-            f"This reservation {STANDING_IN_WORDS[self.status]}, so it cannot be {attempted}.",
+            refusal_sentence(self.status, attempted),
             from_status=self.status.value,
             to_status=target.value,
             rule=PERMITTED_TRANSITIONS_RULE,

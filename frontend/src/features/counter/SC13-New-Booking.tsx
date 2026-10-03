@@ -1,288 +1,216 @@
 /**
  * SC-13 New Booking and Asset Allocation.
  *
- * A booking is a customer, a period, and a list of tools with a real unit
- * behind each one. The screen refuses to pretend: if the unit the customer
- * asked for is already spoken for, it says which booking has it and offers
- * another unit, another branch or different dates rather than a shrug.
+ * A booking made at the counter for a customer who is standing there. The
+ * customer comes in the address as `?customer=<id>`, so a reload keeps them,
+ * and is read from the API. The booking is collected at the branch the
+ * assistant works at, and it may start today.
+ *
+ * It takes the same three requests an online booking takes, on the same
+ * routes, one press of a button each. Making the reservation prices it,
+ * holding it sets the units aside, and confirming it books the hire. Each
+ * button is disabled while its request is in flight. The steps are in
+ * use-counter-booking.ts. Every figure is the server's, and the browser prices
+ * nothing.
+ *
+ * Units are allocated by the server when the booking is held. Nobody picks a
+ * unit by hand, so a booking can never point at a unit another booking has.
+ *
+ * When the step changes, focus moves to the heading of the new step, and a
+ * polite status says what the last request did.
  */
 
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { CalendarPlus, Plus } from 'lucide-react'
-import { Card, EmptyState, Field, Notice, PageHeader, StatusPill } from '../../shared/ui'
-import { TODAY, branches, customers, productModels } from '../../shared/fixtures'
-import { daysBetween, money } from '../../shared/format'
-import type { BranchCode } from '../../shared/types'
-import { addDays, modelById } from './counter-desk-data'
-import type { BookingLineDraft } from './counter-availability'
-import { allocateLine, nextReservationReference } from './counter-availability'
-import { useHomeBranch } from './home-branch'
-import LineEditor from './SC13-Line-Editor'
-import BookingConfirmed from './SC13-Booking-Confirmed'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Search } from 'lucide-react'
+import type { CustomerSummary, Reservation } from '../../shared/api/contract'
+import { customerQueries } from '../../shared/api/counter-queries'
+import { queryPhase } from '../../shared/api/query-phase'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import { branchClockTime, todayInBranchTime } from '../../shared/today'
+import { Card, EmptyState, Notice, PageHeader, StatusPill } from '../../shared/ui'
+import { emptyDraft } from './booking-draft'
+import type { BookingDraft } from './booking-draft'
+import {
+  ACCOUNT_STANDING_LABEL,
+  ACCOUNT_STANDING_PILL,
+  NO_BOOKING_BECAUSE,
+  canBookFor,
+} from './counter-labels'
+import { CUSTOMERS_PATH, CUSTOMER_PARAMETER, customerHref } from './counter-links'
+import { isNotOnFile } from './counter-refusal'
+import { StepList } from './counter-steps'
+import { BookingConfirmed } from './SC13-Booking-Confirmed'
+import { BookingLinesStep } from './SC13-Booking-Lines'
+import { BookingReviewStep } from './SC13-Booking-Review'
+import { useCounterBooking } from './use-counter-booking'
+import type { CounterBookingView } from './use-counter-booking'
+import { WorkBranchGate } from './work-branch-gate'
+import type { CounterBranch } from './work-branch-gate'
 
-const DEFAULT_HIRE_DAYS = 4
+const STEPS = [
+  'Choose the dates and the tools',
+  'Check the cost',
+  'Confirm the booking',
+  'The booking is confirmed',
+] as const
 
-function newLine(): BookingLineDraft {
-  return {
-    id: `line-${Date.now()}`,
-    modelId: productModels[0].id,
-    quantity: 1,
-    mode: 'AUTO',
-    assetIds: [],
-  }
+const STEP_OF: Record<CounterBookingView, number> = { lines: 0, review: 1, held: 2, confirmed: 3 }
+
+/** What the last request did, for a person who cannot see the step change. */
+function outcome(view: CounterBookingView, reservation: Reservation | null): string {
+  if (reservation === null) return ''
+  if (view === 'review') return 'The booking has been priced. Nothing is held yet.'
+  if (view === 'confirmed') return `The booking is confirmed. The reference is ${reservation.reference}.`
+  return reservation.status === 'HELD' && reservation.holdExpiresAt !== null
+    ? `The units are held until ${branchClockTime(reservation.holdExpiresAt)}.`
+    : ''
 }
 
-export default function NewBooking() {
-  const branch = useHomeBranch()
-  const [customerId, setCustomerId] = useState('')
-  const [branchCode, setBranchCode] = useState<BranchCode>(branch.code)
-  const [startDate, setStartDate] = useState(TODAY)
-  const [endDate, setEndDate] = useState(addDays(TODAY, DEFAULT_HIRE_DAYS))
-  const [lines, setLines] = useState<BookingLineDraft[]>([newLine()])
-  const [showBlockers, setShowBlockers] = useState(false)
-  const [reference, setReference] = useState<string | null>(null)
-
-  const customer = customers.find((c) => c.id === customerId)
-  const days = Math.max(1, daysBetween(startDate, endDate))
-
-  const allocations = useMemo(
-    () => lines.map((line) => allocateLine(line, branchCode, startDate, endDate)),
-    [lines, branchCode, startDate, endDate],
+function CustomerCard({ customer }: { customer: CustomerSummary }) {
+  const status = customer.accountStatus
+  return (
+    <div className="mb-lg flex flex-wrap items-center gap-sm rounded border border-line bg-surface px-md py-sm">
+      <p className="min-w-0 break-words text-sm text-ink">
+        Booking for <span className="font-semibold">{customer.displayName}</span>,{' '}
+        <span className="tabular">{customer.phone}</span>
+      </p>
+      <StatusPill status={ACCOUNT_STANDING_PILL[status]} label={ACCOUNT_STANDING_LABEL[status]} />
+      <Link to={customerHref(customer.id)} className="btn-ghost ml-auto px-md">
+        Find someone else
+      </Link>
+    </div>
   )
+}
 
-  const hireTotal = lines.reduce(
-    (sum, line) => sum + modelById(line.modelId).dailyRate * days * line.quantity,
-    0,
-  )
-  const depositTotal = lines.reduce(
-    (sum, line) => sum + modelById(line.modelId).depositAmount * line.quantity,
-    0,
-  )
+function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: CounterBranch }) {
+  const [today] = useState(() => todayInBranchTime())
+  const [draft, setDraft] = useState<BookingDraft>(() => emptyDraft(today))
+  const booking = useCounterBooking(customer.id, branch.code)
+  const { view, reservation } = booking
 
-  const blockers: string[] = []
-  if (!customer) blockers.push('Choose the customer this hire is for.')
-  if (customer?.onHold) {
-    blockers.push(
-      `${customer.name} has an account on hold, so no new hire can go out. An owner has to lift the hold first.`,
-    )
-  }
-  if (startDate < TODAY) blockers.push('The collection date cannot be in the past.')
-  if (endDate <= startDate) blockers.push('The return date has to be after the collection date.')
-  if (lines.length === 0) blockers.push('Add at least one tool to the booking.')
-  allocations.forEach((allocation, index) => {
-    if (allocation.problem) {
-      blockers.push(`Tool ${index + 1}, ${modelById(lines[index].modelId).name}: ${allocation.problem}`)
-    }
-  })
+  // The first step is where the page opens, and the router has already put
+  // focus on the main region. Only a change of step moves it to the heading.
+  const heading = useRef<HTMLHeadingElement>(null)
+  const shownView = useRef(view)
+  useEffect(() => {
+    if (shownView.current === view) return
+    shownView.current = view
+    heading.current?.focus()
+  }, [view])
 
-  function updateLine(index: number, next: BookingLineDraft) {
-    setLines((current) => current.map((line, i) => (i === index ? next : line)))
-  }
-
-  function confirm() {
-    if (blockers.length > 0) {
-      setShowBlockers(true)
-      window.scrollTo({ top: 0 })
-      return
-    }
-    setReference(nextReservationReference())
-    window.scrollTo({ top: 0 })
-  }
-
-  if (reference && customer) {
-    return (
-      <BookingConfirmed
-        reference={reference}
-        customer={customer}
-        branchCode={branchCode}
-        startDate={startDate}
-        endDate={endDate}
-        lines={lines}
-        allocations={allocations}
-        hireTotal={hireTotal}
-        depositTotal={depositTotal}
-        onStartAnother={() => {
-          setReference(null)
-          setLines([newLine()])
-          setCustomerId('')
-          setShowBlockers(false)
-        }}
-      />
-    )
+  function startAgain() {
+    setDraft(emptyDraft(today))
+    booking.startAgain()
   }
 
   return (
-    <div>
+    <>
+      <CustomerCard customer={customer} />
+      <StepList label="Booking steps" steps={STEPS} current={STEP_OF[view]} allDone={view === 'confirmed'} />
+      <p role="status" className="sr-only">
+        {outcome(view, reservation)}
+      </p>
+
+      {booking.blockedBecause !== null ? (
+        <Notice tone="error" title={`No booking can be made for ${customer.displayName}`}>
+          <p>{booking.blockedBecause}</p>
+        </Notice>
+      ) : view === 'confirmed' && reservation !== null ? (
+        <BookingConfirmed
+          reservation={reservation}
+          customer={customer}
+          today={today}
+          headingRef={heading}
+          onStartAgain={startAgain}
+        />
+      ) : view !== 'lines' && reservation !== null ? (
+        <BookingReviewStep reservation={reservation} booking={booking} headingRef={heading} />
+      ) : (
+        <BookingLinesStep
+          draft={draft}
+          onDraft={setDraft}
+          branch={branch}
+          today={today}
+          booking={booking}
+          headingRef={heading}
+        />
+      )}
+    </>
+  )
+}
+
+function FindTheCustomerFirst() {
+  return (
+    <div className="card">
+      <EmptyState
+        title="Find the customer first"
+        body="A booking at the counter is always for a customer on file. Find them, or register them as a walk in, and start the booking from there."
+        action={
+          <Link to={CUSTOMERS_PATH} className="btn-primary px-lg">
+            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Find a customer
+          </Link>
+        }
+      />
+    </div>
+  )
+}
+
+function BookingDesk({ customerId, branch }: { customerId: string; branch: CounterBranch }) {
+  const customer = useQuery(customerQueries.detail(customerId))
+  const phase = queryPhase(customer)
+
+  if (phase === 'failed' && isNotOnFile(customer.error)) {
+    return (
+      <Notice tone="error" title="We cannot find that customer">
+        <p>
+          The customer in the address is not on file.{' '}
+          <Link to={CUSTOMERS_PATH} className="font-medium underline">
+            Find the customer again
+          </Link>
+          .
+        </p>
+      </Notice>
+    )
+  }
+  if (phase === 'failed') {
+    return <ErrorState what="the customer" error={customer.error} onRetry={() => void customer.refetch()} />
+  }
+  if (!customer.data) return <LoadingState label="Loading the customer" shape="detail" count={1} />
+
+  const chosen = customer.data
+  if (!canBookFor(chosen.accountStatus)) {
+    return (
+      <>
+        <CustomerCard customer={chosen} />
+        <Card title="No booking can be made">
+          <p className="text-sm text-ink">{NO_BOOKING_BECAUSE[chosen.accountStatus]}</p>
+        </Card>
+      </>
+    )
+  }
+  return <BookingFlow customer={chosen} branch={branch} />
+}
+
+export default function NewBooking() {
+  const [params] = useSearchParams()
+  const customerId = params.get(CUSTOMER_PARAMETER)
+  return (
+    <>
       <PageHeader
         screenId="SC-13"
         title="New booking"
-        subtitle="Pick the customer and the dates, then add the tools. Units are set aside as you go."
+        subtitle="Choose the dates and the tools, check the cost, then hold and confirm. The units are picked for you."
       />
-
-      {showBlockers && blockers.length > 0 && (
-        <div className="mb-lg">
-          <Notice tone="error" title="This booking cannot be made yet">
-            <ul className="ml-md list-disc">
-              {blockers.map((blocker) => (
-                <li key={blocker}>{blocker}</li>
-              ))}
-            </ul>
-          </Notice>
-        </div>
+      {customerId === null || customerId === '' ? (
+        <FindTheCustomerFirst />
+      ) : (
+        <WorkBranchGate>
+          {(branch) => <BookingDesk key={customerId} customerId={customerId} branch={branch} />}
+        </WorkBranchGate>
       )}
-
-      <Card title="Who and when" className="mb-lg">
-        <div className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-          <Field
-            label="Customer"
-            htmlFor="booking-customer"
-            help="Not on file yet? Register them first."
-          >
-            <select
-              id="booking-customer"
-              className="field-input cursor-pointer"
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-            >
-              <option value="">Choose a customer</option>
-              {customers.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                  {option.onHold ? ' (account on hold)' : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Collecting from" htmlFor="booking-branch">
-            <select
-              id="booking-branch"
-              className="field-input cursor-pointer"
-              value={branchCode}
-              onChange={(event) => setBranchCode(event.target.value as BranchCode)}
-            >
-              {branches.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Goes out" htmlFor="booking-start">
-            <input
-              id="booking-start"
-              type="date"
-              className="field-input tabular cursor-pointer"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-            />
-          </Field>
-
-          <Field
-            label="Back by"
-            htmlFor="booking-end"
-            help={`${days} ${days === 1 ? 'day' : 'days'} on hire.`}
-          >
-            <input
-              id="booking-end"
-              type="date"
-              className="field-input tabular cursor-pointer"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-            />
-          </Field>
-        </div>
-
-        {customer && (
-          <div className="mt-md flex flex-wrap items-center gap-sm">
-            <span className="text-sm text-slate-soft">
-              {customer.phone}, {customer.billingSuburb}
-            </span>
-            {customer.onHold ? (
-              <StatusPill status="OVERDUE" label="Account on hold" />
-            ) : (
-              <StatusPill status="AVAILABLE" label="Good standing" />
-            )}
-            <Link to="/counter/customers" className="btn-ghost px-sm text-sm">
-              Find someone else
-            </Link>
-          </div>
-        )}
-      </Card>
-
-      <div className="mb-lg">
-        {lines.length === 0 ? (
-          <Card title="Tools on this booking">
-            <EmptyState
-              title="No tools on this booking yet"
-              body="Add the first tool and the system will set a unit aside for the dates above."
-              action={
-                <button type="button" onClick={() => setLines([newLine()])} className="btn-primary">
-                  Add a tool
-                </button>
-              }
-            />
-          </Card>
-        ) : (
-          <ul className="flex flex-col gap-md">
-            {lines.map((line, index) => (
-              <LineEditor
-                key={line.id}
-                line={line}
-                position={index + 1}
-                branch={branchCode}
-                startDate={startDate}
-                endDate={endDate}
-                allocation={allocations[index]}
-                onChange={(next) => updateLine(index, next)}
-                onRemove={() => setLines((current) => current.filter((_, i) => i !== index))}
-                onMoveBranch={(code) => setBranchCode(code)}
-                onShiftPeriod={(start, end) => {
-                  setStartDate(start)
-                  setEndDate(end)
-                }}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="mb-lg">
-        <button
-          type="button"
-          onClick={() => setLines((current) => [...current, newLine()])}
-          className="btn-secondary"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Add another tool
-        </button>
-      </div>
-
-      <Card title="What it comes to">
-        <dl className="tabular grid gap-sm sm:grid-cols-3">
-          <div>
-            <dt className="text-sm text-slate-soft">Hire, {days} {days === 1 ? 'day' : 'days'}</dt>
-            <dd className="text-xl font-semibold text-ink">{money(hireTotal)}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-slate-soft">Deposit held</dt>
-            <dd className="text-xl font-semibold text-ink">{money(depositTotal)}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-slate-soft">Taken on collection</dt>
-            <dd className="text-xl font-semibold text-ink">{money(hireTotal + depositTotal)}</dd>
-          </div>
-        </dl>
-        <p className="mt-md text-sm text-slate-soft">
-          The deposit is refundable. Anything back late carries the model late fee for each day.
-        </p>
-        <button type="button" onClick={confirm} className="btn-primary mt-lg">
-          <CalendarPlus className="h-4 w-4" aria-hidden="true" />
-          Confirm the booking
-        </button>
-      </Card>
-    </div>
+    </>
   )
 }

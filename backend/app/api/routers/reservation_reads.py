@@ -4,7 +4,10 @@ A signed in caller reads one reservation, or a page of them. A customer is
 shown their own and nobody else's, and one that is not theirs is answered 404
 in the words used for one that never existed (BR-42). Counter staff and
 administrators read any customer's reservation at any branch, and may narrow
-a list to one customer or one branch.
+a list to one customer with `customerProfileId` or one branch with
+`branchCode`. The branch filter was first called `branch`, and that name is
+still accepted so a client built against it keeps working. `branchCode` wins
+when both are sent.
 
 A list is newest first. Every reservation in it carries what the caller may do
 to it next, so a screen draws its buttons from the answer.
@@ -37,6 +40,7 @@ from app.api.reservation_schemas import (
     ReservationPageResponse,
     ReservationResponse,
 )
+from app.application.availability.search import BRANCH_PARAMETER
 from app.application.booking.access import ReservationCommand
 from app.application.booking.read_models import (
     DEFAULT_PAGE_SIZE,
@@ -47,6 +51,9 @@ from app.application.booking.read_models import (
 from app.application.booking.read_reservation import ListReservationsQuery
 from app.application.catalogue.read_models import FIRST_PAGE, MAXIMUM_PAGE
 from app.domain.enums import ReservationStatus
+
+# The name the contract gives the branch filter. `branch` is its earlier name.
+BRANCH_CODE_PARAMETER = "branchCode"
 
 router = APIRouter(prefix=RESERVATIONS_PREFIX, tags=[BOOKING_TAG])
 
@@ -71,9 +78,19 @@ def list_reservations(
         UUID | None,
         Query(alias="customerProfileId", description="Only this customer's. Staff only."),
     ] = None,
+    branch_code: Annotated[
+        str | None,
+        Query(
+            alias="branchCode",
+            description="A branch code. Only reservations collected there. Staff only.",
+        ),
+    ] = None,
     branch: Annotated[
         str | None,
-        Query(description="A branch code. Only reservations collected there. Staff only."),
+        Query(
+            description="The earlier name of `branchCode`, still accepted. Staff only.",
+            deprecated=True,
+        ),
     ] = None,
     page: Annotated[
         int, Query(ge=FIRST_PAGE, le=MAXIMUM_PAGE, description="The page, counted from 1.")
@@ -94,17 +111,19 @@ def list_reservations(
         AuthorisationFailure: If a customer narrows the list to another
             customer or to a branch. Mapped to HTTP 403.
         ValidationFailure: If the branch code is not the code of a trading
-            branch. Mapped to HTTP 422, naming `branch`.
+            branch. Mapped to HTTP 422, naming the parameter it was sent in.
 
     """
+    branch_parameter = BRANCH_CODE_PARAMETER if branch_code is not None else BRANCH_PARAMETER
     found = reads.page(
         ListReservationsQuery(
             actor=actor_of(user),
             status=reservation_status,
             customer_profile_id=customer_profile_id,
-            branch_code=branch,
+            branch_code=branch_code if branch_code is not None else branch,
             page=page,
             page_size=page_size,
+            branch_parameter=branch_parameter,
         )
     )
     return reservation_page_response(found)

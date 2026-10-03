@@ -21,9 +21,10 @@
  * such as `fetch`, and return the clock to real time. I also put the session
  * back to how it starts, because it lives in a module and would otherwise
  * carry a signed in account from one test into the next. The hire basket
- * lives in a module too, so it is emptied as well. Web storage is cleared for
- * the same reason, because the session keeps its two markers there and the
- * basket keeps a copy of itself.
+ * lives in a module too, so it is emptied as well, and so does the branch an
+ * administrator chose for the counter, which is forgotten. Web storage is
+ * cleared for the same reason, because the session keeps its two markers there
+ * and the basket and the chosen branch keep a copy of themselves.
  *
  * Every test starts in a browser that has held a session before, which means
  * the session hint is set and start-up asks the API whether there is a
@@ -36,12 +37,14 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import type { MockInstance } from 'vitest'
+import { resetWorkBranchForTests } from '../features/counter/work-branch'
 import { resetBasketForTests } from '../shared/basket-store'
 import { MARKER_VALUE, SESSION_HINT_KEY } from '../shared/session-markers'
 import { resetSessionForTests } from '../shared/session-store'
 
-/** The prefixes of the event names the API client, the session and the basket log. */
-const QUIET_EVENT_PREFIXES = ['api.', 'session.', 'basket.', 'booking.']
+/** The prefixes of the event names the API client, the session, the basket and
+ *  the counter log. */
+const QUIET_EVENT_PREFIXES = ['api.', 'session.', 'basket.', 'booking.', 'counter.']
 
 const CONSOLE_LEVELS = ['info', 'warn', 'error'] as const
 
@@ -67,6 +70,7 @@ afterEach(() => {
   resetBasketForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetWorkBranchForTests()
   consoleSpies.forEach((spy) => spy.mockRestore())
   vi.unstubAllGlobals()
   vi.useRealTimers()

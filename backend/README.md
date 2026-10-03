@@ -27,6 +27,11 @@ first pass at the whole application.
 8. A customer can register, prove their email address, reset a forgotten
    password and edit their own details, and no public account route says
    whether an address has an account.
+9. A counter assistant finds or registers a customer, books for them through
+   the same reservation path a customer uses, and checks the booking out. In
+   one transaction the rental is opened, every unit becomes an item and goes
+   on hire, the hire and the deposit are charged, and the reservation is
+   collected. Two checkouts at once open one rental.
 
 ## Layout
 
@@ -39,7 +44,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases and `sweep_deps.py` wires the sweep that lapses expired holds. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, and `sweep_deps.py` wires the sweep that lapses expired holds. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -52,19 +57,20 @@ layers, the application layer imports the domain and nothing else, and the API
 layer is the only one that imports everything, because it is where the pieces
 are put together.
 
-The design document describes eight modules. Six have code so far, and each
+The design document describes eight modules. Seven have code so far, and each
 keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
-| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
+| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
+| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads` |
 | `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue` | `SqlProductModelRepository`, `SqlCatalogueQuery` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
 | `money` | `Money`, `PricingPolicy`, `StandardPricingPolicy`, `FixedRatePricingPolicy`, `LineSnapshot`, `HireQuote`, `HireTotals` | `QuoteHire` | none yet, a quote writes nothing |
 
-`hire` and `reporting` gain their packages when their first use case is built.
+`reporting` gains its package when its first use case is built.
 The audit trail belongs to no module, because every module writes to
 it, so it has a file of its own in each layer. The throttle in
 `app/application/throttle.py` and the ownership scope in
@@ -212,8 +218,14 @@ reservation.confirm(now=now, email_verified=verified)   # asks HeldState, or is 
 A state checks its guards before it changes anything, so a refused move leaves
 the reservation exactly as it was. The thirty minutes of a hold and the 17:00
 cutoff for a late cancellation are named constants beside the guards that use
-them. `collect`, `mark_no_show` and `close` are built and tested in the states.
-The use cases that call them come with checkout and returns.
+them. Checkout calls `collect`. `mark_no_show` and `close` are built and tested
+in the states, and the use cases that call them come with the no-show sweep
+and with returns.
+
+A tagged unit has a state model of its own, the asset states of the design
+document. `PERMITTED_ASSET_MOVES` in `app/domain/asset_lifecycle.py` is its
+table, and `moved` refuses any move the table does not hold with
+`StateTransitionError`. Checkout moves every unit to `ON_HIRE` through it.
 
 ### The clock
 
@@ -235,6 +247,12 @@ work, no lock and no audit event. A read goes through a query object.
 | `BranchDirectory` | `SqlBranchDirectory` |
 | `CatalogueQuery` | `SqlCatalogueQuery` |
 | `AvailabilityQuery` | `SearchAvailabilityQuery` |
+
+The counter's reads are query objects of the same kind. `SqlCustomerDirectory`
+finds a customer, and `SqlRentalReads` and `SqlCheckoutReads` read a rental and
+a reservation about to be checked out. They are reached through the unit of
+work, because the walk-in and the checkout read back what they have just
+written inside the transaction that wrote it.
 
 A query object selects columns and returns small frozen dataclasses that the
 application layer defines, in the `read_models.py` of each module. It never
@@ -562,7 +580,7 @@ looks at their reservations and cancels one (FR-05 to FR-11).
 | HELD | CONFIRMED | `confirm` | The hold has not run out. Every line holds its quantity. The customer has a verified email address, or staff are confirming for them. The expiry is cleared and the confirmation is queued. |
 | HELD | CANCELLED | `cancel` | The caller owns it or is staff. The units are released with the reason `CANCELLED`. |
 | HELD | EXPIRED | `expire` | The hold has run out. The units are released with the reason `EXPIRED`. |
-| CONFIRMED | COLLECTED | `collect` | Built in the states. The use case comes with checkout. |
+| CONFIRMED | COLLECTED | `collect` | On or after the first day of the hire, by staff at the collection branch. `CheckoutRentalUseCase` makes the move in the transaction that opens the rental. |
 | CONFIRMED | CANCELLED | `cancel` | The caller owns it or is staff, and no rental exists. The units are released. After 17:00 on the day before collection it is counted as a late cancellation. |
 | CONFIRMED | NO_SHOW | `mark_no_show` | Built in the states. The use case comes with the no-show half of the sweep. |
 | COLLECTED | RETURNED | `close` | Built in the states. The use case comes with returns. |
@@ -609,8 +627,15 @@ with `AccountOnHoldError`, which is a 403 (BR-18).
 
 Every change of status writes one audit event in the same transaction (BR-49),
 `reservation.created`, `reservation.held`, `reservation.confirmed`,
-`reservation.cancelled` or `reservation.expired`. The last one has no actor,
-because nobody asks for a sweep.
+`reservation.cancelled`, `reservation.expired` or `reservation.collected`.
+`reservation.expired` has no actor, because nobody asks for a sweep.
+
+**A customer's list leaves out abandoned baskets.** A draft that was replaced
+by a changed basket, or thrown away, is cancelled without ever holding a unit.
+That is not a cancelled booking, so a customer's own list leaves it out. The
+condition is in the statement, an `EXISTS` over the allocations of its lines,
+so the count and the page agree. Staff still list every reservation, and an
+abandoned one can still be read by its key.
 
 Two things here get worse with volume and are worth naming. The list is found
 with OFFSET and counted in full. A customer's own list is short and indexed, so
@@ -626,6 +651,93 @@ property worth knowing. `SKIP LOCKED` lets several requests each lock some of
 the free units, and a request that locked fewer than it needs is refused and
 lets them go. Nobody is ever left half held, but two requests that each wanted
 two of the last three units can both be refused and have to try again.
+
+## Counter bookings and checkout
+
+A counter assistant finds or registers a customer, books for them and hands the
+equipment over with the deposit taken (FR-13, FR-14, FR-17, US-20 to US-22).
+
+**Finding a customer.** `LookUpCustomers` searches by part of a name, by a
+phone number or by the email address of an account, two to eighty characters,
+a page of at most fifty, best match first. An exact phone number or address
+comes first, then a name that starts with the text, then a name with a word
+that starts with it, then any other. Each way of matching stands on an index.
+The name has the trigram index of the baseline. The email reaches its profile
+through the unique index on the address and the unique index on
+`customer_profile.user_account_id`. The phone had only a btree, which finds a
+number typed exactly as it was stored, and a number is stored as the customer
+typed it, for example `082 441 7719`. Revision `0003` adds a trigram index over
+the digits of the number, with the spaces, hyphens, brackets and plus sign
+taken out, and the search writes the same expression, so `0824417719`,
+`082 441` and `7719` all find it. `tests/integration/test_customer_search_index.py`
+asks the planner to prove each of the three is used. The two LIKE wildcards
+are taken out of the text, so a search for `%` finds nobody. The text is logged
+by its length only.
+
+**Registering a walk-in.** `RegisterWalkInUseCase` writes a customer profile
+with no account, so no password exists and nothing is mailed. The details are
+checked by the rules a person registering online is held to, and a trade
+customer needs a company name. Counter staff register at their own branch and
+are refused with 403 for naming another. An administrator belongs to no branch
+and has to name one. The audit event `customer.walk_in_registered` says what
+kind of customer was registered and where, and none of their details.
+
+**Booking at the counter.** There is no second path (FR-14). Staff use the
+reservation routes a customer uses and name the customer in
+`customerProfileId`. Counter staff are held to their own branch on every
+write. Anybody may book for today. A confirmation by staff satisfies the
+verified email rule (BR-47), so a walk-in with no address can be confirmed.
+Staff list reservations at any branch and narrow them with `customerProfileId`,
+`branchCode` and `status`. The branch filter was called `branch` before, and
+that name is still accepted.
+
+**Checking out.** `CheckoutRentalUseCase` does it all in one unit of work. It
+locks the reservation, refuses one at another branch (403), finds any rental
+already opened from it, refuses a reservation that is not confirmed or whose
+hire has not started (409, with a sentence that says which), locks the units
+it holds in tag order, draws the next reference from `rental_reference_seq`,
+and hands the rest to `check_out` in `app/domain/checkout.py`. The domain
+checks that every active allocation is listed exactly once and that the
+agreement is signed (422, naming the field), turns each allocation into one
+rental item with its condition, accessories and meter reading (BR-28), moves
+each unit to `ON_HIRE` through the asset state model with the condition and
+the reading it went out with, and raises two charges from
+`app/domain/checkout_charges.py`.
+
+| Charge | Amount | VAT | Belongs to |
+|---|---|---|---|
+| `HIRE` | The subtotal and the VAT stored on the reservation, never worked out again (BR-20). | 15.00 percent, as stored. | The one unit on a hire of one unit, as in the worked example. The hire as a whole otherwise. |
+| `DEPOSIT_HOLD` | The deposit copied onto each line, added once for every unit collected (BR-27). | None (BR-23). | The hire as a whole. |
+
+Both are written `SETTLED` with a simulated reference such as
+`SIM-TSH-H-26-000099-01` (BR-33). The reservation moves to `COLLECTED` last,
+through its own state. The use case writes `reservation.collected`,
+`rental.checked_out` and one `asset.status_changed` for every unit, and
+commits once. A checkout asked for again finds the rental the first one opened
+and answers 200 with it, writing nothing. Two at once take turns on the lock
+of the reservation, and the unique key on `rental.reservation_id` would refuse
+a second rental if anything got past it.
+
+**Reading a rental.** `ReadRentals` returns a rental by its key or its
+reference, with its items and its charges, in three statements however many
+units it has. The checkout read is two. Three answers belong to the changes
+after this one, and each comes from one function in
+`app/application/hire/progress.py` that its change replaces. Until then
+`daysLateToday` is 0, `lateFeeToday` is `0.00`, `damageAssessment` is
+`NOT_NEEDED`, and `settlementWaitingOn` is `ITEMS_OUT` while a unit is out and
+null once none is. A customer is never shown a tag.
+
+What degrades first as the data grows is the customer search on a short text.
+A trigram index cannot narrow a name pattern of two characters, so a search
+for `al` reads the whole index and sorts every match to find the first page,
+and the page is found with OFFSET. Three characters or more stay cheap, so the
+counter screen should ask for three before it searches. A checkout writes one
+audit event and one update for every unit, which is linear in the units of one
+booking and bounded by the twenty lines of ten units a reservation can carry.
+At a hundred times the volume the lock on the reservation still only makes two
+assistants checking out the same booking wait for each other. Two different
+bookings never wait on one another, unless they share a unit, which the
+exclusion constraint already rules out.
 
 ## The schema
 
@@ -649,6 +761,13 @@ migration creates. A later change to the schema is a new revision.
 The migration is the one authoritative listing of the check constraints, the
 exclusion constraint and the indexes. The models declare columns and keys and
 do not repeat them.
+
+Revision `0003` adds one index and nothing else,
+`ix_customer_profile_phone_digits_trgm`, a trigram index over the digits of
+`customer_profile.contact_phone`, which the counter's customer search reads.
+It is built inside the migration's transaction, which blocks writes to the
+profiles for the moments it takes. A table a hundred times larger would want
+`CREATE INDEX CONCURRENTLY` outside a transaction instead.
 
 ## The seed and the two database roles
 
@@ -746,6 +865,12 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/reservations/{id}/cancellation` | Any active account, as above. |
 | GET | `/api/reservations` | Any active account. A customer sees their own. |
 | GET | `/api/reservations/{id}` | Any active account. Somebody else's is a 404 for a customer. |
+| GET | `/api/reservations/{id}/checkout` | Counter staff and administrators. |
+| POST | `/api/reservations/{id}/checkout` | Counter staff of the collection branch, and administrators. |
+| GET | `/api/rentals/{id}` | Counter staff and administrators. |
+| GET | `/api/customers` | Counter staff and administrators. |
+| POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
+| GET | `/api/customers/{id}` | Counter staff and administrators. |
 | GET | `/api/branches` | Public by declaration. |
 | GET | `/api/catalogue/categories` | Public by declaration. |
 | GET | `/api/catalogue/models` | Public by declaration. |
@@ -806,7 +931,7 @@ reservation or its reference.
 | `POST /api/reservations/{id}/hold` | none | 200 with the reservation, now `HELD`. 409 `asset-unavailable` when a line cannot be fully allocated. 409 `state-transition` when it is not a draft. |
 | `POST /api/reservations/{id}/confirm` | none | 200 with the reservation, now `CONFIRMED`. 409 `state-transition` when the hold has run out or the move is not permitted. 403 `email-not-verified`. |
 | `POST /api/reservations/{id}/cancellation` | `reason`, optional, at most 200 characters | 200 with the reservation, now `CANCELLED`. 409 `state-transition` when it can no longer be cancelled. |
-| `GET /api/reservations` | `status`, `page`, `pageSize` from 1 to 50 and 20 by default. Staff may add `customerProfileId` or `branch` | 200 with `items`, `page`, `pageSize` and `total`, newest first. |
+| `GET /api/reservations` | `status`, `page`, `pageSize` from 1 to 50 and 20 by default. Staff may add `customerProfileId` or `branchCode`, and `branch` is still accepted for `branchCode` | 200 with `items`, `page`, `pageSize` and `total`, newest first. A customer's list leaves out abandoned baskets. |
 | `GET /api/reservations/{id}` | none | 200 with the reservation. 404 when it does not exist or is not the caller's. |
 
 A reservation carries `id`, `reference`, `status`, `branchCode`, `branchName`,
@@ -828,6 +953,25 @@ name on the wire, for example `body.to` or `body.lines.0.modelSlug`. A value a
 rule refused carries a plain sentence. A value the framework refused for its
 type carries the framework's own wording, as every request body does. No
 sentence names a business rule. The rule goes to the log.
+
+### The counter routes
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/customers` | `q` of 2 to 80 characters, `page`, `pageSize` | 200 with `items` of `CustomerSummary`, `page`, `pageSize` and `total`, best match first. 422 naming `query.q`. |
+| `POST /api/customers` | `displayName`, `phone`, `idDocumentType`, `idDocumentLast4`, the four billing fields, `customerType`, `companyName`, `vatNumber`, `branchCode` | 201 with the `CustomerSummary` and a `Location` header. 422 naming the field, and `branchCode` when an administrator names none. 403 `branch-scope` when counter staff name another branch. |
+| `GET /api/customers/{id}` | none | 200 with the `CustomerSummary`. 404 when there is no such customer. |
+| `GET /api/reservations/{id}/checkout` | none | 200 with the reservation, its customer, its units, `hireTotalIncVat`, `depositTotal`, `canCheckOut`, `refusal` and `rentalId`. 404. |
+| `POST /api/reservations/{id}/checkout` | `items` of `allocationId`, `conditionOut`, `accessoriesOut` and `hourMeterOut`, and `agreementSigned` | 201 with the `Rental` and a `Location` header. 200 with the existing rental when it was already checked out. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming the field. |
+| `GET /api/rentals/{id}` | none | 200 with the `Rental`. 404 when there is no such rental. |
+
+`CustomerSummary` carries `id`, `displayName`, `email`, `phone`, `hasLogin`,
+`emailVerified`, `customerType`, `companyName`, `idDocumentType`,
+`idDocumentLast4`, `billingSuburb`, `billingCity`, `accountStatus`,
+`tradeDiscountPercent`, `noShowCount` and `homeBranchCode`. A walk-in has a
+null `email` and `hasLogin` false. A `Rental` carries what the contract gives
+it, with its `items` and its `charges`, and `{id}` of a rental is its key or
+its reference.
 
 ### The public catalogue, availability and quote routes
 
@@ -1148,6 +1292,21 @@ prove on PostgreSQL that the account and the profile commit together or not at
 all, that the token columns hold only hashes, that every step writes its audit
 event, and that registration and the lockout work within the grants of the
 application role.
+
+Counter bookings and checkout are tested at every level too. `tests/unit`
+holds the rules of a checkout, the deposit, the hire charge, the asset state
+model, the rental and a walk-in's details with no database at all, and the
+views with read models built by hand. `tests/api` asks the checkout routes for
+every refusal in `reservation_checkout_refusals.py`, pins the shapes of the
+rental, the checkout read and `CustomerSummary`, and counts the statements of
+both reads for one unit and for two. On PostgreSQL,
+`test_checkout_transaction.py` makes a checkout fail at the audit write, at the
+commit and on a quarantined unit and finds nothing kept,
+`test_checkout_race.py` posts two checkouts of one reservation at once from two
+threads and finds one rental, `test_rental_schema_keys.py` proves the keys
+behind them, `test_abandoned_baskets.py` reads the customer's list, and
+`test_rental_reads_like_the_worked_example.py` compares a rental opened at the
+counter with the seeded worked example.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

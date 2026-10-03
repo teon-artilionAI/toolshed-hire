@@ -31,6 +31,7 @@ from app.domain.customer_account import CustomerDetails, NewCustomer
 from app.domain.enums import RevokeReason
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.session import RefreshSession
+from app.domain.walk_in import WalkInCustomer
 
 
 class EmailAlreadyRegistered(Exception):
@@ -100,6 +101,10 @@ class CustomerRepository(Protocol):
         self, *, user_account_id: UUID, registered_branch_id: UUID, customer: NewCustomer
     ) -> UUID:
         """Write the profile of somebody who has just registered and return its key."""
+        ...
+
+    def add_walk_in(self, *, registered_branch_id: UUID, customer: WalkInCustomer) -> UUID:
+        """Write the profile of a walk-in, which has no account, and return its key."""
         ...
 
     def details_for_account(

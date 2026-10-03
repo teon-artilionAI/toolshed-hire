@@ -12,6 +12,7 @@ object.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
@@ -38,6 +39,10 @@ class ProductModelRepository(Protocol):
         draft cannot be booked and cannot be told apart from a slug nobody
         ever used.
         """
+        ...
+
+    def names_of(self, product_model_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Return the display name of each product model asked for, by its key, in one read."""
         ...
 
 

@@ -70,9 +70,11 @@ export const RESET_LINK_INVALID = 'reset-link-invalid'
 /** The identity documents the API accepts, in the order a menu lists them. */
 export const ID_DOCUMENT_TYPES: readonly IdDocumentType[] = ['SA_ID', 'PASSPORT', 'DRIVING_LICENCE']
 
-const CUSTOMER_TYPES: readonly CustomerType[] = ['INDIVIDUAL', 'TRADE']
+/** Whether a customer hires as a member of the public or as a trade account. */
+export const CUSTOMER_TYPES: readonly CustomerType[] = ['INDIVIDUAL', 'TRADE']
 
-const ACCOUNT_STATUSES: readonly AccountStatus[] = ['ACTIVE', 'ON_HOLD', 'BLACKLISTED']
+/** Where a customer account can stand. */
+export const ACCOUNT_STATUSES: readonly AccountStatus[] = ['ACTIVE', 'ON_HOLD', 'BLACKLISTED']
 
 const PUBLIC_ROUTE = { skipSessionRenewal: true } as const
 

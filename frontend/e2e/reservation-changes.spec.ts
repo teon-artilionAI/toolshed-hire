@@ -10,6 +10,9 @@
  *   asked for, in the server's own sentence, and the basket can be changed and
  *   tried again. The draft that was replaced is cancelled.
  * - A reload in the middle of a hold picks the same reservation up.
+ * - A draft that was replaced before it held anything is an abandoned basket
+ *   and not a cancelled booking, so the server leaves it out of My Hires. The
+ *   one that was held and then released is a cancelled booking and stays.
  * - A review the customer walks away from stays behind as a booking that was
  *   not finished. My Hires leaves it out until the filter asks for it.
  *
@@ -167,15 +170,17 @@ test.describe('a basket that changes, against the real backend', () => {
     const [firstDraft, refusedDraft, held, unfinished] = await made.references()
     expect(unfinished).toBeDefined()
 
-    // SC-07. The three that were replaced or released are cancelled, and the
-    // one that was held has both models on its one row.
+    // SC-07. The one that was held and released is cancelled, with both models
+    // on its one row. The two drafts that were replaced before they held
+    // anything are abandoned baskets, and the server leaves them out.
     await page.goto('/reservations')
     await expect(page.getByRole('heading', { level: 1, name: 'My hires' })).toBeVisible()
     const list = page.getByRole('region', { name: 'My bookings' })
-    for (const reference of [firstDraft, refusedDraft, held]) {
-      await expect(bookingRow(page, reference)).toContainText('Cancelled')
-    }
+    await expect(bookingRow(page, held)).toContainText('Cancelled')
     await expect(bookingRow(page, held)).toContainText(`1 x ${first.name}, 1 x ${second.name}`)
+    for (const abandoned of [firstDraft, refusedDraft]) {
+      await expect(bookingRow(page, abandoned)).toHaveCount(0)
+    }
 
     // The unfinished one is left out, and the list says that something was.
     await expect(bookingRow(page, unfinished)).toHaveCount(0)

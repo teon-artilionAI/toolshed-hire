@@ -1,273 +1,174 @@
 /**
- * One line of a booking, for SC-13.
+ * One line of a counter booking, for SC-13.
  *
- * The conflict case lives here. When a unit is already spoken for, the
- * screen says which booking has it and until when, and then offers the
- * three answers a counter assistant would give out loud: another unit,
- * another branch, or different dates. Nothing is hidden behind a generic
- * "not available".
+ * A model, how many of it, and whether that many are free at this branch for
+ * the whole period. The answer comes from the single model availability route,
+ * which also applies the shortest and longest hire of the model, and it is
+ * asked again whenever the quantity or the dates change. It says free or not
+ * free and never a count.
+ *
+ * The units themselves are picked by the server when the booking is held.
+ * Nobody chooses a unit here, so a booking can never be tied to a unit that
+ * another booking already has.
  */
 
-import { Trash2 } from 'lucide-react'
-import { Field, Notice, StatusPill } from '../../shared/ui'
-import { productModels } from '../../shared/fixtures'
-import { daysBetween, formatDate, money } from '../../shared/format'
-import type { BranchCode } from '../../shared/types'
-import { modelById } from './counter-desk-data'
-import type { BookingLineDraft, LineAllocation, UnitState } from './counter-availability'
-import { branchAvailability, nextFreePeriod, unitStateSummary } from './counter-availability'
+import { useQuery } from '@tanstack/react-query'
+import { AlertCircle, Ban, CircleCheck, Loader2, Minus, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { MAX_QUANTITY, MIN_QUANTITY } from '../../shared/api/catalogue'
+import { catalogueQueries } from '../../shared/api/catalogue-queries'
+import { queryPhase } from '../../shared/api/query-phase'
+import type { DraftLine } from './booking-draft'
+import { describeCounterFailure } from './counter-refusal'
+import type { CounterBranch } from './work-branch-gate'
 
-/** Every unit shows a label as well as a colour, so the state survives
- *  greyscale and colour blindness. */
-const PILL: Record<UnitState['kind'], { status: string; label: string }> = {
-  free: { status: 'AVAILABLE', label: 'Free' },
-  'out-of-service': { status: 'QUARANTINED', label: 'Not hireable' },
-  'still-out': { status: 'ON_HIRE', label: 'Still out' },
-  clash: { status: 'RESERVED', label: 'Spoken for' },
+function LineAvailability({
+  line,
+  branch,
+  period,
+}: {
+  line: DraftLine
+  branch: CounterBranch
+  /** Null while the dates cannot be asked about. */
+  period: { from: string; to: string } | null
+}) {
+  const answer = useQuery({
+    ...catalogueQueries.modelAvailability(line.modelSlug, {
+      from: period?.from ?? '',
+      to: period?.to ?? '',
+      quantity: line.quantity,
+    }),
+    enabled: period !== null,
+  })
+  const phase = queryPhase(answer)
+  const units = `${line.quantity} ${line.quantity === 1 ? 'unit' : 'units'}`
+
+  if (period === null) {
+    return <p className="text-sm text-slate-soft">Choose the dates to see whether it is free.</p>
+  }
+  if (phase === 'loading' || phase === 'idle') {
+    return (
+      <p className="flex items-center gap-xs text-sm text-slate-soft">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        Checking {units} at {branch.name}
+      </p>
+    )
+  }
+  if (phase === 'failed') {
+    const refusal = describeCounterFailure(answer.error)
+    return (
+      <div className="flex flex-wrap items-center gap-sm text-sm text-status-overdue">
+        <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>{refusal.kind === 'fault' ? 'We could not check whether it is free.' : refusal.detail}</span>
+        {refusal.kind === 'fault' && (
+          <button type="button" className="btn-ghost px-sm" onClick={() => void answer.refetch()}>
+            <RotateCw className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Check again
+          </button>
+        )}
+      </div>
+    )
+  }
+  const here = answer.data?.branches.find((candidate) => candidate.branchCode === branch.code)
+  const free = here?.available === true
+  const Icon = free ? CircleCheck : Ban
+  return (
+    <p
+      className={`flex items-start gap-xs text-sm font-medium ${
+        free ? 'text-status-available' : 'text-status-overdue'
+      }`}
+    >
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      {free
+        ? `${units} free at ${branch.name} for these dates`
+        : `${units} not free at ${branch.name} for these dates. Lower the quantity, change the dates or remove it.`}
+    </p>
+  )
 }
 
 export default function LineEditor({
   line,
   position,
   branch,
-  startDate,
-  endDate,
-  allocation,
-  onChange,
+  period,
+  error,
+  disabled,
+  onQuantity,
   onRemove,
-  onMoveBranch,
-  onShiftPeriod,
 }: {
-  line: BookingLineDraft
+  line: DraftLine
+  /** Where the line sits, counted from one, so each control has its own name. */
   position: number
-  branch: BranchCode
-  startDate: string
-  endDate: string
-  allocation: LineAllocation
-  onChange: (line: BookingLineDraft) => void
+  branch: CounterBranch
+  period: { from: string; to: string } | null
+  /** What the API said about this line, when it refused it. */
+  error?: string
+  disabled: boolean
+  onQuantity: (quantity: number) => void
   onRemove: () => void
-  onMoveBranch: (code: BranchCode) => void
-  onShiftPeriod: (start: string, end: string) => void
 }) {
-  const model = modelById(line.modelId)
-  const days = Math.max(1, daysBetween(startDate, endDate))
-  const hire = model.dailyRate * days * line.quantity
-  const deposit = model.depositAmount * line.quantity
-  const modeName = `line-${line.id}-mode`
-
-  function toggleUnit(assetId: string) {
-    const picked = line.assetIds.includes(assetId)
-      ? line.assetIds.filter((id) => id !== assetId)
-      : [...line.assetIds, assetId]
-    onChange({ ...line, mode: 'MANUAL', assetIds: picked })
-  }
-
-  /** Swap the line onto a unit that is free, keeping any good picks. */
-  function swapOnto(assetId: string) {
-    const keep = allocation.chosen
-      .filter((u) => u.state.kind === 'free')
-      .map((u) => u.asset.id)
-      .filter((id) => id !== assetId)
-    onChange({
-      ...line,
-      mode: 'MANUAL',
-      assetIds: [...keep, assetId].slice(-line.quantity),
-    })
-  }
-
-  const elsewhere = branchAvailability(line.modelId, startDate, endDate).filter(
-    (option) => option.branch.code !== branch,
-  )
-  const blockedUnit = allocation.blocked[0]?.asset ?? allocation.units[0]?.asset
-  const shift = blockedUnit ? nextFreePeriod(blockedUnit, startDate, endDate) : undefined
-  const alternatives = allocation.free.filter(
-    (asset) => !allocation.chosen.some((u) => u.asset.id === asset.id),
-  )
-
+  const id = `line-${position}-quantity`
   return (
-    <li className="card p-lg">
-      <div className="mb-md flex flex-wrap items-end gap-md">
-        <div className="min-w-[16rem] flex-1">
-          <Field label={`Tool ${position}`} htmlFor={`line-${line.id}-model`}>
-            <select
-              id={`line-${line.id}-model`}
-              className="field-input cursor-pointer"
-              value={line.modelId}
-              onChange={(event) =>
-                onChange({ ...line, modelId: event.target.value, assetIds: [] })
-              }
-            >
-              {productModels.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.manufacturer} {option.name}
-                  {option.published ? '' : ' (not on the website)'}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        <div className="w-28">
-          <Field label="How many" htmlFor={`line-${line.id}-qty`}>
-            <input
-              id={`line-${line.id}-qty`}
-              type="number"
-              min={1}
-              max={5}
-              className="field-input tabular"
-              value={line.quantity}
-              onChange={(event) =>
-                onChange({
-                  ...line,
-                  quantity: Math.min(5, Math.max(1, Number(event.target.value) || 1)),
-                })
-              }
-            />
-          </Field>
-        </div>
-
-        <button type="button" onClick={onRemove} className="btn-secondary">
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          Remove
-        </button>
-      </div>
-
-      <fieldset className="mb-md">
-        <legend className="field-label">Which unit goes out</legend>
-        <div className="flex flex-wrap gap-sm">
-          {(['AUTO', 'MANUAL'] as const).map((mode) => (
-            <label
-              key={mode}
-              className="flex min-h-[2.75rem] cursor-pointer items-center gap-sm rounded border border-line px-md py-sm text-sm transition-colors duration-200 hover:bg-muted"
-            >
-              <input
-                type="radio"
-                name={modeName}
-                className="h-5 w-5 cursor-pointer"
-                checked={line.mode === mode}
-                onChange={() => onChange({ ...line, mode, assetIds: [] })}
-              />
-              {mode === 'AUTO' ? 'Let the system pick' : 'Choose the unit myself'}
+    <li className="rounded border border-line bg-surface p-md">
+      <div className="flex flex-wrap items-end justify-between gap-md">
+        <p className="min-w-0 break-words font-medium text-ink">
+          <span className="sr-only">Tool {position}, </span>
+          {line.modelName}
+        </p>
+        <div className="flex flex-wrap items-end gap-sm">
+          <div>
+            <label className="field-label" htmlFor={id}>
+              How many
             </label>
-          ))}
+            <div className="flex items-center gap-sm">
+              <button
+                type="button"
+                className="btn-secondary w-11 shrink-0 px-0"
+                disabled={disabled || line.quantity <= MIN_QUANTITY}
+                onClick={() => onQuantity(line.quantity - 1)}
+              >
+                <Minus className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">One fewer {line.modelName}</span>
+              </button>
+              <input
+                id={id}
+                type="number"
+                inputMode="numeric"
+                className="field-input tabular w-20 text-center"
+                value={line.quantity}
+                min={MIN_QUANTITY}
+                max={MAX_QUANTITY}
+                disabled={disabled}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? `${id}-error` : undefined}
+                onChange={(event) => onQuantity(Number.parseInt(event.target.value, 10) || MIN_QUANTITY)}
+              />
+              <button
+                type="button"
+                className="btn-secondary w-11 shrink-0 px-0"
+                disabled={disabled || line.quantity >= MAX_QUANTITY}
+                onClick={() => onQuantity(line.quantity + 1)}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">One more {line.modelName}</span>
+              </button>
+            </div>
+          </div>
+          <button type="button" className="btn-secondary px-md" disabled={disabled} onClick={onRemove}>
+            <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Remove{' '}
+            <span className="sr-only">{line.modelName}</span>
+          </button>
         </div>
-      </fieldset>
-
-      {line.mode === 'MANUAL' ? (
-        <fieldset className="mb-md">
-          <legend className="field-label">
-            Units at this branch, {line.assetIds.length} of {line.quantity} picked
-          </legend>
-          {allocation.units.length === 0 ? (
-            <p className="text-sm text-slate-soft">
-              This branch does not carry {model.name}. Try another branch below.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-sm">
-              {allocation.units.map(({ asset, state }) => (
-                <li key={asset.id}>
-                  <label className="flex min-h-[2.75rem] cursor-pointer flex-wrap items-center gap-sm rounded border border-line px-md py-sm transition-colors duration-200 hover:bg-muted">
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 cursor-pointer"
-                      checked={line.assetIds.includes(asset.id)}
-                      onChange={() => toggleUnit(asset.id)}
-                    />
-                    <span className="font-mono text-sm text-ink">{asset.tag}</span>
-                    <StatusPill status={PILL[state.kind].status} label={PILL[state.kind].label} />
-                    <span className="text-sm text-slate-soft">{unitStateSummary(state)}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-        </fieldset>
-      ) : (
-        <p className="mb-md text-sm text-slate-soft">
-          {allocation.chosen.length > 0
-            ? `Set aside: ${allocation.chosen.map((u) => u.asset.tag).join(', ')}.`
-            : 'Nothing of this model is free at this branch for these dates.'}
+      </div>
+      {error && (
+        <p className="field-error" id={`${id}-error`}>
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </p>
       )}
-
-      {allocation.problem && (
-        <div className="mb-md">
-          <Notice tone="error" title={allocation.problem}>
-            <ul className="mb-sm flex flex-col gap-xs">
-              {allocation.blocked.map(({ asset, state }) => (
-                <li key={asset.id}>
-                  <span className="font-mono">{asset.tag}</span>: {unitStateSummary(state)}
-                </li>
-              ))}
-            </ul>
-            <p className="font-medium">Three ways to fix this.</p>
-
-            <div className="mt-sm flex flex-col gap-sm">
-              <div>
-                <p className="text-sm">1. Another unit at this branch</p>
-                {alternatives.length === 0 ? (
-                  <p className="text-sm text-slate-soft">
-                    Nothing else of this model is free here for these dates.
-                  </p>
-                ) : (
-                  <div className="mt-xs flex flex-wrap gap-sm">
-                    {alternatives.map((asset) => (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        onClick={() => swapOnto(asset.id)}
-                        className="btn-secondary font-mono"
-                      >
-                        Use {asset.tag}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <p className="text-sm">2. Another branch</p>
-                <div className="mt-xs flex flex-wrap gap-sm">
-                  {elsewhere.map((option) => (
-                    <button
-                      key={option.branch.code}
-                      type="button"
-                      disabled={option.free.length < line.quantity}
-                      onClick={() => onMoveBranch(option.branch.code)}
-                      className="btn-secondary"
-                    >
-                      {option.branch.name}, {option.free.length} free
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm">3. Different dates</p>
-                {shift ? (
-                  <button
-                    type="button"
-                    onClick={() => onShiftPeriod(shift.startDate, shift.endDate)}
-                    className="btn-secondary mt-xs"
-                  >
-                    Shift to {formatDate(shift.startDate)} to {formatDate(shift.endDate)}
-                  </button>
-                ) : (
-                  <p className="text-sm text-slate-soft">
-                    No later date frees this unit within the next few weeks.
-                  </p>
-                )}
-              </div>
-            </div>
-          </Notice>
-        </div>
-      )}
-
-      <p className="tabular text-sm text-slate-soft">
-        {line.quantity} x {days} {days === 1 ? 'day' : 'days'} at {money(model.dailyRate)} a day is{' '}
-        <span className="font-medium text-ink">{money(hire)}</span>, plus {money(deposit)} deposit
-        held.
-      </p>
+      <div className="mt-sm">
+        <LineAvailability line={line} branch={branch} period={period} />
+      </div>
     </li>
   )
 }

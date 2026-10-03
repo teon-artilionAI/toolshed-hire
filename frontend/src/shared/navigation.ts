@@ -71,9 +71,11 @@ export const SCREENS: ScreenDef[] = [
   // Counter staff, SC-10 to SC-18
   { id: 'SC-10', path: '/counter', name: 'Counter Dashboard', navLabel: 'Today', role: 'counter', live: false, inNav: true, icon: 'LayoutDashboard' },
   { id: 'SC-11', path: '/counter/diary', name: 'Branch Diary', navLabel: 'Diary', role: 'counter', live: false, inNav: true, icon: 'CalendarRange' },
-  { id: 'SC-12', path: '/counter/customers', name: 'Customer Lookup and Walk-in Registration', navLabel: 'Customers', role: 'counter', live: false, inNav: true, icon: 'Users' },
-  { id: 'SC-13', path: '/counter/booking', name: 'New Booking and Asset Allocation', navLabel: 'New Booking', role: 'counter', live: false, inNav: true, icon: 'CalendarPlus' },
-  { id: 'SC-14', path: '/counter/checkout/:rentalId', name: 'Checkout and Deposit', role: 'counter', live: false },
+  { id: 'SC-12', path: '/counter/customers', name: 'Customer Lookup and Walk-in Registration', navLabel: 'Customers', role: 'counter', live: true, inNav: true, icon: 'Users' },
+  { id: 'SC-13', path: '/counter/booking', name: 'New Booking and Asset Allocation', navLabel: 'New Booking', role: 'counter', live: true, inNav: true, icon: 'CalendarPlus' },
+  // The value is the key of a reservation or its reference, because a checkout
+  // hands a confirmed reservation over and makes the hire from it.
+  { id: 'SC-14', path: '/counter/checkout/:reservationId', name: 'Checkout and Deposit', role: 'counter', live: true },
   { id: 'SC-15', path: '/counter/return/:rentalId', name: 'Return and Condition Inspection', role: 'counter', live: false },
   { id: 'SC-16', path: '/counter/damage/:assetId', name: 'Damage Report Capture', role: 'counter', live: false },
   { id: 'SC-17', path: '/counter/locator', name: 'Asset Locator', navLabel: 'Locator', role: 'counter', live: false, inNav: true, icon: 'MapPin' },

@@ -139,7 +139,8 @@ class ExpireHoldsAndNoShowsUseCase(UseCase[SweepCommand, SweepResult]):
 
     The design document gives this use case two halves. The half that lapses
     holds is built. The half that marks a confirmed reservation as not
-    collected (BR-17) comes with checkout, and its place is marked below.
+    collected (BR-17) comes with the counter overview, the change after
+    checkout, and its place is marked below.
     """
 
     def execute(self, command: SweepCommand) -> SweepResult:

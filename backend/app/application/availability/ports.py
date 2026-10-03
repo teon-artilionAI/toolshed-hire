@@ -78,3 +78,15 @@ class AssetRepository(Protocol):
 
         """
         ...
+
+    def lock_units(self, asset_ids: Sequence[UUID]) -> list[Asset]:
+        """Lock and return particular units, in asset tag order, to change their status.
+
+        A unit another transaction is changing is waited for, not skipped,
+        because these are the units of one booking and no other will do.
+        """
+        ...
+
+    def save_units(self, assets: Sequence[Asset]) -> None:
+        """Write the status, the condition and the meter reading of units locked earlier."""
+        ...

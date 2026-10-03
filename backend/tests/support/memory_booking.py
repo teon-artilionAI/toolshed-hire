@@ -7,7 +7,8 @@ transaction commits and thrown away when it does not.
 
 It applies the scope of the caller the way the SQL repository does. A
 reservation that belongs to somebody else is answered as though it did not
-exist, so a use case can be tested for the refusal with no database.
+exist, so a use case can be tested for the refusal with no database. A
+customer's own list leaves out the baskets they abandoned, as the SQL one does.
 
 It makes no attempt at locking. `find_for_update` and `lock_due_holds` return
 what they find at once. The row locks are proved against PostgreSQL in
@@ -94,7 +95,9 @@ class MemoryReservations:
         matching = [
             reservation
             for reservation in reversed(self._working.reservations)
-            if self._is_within(reservation, scope) and _matches(reservation, search)
+            if self._is_within(reservation, scope)
+            and _matches(reservation, search)
+            and not (scope.is_restricted and _is_an_abandoned_basket(reservation))
         ]
         page = matching[search.offset : search.offset + search.page_size]
         return ReservationPage(
@@ -175,6 +178,16 @@ class MemoryReservations:
             allocated_count=len(tags),
             asset_tags=tuple(tags),
         )
+
+
+def _is_an_abandoned_basket(reservation: Reservation) -> bool:
+    """Return True for a reservation cancelled without ever holding a unit.
+
+    The SQL reads leave these out of a customer's own list, and so does this.
+    """
+    return reservation.status is ReservationStatus.CANCELLED and not any(
+        line.allocations for line in reservation.lines
+    )
 
 
 def _matches(reservation: Reservation, search: ReservationSearch) -> bool:

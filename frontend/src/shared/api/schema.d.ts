@@ -277,6 +277,58 @@ export interface paths {
         patch: operations["patch_profile_api_me_profile_patch"];
         trace?: never;
     };
+    "/api/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find customers by name, phone or email, best match first
+         * @description Return one page of the customers the text matches.
+         */
+        get: operations["search_customers_api_customers_get"];
+        put?: never;
+        /**
+         * Register a walk-in customer who has no login
+         * @description Register the walk-in and answer with the customer and a `Location` header.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field is refused, or an administrator names no
+         *             branch. HTTP 422, naming the field.
+         *         BranchScopeError: If counter staff name another branch. HTTP 403.
+         */
+        post: operations["post_walk_in_api_customers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one customer
+         * @description Return the customer, or 404 when there is none with this key.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer profile with this key. HTTP 404.
+         */
+        get: operations["read_customer_api_customers__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations": {
         parameters: {
             query?: never;
@@ -292,7 +344,7 @@ export interface paths {
          *         AuthorisationFailure: If a customer narrows the list to another
          *             customer or to a branch. Mapped to HTTP 403.
          *         ValidationFailure: If the branch code is not the code of a trading
-         *             branch. Mapped to HTTP 422, naming `branch`.
+         *             branch. Mapped to HTTP 422, naming the parameter it was sent in.
          */
         get: operations["list_reservations_api_reservations_get"];
         put?: never;
@@ -405,6 +457,64 @@ export interface paths {
          *             HTTP 404.
          */
         get: operations["read_reservation_api_reservations__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return what the counter needs to check a reservation out
+         * @description Return the reservation, its units and whether the caller may check it out now.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         */
+        get: operations["read_checkout_api_reservations__id__checkout_get"];
+        put?: never;
+        /**
+         * Check a confirmed reservation out, opening its rental
+         * @description Hand the equipment over in one transaction, or answer with the rental already opened.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         *         BranchScopeError: If counter staff check out at another branch. HTTP 403.
+         *         StateTransitionError: If the reservation is not confirmed or its hire
+         *             has not started. HTTP 409.
+         *         ValidationFailure: If the list of units is wrong or the agreement is
+         *             not signed. HTTP 422, naming the field.
+         */
+        post: operations["post_checkout_api_reservations__id__checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one rental, by its key or its reference
+         * @description Return the rental, or 404 when it does not exist.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         */
+        get: operations["read_rental_api_rentals__id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -692,6 +802,164 @@ export interface components {
             modelCount: number;
         };
         /**
+         * ChargeResponse
+         * @description One money line on a rental. A deposit release is a negative amount.
+         */
+        ChargeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            type: components["schemas"]["ChargeType"];
+            /** Description */
+            description: string;
+            /** Amountexvat */
+            amountExVat: string;
+            /** Vatrate */
+            vatRate: string;
+            /** Vatamount */
+            vatAmount: string;
+            /** Amountincvat */
+            amountIncVat: string;
+            status: components["schemas"]["ChargeStatus"];
+            /** Raisedat */
+            raisedAt: string;
+            /** Rentalitemid */
+            rentalItemId: string | null;
+        };
+        /**
+         * ChargeStatus
+         * @description Where a charge stands. A settled charge is never edited (BR-24).
+         * @enum {string}
+         */
+        ChargeStatus: "PENDING" | "SETTLED" | "WAIVED" | "REVERSED";
+        /**
+         * ChargeType
+         * @description What a money line on a rental is for. Deposit movements are charges too.
+         * @enum {string}
+         */
+        ChargeType: "HIRE" | "DEPOSIT_HOLD" | "DEPOSIT_RELEASE" | "DEPOSIT_FORFEIT" | "LATE_FEE" | "DAMAGE_RECOVERY" | "CLEANING" | "ADJUSTMENT";
+        /**
+         * CheckoutCustomerResponse
+         * @description The customer the equipment is handed to.
+         */
+        CheckoutCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Displayname */
+            displayName: string;
+            /** Phone */
+            phone: string;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            accountStatus: components["schemas"]["AccountStatus"];
+        };
+        /**
+         * CheckoutItemRequest
+         * @description What the counter records about one unit as it goes out.
+         */
+        CheckoutItemRequest: {
+            /**
+             * Allocationid
+             * Format: uuid
+             */
+            allocationId: string;
+            conditionOut: components["schemas"]["ConditionGrade"];
+            /** Accessoriesout */
+            accessoriesOut?: string | null;
+            /** Hourmeterout */
+            hourMeterOut?: number | null;
+        };
+        /**
+         * CheckoutPreviewResponse
+         * @description What the counter needs to hand the equipment of a reservation over.
+         *
+         *     `refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once
+         *     the reservation has been collected.
+         */
+        CheckoutPreviewResponse: {
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["ReservationStatus"];
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            customer: components["schemas"]["CheckoutCustomerResponse"];
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Hiredays */
+            hireDays: number;
+            /** Units */
+            units: components["schemas"]["CheckoutUnitResponse"][];
+            /** Hiretotalincvat */
+            hireTotalIncVat: string;
+            /** Deposittotal */
+            depositTotal: string;
+            /** Cancheckout */
+            canCheckOut: boolean;
+            /** Refusal */
+            refusal: string | null;
+            /** Rentalid */
+            rentalId: string | null;
+        };
+        /**
+         * CheckoutRequest
+         * @description Every unit of the reservation, once each, and the customer's signature.
+         */
+        CheckoutRequest: {
+            /** Items */
+            items: components["schemas"]["CheckoutItemRequest"][];
+            /** Agreementsigned */
+            agreementSigned: boolean;
+        };
+        /**
+         * CheckoutUnitResponse
+         * @description One unit the reservation holds, as the counter hands it over.
+         */
+        CheckoutUnitResponse: {
+            /**
+             * Allocationid
+             * Format: uuid
+             */
+            allocationId: string;
+            /** Assettag */
+            assetTag: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /** Hourmeter */
+            hourMeter: number | null;
+            /** Depositperunit */
+            depositPerUnit: string;
+        };
+        /**
+         * ConditionGrade
+         * @description Condition grade recorded at checkout and return. A is best.
+         * @enum {string}
+         */
+        ConditionGrade: "A" | "B" | "C";
+        /**
          * CreateReservationRequest
          * @description A request for a draft reservation.
          *
@@ -720,11 +988,71 @@ export interface components {
             notes?: string | null;
         };
         /**
+         * CustomerPageResponse
+         * @description One page of the customers a search found, best match first.
+         */
+        CustomerPageResponse: {
+            /** Items */
+            items: components["schemas"]["CustomerSummaryResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * CustomerSummaryResponse
+         * @description A customer as the counter sees one.
+         *
+         *     `email` is null and `hasLogin` is false for a walk-in, who has no account.
+         */
+        CustomerSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Displayname */
+            displayName: string;
+            /** Email */
+            email: string | null;
+            /** Phone */
+            phone: string;
+            /** Haslogin */
+            hasLogin: boolean;
+            /** Emailverified */
+            emailVerified: boolean;
+            customerType: components["schemas"]["CustomerType"];
+            /** Companyname */
+            companyName: string | null;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            accountStatus: components["schemas"]["AccountStatus"];
+            /** Tradediscountpercent */
+            tradeDiscountPercent: string;
+            /** Noshowcount */
+            noShowCount: number;
+            /** Homebranchcode */
+            homeBranchCode: string;
+        };
+        /**
          * CustomerType
          * @description Whether a customer hires as a member of the public or as a trade account.
          * @enum {string}
          */
         CustomerType: "INDIVIDUAL" | "TRADE";
+        /**
+         * DamageAssessment
+         * @description Whether a unit that came back still waits for its damage to be assessed.
+         * @enum {string}
+         */
+        DamageAssessment: "NOT_NEEDED" | "REQUIRED" | "DONE";
         /**
          * EmailDeliverableResponse
          * @description Whether a message for the address would be delivered in this environment.
@@ -1114,6 +1442,120 @@ export interface components {
             acceptsPrivacyNotice: true;
         };
         /**
+         * RentalItemResponse
+         * @description One unit on a rental.
+         *
+         *     `daysLateToday` and `lateFeeToday` are what the late fee would be if the
+         *     unit came back today, worked out on the server.
+         */
+        RentalItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assettag */
+            assetTag: string | null;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            conditionOut: components["schemas"]["ConditionGrade"];
+            conditionIn: components["schemas"]["ConditionGrade"] | null;
+            /** Hourmeterout */
+            hourMeterOut: number | null;
+            /** Hourmeterin */
+            hourMeterIn: number | null;
+            /** Accessoriesout */
+            accessoriesOut: string | null;
+            /** Accessoriesin */
+            accessoriesIn: string | null;
+            /** Returnedat */
+            returnedAt: string | null;
+            /** Dayslate */
+            daysLate: number;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+            /** Dayslatetoday */
+            daysLateToday: number;
+            /** Latefeetoday */
+            lateFeeToday: string;
+            damageAssessment: components["schemas"]["DamageAssessment"];
+        };
+        /**
+         * RentalResponse
+         * @description One rental, as the caller is allowed to see it.
+         */
+        RentalResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["RentalStatus"];
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reservationreference */
+            reservationReference: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /**
+             * Customerprofileid
+             * Format: uuid
+             */
+            customerProfileId: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Checkedoutat */
+            checkedOutAt: string;
+            /** Returnedat */
+            returnedAt: string | null;
+            /** Items */
+            items: components["schemas"]["RentalItemResponse"][];
+            /** Charges */
+            charges: components["schemas"]["ChargeResponse"][];
+            /** Depositheld */
+            depositHeld: string;
+            /** Depositwithheld */
+            depositWithheld: string;
+            /** Depositrefunded */
+            depositRefunded: string;
+            /** Balancedue */
+            balanceDue: string;
+            /** Settledat */
+            settledAt: string | null;
+            /** Agreementsigned */
+            agreementSigned: boolean;
+            /** Canreturn */
+            canReturn: boolean;
+            settlementWaitingOn: components["schemas"]["SettlementWait"] | null;
+        };
+        /**
+         * RentalStatus
+         * @description Rental lifecycle status, governed by BR-29, BR-52 and BR-53.
+         * @enum {string}
+         */
+        RentalStatus: "OPEN" | "OVERDUE" | "PARTIALLY_RETURNED" | "RETURNED" | "SETTLED";
+        /**
          * ReservationLineRequest
          * @description One model and how many of it.
          */
@@ -1232,6 +1674,12 @@ export interface components {
          */
         ReservationStatus: "DRAFT" | "HELD" | "CONFIRMED" | "COLLECTED" | "RETURNED" | "CANCELLED" | "NO_SHOW" | "EXPIRED";
         /**
+         * SettlementWait
+         * @description What a rental is waiting on before its deposit can be settled.
+         * @enum {string}
+         */
+        SettlementWait: "ITEMS_OUT" | "DAMAGE_ASSESSMENT" | "BALANCE_PAYMENT";
+        /**
          * TokenRequest
          * @description The token of a verification link.
          */
@@ -1314,6 +1762,39 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, unknown>;
+        };
+        /**
+         * WalkInRequest
+         * @description What the counter records to register a customer who has no login.
+         *
+         *     `branchCode` is for an administrator, who belongs to no branch. Counter
+         *     staff may leave it out, and the customer is registered at their branch.
+         *     `companyName` is required for a trade customer.
+         */
+        WalkInRequest: {
+            /** Displayname */
+            displayName: string;
+            /** Phone */
+            phone: string;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingaddressline1 */
+            billingAddressLine1: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            /** Billingpostalcode */
+            billingPostalCode: string;
+            /** @default INDIVIDUAL */
+            customerType: components["schemas"]["CustomerType"];
+            /** Companyname */
+            companyName?: string | null;
+            /** Vatnumber */
+            vatNumber?: string | null;
+            /** Branchcode */
+            branchCode?: string | null;
         };
     };
     responses: never;
@@ -1752,6 +2233,134 @@ export interface operations {
             };
         };
     };
+    search_customers_api_customers_get: {
+        parameters: {
+            query: {
+                /** @description Part of a name, a phone number or an email address. */
+                q: string;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many customers a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerPageResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_walk_in_api_customers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_customer_api_customers__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_reservations_api_reservations_get: {
         parameters: {
             query?: {
@@ -1760,6 +2369,11 @@ export interface operations {
                 /** @description Only this customer's. Staff only. */
                 customerProfileId?: string | null;
                 /** @description A branch code. Only reservations collected there. Staff only. */
+                branchCode?: string | null;
+                /**
+                 * @deprecated
+                 * @description The earlier name of `branchCode`, still accepted. Staff only.
+                 */
                 branch?: string | null;
                 /** @description The page, counted from 1. */
                 page?: number;
@@ -2046,6 +2660,158 @@ export interface operations {
                 };
             };
             /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_checkout_api_reservations__id__checkout_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreviewResponse"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_checkout_api_reservations__id__checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description The reservation was already checked out. The rental it opened, unchanged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The reservation is not confirmed or its hire has not started, and `detail` says which, or a unit cannot go out on hire. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_rental_api_rentals__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description There is no such rental. */
             404: {
                 headers: {
                     [name: string]: unknown;

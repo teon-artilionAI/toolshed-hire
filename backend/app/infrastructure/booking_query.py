@@ -7,7 +7,9 @@ of the units those lines hold. Nothing loops over the database.
 
 Ownership is in the query (BR-42). A restricted scope adds a condition on the
 account of the customer profile to the same statement that finds the
-reservation, so a reservation that belongs to somebody else is never read.
+reservation, so a reservation that belongs to somebody else is never read. A
+customer's list also leaves out a reservation that was cancelled without ever
+holding a unit, which is an abandoned basket and not a cancelled booking.
 
 A list is ordered newest first. The reference breaks a tie between two
 reservations created in the same instant. It comes from a sequence, so the
@@ -29,7 +31,7 @@ from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func
+from sqlalchemy import ColumnElement, func, or_
 from sqlmodel import Session, col, select
 from sqlmodel.sql.expression import Select
 
@@ -41,6 +43,7 @@ from app.application.booking.read_models import (
     ReservationSearch,
 )
 from app.application.ownership import OwnerScope
+from app.domain.enums import ReservationStatus
 from app.domain.policies.pricing import NO_DISCOUNT_PERCENT
 from app.infrastructure.booking_mapping import in_utc, required_utc
 from app.infrastructure.models import (
@@ -94,8 +97,14 @@ class SqlReservationReads:
         return self._details_of([found])[0]
 
     def search(self, search: ReservationSearch, scope: OwnerScope) -> ReservationPage:
-        """Return one page of the reservations that match, newest first."""
+        """Return one page of the reservations that match, newest first.
+
+        A customer's own list leaves out the baskets they abandoned, in the
+        statement itself, so the count and the page agree.
+        """
         conditions = [*_search_conditions(search), *_scope_conditions(scope)]
+        if scope.is_restricted:
+            conditions.append(_not_an_abandoned_basket())
         filters: dict[str, object] = {
             "status": search.status.value if search.status else None,
             "narrowed_to_customer": search.customer_profile_id is not None,
@@ -211,6 +220,25 @@ def _scope_conditions(scope: OwnerScope) -> list[ColumnElement[bool]]:
     if scope.customer_user_id is None:
         return []
     return [col(CustomerProfile.user_account_id) == scope.customer_user_id]
+
+
+def _not_an_abandoned_basket() -> ColumnElement[bool]:
+    """Return the condition that leaves out a reservation cancelled before it held a unit.
+
+    Such a reservation is a draft that was thrown away or replaced by a changed
+    basket. A reservation that ever held a unit keeps the allocation as
+    history, because nothing is deleted (BR-51), so one with no allocation at
+    all never held one. The two indexes the existence test reads through are
+    the unique key on a line's reservation and model, and
+    `ix_asset_allocation_line`.
+    """
+    ever_held_a_unit = (
+        select(col(AssetAllocation.id))
+        .join(ReservationLine, col(ReservationLine.id) == col(AssetAllocation.reservation_line_id))
+        .where(col(ReservationLine.reservation_id) == col(Reservation.id))
+        .exists()
+    )
+    return or_(col(Reservation.status) != ReservationStatus.CANCELLED, ever_held_a_unit)
 
 
 def _search_conditions(search: ReservationSearch) -> list[ColumnElement[bool]]:

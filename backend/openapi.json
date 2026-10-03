@@ -472,6 +472,197 @@
         }
       }
     },
+    "/api/customers": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Find customers by name, phone or email, best match first",
+        "description": "Return one page of the customers the text matches.",
+        "operationId": "search_customers_api_customers_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 80,
+              "description": "Part of a name, a phone number or an email address.",
+              "title": "Q"
+            },
+            "description": "Part of a name, a phone number or an email address."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "How many customers a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many customers a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not staff, or counter staff named another branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Register a walk-in customer who has no login",
+        "description": "Register the walk-in and answer with the customer and a `Location` header.\n\nRaises:\n    ValidationFailure: If a field is refused, or an administrator names no\n        branch. HTTP 422, naming the field.\n    BranchScopeError: If counter staff name another branch. HTTP 403.",
+        "operationId": "post_walk_in_api_customers_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalkInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummaryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not staff, or counter staff named another branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{id}": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Return one customer",
+        "description": "Return the customer, or 404 when there is none with this key.\n\nRaises:\n    NotFound: If there is no customer profile with this key. HTTP 404.",
+        "operationId": "read_customer_api_customers__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the customer.",
+              "title": "Id"
+            },
+            "description": "The key of the customer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummaryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no customer with this key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reservations": {
       "post": {
         "tags": [
@@ -528,7 +719,7 @@
           "booking"
         ],
         "summary": "List reservations, newest first",
-        "description": "Return one page of the reservations the caller may see.\n\nRaises:\n    AuthorisationFailure: If a customer narrows the list to another\n        customer or to a branch. Mapped to HTTP 403.\n    ValidationFailure: If the branch code is not the code of a trading\n        branch. Mapped to HTTP 422, naming `branch`.",
+        "description": "Return one page of the reservations the caller may see.\n\nRaises:\n    AuthorisationFailure: If a customer narrows the list to another\n        customer or to a branch. Mapped to HTTP 403.\n    ValidationFailure: If the branch code is not the code of a trading\n        branch. Mapped to HTTP 422, naming the parameter it was sent in.",
         "operationId": "list_reservations_api_reservations_get",
         "parameters": [
           {
@@ -569,7 +760,7 @@
             "description": "Only this customer's. Staff only."
           },
           {
-            "name": "branch",
+            "name": "branchCode",
             "in": "query",
             "required": false,
             "schema": {
@@ -582,9 +773,29 @@
                 }
               ],
               "description": "A branch code. Only reservations collected there. Staff only.",
-              "title": "Branch"
+              "title": "Branchcode"
             },
             "description": "A branch code. Only reservations collected there. Staff only."
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The earlier name of `branchCode`, still accepted. Staff only.",
+              "deprecated": true,
+              "title": "Branch"
+            },
+            "description": "The earlier name of `branchCode`, still accepted. Staff only.",
+            "deprecated": true
           },
           {
             "name": "page",
@@ -933,6 +1144,208 @@
           },
           "404": {
             "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/{id}/checkout": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return what the counter needs to check a reservation out",
+        "description": "Return the reservation, its units and whether the caller may check it out now.\n\nRaises:\n    NotFound: If there is no such reservation. HTTP 404.",
+        "operationId": "read_checkout_api_reservations__id__checkout_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutPreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Check a confirmed reservation out, opening its rental",
+        "description": "Hand the equipment over in one transaction, or answer with the rental already opened.\n\nRaises:\n    NotFound: If there is no such reservation. HTTP 404.\n    BranchScopeError: If counter staff check out at another branch. HTTP 403.\n    StateTransitionError: If the reservation is not confirmed or its hire\n        has not started. HTTP 409.\n    ValidationFailure: If the list of units is wrong or the agreement is\n        not signed. HTTP 422, naming the field.",
+        "operationId": "post_checkout_api_reservations__id__checkout_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The reservation was already checked out. The rental it opened, unchanged."
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The reservation is not confirmed or its hire has not started, and `detail` says which, or a unit cannot go out on hire.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rentals/{id}": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return one rental, by its key or its reference",
+        "description": "Return the rental, or 404 when it does not exist.\n\nRaises:\n    NotFound: If there is no such rental. HTTP 404.",
+        "operationId": "read_rental_api_rentals__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the rental, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the rental, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such rental.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1731,6 +2144,370 @@
         "title": "CategoryResponse",
         "description": "One active category. `parentCode` is null for a top level category."
       },
+      "ChargeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChargeType"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "amountExVat": {
+            "type": "string",
+            "title": "Amountexvat"
+          },
+          "vatRate": {
+            "type": "string",
+            "title": "Vatrate"
+          },
+          "vatAmount": {
+            "type": "string",
+            "title": "Vatamount"
+          },
+          "amountIncVat": {
+            "type": "string",
+            "title": "Amountincvat"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChargeStatus"
+          },
+          "raisedAt": {
+            "type": "string",
+            "title": "Raisedat"
+          },
+          "rentalItemId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalitemid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "description",
+          "amountExVat",
+          "vatRate",
+          "vatAmount",
+          "amountIncVat",
+          "status",
+          "raisedAt",
+          "rentalItemId"
+        ],
+        "title": "ChargeResponse",
+        "description": "One money line on a rental. A deposit release is a negative amount."
+      },
+      "ChargeStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "SETTLED",
+          "WAIVED",
+          "REVERSED"
+        ],
+        "title": "ChargeStatus",
+        "description": "Where a charge stands. A settled charge is never edited (BR-24)."
+      },
+      "ChargeType": {
+        "type": "string",
+        "enum": [
+          "HIRE",
+          "DEPOSIT_HOLD",
+          "DEPOSIT_RELEASE",
+          "DEPOSIT_FORFEIT",
+          "LATE_FEE",
+          "DAMAGE_RECOVERY",
+          "CLEANING",
+          "ADJUSTMENT"
+        ],
+        "title": "ChargeType",
+        "description": "What a money line on a rental is for. Deposit movements are charges too."
+      },
+      "CheckoutCustomerResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "displayName": {
+            "type": "string",
+            "title": "Displayname"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "idDocumentType": {
+            "$ref": "#/components/schemas/IdDocType"
+          },
+          "idDocumentLast4": {
+            "type": "string",
+            "title": "Iddocumentlast4"
+          },
+          "accountStatus": {
+            "$ref": "#/components/schemas/AccountStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "phone",
+          "idDocumentType",
+          "idDocumentLast4",
+          "accountStatus"
+        ],
+        "title": "CheckoutCustomerResponse",
+        "description": "The customer the equipment is handed to."
+      },
+      "CheckoutItemRequest": {
+        "properties": {
+          "allocationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Allocationid"
+          },
+          "conditionOut": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "accessoriesOut": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessoriesout"
+          },
+          "hourMeterOut": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterout"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allocationId",
+          "conditionOut"
+        ],
+        "title": "CheckoutItemRequest",
+        "description": "What the counter records about one unit as it goes out."
+      },
+      "CheckoutPreviewResponse": {
+        "properties": {
+          "reservationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reservationid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReservationStatus"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CheckoutCustomerResponse"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "hireDays": {
+            "type": "integer",
+            "title": "Hiredays"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutUnitResponse"
+            },
+            "type": "array",
+            "title": "Units"
+          },
+          "hireTotalIncVat": {
+            "type": "string",
+            "title": "Hiretotalincvat"
+          },
+          "depositTotal": {
+            "type": "string",
+            "title": "Deposittotal"
+          },
+          "canCheckOut": {
+            "type": "boolean",
+            "title": "Cancheckout"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
+          },
+          "rentalId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reservationId",
+          "reference",
+          "status",
+          "branchCode",
+          "branchName",
+          "customer",
+          "from",
+          "to",
+          "hireDays",
+          "units",
+          "hireTotalIncVat",
+          "depositTotal",
+          "canCheckOut",
+          "refusal",
+          "rentalId"
+        ],
+        "title": "CheckoutPreviewResponse",
+        "description": "What the counter needs to hand the equipment of a reservation over.\n\n`refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once\nthe reservation has been collected."
+      },
+      "CheckoutRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutItemRequest"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items"
+          },
+          "agreementSigned": {
+            "type": "boolean",
+            "title": "Agreementsigned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "agreementSigned"
+        ],
+        "title": "CheckoutRequest",
+        "description": "Every unit of the reservation, once each, and the customer's signature."
+      },
+      "CheckoutUnitResponse": {
+        "properties": {
+          "allocationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Allocationid"
+          },
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "hourMeter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeter"
+          },
+          "depositPerUnit": {
+            "type": "string",
+            "title": "Depositperunit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "allocationId",
+          "assetTag",
+          "modelName",
+          "modelSlug",
+          "conditionGrade",
+          "hourMeter",
+          "depositPerUnit"
+        ],
+        "title": "CheckoutUnitResponse",
+        "description": "One unit the reservation holds, as the counter hands it over."
+      },
+      "ConditionGrade": {
+        "type": "string",
+        "enum": [
+          "A",
+          "B",
+          "C"
+        ],
+        "title": "ConditionGrade",
+        "description": "Condition grade recorded at checkout and return. A is best."
+      },
       "CreateReservationRequest": {
         "properties": {
           "branchCode": {
@@ -1793,6 +2570,139 @@
         "title": "CreateReservationRequest",
         "description": "A request for a draft reservation.\n\nThe period is half open. `to` is the day the equipment comes back and is\nnot charged. `customerProfileId` is for staff, who book for a named\ncustomer. A customer leaves it null and books for themselves."
       },
+      "CustomerPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerSummaryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "CustomerPageResponse",
+        "description": "One page of the customers a search found, best match first."
+      },
+      "CustomerSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "displayName": {
+            "type": "string",
+            "title": "Displayname"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "hasLogin": {
+            "type": "boolean",
+            "title": "Haslogin"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "title": "Emailverified"
+          },
+          "customerType": {
+            "$ref": "#/components/schemas/CustomerType"
+          },
+          "companyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Companyname"
+          },
+          "idDocumentType": {
+            "$ref": "#/components/schemas/IdDocType"
+          },
+          "idDocumentLast4": {
+            "type": "string",
+            "title": "Iddocumentlast4"
+          },
+          "billingSuburb": {
+            "type": "string",
+            "title": "Billingsuburb"
+          },
+          "billingCity": {
+            "type": "string",
+            "title": "Billingcity"
+          },
+          "accountStatus": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "tradeDiscountPercent": {
+            "type": "string",
+            "title": "Tradediscountpercent"
+          },
+          "noShowCount": {
+            "type": "integer",
+            "title": "Noshowcount"
+          },
+          "homeBranchCode": {
+            "type": "string",
+            "title": "Homebranchcode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "email",
+          "phone",
+          "hasLogin",
+          "emailVerified",
+          "customerType",
+          "companyName",
+          "idDocumentType",
+          "idDocumentLast4",
+          "billingSuburb",
+          "billingCity",
+          "accountStatus",
+          "tradeDiscountPercent",
+          "noShowCount",
+          "homeBranchCode"
+        ],
+        "title": "CustomerSummaryResponse",
+        "description": "A customer as the counter sees one.\n\n`email` is null and `hasLogin` is false for a walk-in, who has no account."
+      },
       "CustomerType": {
         "type": "string",
         "enum": [
@@ -1801,6 +2711,16 @@
         ],
         "title": "CustomerType",
         "description": "Whether a customer hires as a member of the public or as a trade account."
+      },
+      "DamageAssessment": {
+        "type": "string",
+        "enum": [
+          "NOT_NEEDED",
+          "REQUIRED",
+          "DONE"
+        ],
+        "title": "DamageAssessment",
+        "description": "Whether a unit that came back still waits for its damage to be assessed."
       },
       "EmailDeliverableResponse": {
         "properties": {
@@ -2686,6 +3606,313 @@
         "title": "RegisterRequest",
         "description": "What a person sends to open a customer account.\n\nOnly the last four characters of the identity document are sent. The full\nnumber never reaches the service."
       },
+      "RentalItemResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "assetTag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assettag"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "conditionOut": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "conditionIn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConditionGrade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hourMeterOut": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterout"
+          },
+          "hourMeterIn": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterin"
+          },
+          "accessoriesOut": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessoriesout"
+          },
+          "accessoriesIn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessoriesin"
+          },
+          "returnedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returnedat"
+          },
+          "daysLate": {
+            "type": "integer",
+            "title": "Dayslate"
+          },
+          "lateFeePerDay": {
+            "type": "string",
+            "title": "Latefeeperday"
+          },
+          "daysLateToday": {
+            "type": "integer",
+            "title": "Dayslatetoday"
+          },
+          "lateFeeToday": {
+            "type": "string",
+            "title": "Latefeetoday"
+          },
+          "damageAssessment": {
+            "$ref": "#/components/schemas/DamageAssessment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "assetTag",
+          "modelName",
+          "modelSlug",
+          "conditionOut",
+          "conditionIn",
+          "hourMeterOut",
+          "hourMeterIn",
+          "accessoriesOut",
+          "accessoriesIn",
+          "returnedAt",
+          "daysLate",
+          "lateFeePerDay",
+          "daysLateToday",
+          "lateFeeToday",
+          "damageAssessment"
+        ],
+        "title": "RentalItemResponse",
+        "description": "One unit on a rental.\n\n`daysLateToday` and `lateFeeToday` are what the late fee would be if the\nunit came back today, worked out on the server."
+      },
+      "RentalResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RentalStatus"
+          },
+          "reservationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reservationid"
+          },
+          "reservationReference": {
+            "type": "string",
+            "title": "Reservationreference"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "customerProfileId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Customerprofileid"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerPhone": {
+            "type": "string",
+            "title": "Customerphone"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "dueBackOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Duebackon"
+          },
+          "checkedOutAt": {
+            "type": "string",
+            "title": "Checkedoutat"
+          },
+          "returnedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returnedat"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RentalItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "charges": {
+            "items": {
+              "$ref": "#/components/schemas/ChargeResponse"
+            },
+            "type": "array",
+            "title": "Charges"
+          },
+          "depositHeld": {
+            "type": "string",
+            "title": "Depositheld"
+          },
+          "depositWithheld": {
+            "type": "string",
+            "title": "Depositwithheld"
+          },
+          "depositRefunded": {
+            "type": "string",
+            "title": "Depositrefunded"
+          },
+          "balanceDue": {
+            "type": "string",
+            "title": "Balancedue"
+          },
+          "settledAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settledat"
+          },
+          "agreementSigned": {
+            "type": "boolean",
+            "title": "Agreementsigned"
+          },
+          "canReturn": {
+            "type": "boolean",
+            "title": "Canreturn"
+          },
+          "settlementWaitingOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettlementWait"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "reference",
+          "status",
+          "reservationId",
+          "reservationReference",
+          "branchCode",
+          "branchName",
+          "customerProfileId",
+          "customerName",
+          "customerPhone",
+          "from",
+          "dueBackOn",
+          "checkedOutAt",
+          "returnedAt",
+          "items",
+          "charges",
+          "depositHeld",
+          "depositWithheld",
+          "depositRefunded",
+          "balanceDue",
+          "settledAt",
+          "agreementSigned",
+          "canReturn",
+          "settlementWaitingOn"
+        ],
+        "title": "RentalResponse",
+        "description": "One rental, as the caller is allowed to see it."
+      },
+      "RentalStatus": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "OVERDUE",
+          "PARTIALLY_RETURNED",
+          "RETURNED",
+          "SETTLED"
+        ],
+        "title": "RentalStatus",
+        "description": "Rental lifecycle status, governed by BR-29, BR-52 and BR-53."
+      },
       "ReservationLineRequest": {
         "properties": {
           "modelSlug": {
@@ -2970,6 +4197,16 @@
         "title": "ReservationStatus",
         "description": "Reservation lifecycle status, governed by the State pattern in the domain."
       },
+      "SettlementWait": {
+        "type": "string",
+        "enum": [
+          "ITEMS_OUT",
+          "DAMAGE_ASSESSMENT",
+          "BALANCE_PAYMENT"
+        ],
+        "title": "SettlementWait",
+        "description": "What a rental is waiting on before its deposit can be settled."
+      },
       "TokenRequest": {
         "properties": {
           "token": {
@@ -3137,6 +4374,109 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WalkInRequest": {
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Displayname"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Phone"
+          },
+          "idDocumentType": {
+            "$ref": "#/components/schemas/IdDocType"
+          },
+          "idDocumentLast4": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{4}$",
+            "title": "Iddocumentlast4"
+          },
+          "billingAddressLine1": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Billingaddressline1"
+          },
+          "billingSuburb": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Billingsuburb"
+          },
+          "billingCity": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Billingcity"
+          },
+          "billingPostalCode": {
+            "type": "string",
+            "maxLength": 10,
+            "minLength": 1,
+            "title": "Billingpostalcode"
+          },
+          "customerType": {
+            "$ref": "#/components/schemas/CustomerType",
+            "default": "INDIVIDUAL"
+          },
+          "companyName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Companyname"
+          },
+          "vatNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vatnumber"
+          },
+          "branchCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "displayName",
+          "phone",
+          "idDocumentType",
+          "idDocumentLast4",
+          "billingAddressLine1",
+          "billingSuburb",
+          "billingCity",
+          "billingPostalCode"
+        ],
+        "title": "WalkInRequest",
+        "description": "What the counter records to register a customer who has no login.\n\n`branchCode` is for an administrator, who belongs to no branch. Counter\nstaff may leave it out, and the customer is registered at their branch.\n`companyName` is required for a trade customer."
       }
     }
   }

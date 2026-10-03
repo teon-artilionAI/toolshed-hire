@@ -4,12 +4,13 @@ The two repositories map the SQLModel table classes to the small domain
 entities a booking needs, and they run on the session of the unit of work that
 created them. The branch repository only reads. The customer repository also
 counts a late cancellation on the profile (BR-16), writes the profile of
-somebody who has just registered, and reads and writes a customer's own
-details. Those details span two rows, the profile and the account behind it,
-and one statement reads both with the code of the home branch.
+somebody who has just registered or of a walk-in the counter registers, and
+reads and writes a customer's own details. Those details span two rows, the
+profile and the account behind it, and one statement reads both with the code
+of the home branch.
 
-`SqlBranchDirectory` is the read side. It lists the trading branches for a
-visitor and returns read models, never a table row.
+The read sides are elsewhere. `SqlBranchDirectory` lists the trading branches
+for a visitor, and `SqlCustomerDirectory` finds a customer for the counter.
 """
 
 from __future__ import annotations
@@ -22,13 +23,12 @@ from uuid import UUID, uuid4
 from sqlalchemy import ColumnElement, update
 from sqlmodel import Session, col, select
 
-from app.application.identity.read_models import BranchListing
 from app.domain import identity as domain
 from app.domain.business_time import in_business_time
 from app.domain.customer_account import CustomerDetails, NewCustomer
+from app.domain.walk_in import WalkInCustomer
 from app.infrastructure.booking_mapping import required_utc
 from app.infrastructure.models import Branch, CustomerProfile, UserAccount
-from app.infrastructure.query_log import logged_query
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,37 @@ class SqlCustomerRepository:
         logger.info("identity.customer_profile_added", extra=added)
         return profile_id
 
+    def add_walk_in(self, *, registered_branch_id: UUID, customer: WalkInCustomer) -> UUID:
+        """Write the profile of a walk-in, which has no account, and return its key."""
+        profile_id = uuid4()
+        details = customer.details
+        self._session.add(
+            CustomerProfile(
+                id=profile_id,
+                user_account_id=None,
+                customer_type=customer.customer_type,
+                display_name=details.full_name,
+                company_name=customer.company_name,
+                vat_number=customer.vat_number,
+                id_document_type=details.id_document_type,
+                id_document_last4=details.id_document_last4,
+                contact_phone=details.phone,
+                billing_address_line1=details.billing_address_line1,
+                billing_suburb=details.billing_suburb,
+                billing_city=details.billing_city,
+                billing_postal_code=details.billing_postal_code,
+                account_status=details.account_status,
+                trade_discount_percent=details.trade_discount_percent,
+                registered_branch_id=registered_branch_id,
+            )
+        )
+        self._session.flush()
+        logger.info(
+            "identity.walk_in_profile_added",
+            extra={"customer_profile_id": str(profile_id), "branch_id": str(registered_branch_id)},
+        )
+        return profile_id
+
     def details_for_account(
         self, user_account_id: UUID, *, for_update: bool = False
     ) -> CustomerDetails | None:
@@ -233,42 +264,6 @@ class SqlCustomerRepository:
             trade_discount_percent=Decimal(row.trade_discount_percent),
             email_verified=email_verified_at is not None,
         )
-
-
-class SqlBranchDirectory:
-    """Lists the trading branches through one session."""
-
-    def __init__(self, session: Session) -> None:
-        """Bind the directory to the session of the request."""
-        self._session = session
-
-    def list_active(self) -> list[BranchListing]:
-        """Return every active branch, ordered by name and then by code.
-
-        The code breaks a tie between two branches of the same name, so the
-        order is the same on every call. An availability search lists its
-        branches in this order too.
-        """
-        statement = (
-            select(Branch)
-            .where(col(Branch.is_active))
-            .order_by(col(Branch.name), col(Branch.code))
-        )
-        with logged_query(logger, "identity.branch_directory", {"active_only": True}) as outcome:
-            rows = self._session.exec(statement).all()
-            outcome.row_count = len(rows)
-        return [
-            BranchListing(
-                code=row.code,
-                name=row.name,
-                suburb=row.suburb,
-                city=row.city,
-                phone=row.phone,
-                opens_at=row.opens_at,
-                closes_at=row.closes_at,
-            )
-            for row in rows
-        ]
 
 
 def _details_of(

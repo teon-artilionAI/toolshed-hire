@@ -1,201 +1,101 @@
 /**
- * The first three panels of the SC-14 checkout wizard: tags, condition and
- * accessories. Nothing here is used outside SC-14.
+ * The units of a handover on SC-14, one block each.
+ *
+ * For each unit the assistant reads the tag off the unit and ticks it, records
+ * the grade it goes out in, notes what goes with it, and reads the hour meter
+ * when the unit has one. The grade starts at the one the unit has now and the
+ * meter at its last reading, so most units need only the tick.
+ *
+ * Every control is tied to its own message, and every target is at least 44
+ * pixels, because this is filled in standing at a counter.
  */
 
-import type { ChangeEvent } from 'react'
-import type { ConditionGrade } from '../../shared/types'
-import { Field } from '../../shared/ui'
-import type { CheckoutRow, ItemDraft } from './SC14-checkout-model'
-import { CONDITION_GRADES, CONDITION_LABEL } from './SC14-checkout-model'
+import { MAX_ACCESSORIES_LENGTH } from '../../shared/api/checkout'
+import type { CheckoutUnit } from '../../shared/api/contract'
+import { CONDITION_GRADES } from '../../shared/api/rental-read'
+import { money } from '../../shared/format'
+import { CheckRow, SelectInput, TextInput } from './counter-fields'
+import { CONDITION_GRADE_LABEL } from './counter-labels'
+import { unitControlId } from './checkout-form'
+import type { CheckoutErrors, UnitDraft } from './checkout-form'
 
-/** A checkbox big enough to hit on a phone, with the whole row as target. */
-export function CheckRow({
-  id,
-  checked,
-  onChange,
-  title,
-  detail,
-  mono = false,
-}: {
-  id: string
-  checked: boolean
-  onChange: (next: boolean) => void
-  title: string
-  detail?: string
-  mono?: boolean
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className="flex min-h-[2.75rem] cursor-pointer items-start gap-sm rounded border border-line p-sm transition-colors duration-200 hover:bg-muted"
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
-        className="mt-xs h-5 w-5 shrink-0 cursor-pointer accent-accent"
-      />
-      <span className="min-w-0">
-        <span
-          className={`block text-sm font-medium text-ink ${mono ? 'font-mono' : ''}`}
-        >
-          {title}
-        </span>
-        {detail && <span className="mt-xs block text-sm text-slate-soft">{detail}</span>}
-      </span>
-    </label>
-  )
-}
+const GRADE_OPTIONS = CONDITION_GRADES.map((grade) => ({ value: grade, label: CONDITION_GRADE_LABEL[grade] }))
 
-export function TagStep({
-  rows,
-  draft,
-  onToggle,
-}: {
-  rows: CheckoutRow[]
-  draft: Record<string, ItemDraft>
-  onToggle: (itemId: string, next: boolean) => void
-}) {
-  return (
-    <div className="flex flex-col gap-md">
-      <p className="text-sm text-slate-soft">
-        Read the tag on each unit out loud and tick it off. If a tag does not
-        match, stop and fix the allocation before anything leaves the yard.
-      </p>
-      <div className="flex flex-col gap-sm">
-        {rows.map((row) => (
-          <CheckRow
-            key={row.itemId}
-            id={`tag-${row.itemId}`}
-            checked={draft[row.itemId].tagConfirmed}
-            onChange={(next) => onToggle(row.itemId, next)}
-            title={row.tag}
-            detail={`${row.manufacturer} ${row.modelName}`}
-            mono
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-export function ConditionStep({
-  rows,
-  draft,
+export function UnitFields({
+  unit,
+  index,
+  answers,
+  errors,
+  disabled,
   onChange,
 }: {
-  rows: CheckoutRow[]
-  draft: Record<string, ItemDraft>
-  onChange: (itemId: string, patch: Partial<ItemDraft>) => void
+  unit: CheckoutUnit
+  /** Where the unit sits on the reservation, counted from zero. */
+  index: number
+  answers: UnitDraft
+  errors: CheckoutErrors
+  disabled: boolean
+  onChange: (patch: Partial<UnitDraft>) => void
 }) {
+  const id = (control: Parameters<typeof unitControlId>[1]) => unitControlId(index, control)
   return (
-    <div className="flex flex-col gap-lg">
-      <p className="text-sm text-slate-soft">
-        Record what the unit looks like as it goes out. This is the reading the
-        return inspection is measured against, so a grade written down now
-        settles an argument later.
+    <fieldset className="min-w-0 rounded-lg border border-line bg-surface p-md shadow-card" disabled={disabled}>
+      <legend className="rounded bg-surface px-xs font-mono text-sm font-semibold text-ink">{unit.assetTag}</legend>
+      <p className="mb-md text-sm text-slate-soft">
+        {unit.modelName}. Its grade now is {CONDITION_GRADE_LABEL[unit.conditionGrade]}. Deposit{' '}
+        {money(unit.depositPerUnit)}.
       </p>
-      {rows.map((row) => (
-        <div key={row.itemId} className="rounded border border-line p-md">
-          <p className="font-mono text-sm font-medium text-ink">{row.tag}</p>
-          <p className="mb-md text-sm text-slate-soft">
-            {row.manufacturer} {row.modelName}, last graded{' '}
-            {CONDITION_LABEL[row.conditionOnFile]}
+
+      <CheckRow
+        id={id('tag')}
+        checked={answers.tagRead}
+        onChange={(tagRead) => onChange({ tagRead })}
+        error={errors[id('tag')]}
+      >
+        I have read the tag on the unit and it says <span className="font-mono">{unit.assetTag}</span>
+      </CheckRow>
+
+      <div className="mt-md grid gap-md sm:grid-cols-2">
+        <SelectInput
+          id={id('condition')}
+          label="Condition going out"
+          value={answers.conditionOut}
+          onChange={(value) => {
+            const grade = CONDITION_GRADES.find((known) => known === value)
+            if (grade) onChange({ conditionOut: grade })
+          }}
+          options={GRADE_OPTIONS}
+          error={errors[id('condition')]}
+        />
+        {unit.hourMeter === null ? (
+          <p className="self-end rounded bg-muted p-sm text-sm text-slate-soft">
+            This unit has no hour meter, so there is nothing to read.
           </p>
-
-          <div className="grid gap-md sm:grid-cols-2">
-            <Field label="Condition going out" htmlFor={`cond-${row.itemId}`}>
-              <select
-                id={`cond-${row.itemId}`}
-                className="field-input cursor-pointer"
-                value={draft[row.itemId].conditionOut}
-                onChange={(e) =>
-                  onChange(row.itemId, {
-                    conditionOut: e.target.value as ConditionGrade,
-                  })
-                }
-              >
-                {CONDITION_GRADES.map((grade) => (
-                  <option key={grade} value={grade}>
-                    {CONDITION_LABEL[grade]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            {row.hasMeter ? (
-              <Field
-                label="Hour meter reading"
-                htmlFor={`meter-${row.itemId}`}
-                help={`Last recorded reading, ${row.meterOnFile ?? 0} hours.`}
-              >
-                <input
-                  id={`meter-${row.itemId}`}
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  className="field-input tabular"
-                  value={draft[row.itemId].meter}
-                  onChange={(e) => onChange(row.itemId, { meter: e.target.value })}
-                />
-              </Field>
-            ) : (
-              <p className="self-end rounded bg-muted p-sm text-sm text-slate-soft">
-                This unit has no hour meter, so there is nothing to read.
-              </p>
-            )}
-          </div>
-
-          <div className="mt-md">
-            <Field
-              label="Anything worth noting"
-              htmlFor={`note-${row.itemId}`}
-              help="Optional. Scratches, a missing sticker, a stiff trigger."
-            >
-              <input
-                id={`note-${row.itemId}`}
-                type="text"
-                className="field-input"
-                value={draft[row.itemId].note}
-                onChange={(e) => onChange(row.itemId, { note: e.target.value })}
-                placeholder="Scuffed housing on the left side"
-              />
-            </Field>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export function AccessoryStep({
-  accessories,
-  checked,
-  onToggle,
-}: {
-  accessories: string[]
-  checked: Record<string, boolean>
-  onToggle: (item: string, next: boolean) => void
-}) {
-  return (
-    <div className="flex flex-col gap-md">
-      <p className="text-sm text-slate-soft">
-        Tick what actually goes over the counter. Anything left unticked is not
-        handed over, and is not chargeable if it does not come back.
-      </p>
-      <div className="grid gap-sm sm:grid-cols-2">
-        {accessories.map((item, index) => (
-          <CheckRow
-            key={item}
-            id={`acc-${index}`}
-            checked={checked[item] ?? false}
-            onChange={(next) => onToggle(item, next)}
-            title={item}
+        ) : (
+          <TextInput
+            id={id('meter')}
+            label="Hour meter reading"
+            inputMode="numeric"
+            help={`The last reading was ${unit.hourMeter} hours.`}
+            value={answers.meter}
+            onChange={(meter) => onChange({ meter })}
+            error={errors[id('meter')]}
+            autoComplete="off"
           />
-        ))}
+        )}
       </div>
-    </div>
+      <div className="mt-md">
+        <TextInput
+          id={id('accessories')}
+          label="Accessories handed over"
+          help="Optional. For example a chuck key and two bits. Leave it empty when nothing goes with it."
+          value={answers.accessories}
+          onChange={(accessories) => onChange({ accessories })}
+          error={errors[id('accessories')]}
+          maxLength={MAX_ACCESSORIES_LENGTH}
+          autoComplete="off"
+        />
+      </div>
+    </fieldset>
   )
 }

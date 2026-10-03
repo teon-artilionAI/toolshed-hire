@@ -104,6 +104,8 @@ class Asset:
         branch_id: The branch that holds the unit.
         status: Where the unit is in its lifecycle.
         condition_grade: The grade recorded at the last checkout or return.
+        hour_meter_reading: The last meter reading taken, for a unit that has
+            a meter and once one has been read.
 
     """
 
@@ -113,6 +115,7 @@ class Asset:
     branch_id: UUID
     status: AssetStatus
     condition_grade: ConditionGrade
+    hour_meter_reading: int | None = None
 
     def is_allocatable(self) -> bool:
         """Return True when the unit may be held for a future hire.
