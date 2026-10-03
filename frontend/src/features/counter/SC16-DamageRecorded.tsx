@@ -12,12 +12,13 @@
 
 import type { RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import type { DamageReport } from '../../shared/api/contract'
+import type { AssetStatus, DamageReport } from '../../shared/api/contract'
 import { money } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Card, Notice, StatusPill } from '../../shared/ui'
 import { ASSET_STATUS_LABEL, DAMAGE_SEVERITY_LABEL } from './counter-labels'
 import { COUNTER_HOME_PATH, rentalHref } from './counter-links'
+import { statusAfterFiling } from './SC16-damage-model'
 
 /** Who pays, in words, from what the server recorded. */
 function whoPays(report: DamageReport): string {
@@ -37,20 +38,25 @@ function Saved({ label, children }: { label: string; children: string }) {
 
 export function DamageRecorded({
   report,
+  unitStatus,
   noticeRef,
   locatorHref,
 }: {
   report: DamageReport
+  /** The state of the unit as the screen last read it, before or after filing. */
+  unitStatus: AssetStatus
   /** Where focus goes once the report is filed. */
   noticeRef: RefObject<HTMLDivElement | null>
   locatorHref: string
 }) {
+  const unitNow = statusAfterFiling(unitStatus)
   return (
     <div className="flex flex-col gap-md">
       <div ref={noticeRef} tabIndex={-1}>
         <Notice tone="success" title={`Damage report ${report.reference} is filed`}>
           <p>
-            {report.assetTag} is in quarantine and cannot be booked until the owner resolves the report.
+            {report.assetTag} is {unitNow === 'UNDER_REPAIR' ? 'in the workshop' : 'in quarantine'} and cannot be
+            booked until the owner resolves the report.
             {report.rentalReference === null
               ? ''
               : ` Go back to the return of ${report.rentalReference} to see where its deposit stands.`}
@@ -69,7 +75,7 @@ export function DamageRecorded({
           <div>
             <dt className="text-sm text-slate-soft">New state of the unit</dt>
             <dd>
-              <StatusPill status="QUARANTINED" label={ASSET_STATUS_LABEL.QUARANTINED} />
+              <StatusPill status={unitNow} label={ASSET_STATUS_LABEL[unitNow]} />
             </dd>
           </div>
         </dl>

@@ -109,7 +109,10 @@ function Waiting({ rental, onPaid }: { rental: Rental; onPaid: (rental: Rental) 
               {item.assetTag === null ? (
                 <p className="text-sm text-ink">{item.modelName} has no tag on record, so report it from the asset register.</p>
               ) : (
-                <Link to={damageHref(item.assetTag, item.id)} className="btn-secondary px-md">
+                <Link
+                  to={damageHref(item.assetTag, { rentalId: rental.id, rentalItemId: item.id })}
+                  className="btn-secondary px-md"
+                >
                   <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
                   Record the damage to {itemLabel(item)}
                 </Link>

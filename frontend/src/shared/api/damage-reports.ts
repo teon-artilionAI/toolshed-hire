@@ -25,7 +25,6 @@ import type {
   DamageStatus,
   FileDamageReportRequest,
   IsoTimestamp,
-  Money,
   ResolveDamageReportRequest,
 } from './contract'
 import {
@@ -33,6 +32,7 @@ import {
   readFlag,
   readList,
   readMoney,
+  readNullableMoney,
   readNullableText,
   readNullableTimestamp,
   readObject,
@@ -53,11 +53,6 @@ export const OPEN_DAMAGE_STATUSES: readonly DamageStatus[] = ['OPEN', 'UNDER_REP
 
 /** The page size the list of a unit's reports asks for. The API's own default. */
 export const DAMAGE_REPORT_PAGE_SIZE = 20
-
-/** An amount the contract allows to be null. A missing field is not null. */
-function readNullableMoney(record: Record<string, unknown>, key: string, path: string): Money | null {
-  return record[key] === null ? null : readMoney(record, key, path)
-}
 
 /** An instant the contract never sends as null. */
 function readTimestamp(record: Record<string, unknown>, key: string, path: string): IsoTimestamp {

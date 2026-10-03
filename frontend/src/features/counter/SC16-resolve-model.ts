@@ -86,13 +86,11 @@ export function resolutionWords(outcome: DamageOutcome | null, assetTag: string)
   return 'Choose how the report was resolved, and the screen says what happens to the unit.'
 }
 
-/** Both spellings of each field the API may name, as on the damage form. */
+/** Each field the API may name, the way the wire names it, as on the damage form. */
 const API_FIELD_CONTROL: Record<string, ResolveControl> = {
   outcome: 'outcome',
   actualRepairCost: 'cost',
-  actual_repair_cost: 'cost',
   resolutionNotes: 'notes',
-  resolution_notes: 'notes',
 }
 
 /**

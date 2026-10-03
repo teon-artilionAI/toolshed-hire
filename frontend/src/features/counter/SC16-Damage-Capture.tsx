@@ -2,17 +2,20 @@
  * SC-16 Damage Report Capture.
  *
  * Reached from the return inspection when a unit comes back worse than it went
- * out, with the unit of the hire in the address, or from the locator for a
+ * out, with the hire and its unit in the address, or from the locator for a
  * unit that is out of service. The address carries the tag of the unit, and
  * the screen finds the unit through the locator route, which says where it is
  * and what state it is in. Under it are the reports already filed against the
- * unit, and the form for a new one.
+ * unit, and the form for a new one. When the address names a hire, the screen
+ * reads it too, for the replacement value of the unit, which is the most the
+ * customer can be charged.
  *
  * Filing a report takes the unit out of service at once. It moves to
- * quarantine and cannot be booked until the owner resolves the report, which
- * is the whole point of capturing it at the counter rather than in a notebook.
- * When the unit came back on a hire, the report can charge the customer, and
- * filing it settles the deposit of that hire unless something else is waiting.
+ * quarantine, or stays in the workshop when it is there already, and cannot be
+ * booked until the owner resolves the report, which is the whole point of
+ * capturing it at the counter rather than in a notebook. When the unit came
+ * back on a hire, the report can charge the customer, and filing it settles
+ * the deposit of that hire unless something else is waiting.
  *
  * A signed in administrator also sees the owner's moves on each open report.
  * Nobody else does. Every write shows the server's answer in a notice that
@@ -22,18 +25,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import type { DamageReport, LocatedUnit } from '../../shared/api/contract'
+import type { DamageReport, LocatedUnit, Money } from '../../shared/api/contract'
 import { locatorQueries } from '../../shared/api/counter-queries'
-import { damageQueries } from '../../shared/api/damage-queries'
 import { MAX_LOCATOR_SEARCH_LENGTH, MIN_LOCATOR_SEARCH_LENGTH } from '../../shared/api/locator'
 import { isRefusal } from '../../shared/api/problem-fields'
 import { queryPhase } from '../../shared/api/query-phase'
+import { rentalQueries } from '../../shared/api/rental-queries'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { Notice, PageHeader, StatusPill } from '../../shared/ui'
 import { useSession } from '../../shared/use-session'
 import { ASSET_STATUS_LABEL } from './counter-labels'
-import { RENTAL_ITEM_PARAMETER } from './counter-links'
-import { knownReplacementValue } from './SC16-damage-model'
+import { RENTAL_ITEM_PARAMETER, RENTAL_PARAMETER } from './counter-links'
+import type { UnitOfHire } from './counter-links'
 import { DamageForm } from './SC16-Damage-Form'
 import { DamageRecorded } from './SC16-DamageRecorded'
 import { ReportHistory } from './SC16-Report-History'
@@ -77,11 +80,33 @@ function NotFound({ assetTag }: { assetTag: string }) {
   )
 }
 
+/**
+ * The replacement value of the unit of the hire, read off the hire while the
+ * form is open. The hire answers with it on each of its units. It is null
+ * outside a hire, while the hire is read, and when the hire cannot be read, and
+ * the form then says only that the server checks the amount, which it does
+ * either way.
+ */
+function useReplacementValue(hire: UnitOfHire | null, formOpen: boolean): Money | null {
+  const rental = useQuery({ ...rentalQueries.detail(hire?.rentalId ?? ''), enabled: hire !== null && formOpen })
+  if (hire === null) return null
+  return rental.data?.items.find((item) => item.id === hire.rentalItemId)?.replacementValue ?? null
+}
+
 /** The screen once the unit is known. */
-function DamageScreen({ unit, rentalItemId }: { unit: LocatedUnit; rentalItemId: string | null }) {
+function DamageScreen({
+  unit,
+  rentalItemId,
+  hire,
+}: {
+  unit: LocatedUnit
+  rentalItemId: string | null
+  /** The hire and its unit, when the address names both. */
+  hire: UnitOfHire | null
+}) {
   const { role, user } = useSession()
-  const reports = useQuery(damageQueries.forUnit(unit.assetTag))
   const [filed, setFiled] = useState<DamageReport | null>(null)
+  const replacementValue = useReplacementValue(hire, filed === null)
   const elsewhere = role === 'counter' && user !== null && user.branchCode !== unit.branchCode
 
   // Filing replaces the form, so focus goes to what it did.
@@ -113,12 +138,17 @@ function DamageScreen({ unit, rentalItemId }: { unit: LocatedUnit; rentalItemId:
         <DamageForm
           unit={unit}
           rentalItemId={rentalItemId}
-          replacementValue={knownReplacementValue(reports.data?.items ?? [], rentalItemId)}
+          replacementValue={replacementValue}
           locatorHref={locatorFor(unit.assetTag)}
           onFiled={setFiled}
         />
       ) : (
-        <DamageRecorded report={filed} noticeRef={filedRef} locatorHref={locatorFor(unit.assetTag)} />
+        <DamageRecorded
+          report={filed}
+          unitStatus={unit.status}
+          noticeRef={filedRef}
+          locatorHref={locatorFor(unit.assetTag)}
+        />
       )}
     </div>
   )
@@ -129,6 +159,8 @@ export default function DamageReportCapture() {
   const [params] = useSearchParams()
   const tag = assetTag.trim()
   const rentalItemId = params.get(RENTAL_ITEM_PARAMETER)?.trim() || null
+  const rentalId = params.get(RENTAL_PARAMETER)?.trim() || null
+  const hire = rentalId === null || rentalItemId === null ? null : { rentalId, rentalItemId }
   const searchable = tag.length >= MIN_LOCATOR_SEARCH_LENGTH && tag.length <= MAX_LOCATOR_SEARCH_LENGTH
   const lookup = useQuery({
     ...locatorQueries.search({ q: tag, page: FIRST_PAGE, pageSize: UNIT_LOOKUP_PAGE_SIZE }),
@@ -162,7 +194,7 @@ export default function DamageReportCapture() {
       {unit !== undefined ? (
         // A read again that fails leaves the unit as it was last read, and the
         // failure above says so. A report being filed is never thrown away.
-        <DamageScreen key={unit.assetTag} unit={unit} rentalItemId={rentalItemId} />
+        <DamageScreen key={unit.assetTag} unit={unit} rentalItemId={rentalItemId} hire={hire} />
       ) : (
         phase !== 'failed' && <LoadingState label="Finding the unit" shape="rows" count={LOADING_BLOCKS} />
       )}

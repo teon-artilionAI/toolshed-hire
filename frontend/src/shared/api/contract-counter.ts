@@ -139,11 +139,13 @@ export type ChargeStatus = Schemas['ChargeStatus']
  *
  * `assetTag` is null for a customer, who is never shown one. `daysLateToday`
  * and `lateFeeToday` are what the late fee policy gives if the item came back
- * today, worked out on the server.
+ * today, worked out on the server. `replacementValue` is the value copied onto
+ * the booking, the most a damage report may recover for the unit, and is null
+ * for a customer, as the tag is.
  */
 export type RentalItem = Refine<
   Schemas['RentalItemResponse'],
-  { returnedAt: IsoTimestamp | null; lateFeePerDay: Money; lateFeeToday: Money }
+  { returnedAt: IsoTimestamp | null; lateFeePerDay: Money; lateFeeToday: Money; replacementValue: Money | null }
 >
 
 /** One charge on a hire. A release of a deposit is a negative amount. */

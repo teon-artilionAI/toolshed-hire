@@ -5,8 +5,9 @@
  * The unit is found through the locator by the tag in the address, so the
  * screen has a loading, a failed, a not found and a loaded state, and the
  * reports on the unit have their own. The form opens with no decision on
- * charging, says beside it that fair wear and tear is not charged, and sends
- * nothing until every answer is there. The writes are in
+ * charging, says beside it that fair wear and tear is not charged, names the
+ * replacement value the hire in the address gives the unit, and sends nothing
+ * until every answer is there. The writes are in
  * SC16-Damage-Writes.test.tsx and the owner's moves in SC16-Resolution.test.tsx.
  */
 
@@ -15,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SAMPLE_DATA_TITLE } from '../../shared/sample-data-notice'
 import { jsonResponse, neverAnswers, problemResponse } from '../../test/api-mock'
 import { TEST_NOW } from '../../test/catalogue-samples'
+import { RENTAL_ID } from '../../test/counter-samples'
 import {
   DAMAGED_ITEM,
   DAMAGE_REPORTS_ROUTE,
@@ -29,10 +31,14 @@ import {
 } from '../../test/damage-samples'
 import { LOCATOR_ROUTE, locatorPage } from '../../test/overview-samples'
 import { SCREEN_WAIT } from '../../test/render-app'
+import { WAITING_FOR_DAMAGE, rentalRoute } from '../../test/rental-samples'
 import { ASK, CHARGEABLE, RECOVERY, answer, findForm, openDamage, unitWith } from './SC16-test-kit'
 
-const ON_THE_HIRE = `/counter/damage/${QUARANTINED_AT_BELLVILLE.assetTag}?rentalItem=${DAMAGED_ITEM.id}`
+const ON_THE_HIRE = `/counter/damage/${QUARANTINED_AT_BELLVILLE.assetTag}?rental=${RENTAL_ID}&rentalItem=${DAMAGED_ITEM.id}`
 const OFF_HIRE = `/counter/damage/${ON_THE_SHELF.assetTag}`
+
+/** The second unit of the hire, which has a replacement value of its own. */
+const OTHER_ITEM_ID = WAITING_FOR_DAMAGE.items[1].id
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: TEST_NOW })
@@ -174,13 +180,44 @@ describe('the form', () => {
     expect(screen.queryByLabelText(RECOVERY)).not.toBeInTheDocument()
   })
 
-  it('names the replacement value when an earlier report on the same hire of the unit gave it', async () => {
-    const { user } = await openDamage(unitWith(QUARANTINED_AT_BELLVILLE, [FILED_ON_THE_HIRE]), ON_THE_HIRE)
+  it('names the replacement value of the unit, read off the hire in the address, before any report gives it', async () => {
+    const { user, network } = await openDamage(unitWith(QUARANTINED_AT_BELLVILLE), ON_THE_HIRE)
     await answer(user, { charge: 'Charge the customer' })
 
     await waitFor(() =>
       expect(screen.getByLabelText(RECOVERY)).toHaveAccessibleDescription(/replacement value of R\s9\s876[,.]54/),
     )
+    expect(network.requestsTo(rentalRoute())).not.toHaveLength(0)
+  })
+
+  it('takes the replacement value of the unit named in the address and of no other unit on the hire', async () => {
+    const { user } = await openDamage(
+      unitWith(QUARANTINED_AT_BELLVILLE, [FILED_ON_THE_HIRE]),
+      ON_THE_HIRE.replace(DAMAGED_ITEM.id, OTHER_ITEM_ID),
+    )
+    await answer(user, { charge: 'Charge the customer' })
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(RECOVERY)).toHaveAccessibleDescription(/replacement value of R\s8\s765[,.]43/),
+    )
+  })
+
+  it('says only that the server checks the amount when the hire cannot be read', async () => {
+    const { user, network } = await openDamage(
+      unitWith(QUARANTINED_AT_BELLVILLE, [], { [rentalRoute()]: () => problemResponse(500) }),
+      ON_THE_HIRE,
+    )
+    await answer(user, { charge: 'Charge the customer' })
+
+    await waitFor(() => expect(network.requestsTo(rentalRoute())).not.toHaveLength(0))
+    expect(screen.getByLabelText(RECOVERY)).toHaveAccessibleDescription(/^It may not be more than the replacement value copied onto the booking\. The server checks it/)
+  })
+
+  it('does not read a hire when the address names none', async () => {
+    const { network } = await openDamage(unitWith(ON_THE_SHELF), OFF_HIRE)
+    await findForm()
+
+    expect(network.requestsTo(rentalRoute())).toHaveLength(0)
   })
 
   it('never asks for an amount outside a hire, where nothing is charged to a deposit', async () => {

@@ -222,7 +222,12 @@ commits as `../backend/openapi.json`.
   wire type from. It gives each type the name the screens use. Where the
   generated type says less than the screens rely on, such as money typed as a
   plain `string` or a role typed as any `string`, it keeps a more precise type
-  and says why.
+  and says why. It holds the session types itself and passes every other type
+  on from the module it is built in.
+- The branch and catalogue types, which are the branches, the categories, the
+  models, the availability searches and the quote, are in
+  `api/contract-catalogue.ts`, built from the generated file the same way, so
+  `contract.ts` stays a size that can be read in one sitting.
 - The six reservation routes are in the document, and their types are built
   from the generated file like every other. They sit in
   `api/contract-booking.ts` to keep each file short, and `contract.ts` passes
@@ -249,13 +254,13 @@ commits as `../backend/openapi.json`.
   bodies, queries and pages are in `api/contract-returns.ts`, built from the
   generated file the same way. Every one of those routes answers with the
   `Rental` above, or a page of them.
-- The damage and quarantine routes are not in the document yet. Their types
-  are the one exception to the rule above. `api/contract-damage.ts` writes
-  them by hand from the agreed contract, with the same names, members and
-  values, and says so at the top. The severities are not in that contract, so
-  they are the ones the database stores, `MINOR`, `MAJOR` and `WRITE_OFF`.
-  Once the document has the routes, these types should be built from the
-  generated file like the rest.
+- The damage and quarantine routes, which are filing a report, the list and
+  the read of reports, sending one for repair and resolving it, are in the
+  document too. Their types are in `api/contract-damage.ts`, built from the
+  generated file the same way. The severities are the backend's own list,
+  `MINOR`, `MAJOR` and `WRITE_OFF`, and a severity retires nothing on its own.
+  Each unit of a hire also carries `replacementValue` for staff, which is null
+  for a customer, as its tag is.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -754,12 +759,13 @@ out a late fee, a settlement or a balance, and never adds money up.
   time of the loss and no grade, and with no flag of its own. The screen reads
   a closed unit with no grade as lost, says so, and lists the charges that
   carry its id.
-- The hire reads as overdue when the server says so, or when any unit still out
-  is late today. The server moves a hire to overdue when it lists hires, not
-  when it reads one, so a hire opened by its reference can still say open.
+- The hire reads as overdue when the server says so. The read of one hire
+  moves it to overdue before it answers, so its status is never behind the
+  lists.
 - When the deposit is waiting on a balance, a form takes the reference of the
   payment and posts it. When it is waiting on a damage report, each unit that
-  needs one links to `/counter/damage/<assetTag>?rentalItem=<id>`. Coming back
+  needs one links to
+  `/counter/damage/<assetTag>?rental=<rentalId>&rentalItem=<id>`. Coming back
   from there, the hire is read afresh and shows the settlement the server made
   when the report was filed.
 - A 409 or a 403 shows the server's message and offers to read the hire again.
@@ -817,6 +823,7 @@ is found through the locator route.
 |---|---|---|
 | `SC-16` | `GET /api/assets/locator?q=<tag>&page=1&pageSize=50` | The unit with that tag, where it is and its state |
 | `SC-16` | `GET /api/damage-reports?assetTag=&page=&pageSize=` | The reports already filed against the unit, newest first |
+| `SC-16` | `GET /api/rentals/{id}` | The hire the unit came back on, when the address names one, for the replacement value of the unit |
 | `SC-16` | `POST /api/damage-reports` | The report, with its reference, and the unit in quarantine |
 | `SC-16` | `POST /api/damage-reports/{id}/repair` | The report, for an administrator, in the workshop |
 | `SC-16` | `POST /api/damage-reports/{id}/resolution` | The report, for an administrator, resolved or written off |
@@ -824,9 +831,9 @@ is found through the locator route.
 #### `SC-16` Damage Report Capture
 
 - The address is `/counter/damage/:assetTag`. A link from a return also carries
-  the unit of the hire, as `?rentalItem=<id>`. The screen has a loading, a
-  failed and a not found state for the unit, and the reports have their own,
-  so the form works while they load.
+  the hire and its unit, as `?rental=<rentalId>&rentalItem=<id>`. The screen
+  has a loading, a failed and a not found state for the unit, and the reports
+  have their own, so the form works while they load.
 - The form takes the severity, a description, the repair estimate and the
   decision on whether the customer is charged. The decision has no default.
   Neither answer is chosen when the form opens, the form is not sent without
@@ -834,10 +841,17 @@ is found through the locator route.
   the customer is charged on a hire, the form also takes the amount to
   recover, VAT inclusive. The server holds it to the replacement value copied
   onto the booking (BR-39), and when it refuses, its message, which names the
-  most it will take, lands under the amount. The API sends the replacement
-  value only on a report, so the screen names it when an earlier report on the
-  same hire of the unit carries it, and otherwise says the server checks it.
-  The rules and the body are in `SC16-damage-model.ts`.
+  most it will take, lands under the amount. The screen reads the hire named in
+  the address and names the replacement value its unit carries, before any
+  report exists. While the hire loads, or when it cannot be read, the box says
+  only that the server checks the amount. The rules and the body are in
+  `SC16-damage-model.ts`.
+- A unit that came back damaged waits for the report of that return, and the
+  server refuses a report about it that does not name that unit of the hire
+  with a 409. So a report for such a unit is filed from its return, and the
+  locator's link shows the server's sentence when it is tried from there. A
+  unit already in the workshop stays there when a report is filed, and the
+  screen says so instead of saying it is quarantined.
 - There is no photograph upload in this release.
 - "Record the damage and quarantine the unit" asks a question that says in
   words what is about to happen, that the unit is quarantined and cannot be

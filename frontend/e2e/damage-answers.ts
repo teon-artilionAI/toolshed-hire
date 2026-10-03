@@ -11,6 +11,7 @@
  */
 
 import { dateFromToday } from './hire-dates.ts'
+import { RETURN_RENTAL_ID } from './return-answers.ts'
 
 /** The unit the scans open, which the locator answer finds at Cape Town CBD. */
 const DAMAGED_TAG = 'TSH-PC-0007'
@@ -18,8 +19,9 @@ const DAMAGED_TAG = 'TSH-PC-0007'
 /** The unit of the hire it came back on. */
 const RENTAL_ITEM_ID = 'b2200000-0000-4000-8000-000000000002'
 
-/** SC-16 for that unit, reached from its return. */
-export const DAMAGE_PATH = `/counter/damage/${DAMAGED_TAG}?rentalItem=${RENTAL_ITEM_ID}`
+/** SC-16 for that unit, reached from its return, which names the hire and its
+ *  unit. The screen reads the hire for the replacement value of the unit. */
+export const DAMAGE_PATH = `/counter/damage/${DAMAGED_TAG}?rental=${RETURN_RENTAL_ID}&rentalItem=${RENTAL_ITEM_ID}`
 
 function report(number: number, overrides: Record<string, unknown>) {
   return {

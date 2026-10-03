@@ -672,6 +672,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/damage-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List damage reports at every branch, newest first
+         * @description Return one page of damage reports, newest first.
+         *
+         *     Raises:
+         *         ValidationFailure: If the branch code is not the code of a trading
+         *             branch. HTTP 422, naming `branchCode`.
+         */
+        get: operations["list_damage_reports_api_damage_reports_get"];
+        put?: never;
+        /**
+         * File a damage report, quarantine the unit and charge the decided recovery
+         * @description File the report in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If the tag is unknown, the decision is missing, the
+         *             amount to recover does not follow from it or is above the cap, or
+         *             the rental item is not a hire of the unit. HTTP 422, naming the field.
+         *         BranchScopeError: If counter staff file a report at another branch. HTTP 403.
+         *         StateTransitionError: If the unit is out on hire or retired, waits for
+         *             the report of another hire, or the deposit was already settled. HTTP 409.
+         */
+        post: operations["post_damage_report_api_damage_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one damage report, by its key or its reference
+         * @description Return the report, or 404 when it does not exist.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         */
+        get: operations["read_damage_report_api_damage_reports__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send an open damage report for repair, and its unit with it
+         * @description Send the report for repair in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         *         StateTransitionError: If the report is not OPEN. HTTP 409.
+         */
+        post: operations["post_repair_api_damage_reports__id__repair_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a damage report as resolved or written off
+         * @description Close the report in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         *         ValidationFailure: If a report is resolved without its actual cost.
+         *             HTTP 422, naming `actualRepairCost`.
+         *         StateTransitionError: If the report is already closed, or a write off
+         *             would retire a unit a booking still holds. HTTP 409.
+         */
+        post: operations["post_resolution_api_damage_reports__id__resolution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/counter/dashboard": {
         parameters: {
             query?: never;
@@ -1361,6 +1471,98 @@ export interface components {
          */
         DamageAssessment: "NOT_NEEDED" | "REQUIRED" | "DONE";
         /**
+         * DamageReportPageResponse
+         * @description One page of damage reports, newest first.
+         */
+        DamageReportPageResponse: {
+            /** Items */
+            items: components["schemas"]["DamageReportResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * DamageReportRequest
+         * @description A damage report as the counter files it.
+         */
+        DamageReportRequest: {
+            /** Assettag */
+            assetTag: string;
+            /** Rentalitemid */
+            rentalItemId?: string | null;
+            severity: components["schemas"]["DamageSeverity"];
+            /** Description */
+            description: string;
+            /** Repairestimate */
+            repairEstimate: string;
+            /** Chargeabletocustomer */
+            chargeableToCustomer: boolean;
+            /** Recoveryamount */
+            recoveryAmount?: string | null;
+        };
+        /**
+         * DamageReportResponse
+         * @description One damage report, as staff read it.
+         */
+        DamageReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reference */
+            reference: string;
+            /** Assettag */
+            assetTag: string;
+            /** Modelname */
+            modelName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Rentalid */
+            rentalId: string | null;
+            /** Rentalreference */
+            rentalReference: string | null;
+            /** Rentalitemid */
+            rentalItemId: string | null;
+            severity: components["schemas"]["DamageSeverity"];
+            status: components["schemas"]["DamageStatus"];
+            /** Description */
+            description: string;
+            /** Repairestimate */
+            repairEstimate: string;
+            /** Actualrepaircost */
+            actualRepairCost: string | null;
+            /** Chargeabletocustomer */
+            chargeableToCustomer: boolean;
+            /** Recoverycharged */
+            recoveryCharged: string | null;
+            /** Replacementvalue */
+            replacementValue: string;
+            /** Reportedat */
+            reportedAt: string;
+            /** Reportedbyname */
+            reportedByName: string;
+            /** Resolvedat */
+            resolvedAt: string | null;
+            /** Resolutionnotes */
+            resolutionNotes: string | null;
+        };
+        /**
+         * DamageSeverity
+         * @description How bad the damage is. WRITE_OFF retires the unit (BR-38).
+         * @enum {string}
+         */
+        DamageSeverity: "MINOR" | "MAJOR" | "WRITE_OFF";
+        /**
+         * DamageStatus
+         * @description Where a damage report stands between being raised and being closed.
+         * @enum {string}
+         */
+        DamageStatus: "OPEN" | "UNDER_REPAIR" | "RESOLVED" | "WRITTEN_OFF";
+        /**
          * DashboardCountsResponse
          * @description The true totals behind the dashboard, however long each list is.
          */
@@ -1917,7 +2119,9 @@ export interface components {
          * @description One unit on a rental.
          *
          *     `daysLateToday` and `lateFeeToday` are what the late fee would be if the
-         *     unit came back today, worked out on the server.
+         *     unit came back today, worked out on the server. `replacementValue` is the
+         *     value copied onto the booking line, the most a damage report may recover,
+         *     and is null for a customer, as `assetTag` is.
          */
         RentalItemResponse: {
             /**
@@ -1952,6 +2156,8 @@ export interface components {
             /** Latefeetoday */
             lateFeeToday: string;
             damageAssessment: components["schemas"]["DamageAssessment"];
+            /** Replacementvalue */
+            replacementValue: string | null;
         };
         /**
          * RentalPageResponse
@@ -2158,6 +2364,21 @@ export interface components {
          * @enum {string}
          */
         ReservationStatus: "DRAFT" | "HELD" | "CONFIRMED" | "COLLECTED" | "RETURNED" | "CANCELLED" | "NO_SHOW" | "EXPIRED";
+        /**
+         * ResolutionRequest
+         * @description How an administrator closes a report.
+         */
+        ResolutionRequest: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "RESOLVED" | "WRITTEN_OFF";
+            /** Actualrepaircost */
+            actualRepairCost?: string | null;
+            /** Resolutionnotes */
+            resolutionNotes?: string | null;
+        };
         /**
          * ReturnDueResponse
          * @description A rental due back today with a unit still out.
@@ -3684,6 +3905,260 @@ export interface operations {
                 };
             };
             /** @description Nothing is owed on the rental, so there is no balance to pay. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_damage_reports_api_damage_reports_get: {
+        parameters: {
+            query?: {
+                /** @description An asset tag. Only the reports of that unit. */
+                assetTag?: string | null;
+                /** @description Only reports in this status. */
+                status?: components["schemas"]["DamageStatus"] | null;
+                /** @description A branch code. Only reports of units held there. */
+                branchCode?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many reports a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportPageResponse"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_damage_report_api_damage_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DamageReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The unit is out on hire or retired, it waits for the report of another hire, or the deposit of the hire was already settled, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_damage_report_api_damage_reports__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_repair_api_damage_reports__id__repair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The report cannot make that move from where it stands, or a booking still holds the unit it would retire, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_resolution_api_damage_reports__id__resolution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The report cannot make that move from where it stands, or a booking still holds the unit it would retire, and `detail` says which. */
             409: {
                 headers: {
                     [name: string]: unknown;

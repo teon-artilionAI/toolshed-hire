@@ -3,8 +3,9 @@
  *
  * The damage screen is opened inside the whole application, by default as the
  * counter assistant at Bellville, with the clock pinned to `TEST_NOW`. The
- * unit is found through the locator route, and its reports through the damage
- * route, and each test says how those and the writes answer.
+ * unit is found through the locator route, its reports through the damage
+ * route, and the hire it came back on through the rental route, and each test
+ * says how those and the writes answer.
  */
 
 import { screen, within } from '@testing-library/react'
@@ -16,6 +17,7 @@ import type { ApiMock, RouteTable } from '../../test/api-mock'
 import { DAMAGE_REPORTS_ROUTE, reportPage } from '../../test/damage-samples'
 import { LOCATOR_ROUTE, locatorPage } from '../../test/overview-samples'
 import { SCREEN_WAIT, findScreenHeading, renderApp } from '../../test/render-app'
+import { WAITING_FOR_DAMAGE, rentalRoute } from '../../test/rental-samples'
 import { COUNTER_STAFF, signedInAs } from '../../test/session-samples'
 
 export const HEADING = 'Record damage'
@@ -24,11 +26,13 @@ export const ANSWER = 'Yes, file the report'
 export const CHARGEABLE = 'Is the customer charged for this damage?'
 export const RECOVERY = 'Amount to recover from the customer, in rand, including VAT'
 
-/** Routes in which the locator finds this unit and these reports are on it. */
+/** Routes in which the locator finds this unit, these reports are on it, and
+ *  the hire it came back on is waiting for its report. */
 export function unitWith(unit: LocatedUnit, reports: DamageReport[] = [], routes: RouteTable = {}): RouteTable {
   return {
     [LOCATOR_ROUTE]: () => jsonResponse(locatorPage([unit])),
     [DAMAGE_REPORTS_ROUTE]: () => jsonResponse(reportPage(reports)),
+    [rentalRoute()]: () => jsonResponse(WAITING_FOR_DAMAGE),
     ...routes,
   }
 }

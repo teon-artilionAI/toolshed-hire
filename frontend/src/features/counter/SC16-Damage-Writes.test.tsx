@@ -31,7 +31,7 @@ import { WAITING_FOR_DAMAGE, rentalRoute } from '../../test/rental-samples'
 import { COUNTER_STAFF, signedInAs } from '../../test/session-samples'
 import { ANSWER, ASK, COMPLETE, RECOVERY, answer, openDamage, unitWith } from './SC16-test-kit'
 
-const ON_THE_HIRE = `/counter/damage/${QUARANTINED_AT_BELLVILLE.assetTag}?rentalItem=${DAMAGED_ITEM.id}`
+const ON_THE_HIRE = `/counter/damage/${QUARANTINED_AT_BELLVILLE.assetTag}?rental=${RENTAL_ID}&rentalItem=${DAMAGED_ITEM.id}`
 const OFF_HIRE = `/counter/damage/${ON_THE_SHELF.assetTag}`
 const QUESTION = /^File this damage report for /
 
@@ -132,7 +132,7 @@ describe('what the server refuses', () => {
     const detail = 'The amount to recover cannot be more than R9876.54.'
     const { user } = await openDamage(
       unitWith(QUARANTINED_AT_BELLVILLE, [], {
-        [FILE_DAMAGE_ROUTE]: () => problemResponse(422, { errors: { fields: { 'body.recovery_amount': detail } } }),
+        [FILE_DAMAGE_ROUTE]: () => problemResponse(422, { errors: { fields: { 'body.recoveryAmount': detail } } }),
       }),
       ON_THE_HIRE,
     )
@@ -193,6 +193,22 @@ describe('once the report is filed', () => {
     expect(screen.queryByRole('link', { name: /^Back to the return/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to today' })).toHaveAttribute('href', '/counter')
     expect(screen.getByRole('link', { name: 'Open the asset locator' })).toHaveAttribute('href', '/counter/locator?q=TSH-PC-0011')
+  })
+
+  it('says a unit already in the workshop stays there, as the server leaves it', async () => {
+    const inTheWorkshop = { ...ON_THE_SHELF, status: 'UNDER_REPAIR' as const }
+    const { user } = await openDamage(
+      unitWith(inTheWorkshop, [], { [FILE_DAMAGE_ROUTE]: () => createdResponse(FILED_OFF_HIRE) }),
+      OFF_HIRE,
+    )
+    await answer(user, { ...COMPLETE, recovery: undefined })
+    await user.click(screen.getByRole('button', { name: ASK }))
+    expect(await screen.findByText('TSH-PC-0011 stays in the workshop and cannot be booked until the owner resolves the report.')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: ANSWER }))
+
+    expect(await screen.findByText(/^TSH-PC-0011 is in the workshop and cannot be booked/, {}, SCREEN_WAIT)).toBeVisible()
+    expect(screen.getByText('New state of the unit').closest('div')).toHaveTextContent('In the workshop')
   })
 
   it('goes back to the return, which reads the hire again and shows the deposit settled', async () => {

@@ -31,6 +31,9 @@ const RECOVERY_AMOUNT = '50.00'
 const RECOVERY_SHOWN = /^R\s50[,.]00$/
 const NOTHING = /^R\s0[,.]00$/
 
+/** What the box for the amount says once it knows the replacement value of the unit. */
+const REPLACEMENT_VALUE_NAMED = /replacement value of R\s[\d\s]+[,.]\d{2} copied onto the booking/
+
 /** A damage report reference, for example TSH-D-26-00031. */
 const DAMAGE_REFERENCE = /TSH-D-\d{2}-\d+/
 
@@ -52,6 +55,9 @@ export async function checkOutAndOpenTheHire(page: Page): Promise<void> {
   await page.getByRole('link', { name: 'Check out now' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Checkout and deposit' })).toBeVisible()
   const tags = page.getByRole('checkbox', { name: /I have read the tag on the unit/ })
+  // The heading is there before the units are read, and `all` does not wait,
+  // so the first unit has to be on the screen before the tags are ticked.
+  await expect(tags.first()).toBeVisible()
   for (const tag of await tags.all()) await tag.check()
   await page.getByRole('checkbox', { name: /read the hire agreement and signed it/ }).check()
   await page.getByRole('button', { name: 'Check out the equipment' }).click()
@@ -76,8 +82,10 @@ export async function takeItBackWorse(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Take the ticked units back' }).click()
   await page.getByRole('button', { name: 'Yes, take them back' }).click()
 
-  await expect(page.getByText('The deposit is waiting for a damage report')).toBeVisible()
-  await expect(page.getByText('Waiting for a damage report.')).toBeVisible()
+  // The notice of what the return did says the same thing in a sentence of its
+  // own, so these two are matched whole.
+  await expect(page.getByText('The deposit is waiting for a damage report', { exact: true })).toBeVisible()
+  await expect(page.getByText('Waiting for a damage report.', { exact: true })).toBeVisible()
   expect(await blockingViolations(page)).toEqual([])
   const link = page.getByRole('link', { name: /^Record the damage to / })
   const tag = (await link.innerText()).replace('Record the damage to', '').trim()
@@ -101,7 +109,10 @@ export async function fileAChargeableReport(page: Page, tag: string): Promise<st
   const decision = form.getByRole('group', { name: 'Is the customer charged for this damage?' })
   await expect(decision.getByRole('radio', { checked: true })).toHaveCount(0)
   await decision.getByRole('radio', { name: /^Charge the customer/ }).check()
-  await form.getByLabel('Amount to recover from the customer, in rand, including VAT').fill(RECOVERY_AMOUNT)
+  const recovery = form.getByLabel('Amount to recover from the customer, in rand, including VAT')
+  await recovery.fill(RECOVERY_AMOUNT)
+  // The hire named in the address gives the cap before any report exists.
+  await expect(recovery).toHaveAccessibleDescription(REPLACEMENT_VALUE_NAMED)
   expect(await blockingViolations(page)).toEqual([])
 
   await form.getByRole('button', { name: 'Record the damage and quarantine the unit' }).click()

@@ -194,7 +194,7 @@ describe('resolving a report', () => {
   it('puts a refused cost under the cost', async () => {
     const { user, entry } = await openReports(ADMIN, {
       [resolutionRoute(EARLIER_REPORT.id)]: () =>
-        problemResponse(422, { errors: { fields: { 'body.actual_repair_cost': 'A repair cost cannot be less than R0.00.' } } }),
+        problemResponse(422, { errors: { fields: { 'body.actualRepairCost': 'A repair cost cannot be less than R0.00.' } } }),
     })
     const form = await startResolving(user, entry)
     await user.click(within(form).getByRole('radio', { name: /^Repaired/ }))

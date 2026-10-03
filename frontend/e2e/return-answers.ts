@@ -40,6 +40,7 @@ function item(number: number, overrides: Record<string, unknown>) {
     daysLateToday: 2,
     lateFeeToday: '440.00',
     damageAssessment: 'NOT_NEEDED',
+    replacementValue: '42500.00',
     ...overrides,
   }
 }
@@ -117,7 +118,13 @@ const LONG_OVERDUE = rental(OVERDUE_RENTAL_ID, 'TSH-H-26-000097', {
 /** The same hire partly back, settled, the way a customer is sent it. */
 const CUSTOMER_HIRE = rental(RETURN_RENTAL_ID, 'TSH-H-26-000099', {
   status: 'SETTLED',
-  items: PARTLY_BACK_ITEMS.map((each) => ({ ...each, assetTag: null, returnedAt: RETURNED_AT, conditionIn: 'B' })),
+  items: PARTLY_BACK_ITEMS.map((each) => ({
+    ...each,
+    assetTag: null,
+    replacementValue: null,
+    returnedAt: RETURNED_AT,
+    conditionIn: 'B',
+  })),
   charges: [
     charge(1, {}),
     charge(2, { type: 'LATE_FEE', description: 'Late return of a plate compactor with water tank, 2 days', amountIncVat: '1320.00' }),

@@ -17,7 +17,7 @@
  * right box whether it came from these checks or from the API.
  */
 
-import type { DamageReport, DamageSeverity, FileDamageReportRequest, LocatedUnit, Money } from '../../shared/api/contract'
+import type { AssetStatus, DamageSeverity, FileDamageReportRequest, LocatedUnit, Money } from '../../shared/api/contract'
 import type { FieldErrors } from '../../shared/api/problem-fields'
 import { money } from '../../shared/format'
 
@@ -149,6 +149,27 @@ const SEVERITY_IN_A_SENTENCE: Record<DamageSeverity, string> = {
   WRITE_OFF: 'too bad to be worth repairing',
 }
 
+/** The states of a unit out of service for its damage. A new report leaves a
+ *  unit in either of them where it is. */
+const OUT_OF_SERVICE: readonly AssetStatus[] = ['QUARANTINED', 'UNDER_REPAIR']
+
+/**
+ * Where a unit stands once a report is filed against it. The server moves it
+ * to quarantine, unless it is in quarantine or in the workshop already, and
+ * then it stays there.
+ */
+export function statusAfterFiling(before: AssetStatus): AssetStatus {
+  return OUT_OF_SERVICE.includes(before) ? before : 'QUARANTINED'
+}
+
+/** What filing does to the unit, in one sentence. */
+function unitSentence(unit: LocatedUnit): string {
+  const until = 'cannot be booked until the owner resolves the report.'
+  if (unit.status === 'QUARANTINED') return `${unit.assetTag} stays in quarantine and ${until}`
+  if (unit.status === 'UNDER_REPAIR') return `${unit.assetTag} stays in the workshop and ${until}`
+  return `${unit.assetTag} is quarantined and ${until}`
+}
+
 /**
  * What pressing the last button will do, in words, before it is pressed. One
  * sentence for each thing that happens.
@@ -159,9 +180,7 @@ export function damageSentences(unit: LocatedUnit, rentalItemId: string | null, 
   const sentences = [
     `A damage report is filed against ${unit.assetTag}, ${unit.modelName}, at ${unit.branchName}. ` +
       `The damage is ${SEVERITY_IN_A_SENTENCE[request.severity]}.`,
-    unit.status === 'QUARANTINED'
-      ? `${unit.assetTag} stays in quarantine and cannot be booked until the owner resolves the report.`
-      : `${unit.assetTag} is quarantined and cannot be booked until the owner resolves the report.`,
+    unitSentence(unit),
     `The repair is estimated at ${money(request.repairEstimate)}.`,
   ]
   if (request.recoveryAmount !== null) {
@@ -181,29 +200,16 @@ export function damageSentences(unit: LocatedUnit, rentalItemId: string | null, 
 }
 
 /**
- * The replacement value a report may not recover more than, when the screen
- * knows it. The API sends it only on a report, so it is known when an earlier
- * report names the same unit of the same hire, whose booking it was copied onto.
- */
-export function knownReplacementValue(reports: readonly DamageReport[], rentalItemId: string | null): Money | null {
-  if (rentalItemId === null) return null
-  return reports.find((report) => report.rentalItemId === rentalItemId)?.replacementValue ?? null
-}
-
-/**
- * The controls the API names a field of. A rule on the server may name a field
- * the way the backend spells it rather than the way the wire does, so both
- * spellings are read.
+ * The controls the API names a field of. The API names a field the way the
+ * wire does, whether the framework refused it or a rule of the backend did. A
+ * refusal of the tag or the rental item has no control and is left over.
  */
 const API_FIELD_CONTROL: Record<string, DamageControl> = {
   severity: 'severity',
   description: 'description',
   repairEstimate: 'estimate',
-  repair_estimate: 'estimate',
   chargeableToCustomer: 'chargeable',
-  chargeable_to_customer: 'chargeable',
   recoveryAmount: 'recovery',
-  recovery_amount: 'recovery',
 }
 
 /**
