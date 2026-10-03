@@ -12,11 +12,10 @@ as it went out, and was not flagged, needs none. A unit still out, or one
 recorded as lost, waits for nothing here, because nobody has inspected it. A
 report that names any unit makes its assessment DONE.
 
-The schema has no column for the counter's flag, so I keep the flag where the
-schema keeps what the counter says about a unit, in the notes of its rental
-item. The notes of a flagged unit begin with `FLAGGED_NOTE`, followed by
-anything the counter wrote, and `was_flagged` reads the flag back from there.
-Nothing else writes that sentence, and the notes are never shown to a client.
+The return records the counter's flag on the rental item as
+`flagged_for_damage`, beside the grade it came back in, and every later
+question about the unit reads it from there. The notes keep what the counter
+wrote and decide nothing.
 
 How many units of a rental still wait is `assessments_due_on`. It is the
 number the settlement asks before it lets the deposit go (BR-32).
@@ -35,8 +34,6 @@ from app.domain.rental import DamageAssessment, Rental, RentalItem
 GRADE_RANK: Final[Mapping[ConditionGrade, int]] = MappingProxyType(
     {ConditionGrade.A: 0, ConditionGrade.B: 1, ConditionGrade.C: 2}
 )
-FLAGGED_NOTE: Final[str] = "Flagged for a damage assessment at return."
-NOTE_SEPARATOR: Final[str] = "\n"
 
 
 def came_back_worse(condition_out: ConditionGrade, condition_in: ConditionGrade) -> bool:
@@ -65,30 +62,6 @@ def status_on_return(
     if goes_to_quarantine(condition_out=condition_out, condition_in=condition_in, flagged=flagged):
         return AssetStatus.QUARANTINED
     return AssetStatus.AVAILABLE
-
-
-def notes_on_return(notes: str | None, *, flagged: bool) -> str | None:
-    """Return the notes a unit is stored with as it comes back, with the flag when it was flagged.
-
-    Args:
-        notes: What the counter wrote about the unit, or None.
-        flagged: Whether the counter flagged it for a damage assessment.
-
-    Returns:
-        The counter's notes without surrounding space, after `FLAGGED_NOTE`
-        on a line of its own when the unit was flagged, or None when there is
-        nothing to keep.
-
-    """
-    written = (notes or "").strip()
-    if not flagged:
-        return written or None
-    return NOTE_SEPARATOR.join(part for part in (FLAGGED_NOTE, written) if part)
-
-
-def was_flagged(notes: str | None) -> bool:
-    """Return True when the stored notes of a unit say the counter flagged it."""
-    return notes is not None and notes.startswith(FLAGGED_NOTE)
 
 
 def damage_assessment_of(
@@ -122,7 +95,7 @@ def assessment_of(item: RentalItem) -> DamageAssessment:
     return damage_assessment_of(
         condition_out=item.condition_out,
         condition_in=item.condition_in,
-        flagged=was_flagged(item.notes),
+        flagged=item.flagged_for_damage,
         reported=item.damage_reported,
     )
 

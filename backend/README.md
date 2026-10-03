@@ -907,7 +907,8 @@ coming back, always in that order, and hands the rest to `return_items` in
 not on the rental and a meter reading below the one it went out with (422,
 naming the field), and then a unit already back (409), so a refused return
 changes nothing. For each unit it records the condition, the meter, the
-accessories, the notes and the time, asks the late fee policy for the days
+accessories, the notes, the counter's damage flag and the time, asks the late
+fee policy for the days
 late and the fee, raises a `LATE_FEE` charge when there is one, lets the
 allocation go with the reason `RETURNED` and moves the unit to `AVAILABLE`
 through the asset state model, so it can be booked from that day. The rental
@@ -1023,8 +1024,8 @@ worked out from the dates.
 
 A unit that comes back damaged leaves availability at once, and whether the
 customer is charged for the damage is an explicit decision (FR-20, US-24,
-US-38, BR-35 to BR-40). There is no new table and no new column. Revision
-`0005` adds two indexes.
+US-38, BR-35 to BR-40). There is no new table. Revision `0005` adds two
+indexes and revision `0006` adds one column, `rental_item.flagged_for_damage`.
 
 **Quarantine at return (BR-35).** `status_on_return` in
 `app/domain/quarantine.py` decides from the two grades and the counter's flag.
@@ -1035,11 +1036,14 @@ is still let go, because the hire is over. Its `damageAssessment` reads
 `REQUIRED`, `settlementWaitingOn` reads `DAMAGE_ASSESSMENT` and the deposit is
 not settled. Once a damage report names the unit the assessment reads `DONE`.
 `damage_assessment_of` is the one rule the read and the settlement both ask.
-The schema has no column for the flag, so I keep it where the schema keeps
-what the counter says about a unit, at the head of the rental item's notes,
-which no client is shown. `was_flagged` reads it back. A column on
-`rental_item` would be the durable home for it, and it is a one statement
-migration when the schema may change.
+The return stores the flag in `rental_item.flagged_for_damage`, and the read
+of a rental, the settlement and the check on a unit's last hire when a report
+is filed all read it from there. The notes are stored as the counter wrote
+them, trimmed of surrounding space, and nothing is ever decided from them. The
+design document lists no column for the flag. I added one on purpose, because
+the only other place the schema offers is the free text of the notes, and the
+deposit should not depend on matching words in free text. Revision `0006` says
+the same.
 
 **Filing a report.** `POST /api/damage-reports` is `FileDamageReportUseCase`,
 for counter staff of the branch that holds the unit and administrators. In one
@@ -1171,6 +1175,16 @@ Revision `0005` adds two indexes and nothing else, both on `damage_report`.
 every read of a rental asks through, and `ix_damage_report_asset` is a btree
 on `asset_id`, which the reports of one unit are reached through. The table is
 empty when the revision first runs, so building them blocks nothing.
+
+Revision `0006` adds one column and nothing else,
+`rental_item.flagged_for_damage`, a `BOOLEAN NOT NULL DEFAULT false` that holds
+the counter's damage flag on a unit that came back. The design document lists
+no such column, and the revision's docstring explains the departure. A column
+with a constant default is added without rewriting the table, so the statement
+holds its lock for a moment however many items there are. The release before
+it never names the column, so its inserts take the default and it keeps working
+against a migrated database. A privilege on a table covers the columns it gains
+later, so there is nothing to grant.
 
 ## The seed and the two database roles
 
@@ -1785,7 +1799,8 @@ runs the overdue sweep a batch at a time.
 
 Damage and quarantine are tested the same way. `tests/unit` holds the
 quarantine decision for A to A, A to B, A to C, B to A and the flag alone, the
-flag in the notes, the moves of a report's status on their own, what each move
+flag kept on the item apart from the notes, which never decide anything, the
+moves of a report's status on their own, what each move
 does to the unit, the recovery cap below, at and above the replacement value
 and after an earlier recovery, the rules of the chargeable decision, and a
 hire taken back a grade worse whose settlement waits and then resumes with the
@@ -1798,7 +1813,9 @@ past its due date as `OVERDUE` with no list read first. On PostgreSQL,
 unit and offers it again once its report is resolved, that the report, its
 charge and the settlement are one transaction, that a write off keeps the row
 and its history, and that the two reads of revision `0005` stand on its
-indexes.
+indexes. `test_flagged_return.py` takes a unit back flagged in the grade it
+went out in and reads the committed row, which holds the flag in its column and
+the notes exactly as they were posted.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as
@@ -1810,7 +1827,8 @@ after the run.
 `tests/integration/test_schema_baseline.py` runs before every other test. It
 reads the PostgreSQL catalogue and asserts that the three extensions, the
 seventeen tables, the seventeen enumerated types, the exclusion constraint with
-its exact definition and the partial indexes all exist. Every other integration
+its exact definition and the partial indexes all exist, and that every column a
+later revision added is NOT NULL with its default. Every other integration
 test assumes that schema, so a broken migration is reported once at the top
 instead of as a page of unrelated failures. The order is set by the collection
 hook in `tests/integration/conftest.py`, which needs no plugin.

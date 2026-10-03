@@ -137,6 +137,7 @@ def _write_items(session: Session, rental: domain.Rental) -> None:
         row.returned_at = item.returned_at
         row.days_late = item.days_late
         row.notes = item.notes
+        row.flagged_for_damage = item.flagged_for_damage
         session.add(row)
 
 
@@ -244,6 +245,7 @@ def _items_by_rental(
                 returned_at=in_utc(item.returned_at),
                 days_late=item.days_late,
                 notes=item.notes,
+                flagged_for_damage=item.flagged_for_damage,
                 damage_reported=bool(reported),
             )
         )

@@ -123,6 +123,9 @@ class RentalItem(SQLModel, table=True):
         default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
     )
     notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # Set at return when the counter flagged the unit for a damage assessment
+    # (BR-35). Added by revision 0006, which says why it is a column of its own.
+    flagged_for_damage: bool = Field(default=False, sa_column=flag(default=False))
     created_at: datetime | None = Field(default=None, sa_column=created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=updated_at_column())
 

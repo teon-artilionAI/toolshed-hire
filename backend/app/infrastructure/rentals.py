@@ -206,4 +206,5 @@ def _item_row(item: domain.RentalItem) -> RentalItem:
         returned_at=item.returned_at,
         days_late=item.days_late,
         notes=item.notes,
+        flagged_for_damage=item.flagged_for_damage,
     )

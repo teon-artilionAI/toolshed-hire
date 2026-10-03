@@ -37,7 +37,14 @@ from tests.support.damage_api import (
     unit_status,
 )
 from tests.support.factories import Factory
-from tests.support.rental_api import charges_of, worked_example_world
+from tests.support.rental_api import (
+    charges_of,
+    item_ids,
+    on_hire,
+    return_body,
+    take_back,
+    worked_example_world,
+)
 
 REFERENCE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^TSH-D-26-\d{5}$")
 TWO_UNITS: Final[int] = 2
@@ -83,10 +90,12 @@ class TestAReturnThatQuarantines:
     def test_a_flagged_unit_in_the_same_grade_is_quarantined_and_stays_waiting(
         self, booking: BookingClient, world: BookingWorld, assistant: UserAccount, session: Session
     ) -> None:
-        back = returned_worse(booking, world, assistant, flaggedForDamage=True)
-        again = answered(read_rental(booking, assistant, back["id"]))
+        rental = on_hire(booking, world, assistant)
+        body = return_body(*item_ids(rental), flaggedForDamage=True)
+        answered(take_back(booking, assistant, rental["id"], body))
+        again = answered(read_rental(booking, assistant, rental["id"]))
         item = only_item(again)
-        assert item["damageAssessment"] == "REQUIRED"
+        assert (item["conditionIn"], item["damageAssessment"]) == ("A", "REQUIRED")
         assert again["settlementWaitingOn"] == "DAMAGE_ASSESSMENT"
         assert unit_status(session, item["assetTag"]) is AssetStatus.QUARANTINED
 

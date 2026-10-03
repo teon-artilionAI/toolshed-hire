@@ -155,6 +155,26 @@ def column_nullability(session: Session, table_name: str) -> dict[str, bool]:
     return {str(name): bool(nullable) for name, nullable in rows}
 
 
+def column_default(session: Session, table_name: str, column_name: str) -> str | None:
+    """Return the default of one column as PostgreSQL prints it back, or None when it has none."""
+    logger.debug(
+        "test.column_default_query_started", extra={"table": table_name, "column": column_name}
+    )
+    default = session.execute(
+        text(
+            "SELECT column_default FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = :table "
+            "AND column_name = :column"
+        ),
+        {"table": table_name, "column": column_name},
+    ).scalar_one_or_none()
+    logger.debug(
+        "test.column_default_query_finished",
+        extra={"table": table_name, "column": column_name, "default": default},
+    )
+    return str(default) if default is not None else None
+
+
 def partial_index_predicates(session: Session) -> dict[str, str]:
     """Return every partial index in the connected schema with its predicate.
 

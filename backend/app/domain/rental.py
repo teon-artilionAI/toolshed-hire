@@ -111,6 +111,8 @@ class RentalItem:
         returned_at: When it came back or was recorded as lost. None while it is out.
         days_late: The whole days it came back late, worked out at return.
         notes: Anything the counter wrote about it.
+        flagged_for_damage: True when the counter flagged it for a damage
+            assessment as it came back, which sends it to quarantine (BR-35).
         damage_reported: True once a damage report names the unit. It is read
             with the item and never stored on it, because the report is.
         id: The item key, generated here so it is known before the insert.
@@ -131,6 +133,7 @@ class RentalItem:
     returned_at: datetime | None = None
     days_late: int = NO_DAYS_LATE
     notes: str | None = None
+    flagged_for_damage: bool = False
     damage_reported: bool = False
     id: UUID = field(default_factory=uuid4)
 

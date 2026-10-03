@@ -131,6 +131,17 @@ RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
 DAMAGE_REPORT_RENTAL_ITEM_INDEX: Final[str] = "ix_damage_report_rental_item"
 DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
 
+# The columns a revision after the baseline added to one of its tables, each
+# with its table and the default PostgreSQL prints back for it. Revision 0006
+# adds the counter's damage flag to `rental_item`. It is NOT NULL and defaults
+# to false, so a release that never names it still inserts a rental item, and
+# the schema test checks the default for that reason.
+RENTAL_ITEM_TABLE: Final[str] = "rental_item"
+DAMAGE_FLAG_COLUMN: Final[str] = "flagged_for_damage"
+COLUMNS_ADDED_AFTER_BASELINE: Final[tuple[tuple[str, str, str], ...]] = (
+    (RENTAL_ITEM_TABLE, DAMAGE_FLAG_COLUMN, "false"),
+)
+
 # The seventeen native enumerated types and their members, read from the domain
 # enumerations so there is one Python statement of each.
 ENUM_TYPES: Final[dict[str, tuple[str, ...]]] = {

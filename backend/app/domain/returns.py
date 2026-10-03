@@ -37,7 +37,7 @@ from app.domain.enums import AssetStatus, ConditionGrade, ReleaseReason, RentalS
 from app.domain.errors import StateTransitionError, ValidationFailure
 from app.domain.money import Money
 from app.domain.policies.late_fee import LateFee, LateFeePolicy
-from app.domain.quarantine import notes_on_return, status_on_return
+from app.domain.quarantine import status_on_return
 from app.domain.rental import Rental, RentalItem
 from app.domain.return_charges import late_fee_charge
 
@@ -270,10 +270,12 @@ def _take_back(
     """Record one unit as back, raise its late fee, let its allocation go and shelve it."""
     late = late_fee_of(rental, item, policy, today)
     accessories = (back.accessories_in or "").strip()
+    notes = (back.notes or "").strip()
     item.condition_in = back.condition_in
     item.hour_meter_in = back.hour_meter_in
     item.accessories_in = accessories or None
-    item.notes = notes_on_return(back.notes, flagged=back.flagged_for_damage)
+    item.notes = notes or None
+    item.flagged_for_damage = back.flagged_for_damage
     item.returned_at = now
     item.days_late = late.days_late
     charge = None

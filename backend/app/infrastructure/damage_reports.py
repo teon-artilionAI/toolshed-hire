@@ -39,7 +39,7 @@ from app.application.hire.damage_models import (
 )
 from app.domain import damage as domain
 from app.domain.damage_filing import UnitLastHire
-from app.domain.quarantine import damage_assessment_of, was_flagged
+from app.domain.quarantine import damage_assessment_of
 from app.infrastructure.booking_mapping import in_utc, required_utc
 from app.infrastructure.damage_report_query import SqlDamageReportReads, report_key_condition
 from app.infrastructure.models import Asset, AssetAllocation, DamageReport, Rental, RentalItem
@@ -151,7 +151,7 @@ class SqlDamageReportRepository:
                 col(RentalItem.id),
                 col(RentalItem.condition_out),
                 col(RentalItem.condition_in),
-                col(RentalItem.notes),
+                col(RentalItem.flagged_for_damage),
                 col(Rental.reference),
                 damage_reported(),
             )
@@ -162,14 +162,14 @@ class SqlDamageReportRepository:
         ).first()
         if found is None:
             return None
-        item_id, condition_out, condition_in, notes, rental_reference, reported = found
+        item_id, condition_out, condition_in, flagged, rental_reference, reported = found
         return UnitLastHire(
             rental_item_id=item_id,
             rental_reference=rental_reference,
             assessment=damage_assessment_of(
                 condition_out=condition_out,
                 condition_in=condition_in,
-                flagged=was_flagged(notes),
+                flagged=bool(flagged),
                 reported=bool(reported),
             ),
         )

@@ -37,7 +37,6 @@ from app.application.hire.read_models import (
     RentalItemDetail,
     RentalKey,
 )
-from app.domain.quarantine import was_flagged
 from app.infrastructure.booking_mapping import in_utc, required_utc
 from app.infrastructure.models import (
     Asset,
@@ -163,7 +162,7 @@ class SqlRentalReads:
                     returned_at=in_utc(item.returned_at),
                     days_late=item.days_late,
                     late_fee_per_day=Decimal(line.late_fee_per_day_snapshot),
-                    flagged_for_damage=was_flagged(item.notes),
+                    flagged_for_damage=item.flagged_for_damage,
                     damage_reported=bool(reported),
                     replacement_value=Decimal(line.replacement_value_snapshot),
                 )
