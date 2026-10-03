@@ -142,6 +142,48 @@ class SqlAssetRepository:
             "allocation.insert_finished", extra={"allocation_count": len(allocations)}
         )
 
+    def lock_units(self, asset_ids: Sequence[UUID]) -> list[catalogue.Asset]:
+        """Lock particular units to change their status, waiting where another transaction has one.
+
+        The rows are locked in asset tag order, so two transactions that lock
+        overlapping sets of units always take them in the same order and
+        cannot deadlock on each other.
+        """
+        statement = (
+            select(Asset)
+            .where(col(Asset.id).in_(list(asset_ids)))
+            .order_by(col(Asset.asset_tag))
+            .with_for_update(of=Asset)
+            .execution_options(populate_existing=True)
+        )
+        rows = self._session.execute(statement).scalars().all()
+        logger.debug(
+            "asset.units_locked",
+            extra={"requested_count": len(asset_ids), "locked_count": len(rows)},
+        )
+        return [_asset_of(row) for row in rows]
+
+    def save_units(self, assets: Sequence[catalogue.Asset]) -> None:
+        """Write the status, the condition and the meter reading of units locked earlier.
+
+        Raises:
+            LookupError: If a unit was never stored, which would mean a use
+                case is saving a unit it did not read.
+
+        """
+        for asset in assets:
+            row = self._session.get(Asset, asset.id)
+            if row is None:
+                raise LookupError(
+                    f"Attempted to save unit {asset.asset_tag}, which is not in the database."
+                )
+            row.status = asset.status
+            row.condition_grade = asset.condition_grade
+            row.hour_meter_reading = asset.hour_meter_reading
+            self._session.add(row)
+        self._session.flush()
+        logger.debug("asset.units_saved", extra={"unit_count": len(assets)})
+
     def translate_integrity_error(self, error: IntegrityError) -> AllocationConflictError | None:
         """Return the booking conflict an integrity error stands for, if it is one.
 
@@ -178,6 +220,7 @@ def _asset_of(row: Asset) -> catalogue.Asset:
         branch_id=row.branch_id,
         status=row.status,
         condition_grade=row.condition_grade,
+        hour_meter_reading=row.hour_meter_reading,
     )
 
 

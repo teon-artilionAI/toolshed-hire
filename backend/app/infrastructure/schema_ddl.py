@@ -96,6 +96,20 @@ REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
 # The worked example in the design document is TSH-R-26-000123, so the
 # sequence starts at the next number rather than colliding with it.
 REFERENCE_SEQUENCE_START: Final[int] = 124
+# Rental references come from a sequence of their own. The worked example is
+# rental TSH-H-26-000098, and the migration starts the sequence after it.
+RENTAL_REFERENCE_SEQUENCE: Final[str] = "rental_reference_seq"
+
+# The three indexes the counter's customer lookup stands on. The first two
+# are in the baseline. The third is revision 0003, a trigram index over the
+# digits of the contact phone, and its expression has to be written in the
+# search exactly as the migration wrote it, or the planner cannot use it.
+CUSTOMER_NAME_SEARCH_INDEX: Final[str] = "ix_customer_profile_display_name_trgm"
+CUSTOMER_EMAIL_SEARCH_INDEX: Final[str] = "user_account_email_key"
+CUSTOMER_PHONE_SEARCH_INDEX: Final[str] = "ix_customer_profile_phone_digits_trgm"
+# The punctuation a phone number may carry, in the order the index expression
+# removes it, innermost first.
+PHONE_PUNCTUATION_REMOVED: Final[tuple[str, ...]] = (" ", "-", "(", ")", "+")
 
 # The seventeen native enumerated types and their members, read from the domain
 # enumerations so there is one Python statement of each.

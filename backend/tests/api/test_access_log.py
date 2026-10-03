@@ -55,7 +55,9 @@ RESERVATION_PATH: Final[str] = f"{PROBE_PREFIX}/reservations/{RESERVATION_IDENTI
 FAULT_PATH: Final[str] = f"{PROBE_PREFIX}/faults/F-1"
 BROKEN_STREAM_PATH: Final[str] = f"{PROBE_PREFIX}/streams/S-1"
 UNKNOWN_IDENTIFIER: Final[str] = "CUST-778899"
-UNKNOWN_PATH: Final[str] = f"/api/customers/{UNKNOWN_IDENTIFIER}"
+# A path no router serves. It used to sit under /api/customers, which the
+# counter's customer routes now serve.
+UNKNOWN_PATH: Final[str] = f"/api/no-such-collection/{UNKNOWN_IDENTIFIER}"
 
 ACCESS_LOG_FIELDS: Final[set[str]] = {
     "method",

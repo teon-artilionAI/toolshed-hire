@@ -8,6 +8,7 @@ booking is held to (BR-03).
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from decimal import Decimal
 from uuid import UUID
 
@@ -50,6 +51,18 @@ class SqlProductModelRepository:
             extra={"slug": slug, "found": row is not None},
         )
         return _product_model_of(row) if row is not None else None
+
+    def names_of(self, product_model_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Return the display name of each product model asked for, by its key, in one read."""
+        statement = select(col(ProductModel.id), col(ProductModel.name)).where(
+            col(ProductModel.id).in_(list(product_model_ids))
+        )
+        names = dict(self._session.exec(statement).all())
+        logger.debug(
+            "catalogue.product_model_names_read",
+            extra={"requested_count": len(product_model_ids), "found_count": len(names)},
+        )
+        return names
 
 
 def _product_model_of(row: ProductModel) -> domain.ProductModel:

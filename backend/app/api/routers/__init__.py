@@ -15,10 +15,13 @@ from app.api.routers import (
     availability,
     branches,
     catalogue,
+    checkout,
+    customers,
     health,
     me,
     profile,
     quote,
+    rentals,
     reservation_reads,
     reservations,
 )
@@ -31,8 +34,11 @@ api_router.include_router(auth.router)
 api_router.include_router(account.router)
 api_router.include_router(me.router)
 api_router.include_router(profile.router)
+api_router.include_router(customers.router)
 api_router.include_router(reservations.router)
 api_router.include_router(reservation_reads.router)
+api_router.include_router(checkout.router)
+api_router.include_router(rentals.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)
