@@ -1,16 +1,12 @@
-"""The SQL side of the identity module, for branches and customer profiles.
+"""The SQL customer repository of the identity module, on the session of its unit of work.
 
-The two repositories map the SQLModel table classes to the small domain
-entities a booking needs, and they run on the session of the unit of work that
-created them. The branch repository only reads. The customer repository also
-counts a late cancellation on the profile (BR-16), writes the profile of
-somebody who has just registered or of a walk-in the counter registers, and
-reads and writes a customer's own details. Those details span two rows, the
-profile and the account behind it, and one statement reads both with the code
-of the home branch.
-
-The read sides are elsewhere. `SqlBranchDirectory` lists the trading branches
-for a visitor, and `SqlCustomerDirectory` finds a customer for the counter.
+It counts a late cancellation (BR-16) and a booking that was not collected
+(BR-17), each in one statement so two at once are both counted, and writes
+the standing of a customer (BR-18). It writes the profile of somebody who has
+just registered or of a walk-in, and reads and writes a customer's own
+details, which span the profile and the account and are read in one
+statement. The branch repository, the branch directory and the customer
+directory are modules of their own.
 """
 
 from __future__ import annotations
@@ -26,45 +22,14 @@ from sqlmodel import Session, col, select
 from app.domain import identity as domain
 from app.domain.business_time import in_business_time
 from app.domain.customer_account import CustomerDetails, NewCustomer
+from app.domain.enums import AccountStatus
 from app.domain.walk_in import WalkInCustomer
 from app.infrastructure.booking_mapping import required_utc
 from app.infrastructure.models import Branch, CustomerProfile, UserAccount
 
 logger = logging.getLogger(__name__)
 
-LATE_CANCELLATION_INCREMENT: Final[int] = 1
-
-
-class SqlBranchRepository:
-    """Reads branches through one session."""
-
-    def __init__(self, session: Session) -> None:
-        """Bind the repository to the session of its unit of work."""
-        self._session = session
-
-    def get(self, branch_id: UUID) -> domain.Branch | None:
-        """Return the branch with this key, or None when there is none."""
-        logger.debug("identity.branch_lookup_started", extra={"branch_id": str(branch_id)})
-        row = self._session.get(Branch, branch_id)
-        logger.debug(
-            "identity.branch_lookup_finished",
-            extra={"branch_id": str(branch_id), "found": row is not None},
-        )
-        if row is None:
-            return None
-        return domain.Branch(id=row.id, code=row.code, name=row.name)
-
-    def find_active_by_code(self, code: str) -> domain.Branch | None:
-        """Return the trading branch with this code, or None when there is none."""
-        statement = select(Branch).where(col(Branch.code) == code, col(Branch.is_active))
-        row = self._session.exec(statement).first()
-        logger.debug(
-            "identity.branch_code_lookup_finished",
-            extra={"branch_code": code, "found": row is not None},
-        )
-        if row is None:
-            return None
-        return domain.Branch(id=row.id, code=row.code, name=row.name)
+COUNT_INCREMENT: Final[int] = 1
 
 
 class SqlCustomerRepository:
@@ -99,12 +64,43 @@ class SqlCustomerRepository:
             .where(col(CustomerProfile.id) == customer_profile_id)
             .values(
                 late_cancellation_count=col(CustomerProfile.late_cancellation_count)
-                + LATE_CANCELLATION_INCREMENT
+                + COUNT_INCREMENT
             )
         )
         logger.info(
             "identity.late_cancellation_recorded",
             extra={"customer_profile_id": str(customer_profile_id)},
+        )
+
+    def get_for_update(self, customer_profile_id: UUID) -> domain.CustomerProfile | None:
+        """Return the customer profile with this key, locked until the transaction ends."""
+        return self._find(
+            col(CustomerProfile.id) == customer_profile_id,
+            {"customer_profile_id": str(customer_profile_id)},
+            for_update=True,
+        )
+
+    def record_no_show(self, customer_profile_id: UUID) -> None:
+        """Raise the running count of bookings a customer did not collect by one (BR-17)."""
+        self._session.execute(
+            update(CustomerProfile)
+            .where(col(CustomerProfile.id) == customer_profile_id)
+            .values(no_show_count=col(CustomerProfile.no_show_count) + COUNT_INCREMENT)
+        )
+        logger.info(
+            "identity.no_show_recorded", extra={"customer_profile_id": str(customer_profile_id)}
+        )
+
+    def save_account_status(self, customer_profile_id: UUID, status: AccountStatus) -> None:
+        """Write the standing of a customer (BR-18)."""
+        self._session.execute(
+            update(CustomerProfile)
+            .where(col(CustomerProfile.id) == customer_profile_id)
+            .values(account_status=status)
+        )
+        logger.info(
+            "identity.account_status_saved",
+            extra={"customer_profile_id": str(customer_profile_id), "status": status.value},
         )
 
     def add_registered(
@@ -233,24 +229,29 @@ class SqlCustomerRepository:
         )
 
     def _find(
-        self, condition: ColumnElement[bool], sought: dict[str, str]
+        self, condition: ColumnElement[bool], sought: dict[str, str], *, for_update: bool = False
     ) -> domain.CustomerProfile | None:
         """Return the one profile a condition picks, with what its account says.
 
         The address of the account and the moment it was verified are read in
         the same statement, because a confirmation is sent to the first and
         allowed by the second (BR-47). The join is an outer one, because a
-        walk-in has a profile and no account.
+        walk-in has a profile and no account. A lock takes the profile alone,
+        and the profile is read again under it.
         """
         statement = (
             select(CustomerProfile, col(UserAccount.email), col(UserAccount.email_verified_at))
             .outerjoin(UserAccount, col(UserAccount.id) == col(CustomerProfile.user_account_id))
             .where(condition)
         )
+        if for_update:
+            statement = statement.with_for_update(of=CustomerProfile).execution_options(
+                populate_existing=True
+            )
         found = self._session.exec(statement).first()
         logger.debug(
             "identity.customer_profile_lookup_finished",
-            extra={**sought, "found": found is not None},
+            extra={**sought, "found": found is not None, "locked": for_update},
         )
         if found is None:
             return None

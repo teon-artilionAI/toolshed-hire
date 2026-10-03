@@ -13,12 +13,18 @@ A reservation that is going to change is read with `find_for_update`, which
 locks its row until the unit of work ends. Two requests that act on one
 booking at the same moment therefore take turns, and the second one sees what
 the first one did.
+
+The two halves of the lazy sweep each have a query of their own. One finds the
+holds that have run out (BR-13) and the other the confirmed bookings whose
+branch has closed on their first day (BR-17). Both lock what they return.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime, time
 from typing import Protocol
+from uuid import UUID
 
 from app.application.booking.read_models import (
     ReservationDetail,
@@ -28,6 +34,22 @@ from app.application.booking.read_models import (
 )
 from app.application.ownership import OwnerScope
 from app.domain.booking import Reservation
+
+
+@dataclass(frozen=True, slots=True)
+class DueNoShow:
+    """A confirmed reservation the sweep found past its collection, locked.
+
+    Attributes:
+        reservation: The reservation with its lines and allocations.
+        branch_closes_at: When its collection branch closes, on a clock in
+            Cape Town. The sweep turns it into the instant the branch closed
+            on the first day of the hire.
+
+    """
+
+    reservation: Reservation
+    branch_closes_at: time
 
 
 class ReservationRepository(Protocol):
@@ -79,6 +101,24 @@ class ReservationRepository(Protocol):
         The oldest expiry comes first. A row another transaction is changing
         is waited for and then read again, so a reservation that was confirmed
         or expired in the meantime is not returned.
+        """
+        ...
+
+    def lock_due_no_shows(self, now: datetime, limit: int) -> list[DueNoShow]:
+        """Lock and return up to `limit` confirmed reservations that were never collected.
+
+        A reservation is returned once its collection branch has closed on the
+        first day of its hire, by the clock in Cape Town. The earliest first
+        day comes first. A row another transaction is changing is waited for
+        and read again, as the hold query does.
+        """
+        ...
+
+    def count_no_shows_since(self, customer_profile_id: UUID, started_after: date) -> int:
+        """Return how many of a customer's reservations that started after a day were no shows.
+
+        The count reads the reservations as this transaction sees them, so a
+        no show recorded earlier in it is counted.
         """
         ...
 

@@ -24,7 +24,7 @@ import copy
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from types import TracebackType
 from typing import Final, Self
 from uuid import UUID
@@ -33,7 +33,7 @@ from app.domain.audit import AuditEvent
 from app.domain.availability import AssetAllocation
 from app.domain.booking import Reservation
 from app.domain.catalogue import Asset, ProductModel
-from app.domain.enums import NotificationStatus
+from app.domain.enums import AccountStatus, NotificationStatus
 from app.domain.errors import AllocationConflictError
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.notification import Notification
@@ -64,6 +64,8 @@ class Records:
     audit_events: list[AuditEvent] = field(default_factory=list)
     notifications: dict[UUID, Notification] = field(default_factory=dict)
     late_cancellations: dict[UUID, int] = field(default_factory=dict)
+    no_shows: dict[UUID, int] = field(default_factory=dict)
+    account_statuses: dict[UUID, AccountStatus] = field(default_factory=dict)
 
 
 @dataclass
@@ -79,6 +81,8 @@ class MemoryStore:
         assets: The fleet.
         unpublished_slugs: The slugs of models that exist and are not published.
         closed_branch_codes: The codes of branches that have stopped trading.
+        closing_times: When a branch closes, by its key. 17:00 for any not named.
+        stale_no_show_query: True to make the no show query return everything.
         journal: `commit` and `rollback`, in the order they happened.
         fail_audit: When True, recording an audit event raises.
         fail_outbox_read: When True, reading the queued notifications raises.
@@ -94,6 +98,8 @@ class MemoryStore:
     assets: list[Asset] = field(default_factory=list)
     unpublished_slugs: set[str] = field(default_factory=set)
     closed_branch_codes: set[str] = field(default_factory=set)
+    closing_times: dict[UUID, time] = field(default_factory=dict)
+    stale_no_show_query: bool = False
     journal: list[str] = field(default_factory=list)
     fail_audit: bool = False
     fail_outbox_read: bool = False

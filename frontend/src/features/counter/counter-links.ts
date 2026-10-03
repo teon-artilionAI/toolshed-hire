@@ -11,6 +11,12 @@ export const CUSTOMERS_PATH = '/counter/customers'
 /** SC-10, the counter's home. */
 export const COUNTER_HOME_PATH = '/counter'
 
+/** SC-11, the branch diary. */
+export const DIARY_PATH = '/counter/diary'
+
+/** SC-13, a new booking. Without a customer it asks for one first. */
+export const NEW_BOOKING_PATH = '/counter/booking'
+
 /** The query parameter SC-13 carries its customer in, so a reload keeps them. */
 export const CUSTOMER_PARAMETER = 'customer'
 

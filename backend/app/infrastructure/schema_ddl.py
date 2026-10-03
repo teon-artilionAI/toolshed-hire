@@ -111,6 +111,15 @@ CUSTOMER_PHONE_SEARCH_INDEX: Final[str] = "ix_customer_profile_phone_digits_trgm
 # removes it, innermost first.
 PHONE_PUNCTUATION_REMOVED: Final[tuple[str, ...]] = (" ", "-", "(", ")", "+")
 
+# The three indexes of revision 0004. The asset locator matches part of a tag
+# through the first and reaches the units of a model through the second. The
+# counter's diary reads the hires due back at a branch on any day through the
+# third, which the partial index on open hires cannot serve for a day that is
+# past.
+ASSET_TAG_SEARCH_INDEX: Final[str] = "ix_asset_tag_trgm"
+ASSET_MODEL_INDEX: Final[str] = "ix_asset_product_model"
+RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
+
 # The seventeen native enumerated types and their members, read from the domain
 # enumerations so there is one Python statement of each.
 ENUM_TYPES: Final[dict[str, tuple[str, ...]]] = {

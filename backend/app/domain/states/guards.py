@@ -14,8 +14,9 @@ from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
+from app.domain.business_time import business_instant
 from app.domain.enums import ReservationStatus
-from app.domain.errors import AllocationConflictError, AuthorisationFailure
+from app.domain.errors import AllocationConflictError, AuthorisationFailure, StateTransitionError
 
 if TYPE_CHECKING:
     from app.domain.availability import AssetAllocation
@@ -27,6 +28,8 @@ HOLD_DURATION: Final[timedelta] = timedelta(minutes=30)
 # counts as a late cancellation (BR-16).
 LATE_CANCELLATION_CUTOFF: Final[time] = time(17, 0)
 ONE_DAY: Final[timedelta] = timedelta(days=1)
+# Midnight in Cape Town, when the first day of a hire begins.
+START_OF_DAY: Final[time] = time.min
 
 HOLD_EXPIRY_RULE: Final[str] = "BR-13"
 FULL_ALLOCATION_RULE: Final[str] = "BR-08"
@@ -64,6 +67,9 @@ BRANCH_STILL_OPEN_MESSAGE: Final[str] = (
     "The branch has not closed yet on the first day of this hire, so the reservation can "
     "still be collected."
 )
+FIRST_DAY_NOT_COME_MESSAGE: Final[str] = (
+    "This reservation cannot be marked as not collected before the first day of the hire."
+)
 NO_LINES_MESSAGE: Final[str] = "Add at least one tool before you reserve."
 
 
@@ -76,6 +82,47 @@ def ensure_owner_or_staff(by_owner_or_staff: bool) -> None:
     """
     if not by_owner_or_staff:
         raise AuthorisationFailure(NOT_YOURS_TO_CANCEL_MESSAGE, rule=CANCELLATION_RULE)
+
+
+def branch_has_closed(now: datetime, branch_closed_at: datetime) -> bool:
+    """Return True once the closing time of the first day has passed (BR-17).
+
+    The branch is still open at the very instant it closes, so a booking is not
+    a no show until the moment after.
+    """
+    return now > branch_closed_at
+
+
+def ensure_no_show_is_due(
+    reservation: Reservation, now: datetime, branch_closed_at: datetime | None
+) -> None:
+    """Refuse to call a confirmed booking a no show before it is one (BR-17).
+
+    The sweep names the instant the collection branch closed on the first day
+    of the hire, and the booking is a no show once that has passed. A member of
+    staff at the counter names none. They can see that nobody came, so they may
+    mark it from the start of the first day, by the clock in Cape Town.
+
+    Raises:
+        StateTransitionError: If the first day has not begun, for staff, or
+            the branch has not closed yet, for the sweep.
+
+    """
+    if branch_closed_at is None:
+        first_day_begins = business_instant(reservation.period.start, START_OF_DAY)
+        if now >= first_day_begins:
+            return
+        message = FIRST_DAY_NOT_COME_MESSAGE
+    elif branch_has_closed(now, branch_closed_at):
+        return
+    else:
+        message = BRANCH_STILL_OPEN_MESSAGE
+    raise StateTransitionError(
+        message,
+        from_status=reservation.status.value,
+        to_status=ReservationStatus.NO_SHOW.value,
+        rule=NO_SHOW_RULE,
+    )
 
 
 def mark_cancelled(reservation: Reservation, now: datetime, reason: str | None) -> None:

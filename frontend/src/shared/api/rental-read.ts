@@ -39,7 +39,8 @@ import {
 /** The grades a unit can be given, best first. */
 export const CONDITION_GRADES: readonly ConditionGrade[] = ['A', 'B', 'C']
 
-const RENTAL_STATUSES: readonly RentalStatus[] = [
+/** Every status a hire can be in. */
+export const RENTAL_STATUSES: readonly RentalStatus[] = [
   'OPEN',
   'OVERDUE',
   'PARTIALLY_RETURNED',

@@ -27,9 +27,11 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, PlainSerializer, StringConstraints
 
+from app.api.account_schemas import StrictRequest
 from app.api.catalogue_schemas import Money, Percentage
 from app.api.schemas import MAXIMUM_QUANTITY, MINIMUM_QUANTITY, CamelModel, ProblemDetail
 from app.application.booking.cancel_reservation import REASON_MAX_LENGTH
+from app.application.booking.mark_no_show import NO_SHOW_REASON_MAX_LENGTH
 from app.domain.business_time import in_business_time
 from app.domain.enums import ReservationStatus
 
@@ -122,6 +124,12 @@ class CancellationRequest(CamelModel):
     """Why a reservation is being cancelled, when the caller wants to say."""
 
     reason: Annotated[str, Field(max_length=REASON_MAX_LENGTH)] | None = None
+
+
+class NoShowRequest(StrictRequest):
+    """Why nobody collected the reservation, which staff always say."""
+
+    reason: Annotated[TrimmedText, Field(max_length=NO_SHOW_REASON_MAX_LENGTH)]
 
 
 class ReservationLineResponse(CamelModel):

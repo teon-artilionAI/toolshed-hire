@@ -2,7 +2,8 @@
 
 A policy is a port with one implementation that runs in production and a
 counterpart for tests. The pricing policy is the first. The late fee policy
-joins it when returns are built.
+joins it when returns are built, and takes the place of the one function in
+`late_fee` that the counter's overdue list reads until then.
 """
 
 from __future__ import annotations

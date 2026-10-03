@@ -156,12 +156,14 @@ export type RentalCharge = Refine<
  * server's.
  *
  * The checkout answers 201 with the new hire, and 200 with the hire it made
- * before when the reservation is already out. The document describes only the
- * 201 body, so that and the rental route are what this is built from.
+ * before when the reservation is already out. The document describes both
+ * bodies, so this is built from the two of them and the rental route, and a
+ * repeated checkout is read as the same hire the first one made.
  */
 export type Rental = Refine<
   JsonOf<Paths['/api/rentals/{id}']['get']> &
-    CreatedJsonOf<Paths['/api/reservations/{id}/checkout']['post']>,
+    CreatedJsonOf<Paths['/api/reservations/{id}/checkout']['post']> &
+    JsonOf<Paths['/api/reservations/{id}/checkout']['post']>,
   {
     from: IsoDate
     dueBackOn: IsoDate

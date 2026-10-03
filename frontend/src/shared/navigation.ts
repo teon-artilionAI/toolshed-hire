@@ -69,8 +69,8 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-09', path: '/account', name: 'My Account and Hire History', navLabel: 'Account', role: 'customer', live: true, inNav: true, icon: 'User' },
 
   // Counter staff, SC-10 to SC-18
-  { id: 'SC-10', path: '/counter', name: 'Counter Dashboard', navLabel: 'Today', role: 'counter', live: false, inNav: true, icon: 'LayoutDashboard' },
-  { id: 'SC-11', path: '/counter/diary', name: 'Branch Diary', navLabel: 'Diary', role: 'counter', live: false, inNav: true, icon: 'CalendarRange' },
+  { id: 'SC-10', path: '/counter', name: 'Counter Dashboard', navLabel: 'Today', role: 'counter', live: true, inNav: true, icon: 'LayoutDashboard' },
+  { id: 'SC-11', path: '/counter/diary', name: 'Branch Diary', navLabel: 'Diary', role: 'counter', live: true, inNav: true, icon: 'CalendarRange' },
   { id: 'SC-12', path: '/counter/customers', name: 'Customer Lookup and Walk-in Registration', navLabel: 'Customers', role: 'counter', live: true, inNav: true, icon: 'Users' },
   { id: 'SC-13', path: '/counter/booking', name: 'New Booking and Asset Allocation', navLabel: 'New Booking', role: 'counter', live: true, inNav: true, icon: 'CalendarPlus' },
   // The value is the key of a reservation or its reference, because a checkout
@@ -78,7 +78,7 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-14', path: '/counter/checkout/:reservationId', name: 'Checkout and Deposit', role: 'counter', live: true },
   { id: 'SC-15', path: '/counter/return/:rentalId', name: 'Return and Condition Inspection', role: 'counter', live: false },
   { id: 'SC-16', path: '/counter/damage/:assetId', name: 'Damage Report Capture', role: 'counter', live: false },
-  { id: 'SC-17', path: '/counter/locator', name: 'Asset Locator', navLabel: 'Locator', role: 'counter', live: false, inNav: true, icon: 'MapPin' },
+  { id: 'SC-17', path: '/counter/locator', name: 'Asset Locator', navLabel: 'Locator', role: 'counter', live: true, inNav: true, icon: 'MapPin' },
   { id: 'SC-18', path: '/counter/overdue', name: 'Overdue and Late Fee Worklist', navLabel: 'Overdue', role: 'counter', live: false, inNav: true, icon: 'AlarmClock' },
 
   // Admin and owner, SC-19 to SC-24
@@ -150,4 +150,17 @@ export const ROLE_HOME: Record<Role, string> = {
   customer: '/',
   counter: '/counter',
   admin: '/admin',
+}
+
+/**
+ * Whether a path is the home of a role.
+ *
+ * A menu marks the item of the current screen, and an item normally counts as
+ * current on every address that starts with its path, so My Hires stays marked
+ * on the detail of one hire. A home is the start of every other path of its
+ * area, so by that rule the counter's Today would be marked on every counter
+ * screen. The menus mark a home only on its own address.
+ */
+export function isHomePath(path: string): boolean {
+  return Object.values(ROLE_HOME).includes(path)
 }

@@ -44,6 +44,12 @@
  * counter can put the account on hold or register the person a moment ago.
  * What the counter needs to hand equipment over sits under the reservation
  * segment, because it is the reservation read another way.
+ *
+ * The counter's dashboard and diary run under it too. They are left open all
+ * day, and a booking is collected or a hire comes back at another counter
+ * while they are on the screen, so they are read again whenever the window
+ * comes back into focus. So does the asset locator, because a unit can go out
+ * or come back between one search and the next.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -82,10 +88,18 @@ export const ACCOUNT_KEY = 'account'
 /** The first segment of every query key about customers the counter looks up. */
 export const CUSTOMERS_KEY = 'customers'
 
+/** The first segment of every query key about the counter's day, which is the
+ *  dashboard and the diary. */
+export const COUNTER_KEY = 'counter'
+
+/** The first segment of every query key about where units are. */
+export const ASSETS_KEY = 'assets'
+
 /** What never fresh means to the cache. The answer is stale when it arrives,
  *  and it is asked for again whenever a screen mounts, the window regains
  *  focus or the network comes back. Availability, quotes, reservations, the
- *  customer's own profile and the customers the counter looks up all run on it. */
+ *  customer's own profile, the customers the counter looks up, the counter's
+ *  day and the locator all run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -134,5 +148,7 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([RESERVATIONS_KEY], NEVER_FRESH)
   client.setQueryDefaults([ACCOUNT_KEY], NEVER_FRESH)
   client.setQueryDefaults([CUSTOMERS_KEY], NEVER_FRESH)
+  client.setQueryDefaults([COUNTER_KEY], NEVER_FRESH)
+  client.setQueryDefaults([ASSETS_KEY], NEVER_FRESH)
   return client
 }

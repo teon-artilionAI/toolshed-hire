@@ -28,7 +28,7 @@ from uuid import UUID
 from app.application.identity.read_models import BranchListing
 from app.domain.account import Account
 from app.domain.customer_account import CustomerDetails, NewCustomer
-from app.domain.enums import RevokeReason
+from app.domain.enums import AccountStatus, RevokeReason
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.session import RefreshSession
 from app.domain.walk_in import WalkInCustomer
@@ -95,6 +95,26 @@ class CustomerRepository(Protocol):
         The count is raised by one in the database, so two cancellations at
         the same moment are both counted.
         """
+        ...
+
+    def get_for_update(self, customer_profile_id: UUID) -> CustomerProfile | None:
+        """Return the customer profile with this key, locked until the transaction ends.
+
+        Counting a no show locks the profile first, so two no shows of one
+        customer recorded at the same moment take turns, and the second one
+        counts the first (BR-18).
+        """
+        ...
+
+    def record_no_show(self, customer_profile_id: UUID) -> None:
+        """Raise the running count of bookings a customer did not collect by one (BR-17).
+
+        The count is raised in the database, in one statement.
+        """
+        ...
+
+    def save_account_status(self, customer_profile_id: UUID, status: AccountStatus) -> None:
+        """Write the standing of a customer (BR-18)."""
         ...
 
     def add_registered(

@@ -13,10 +13,12 @@
  * reads nothing and is the same either way.
  *
  * The counter's customer lookup, new booking and checkout need a signed in
- * assistant and a customer with a booking. The spec answers the API for those
- * itself, through counter-answers.ts, so they are scanned loaded every time.
- * The new booking is scanned again with a tool on it, and the checkout again
- * with every problem of its form on the screen.
+ * assistant and a customer with a booking, and the counter's dashboard, diary
+ * and locator need a day with something on it and units to find. The spec
+ * answers the API for those itself, through counter-answers.ts, so all six are
+ * scanned loaded every time. The new booking is scanned again with a tool on
+ * it, the checkout again with every problem of its form on the screen, and the
+ * diary again with the no show question open and its problem showing.
  */
 
 import { expect, test } from '@playwright/test'
@@ -66,6 +68,20 @@ test('a checkout with every problem on the screen has no serious or critical acc
 
   await page.getByRole('button', { name: 'Check out the equipment' }).click()
   await expect(page.getByText(/Nothing has gone out yet\. 3 answers need fixing\./)).toBeVisible()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+test('the diary with the no show question open has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  const diary = COUNTER_SCREENS.find((screen) => screen.heading === 'Branch diary')
+  if (diary === undefined) throw new Error('COUNTER_SCREENS has no branch diary to open.')
+  await openCounterScreen(page, diary)
+
+  await page.getByRole('button', { name: /^Mark as no show / }).click()
+  await page.getByRole('button', { name: 'Yes, mark as no show' }).click()
+  await expect(page.getByText(/Say why in a few words/)).toBeVisible()
 
   expect(await blockingViolations(page)).toEqual([])
 })

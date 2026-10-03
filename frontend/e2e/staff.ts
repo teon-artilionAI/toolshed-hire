@@ -10,7 +10,8 @@
  * falls back to the password the development seed gives every account.
  *
  * The API counts every sign in attempt for an email address and allows ten in
- * fifteen minutes. One run signs each assistant in once.
+ * fifteen minutes. One run signs each assistant in three times, once for the
+ * counter journey and once for each counter overview journey.
  */
 
 import { expect } from '@playwright/test'

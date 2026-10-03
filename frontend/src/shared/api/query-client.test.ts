@@ -20,6 +20,7 @@ import {
 } from '../../test/reservation-samples'
 import { listBranches } from './catalogue'
 import { catalogueQueries } from './catalogue-queries'
+import { locatorQueries, overviewQueries } from './counter-queries'
 import {
   CATALOGUE_FRESH_MS,
   MAX_QUERY_RETRIES,
@@ -118,6 +119,9 @@ describe('the freshness rules', () => {
   it.each([
     ['a list of reservations', reservationQueries.list({ page: 1 }).queryKey],
     ['one reservation', reservationQueries.detail(REFERENCE).queryKey],
+    ["the counter's dashboard", overviewQueries.dashboard('BLV').queryKey],
+    ['a day of the diary', overviewQueries.diary({ branchCode: 'BLV', from: '2026-03-12', days: 1 }).queryKey],
+    ['a locator search', locatorQueries.search({ q: 'TSH', page: 1, pageSize: 20 }).queryKey],
   ])('never treat %s as fresh, and refetch it on every use', (_what, queryKey) => {
     const defaults = createQueryClient().getQueryDefaults(queryKey)
 

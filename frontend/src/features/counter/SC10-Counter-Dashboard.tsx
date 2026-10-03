@@ -1,205 +1,174 @@
 /**
  * SC-10 Counter Dashboard.
  *
- * The first screen counter staff see, and it has one job: answer "what do
- * I have to do today" without anybody having to read a table. The five
- * figures across the top are the whole answer, and each one opens the list
- * behind it rather than sending you off to find it.
+ * The first screen counter staff see, and it answers one question: what do I
+ * have to do today at this branch. Five figures across the top are the whole
+ * answer, and the three lists under them say who is coming to collect, what is
+ * due back and what is late, each with the way to deal with it one press away.
+ *
+ * It is one request for the branch the person works at, which comes from
+ * work-branch.ts through the gate. Every count, every day late and every late
+ * fee is the server's. The counts are true totals and each list holds at most
+ * fifty, so a list that is cut short says so and points at the diary.
+ *
+ * The screen is left open all day. It reads the branch again whenever the
+ * window comes back into focus, which is the cache's rule for the counter's
+ * day, and the refresh button reads it again whenever someone asks. The line
+ * above the figures says when they were read.
  */
 
-import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Card, EmptyState, PageHeader, StatTile } from '../../shared/ui'
-import { TODAY, auditEvents } from '../../shared/fixtures'
-import { formatDate, formatDateTime, money } from '../../shared/format'
-import type { BranchScope } from './counter-desk-data'
-import { useHomeBranch } from './home-branch'
-import * as desk from './counter-desk-data'
-import type { FocusId } from './SC10-Focus-Panel'
-import FocusPanel, { PanelLink } from './SC10-Focus-Panel'
+import { useQuery } from '@tanstack/react-query'
+import { RotateCw } from 'lucide-react'
+import type { CounterDashboard as Dashboard, DashboardCounts } from '../../shared/api/contract'
+import { overviewQueries } from '../../shared/api/counter-queries'
+import { queryPhase } from '../../shared/api/query-phase'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import { formatDate } from '../../shared/format'
+import { branchClockTime } from '../../shared/today'
+import { EmptyState, PageHeader, StatTile } from '../../shared/ui'
+import { DIARY_PATH, NEW_BOOKING_PATH } from './counter-links'
+import { TodayLists } from './SC10-Today-Lists'
+import { WorkBranchGate } from './work-branch-gate'
+import type { CounterBranch } from './work-branch-gate'
 
-const TILE_BUTTON =
-  'block h-full w-full cursor-pointer rounded-lg text-left transition-shadow duration-200 [&>div]:h-full'
+/** One skeleton block for each figure. */
+const FIGURE_COUNT = 5
 
-export default function CounterDashboard() {
-  const branch = useHomeBranch()
-  const [allBranches, setAllBranches] = useState(false)
-  const [focus, setFocus] = useState<FocusId>('collections')
-  const scope: BranchScope = allBranches ? 'ALL' : branch.code
+type Tone = 'default' | 'warn' | 'bad' | 'good'
 
-  const today = useMemo(() => {
-    const collections = desk.collectionsOn(TODAY, scope)
-    const returns = desk.returnsOn(TODAY, scope)
-    const week = desk.weekDays(TODAY)
-    return {
-      collections,
-      waiting: collections.filter((c) => !c.rental && c.reservation.status !== 'NO_SHOW'),
-      returns,
-      stillOut: returns.filter((r) => r.outstandingUnits > 0),
-      overdue: desk.overdueReturns(scope),
-      quarantined: desk.assetsWithStatus('QUARANTINED', scope),
-      reallocate: desk.bookingsNeedingReallocation(scope),
-      onHire: desk.assetsWithStatus('ON_HIRE', scope),
-      available: desk.assetsWithStatus('AVAILABLE', scope),
-      weekCollections: week.reduce((n, d) => n + desk.collectionsOn(d, scope).length, 0),
-    }
-  }, [scope])
+interface Figure {
+  label: string
+  value: number
+  hint: string
+  tone: Tone
+}
 
-  const lateFees = today.overdue.reduce((sum, entry) => sum + desk.lateFeeRunning(entry), 0)
-
-  const tiles = [
+/** The five figures, each with a sentence that says what it means, so the
+ *  colour of a figure never carries the meaning alone. */
+function figuresFor(counts: DashboardCounts): Figure[] {
+  return [
     {
-      id: 'collections' as FocusId,
       label: 'Collections due today',
-      value: today.collections.length,
-      hint:
-        today.waiting.length > 0
-          ? `${today.waiting.length} still waiting at the counter`
-          : 'All handed over',
-      tone: today.waiting.length > 0 ? ('warn' as const) : ('good' as const),
+      value: counts.collectionsDue,
+      hint: counts.collectionsDue > 0 ? 'Booked to go out today' : 'Nobody is booked to collect',
+      tone: 'default',
     },
     {
-      id: 'returns' as FocusId,
       label: 'Returns due today',
-      value: today.returns.length,
-      hint:
-        today.stillOut.length > 0
-          ? `${today.stillOut.length} still to come back`
-          : 'Nothing outstanding for today',
-      tone: today.stillOut.length > 0 ? ('warn' as const) : ('good' as const),
+      value: counts.returnsDue,
+      hint: counts.returnsDue > 0 ? 'Due back before closing' : 'Nothing is due back',
+      tone: 'default',
     },
     {
-      id: 'overdue' as FocusId,
       label: 'Overdue now',
-      value: today.overdue.length,
-      hint: today.overdue.length > 0 ? `${money(lateFees)} in late fees running` : 'Nothing late',
-      tone: today.overdue.length > 0 ? ('bad' as const) : ('good' as const),
+      value: counts.overdue,
+      hint: counts.overdue > 0 ? 'Past the day they were due back' : 'Nothing is late',
+      tone: counts.overdue > 0 ? 'bad' : 'good',
     },
     {
-      id: 'quarantine' as FocusId,
+      label: 'Out on hire',
+      value: counts.onHire,
+      hint: 'With customers now',
+      tone: 'default',
+    },
+    {
       label: 'Quarantined',
-      value: today.quarantined.length,
-      hint:
-        today.quarantined.length > 0
-          ? 'Withdrawn from hire until inspected'
-          : 'Whole fleet is hireable',
-      tone: today.quarantined.length > 0 ? ('bad' as const) : ('good' as const),
-    },
-    {
-      id: 'reallocate' as FocusId,
-      label: 'Bookings to reallocate',
-      value: today.reallocate.length,
-      hint:
-        today.reallocate.length > 0
-          ? 'A unit needs swapping before collection'
-          : 'Every booking has a unit set aside',
-      tone: today.reallocate.length > 0 ? ('warn' as const) : ('good' as const),
+      value: counts.quarantined,
+      hint: counts.quarantined > 0 ? 'Withdrawn from hire until inspected' : 'Nothing is withdrawn from hire',
+      tone: counts.quarantined > 0 ? 'warn' : 'good',
     },
   ]
+}
 
-  const activity = auditEvents.filter((event) => event.at.startsWith(TODAY))
+/** Whether there is nothing to collect, take back or chase today. */
+function isQuietDay(counts: DashboardCounts): boolean {
+  return counts.collectionsDue === 0 && counts.returnsDue === 0 && counts.overdue === 0
+}
 
+/** When the figures were read, as a time of day at the branch. */
+function readAt(updatedAt: number): string {
+  return branchClockTime(new Date(updatedAt).toISOString())
+}
+
+function QuietDay({ dashboard }: { dashboard: Dashboard }) {
   return (
-    <div>
+    <div className="card">
+      <EmptyState
+        title={`Nothing is due at ${dashboard.branchName} today`}
+        body="Nobody is booked to collect, nothing is due back and nothing is late. Bookings for other days are in the diary."
+        action={
+          <Link to={DIARY_PATH} className="btn-secondary px-md">
+            Open the diary
+          </Link>
+        }
+      />
+    </div>
+  )
+}
+
+function TodayAt({ branch }: { branch: CounterBranch }) {
+  const dashboard = useQuery(overviewQueries.dashboard(branch.code))
+  const phase = queryPhase(dashboard)
+  const data = dashboard.data
+
+  if (phase === 'failed') {
+    return (
+      <ErrorState
+        what={`today's figures for ${branch.name}`}
+        error={dashboard.error}
+        onRetry={() => void dashboard.refetch()}
+      />
+    )
+  }
+  if (data === undefined) {
+    return <LoadingState label={`Loading today at ${branch.name}`} shape="tiles" count={FIGURE_COUNT} />
+  }
+
+  const refreshing = dashboard.isFetching
+  return (
+    <div aria-busy={refreshing}>
+      <div className="mb-lg flex flex-wrap items-center justify-between gap-sm">
+        <p role="status" className="text-sm text-slate-soft">
+          {data.branchName}, {formatDate(data.date)}.{' '}
+          {refreshing ? 'Reading the figures again.' : `Read at ${readAt(dashboard.dataUpdatedAt)}.`}
+        </p>
+        <button
+          type="button"
+          className="btn-secondary px-md"
+          onClick={() => void dashboard.refetch()}
+          disabled={refreshing}
+        >
+          <RotateCw className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
+
+      <div className="mb-lg grid gap-md sm:grid-cols-2 xl:grid-cols-5">
+        {figuresFor(data.counts).map((figure) => (
+          <StatTile key={figure.label} label={figure.label} value={figure.value} hint={figure.hint} tone={figure.tone} />
+        ))}
+      </div>
+
+      {isQuietDay(data.counts) ? <QuietDay dashboard={data} /> : <TodayLists dashboard={data} />}
+    </div>
+  )
+}
+
+export default function CounterDashboard() {
+  return (
+    <>
       <PageHeader
         screenId="SC-10"
         title="Today at the counter"
-        subtitle={`${allBranches ? 'All three branches' : branch.name}, ${formatDate(TODAY)}. Tap a figure to see what sits behind it.`}
+        subtitle="What goes out, what comes back and what is late at your branch today."
         actions={
-          <Link to="/counter/booking" className="btn-primary">
+          <Link to={NEW_BOOKING_PATH} className="btn-primary">
             Start a booking
           </Link>
         }
       />
-
-      <div
-        role="group"
-        aria-label="Which branches these figures cover"
-        className="mb-lg flex flex-wrap gap-sm"
-      >
-        {[
-          { on: false, label: branch.name },
-          { on: true, label: 'All branches' },
-        ].map((option) => (
-          <button
-            key={option.label}
-            type="button"
-            aria-pressed={allBranches === option.on}
-            onClick={() => setAllBranches(option.on)}
-            className={
-              allBranches === option.on
-                ? 'btn bg-accent font-semibold text-accent-ink'
-                : 'btn-secondary'
-            }
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-lg grid gap-md sm:grid-cols-2 xl:grid-cols-5">
-        {tiles.map((tile) => (
-          <button
-            key={tile.id}
-            type="button"
-            aria-pressed={focus === tile.id}
-            onClick={() => setFocus(tile.id)}
-            className={`${TILE_BUTTON} ${
-              focus === tile.id ? 'ring-2 ring-accent ring-offset-2' : 'hover:shadow-raised'
-            }`}
-          >
-            <StatTile label={tile.label} value={tile.value} hint={tile.hint} tone={tile.tone} />
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-lg">
-        <FocusPanel focus={focus} today={today} />
-      </div>
-
-      <div className="grid gap-md lg:grid-cols-3">
-        <StatTile
-          label="Out on hire now"
-          value={today.onHire.length}
-          hint="Units with a customer"
-        />
-        <StatTile
-          label="Ready to hire"
-          value={today.available.length}
-          hint="On the shelf and serviceable"
-          tone="good"
-        />
-        <StatTile
-          label="Collections this week"
-          value={today.weekCollections}
-          hint="Monday to Sunday"
-        />
-      </div>
-
-      <Card
-        title="What has happened today"
-        className="mt-lg"
-        action={<PanelLink to="/counter/diary">Open the diary</PanelLink>}
-      >
-        {activity.length === 0 ? (
-          <EmptyState
-            title="Nothing logged yet today"
-            body="Collections, returns and fee changes appear here as they happen."
-          />
-        ) : (
-          <ul className="flex flex-col gap-md">
-            {activity.map((event) => (
-              <li key={event.id} className="flex flex-wrap items-baseline gap-sm">
-                <span className="tabular font-mono text-xs text-slate-faint">
-                  {formatDateTime(event.at)}
-                </span>
-                <span className="text-sm text-ink">{event.detail}</span>
-                <span className="text-xs text-slate-soft">by {event.actor}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </div>
+      <WorkBranchGate>{(branch) => <TodayAt branch={branch} />}</WorkBranchGate>
+    </>
   )
 }

@@ -14,6 +14,7 @@ import {
   ShieldCheck, ShoppingCart, Tags, User, Users, Wrench, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { isHomePath } from './navigation'
 import type { ScreenDef } from './navigation'
 import { MAX_TAB_BAR_ITEMS, TAB_CLASS, navItemClass } from './shell-nav-style'
 
@@ -72,7 +73,7 @@ export function MobileTabBar({ items }: { items: ScreenDef[] }) {
           <ul className="flex flex-col gap-sm">
             {rest.map((s) => (
               <li key={s.id}>
-                <NavLink to={s.path} className={navItemClass('btn w-full justify-start', 'text-ink hover:bg-muted')}>
+                <NavLink to={s.path} end={isHomePath(s.path)} className={navItemClass('btn w-full justify-start', 'text-ink hover:bg-muted')}>
                   <NavIcon screen={s} />
                   {s.navLabel ?? s.name}
                 </NavLink>
@@ -89,7 +90,7 @@ export function MobileTabBar({ items }: { items: ScreenDef[] }) {
           <NavLink
             key={s.id}
             to={s.path}
-            end={s.path === '/'}
+            end={isHomePath(s.path)}
             className={navItemClass(TAB_CLASS, 'text-slate-soft hover:bg-muted', 'bg-accent-wash font-semibold text-ink')}
           >
             <NavIcon screen={s} />

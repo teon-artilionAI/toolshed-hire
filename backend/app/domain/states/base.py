@@ -53,6 +53,7 @@ CONFIRM_MOVE: Final[str] = "confirm"
 CANCEL_MOVE: Final[str] = "cancel"
 COLLECT_MOVE: Final[str] = "collect"
 EXPIRE_MOVE: Final[str] = "expire"
+NO_SHOW_MOVE: Final[str] = "mark_no_show"
 # What each move would have done, as a customer reads it in a refusal.
 PUT_ON_HOLD: Final[str] = "put on hold"
 CONFIRMED: Final[str] = "confirmed"
@@ -149,7 +150,7 @@ class ReservationState:
         self._reject(ReservationStatus.EXPIRED, EXPIRED)
 
     def mark_no_show(
-        self, reservation: Reservation, *, now: datetime, branch_closed_at: datetime
+        self, reservation: Reservation, *, now: datetime, branch_closed_at: datetime | None
     ) -> None:
         """Refuse to record that the reservation was never collected."""
         self._reject(ReservationStatus.NO_SHOW, MARKED_AS_NOT_COLLECTED)
