@@ -18,6 +18,9 @@
  *
  * The account spec needs the registration and account routes, and asks a
  * fourth question about those.
+ *
+ * The counter spec needs the customer and checkout routes, and asks a fifth
+ * question about those.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -164,4 +167,48 @@ export async function accountRoutesArePresent(request: APIRequestContext): Promi
     )
   }
   return present
+}
+
+/** The customer lookup and the checkout of a reservation, the two ends of a
+ *  counter booking. The reference does not have to exist. A route that is
+ *  there refuses a request with no token before it looks. */
+const COUNTER_PROBE_PATHS: readonly string[] = [
+  '/api/customers?q=probe',
+  '/api/reservations/TSH-R-00-000000/checkout',
+]
+
+/** The reason shown beside a skipped counter spec in the report. */
+export const COUNTER_ROUTES_NEEDED =
+  `This needs the counter routes on the real backend, and one of ${COUNTER_PROBE_PATHS.join(' and ')} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that can ' +
+  'look a customer up, register a walk in and check a reservation out.'
+
+/**
+ * Ask whether the backend has the counter routes.
+ *
+ * I ask the customer lookup and a checkout with no token. A backend that has a
+ * route refuses that with a 401, which is an answer from the route and so
+ * proves it exists. A backend that does not have it answers 404 or 405. The
+ * counter spec books through the reservation routes and signs in, so those
+ * have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the reservation and
+ *   session routes, and both counter routes answered for themselves.
+ */
+export async function counterRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await reservationRoutesArePresent(request))) return false
+  for (const path of COUNTER_PROBE_PATHS) {
+    const response = await request.get(path, { timeout: HEALTH_TIMEOUT_MS })
+    const status = response.status()
+    const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+    if (present) continue
+    if (BACKEND_IS_REQUIRED) {
+      throw new Error(
+        `${REQUIRE_BACKEND_VARIABLE} is set, so the counter routes have to be there, and ` +
+          `GET ${path} answered ${status}. A skipped spec would hide that.`,
+      )
+    }
+    return false
+  }
+  return true
 }

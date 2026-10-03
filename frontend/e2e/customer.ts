@@ -23,8 +23,8 @@ export const CUSTOMER_EMAIL = 'w.adonis@buildright.co.za'
 export const SECOND_CUSTOMER_EMAIL = 'nomsa.dlamini@example.com'
 
 /** The password the seed gives every account when `SEED_PASSWORD` is unset.
- *  It exists in development only. */
-const DEVELOPMENT_SEED_PASSWORD = 'toolshed-dev-password'
+ *  It exists in development only. The staff accounts fall back to it too. */
+export const DEVELOPMENT_SEED_PASSWORD = 'toolshed-dev-password'
 
 export const CUSTOMER_PASSWORD = process.env.E2E_CUSTOMER_PASSWORD ?? DEVELOPMENT_SEED_PASSWORD
 

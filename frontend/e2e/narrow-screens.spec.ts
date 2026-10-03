@@ -1,24 +1,29 @@
 /**
- * My Hires and My Account on a phone 360 pixels wide.
+ * My Hires, My Account and the counter's booking screens on a phone 360
+ * pixels wide.
  *
- * Both screens used to need scrolling sideways at this width. The list of
- * bookings was a table of six columns inside a box that scrolled, with the
- * status and the total out of sight, and the account screen pushed the whole
- * page wider than the window. Only a real browser can measure that, so the
- * check is here and not among the component tests.
+ * Both customer screens used to need scrolling sideways at this width. The
+ * list of bookings was a table of six columns inside a box that scrolled, with
+ * the status and the total out of sight, and the account screen pushed the
+ * whole page wider than the window. Only a real browser can measure that, so
+ * the check is here and not among the component tests. The counter's customer
+ * lookup, new booking and checkout are checked the same way, because an
+ * assistant may hold a phone at the counter.
  *
- * This is the one browser spec that does not use the real backend. Both
- * screens need a signed in customer with bookings and a profile, and a layout
- * check should not depend on what a database happens to hold. So the spec
- * answers the API itself, with bodies shaped the way the contract describes
- * them and with long names and addresses, which are what break a layout. It
- * runs with or without a backend.
+ * This spec does not use the real backend. The screens need a signed in person
+ * with bookings and a profile, and a layout check should not depend on what a
+ * database happens to hold. So the spec answers the API itself, with bodies
+ * shaped the way the contract describes them and with long names and
+ * addresses, which are what break a layout. The counter's answers are in
+ * counter-answers.ts, which the accessibility spec shares. It runs with or
+ * without a backend.
  *
  * It sets its own viewport, so both browser projects check the same width.
  */
 
 import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 
 /** The narrowest phone the screens are built for. */
 const NARROW_PHONE = { width: 360, height: 780 }
@@ -185,3 +190,13 @@ test('My Account fits 360 pixels with long details, reading and editing', async 
 
   expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
 })
+
+for (const counterScreen of COUNTER_SCREENS) {
+  test(`${counterScreen.heading} fits 360 pixels with long names, with nothing to scroll sideways`, async ({
+    page,
+  }) => {
+    await openCounterScreen(page, counterScreen)
+
+    expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
+  })
+}
