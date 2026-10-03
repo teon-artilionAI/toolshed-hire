@@ -54,8 +54,8 @@ from app.application.catalogue.read_models import (
 )
 from app.application.identity.ports import BranchDirectory
 from app.infrastructure.availability_search import SearchAvailabilityQuery
+from app.infrastructure.branch_directory import SqlBranchDirectory
 from app.infrastructure.catalogue_query import SqlCatalogueQuery
-from app.infrastructure.identity import SqlBranchDirectory
 
 PUBLIC_CACHE_SECONDS: Final[int] = 60
 CACHE_CONTROL_PUBLIC_VALUE: Final[str] = f"public, max-age={PUBLIC_CACHE_SECONDS}"

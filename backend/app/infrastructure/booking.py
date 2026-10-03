@@ -19,10 +19,16 @@ candidate units, where any free unit will do, and the asset repository is the
 one place that does it. A reservation is a particular row, so the second
 request waits for the first and then reads what it left.
 
-`lock_due_holds` is the query of the lazy sweep (BR-13). Its status condition
-is written as the literal the partial index `ix_reservation_hold_expiry` is
-filtered on, so the planner can use that index whatever plan it caches, and a
-sweep only ever reads rows that could lapse.
+`lock_due_holds` and `lock_due_no_shows` are the two queries of the lazy sweep
+(BR-13, BR-17). The status condition of each is written as the literal its
+partial index is filtered on, `ix_reservation_hold_expiry` for the holds and
+`ix_reservation_confirmed_start` for the no shows, so the planner can use that
+index whatever plan it caches, and a sweep only ever reads rows that could be
+due. The no show query joins the three branches for their closing time and
+locks the reservations alone.
+
+`count_no_shows_since` counts the strikes of one customer through
+`ix_reservation_customer_start` (BR-18).
 
 The reads that return read models are in `app.infrastructure.booking_query`.
 """
@@ -30,12 +36,14 @@ The reads that return read models are in `app.infrastructure.booking_query`.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Final
+from uuid import UUID
 
-from sqlalchemy import literal_column, text
+from sqlalchemy import func, literal_column, or_, text
 from sqlmodel import Session, col, select
 
+from app.application.booking.ports import DueNoShow
 from app.application.booking.read_models import (
     ReservationDetail,
     ReservationKey,
@@ -44,18 +52,20 @@ from app.application.booking.read_models import (
 )
 from app.application.ownership import OwnerScope
 from app.domain import booking as domain
+from app.domain.business_time import in_business_time
 from app.domain.enums import ReservationStatus
 from app.infrastructure.booking_mapping import aggregates_of, line_row, reservation_row
 from app.infrastructure.booking_query import SqlReservationReads, key_condition
-from app.infrastructure.models import AssetAllocation, CustomerProfile, Reservation
+from app.infrastructure.models import AssetAllocation, Branch, CustomerProfile, Reservation
 from app.infrastructure.schema_ddl import REFERENCE_SEQUENCE
 
 logger = logging.getLogger(__name__)
 
-# The status the partial index behind the sweep is filtered on, written into
-# the statement as a literal. A bound parameter here would stop a cached plan
-# from using that index.
+# The statuses the partial indexes behind the sweep are filtered on, written
+# into the statement as literals. A bound parameter here would stop a cached
+# plan from using those indexes.
 HELD_STATUS_LITERAL: Final[str] = f"'{ReservationStatus.HELD.value}'"
+CONFIRMED_STATUS_LITERAL: Final[str] = f"'{ReservationStatus.CONFIRMED.value}'"
 
 
 class SqlReservationRepository:
@@ -167,6 +177,61 @@ class SqlReservationRepository:
             "booking.due_holds_locked", extra={"due_count": len(rows), "limit": limit}
         )
         return aggregates_of(self._session, rows)
+
+    def lock_due_no_shows(self, now: datetime, limit: int) -> list[DueNoShow]:
+        """Lock and return up to `limit` confirmed reservations whose branch has closed on day one.
+
+        A first day before today is always past its closing time. A first day
+        of today is past it once the clock in Cape Town is later than the time
+        the branch closes. The range on the first day is stated on its own as
+        well, so the partial index can bound the scan.
+        """
+        local = in_business_time(now)
+        today, time_of_day = local.date(), local.time()
+        statement = (
+            select(Reservation, col(Branch.closes_at))
+            .join(Branch, col(Branch.id) == col(Reservation.branch_id))
+            .where(
+                col(Reservation.status) == literal_column(CONFIRMED_STATUS_LITERAL),
+                col(Reservation.start_date) <= today,
+                or_(col(Reservation.start_date) < today, col(Branch.closes_at) < time_of_day),
+            )
+            .order_by(col(Reservation.start_date), col(Reservation.id))
+            .limit(limit)
+            .with_for_update(of=Reservation)
+            .execution_options(populate_existing=True)
+        )
+        rows = self._session.exec(statement).all()
+        logger.debug(
+            "booking.due_no_shows_locked", extra={"due_count": len(rows), "limit": limit}
+        )
+        aggregates = aggregates_of(self._session, [row for row, _closes_at in rows])
+        return [
+            DueNoShow(reservation=reservation, branch_closes_at=closes_at)
+            for reservation, (_row, closes_at) in zip(aggregates, rows, strict=True)
+        ]
+
+    def count_no_shows_since(self, customer_profile_id: UUID, started_after: date) -> int:
+        """Return how many of a customer's reservations that started after a day were no shows."""
+        statement = (
+            select(func.count())
+            .select_from(Reservation)
+            .where(
+                col(Reservation.customer_profile_id) == customer_profile_id,
+                col(Reservation.start_date) > started_after,
+                col(Reservation.status) == ReservationStatus.NO_SHOW,
+            )
+        )
+        counted = self._session.exec(statement).one()
+        logger.debug(
+            "booking.no_shows_counted",
+            extra={
+                "customer_profile_id": str(customer_profile_id),
+                "started_after": started_after.isoformat(),
+                "no_show_count": counted,
+            },
+        )
+        return counted
 
     def find_detail(self, key: ReservationKey, scope: OwnerScope) -> ReservationDetail | None:
         """Return one reservation as a read model, if the scope lets the caller see it."""

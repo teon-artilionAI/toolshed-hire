@@ -116,12 +116,70 @@ describe('the menu and the layout', () => {
   })
 })
 
-describe('the sample data notice in the shell', () => {
-  it('is above a public screen that is not connected yet', async () => {
-    mockApi(SIGNED_OUT)
+describe('the current page in the menu', () => {
+  /** Every link with this name in the menus, the wide one and the phone one. */
+  function menuLinks(name: string): HTMLElement[] {
+    const links = screen
+      .getAllByRole('navigation', { name: 'Primary' })
+      .flatMap((navigation) => within(navigation).queryAllByRole('link', { name }))
+    expect(links.length).toBeGreaterThan(0)
+    return links
+  }
 
-    renderApp('/register')
-    const title = await findScreenHeading('Create your hire account')
+  function expectCurrent(name: string, current: boolean): void {
+    for (const link of menuLinks(name)) {
+      if (current) expect(link).toHaveAttribute('aria-current', 'page')
+      else expect(link).not.toHaveAttribute('aria-current')
+    }
+  }
+
+  it('marks Today only on the counter home, although every counter address starts with it', async () => {
+    mockApi(signedInAs(COUNTER_STAFF))
+
+    renderApp('/counter/diary')
+    await findScreenHeading('Branch diary')
+
+    expectCurrent('Diary', true)
+    expectCurrent('Today', false)
+  })
+
+  it('marks Today on the counter home itself', async () => {
+    mockApi(signedInAs(COUNTER_STAFF))
+
+    renderApp('/counter')
+    await findScreenHeading('Today at the counter')
+
+    expectCurrent('Today', true)
+    expectCurrent('Diary', false)
+  })
+
+  it('marks the admin Overview only on its own address', async () => {
+    mockApi(signedInAs(ADMIN))
+
+    renderApp('/admin/users')
+    await screen.findAllByRole('link', { name: 'Users' }, SCREEN_WAIT)
+
+    expectCurrent('Users', true)
+    expectCurrent('Overview', false)
+  })
+
+  it('still marks My Hires on the detail of one hire, which is not a home', async () => {
+    mockApi(signedInAs(CUSTOMER))
+
+    renderApp('/reservations/TSH-R-26-000124')
+    await findScreenHeading('Booking detail')
+
+    expectCurrent('My Hires', true)
+    expectCurrent('Catalogue', false)
+  })
+})
+
+describe('the sample data notice in the shell', () => {
+  it('is above a screen that is not connected yet', async () => {
+    mockApi(signedInAs(ADMIN))
+
+    renderApp('/admin/users')
+    const title = await findScreenHeading('Users, roles and account holds')
 
     const notice = screen.getByText(SAMPLE_DATA_TITLE)
     expect(notice).toBeVisible()
@@ -130,19 +188,12 @@ describe('the sample data notice in the shell', () => {
     expect(within(screen.getByRole('main')).getByText(SAMPLE_DATA_TITLE)).toBe(notice)
   })
 
-  it('is above a protected screen that is not connected yet', async () => {
-    mockApi(signedInAs(COUNTER_STAFF))
-
-    renderApp('/counter')
-    await findScreenHeading('Today at the counter')
-
-    expect(screen.getByText(SAMPLE_DATA_TITLE)).toBeVisible()
-  })
-
   it.each([
     ['/signin', 'Sign in to Toolshed Hire'],
     ['/basket', 'Your hire basket'],
-  ])('is not on %s, which reads from the API', async (opened, heading) => {
+    ['/register', 'Create your hire account'],
+    ['/privacy', 'Privacy notice'],
+  ])('is not on %s, a public screen that is connected', async (opened, heading) => {
     mockApi(SIGNED_OUT)
 
     renderApp(opened)
@@ -154,6 +205,7 @@ describe('the sample data notice in the shell', () => {
   it.each([
     ['/reservations', 'My hires'],
     ['/reservations/TSH-R-26-000124', 'Booking detail'],
+    ['/account', 'My account'],
   ])('is not on %s, a protected screen that reads from the API', async (opened, heading) => {
     mockApi(signedInAs(CUSTOMER))
 

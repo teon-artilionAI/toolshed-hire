@@ -13,6 +13,12 @@ bound.
 
 Deleting old windows is the one delete the application role is allowed, and
 this table is the only one it is allowed on.
+
+`total_since` adds up the counters of one bucket from a moment onwards. The
+sign in lockout counts each failure in the second it happened in and asks for
+the sum over the last fifteen minutes (BR-46). The unique constraint on the
+bucket and the window start is the index that read uses, so it touches the
+handful of rows of one account and never scans the table.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ import logging
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import CursorResult, DateTime, String, bindparam, delete, text
+from sqlalchemy import CursorResult, DateTime, String, bindparam, delete, func, select, text
 from sqlmodel import Session, col
 
 from app.infrastructure.models import RateLimitCounter
@@ -29,6 +35,7 @@ from app.infrastructure.models import RateLimitCounter
 logger = logging.getLogger(__name__)
 
 FIRST_ATTEMPT: Final[int] = 1
+NOTHING_COUNTED: Final[int] = 0
 
 _COUNT_ATTEMPT = text(
     "INSERT INTO rate_limit_counter (bucket_key_hash, window_started_at, request_count) "
@@ -74,3 +81,17 @@ class SqlRateLimitStore:
             extra={"deleted_count": deleted_count, "cutoff": cutoff.isoformat()},
         )
         return deleted_count
+
+    def total_since(self, bucket_key_hash: str, since: datetime) -> int:
+        """Return the sum of the counters of a bucket whose windows began at or after `since`."""
+        statement = select(
+            func.coalesce(func.sum(col(RateLimitCounter.request_count)), NOTHING_COUNTED)
+        ).where(
+            col(RateLimitCounter.bucket_key_hash) == bucket_key_hash,
+            col(RateLimitCounter.window_started_at) >= since,
+        )
+        total = int(self._session.execute(statement).scalar_one())
+        logger.debug(
+            "rate_limit.total_read", extra={"request_count": total, "since": since.isoformat()}
+        )
+        return total

@@ -59,8 +59,9 @@ OTHER_BRANCH: Final[str] = (
     "branch."
 )
 ACCOUNT_ON_HOLD: Final[str] = (
-    "This customer account is on hold, so it cannot make a reservation at the moment. "
-    "Please speak to the branch."
+    "This customer account is on hold because three bookings in the last twelve months "
+    "were not collected. It cannot make a reservation until an administrator lifts the "
+    "hold. Please speak to the branch."
 )
 
 

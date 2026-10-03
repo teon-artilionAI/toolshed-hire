@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toolshed-hire-backend"
-version = "0.2.0"
+version = "0.3.0"
 description = "Toolshed Hire rental system backend, FastAPI and PostgreSQL walking skeleton"
 readme = "README.md"
 # Cloud Run and CI both run 3.12. The upper bound is left open so a developer
@@ -64,6 +64,7 @@ packages = [
     "app.application.availability",
     "app.application.booking",
     "app.application.catalogue",
+    "app.application.hire",
     "app.application.identity",
     "app.application.money",
     "app.application.notification",
@@ -200,14 +201,14 @@ warn_unreachable = true
 module = ["passlib.*"]
 ignore_missing_imports = true
 
-# disallow_any_explicit is left on everywhere else, and off in exactly the four
+# disallow_any_explicit is left on everywhere else, and off in exactly the twelve
 # modules that declare pydantic models. The Any it objects to is not in this
 # source. pydantic marks BaseModel with @dataclass_transform, and for every
 # such class mypy synthesises a hidden "__mypy-replace" member whose keyword
 # parameters are typed Any. The flag then reports that synthesised member
 # against the class statement itself, so the only ways to satisfy it are to
 # stop using pydantic or to switch the flag off for the file. Narrowing it to
-# these four modules keeps the check live across the domain, the application
+# these twelve modules keeps the check live across the domain, the application
 # layer and the routers, which is where an Any written by hand would actually
 # do damage.
 [[tool.mypy.overrides]]
@@ -215,6 +216,14 @@ module = [
     "app.api.schemas",
     "app.api.catalogue_schemas",
     "app.api.reservation_schemas",
+    "app.api.account_schemas",
+    "app.api.customer_schemas",
+    "app.api.hire_schemas",
+    "app.api.return_schemas",
+    "app.api.counter_schemas",
+    "app.api.damage_schemas",
     "app.config",
+    "app.config_limits",
+    "app.config_clock",
 ]
 disallow_any_explicit = false

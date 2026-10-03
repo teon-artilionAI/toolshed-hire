@@ -13,7 +13,8 @@
  * owner's layout, with the counter screens in the same menu because an admin
  * may use those too. The rule for the menu is `navFor` in screen-access.ts.
  *
- * The shell also owns the notice that says a screen still shows sample data.
+ * The shell also owns the notice that says a screen still shows sample data,
+ * and the footer under every screen, which links to the privacy notice.
  *
  * The count beside the basket in the customer header is how many units the
  * hire basket holds. It comes from the basket itself, in basket-store.ts, so
@@ -27,7 +28,7 @@ import { LogOut, ShoppingCart } from 'lucide-react'
 import { catalogueQueries } from './api/catalogue-queries'
 import { basketUnitCount } from './basket-store'
 import type { ScreenDef } from './navigation'
-import { CATALOGUE_PATH, SIGN_IN_PATH } from './navigation'
+import { CATALOGUE_PATH, PRIVACY_PATH, SIGN_IN_PATH, isHomePath } from './navigation'
 import { SampleDataNotice } from './sample-data-notice'
 import { navFor } from './screen-access'
 import { BrandMark, MobileTabBar, NavIcon, SkipLink } from './shell-nav'
@@ -107,6 +108,7 @@ function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { i
             <li key={s.id}>
               <NavLink
                 to={s.path}
+                end={isHomePath(s.path)}
                 className={navItemClass(`flex cursor-pointer items-center gap-sm rounded px-md py-sm transition-colors ${size}`, idle)}
               >
                 <NavIcon screen={s} />
@@ -144,7 +146,7 @@ function CustomerHeader({ items }: { items: ScreenDef[] }) {
               <li key={s.id}>
                 <NavLink
                   to={s.path}
-                  end={s.path === CATALOGUE_PATH}
+                  end={isHomePath(s.path)}
                   className={navItemClass('btn px-md', 'text-slate hover:bg-muted hover:text-ink', 'bg-accent-wash font-semibold text-ink')}
                 >
                   {s.navLabel ?? s.name}
@@ -205,11 +207,34 @@ function Main({ screen, children }: { screen?: ScreenDef; children: ReactNode })
     <main
       id="main"
       tabIndex={-1}
-      className="mx-auto w-full max-w-6xl flex-1 px-md py-lg pb-[8.5rem] md:pb-2xl"
+      className="mx-auto w-full max-w-6xl flex-1 px-md py-lg"
     >
       <SampleDataNotice screen={screen} />
       {children}
     </main>
+  )
+}
+
+/**
+ * The footer under every screen, in all three layouts.
+ *
+ * On a phone the tab bar is fixed to the bottom of the window, so the footer
+ * keeps clear of it with padding of its own. The link is a full 44 pixel
+ * target.
+ */
+function ShellFooter() {
+  return (
+    <footer className="mx-auto w-full max-w-6xl px-md pb-[6.5rem] md:pb-lg">
+      <div className="flex flex-wrap items-center justify-between gap-x-md border-t border-line pt-sm text-sm text-slate-soft">
+        <p>Toolshed Hire</p>
+        <Link
+          to={PRIVACY_PATH}
+          className="inline-flex min-h-[2.75rem] cursor-pointer items-center font-medium text-ink underline transition-colors duration-200 hover:text-slate"
+        >
+          Privacy notice
+        </Link>
+      </div>
+    </footer>
   )
 }
 
@@ -229,6 +254,7 @@ export default function AppShell({ screen, children }: { screen?: ScreenDef; chi
         <SkipLink />
         <CustomerHeader items={items} />
         <Main screen={screen}>{children}</Main>
+        <ShellFooter />
         <MobileTabBar items={items.slice(0, MAX_TAB_BAR_ITEMS)} />
       </div>
     )
@@ -255,6 +281,7 @@ export default function AppShell({ screen, children }: { screen?: ScreenDef; chi
           <p className="sr-only" aria-live="polite">Working at {chrome.heading}</p>
         )}
         <Main screen={screen}>{children}</Main>
+        <ShellFooter />
       </div>
       <MobileTabBar items={items} />
     </div>

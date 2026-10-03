@@ -3,6 +3,10 @@
 These are the rules of BR-46 and BR-48 with nothing around them. No database,
 no HTTP and no hashing, only the two entities and a moment in time the test
 chooses.
+
+An account is told how many failures the last fifteen minutes hold, and here
+the test is what tells it. The window itself, counted second by second, is
+proved in test_lockout_window.py.
 """
 
 from __future__ import annotations
@@ -12,7 +16,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Final
 from uuid import uuid4
 
-from app.domain.account import LOCKOUT_DURATION, MAXIMUM_FAILED_LOGINS, Account
+from app.domain.account import (
+    FAILED_LOGIN_WINDOW,
+    LOCKOUT_DURATION,
+    MAXIMUM_FAILED_LOGINS,
+    Account,
+)
 from app.domain.enums import RevokeReason, UserRole
 from app.domain.session import (
     REFRESH_ABSOLUTE_LIFETIME,
@@ -42,6 +51,14 @@ def account() -> Account:
     )
 
 
+def fail(subject: Account, times: int, now: datetime = NOW) -> list[bool]:
+    """Fail a sign in `times` times at one instant, with every failure inside the window."""
+    return [
+        subject.record_failed_login(now, failures_in_window=subject.failed_login_count + 1)
+        for _ in range(times)
+    ]
+
+
 def opened(now: datetime = NOW) -> RefreshSession:
     return RefreshSession.opened_at_sign_in(
         user_account_id=uuid4(),
@@ -53,35 +70,33 @@ def opened(now: datetime = NOW) -> RefreshSession:
 
 
 class TestTheLockout:
-    """Five failures lock the account for fifteen minutes (BR-46)."""
+    """Five failures inside fifteen minutes lock the account for fifteen minutes (BR-46)."""
 
     def test_the_limits_are_the_ones_the_design_document_states(self) -> None:
         assert MAXIMUM_FAILED_LOGINS == 5
+        assert timedelta(minutes=15) == FAILED_LOGIN_WINDOW
         assert timedelta(minutes=15) == LOCKOUT_DURATION
 
     def test_four_failures_do_not_lock(self) -> None:
         subject = account()
-        locked = [subject.record_failed_login(NOW) for _ in range(MAXIMUM_FAILED_LOGINS - 1)]
-        assert locked == [False, False, False, False]
+        assert fail(subject, MAXIMUM_FAILED_LOGINS - 1) == [False, False, False, False]
         assert not subject.is_locked(NOW)
 
     def test_the_fifth_failure_locks_for_fifteen_minutes(self) -> None:
         subject = account()
-        outcomes = [subject.record_failed_login(NOW) for _ in range(MAXIMUM_FAILED_LOGINS)]
+        outcomes = fail(subject, MAXIMUM_FAILED_LOGINS)
         assert outcomes[-1] is True
         assert subject.locked_until == NOW + LOCKOUT_DURATION
         assert subject.is_locked(NOW + LOCKOUT_DURATION - ONE_SECOND)
 
     def test_the_lock_ends_exactly_when_its_time_is_up(self) -> None:
         subject = account()
-        for _ in range(MAXIMUM_FAILED_LOGINS):
-            subject.record_failed_login(NOW)
+        fail(subject, MAXIMUM_FAILED_LOGINS)
         assert not subject.is_locked(NOW + LOCKOUT_DURATION)
 
     def test_a_success_clears_the_count_and_notes_the_sign_in(self) -> None:
         subject = account()
-        subject.record_failed_login(NOW)
-        subject.record_failed_login(NOW)
+        fail(subject, 2)
         subject.record_successful_login(NOW + ONE_SECOND)
         assert subject.failed_login_count == 0
         assert subject.locked_until is None
@@ -89,12 +104,43 @@ class TestTheLockout:
 
     def test_the_first_failure_after_a_lock_ran_out_starts_the_count_again(self) -> None:
         subject = account()
-        for _ in range(MAXIMUM_FAILED_LOGINS):
-            subject.record_failed_login(NOW)
+        fail(subject, MAXIMUM_FAILED_LOGINS)
         later = NOW + LOCKOUT_DURATION + ONE_SECOND
-        assert subject.record_failed_login(later) is False
+        assert subject.record_failed_login(later, failures_in_window=1) is False
         assert subject.failed_login_count == 1
         assert not subject.is_locked(later)
+
+    def test_a_failure_the_window_has_let_go_of_is_not_counted(self) -> None:
+        # Four failures, and by the fifth the window only holds two of them.
+        subject = account()
+        fail(subject, MAXIMUM_FAILED_LOGINS - 1)
+        later = NOW + FAILED_LOGIN_WINDOW
+        assert subject.record_failed_login(later, failures_in_window=2) is False
+        assert subject.failed_login_count == 2
+
+    def test_a_failure_from_before_a_success_is_not_counted_while_its_window_runs(
+        self,
+    ) -> None:
+        # The window still holds the four failures from before the success.
+        # The account's own count went back to zero, and the smaller number wins.
+        subject = account()
+        fail(subject, MAXIMUM_FAILED_LOGINS - 1)
+        subject.record_successful_login(NOW)
+        locked = subject.record_failed_login(NOW, failures_in_window=MAXIMUM_FAILED_LOGINS)
+        assert locked is False
+        assert subject.failed_login_count == 1
+
+    def test_a_window_that_reports_nothing_still_counts_the_failure_itself(self) -> None:
+        subject = account()
+        subject.record_failed_login(NOW, failures_in_window=0)
+        assert subject.failed_login_count == 1
+
+    def test_clearing_the_lockout_forgets_the_failures_and_lifts_the_lock(self) -> None:
+        subject = account()
+        fail(subject, MAXIMUM_FAILED_LOGINS)
+        subject.clear_lockout()
+        assert subject.failed_login_count == 0
+        assert not subject.is_locked(NOW)
 
     def test_an_account_becomes_the_actor_with_its_role_and_branch(self) -> None:
         branch_id = uuid4()

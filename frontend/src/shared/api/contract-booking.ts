@@ -97,9 +97,12 @@ export type CancelReservationRequest = Schemas['CancellationRequest']
  *
  * `status` is one status or none, and the API has no way to ask for every
  * status but one. `page` counts from 1, and the API uses a page size of 20
- * when none is named. `customerProfileId` and `branch` are for staff. A
- * customer only ever gets their own reservations, and is refused with a 403
- * for naming either, so the customer screens leave both out.
+ * when none is named. `customerProfileId` and `branchCode` are for staff,
+ * who get the reservations at every branch unless they name one. The API
+ * still takes `branch`, the earlier name of `branchCode`, and the screens use
+ * only the new one. A customer only ever gets their own reservations, and is
+ * refused with a 403 for naming either, so the customer screens leave both
+ * out.
  */
 export type ReservationListQuery = QueryOf<Paths['/api/reservations']['get']>
 

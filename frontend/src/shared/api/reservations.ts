@@ -1,10 +1,11 @@
 /**
  * The reservation endpoints.
  *
- * Six routes, all of which need a signed in person. A customer creates a
+ * Seven routes, all of which need a signed in person. A customer creates a
  * reservation as a draft, puts it on hold, confirms it, cancels it, lists
- * their own and reads one. Each function here makes one call and reads the
- * body into its contract type.
+ * their own and reads one. Counter staff use the same six, and the seventh,
+ * which records that nobody came to collect a booking. Each function here
+ * makes one call and reads the body into its contract type.
  *
  * Every route answers with the whole reservation, and every figure in it is
  * the server's. So are `canHold`, `canConfirm` and `canCancel`, which say what
@@ -19,6 +20,7 @@ import { api } from './client'
 import type {
   CancelReservationRequest,
   CreateReservationRequest,
+  NoShowRequest,
   Reservation,
   ReservationLine,
   ReservationListQuery,
@@ -58,6 +60,9 @@ export const DEFAULT_RESERVATION_PAGE_SIZE = 20
 
 /** The longest reason a cancellation may carry. */
 export const MAX_CANCELLATION_REASON_LENGTH = 200
+
+/** The longest reason a no show may carry. */
+export const MAX_NO_SHOW_REASON_LENGTH = 200
 
 /** How the `type` of the 403 ends when the customer's account is on hold. */
 export const ACCOUNT_ON_HOLD = 'account-on-hold'
@@ -183,6 +188,21 @@ export function confirmReservation(id: string): Promise<Reservation> {
 export function cancelReservation(id: string, reason: string | null): Promise<Reservation> {
   const body: CancelReservationRequest = { reason }
   return api.post(`${reservationEndpoint(id)}/cancellation`, body, readReservation)
+}
+
+/**
+ * POST /api/reservations/{id}/no-show. For staff at the collection branch.
+ *
+ * Releases every unit of the booking and counts a strike against the
+ * customer. The answer is the reservation, now a no show.
+ *
+ * @param reason Why, in the assistant's words. Required, at most 200 characters.
+ * @throws ApiError with status 409 when the booking is not confirmed or starts
+ *   after today, 403 at another branch, and 422 when the reason is refused.
+ */
+export function markNoShow(id: string, reason: string): Promise<Reservation> {
+  const body: NoShowRequest = { reason }
+  return api.post(`${reservationEndpoint(id)}/no-show`, body, readReservation)
 }
 
 /** GET /api/reservations. The caller's own, newest first. */

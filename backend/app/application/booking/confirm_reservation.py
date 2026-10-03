@@ -27,6 +27,7 @@ from app.application.booking.access import (
     RESERVATION_CONFIRMED_ACTION,
     ReservationCommand,
     customer_of,
+    ensure_collection_branch_open,
     is_staff,
     load_for_change,
     read_detail,
@@ -45,6 +46,7 @@ from app.application.notification.confirmation import queue_booking_confirmation
 from app.application.notification.dispatcher import NotificationDispatcher
 from app.application.unit_of_work import UnitOfWork
 from app.application.use_case import UseCase
+from app.domain.states.base import CONFIRM_MOVE
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,8 @@ class ConfirmReservationUseCase(UseCase[ReservationCommand, ReservationView]):
             reservation = load_for_change(uow, actor, command.key)
             settle_overdue_hold(uow, reservation, now)
             customer = customer_of(uow, reservation)
+            if reservation.state.permits(CONFIRM_MOVE):
+                ensure_collection_branch_open(uow, reservation, now)
             before = state_of(reservation)
             reservation.confirm(
                 now=now, email_verified=is_staff(actor) or customer.email_verified

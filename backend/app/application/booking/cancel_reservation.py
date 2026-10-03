@@ -96,9 +96,11 @@ class CancelReservationUseCase(UseCase[CancelReservationCommand, ReservationView
                 now=now,
                 reason=reason,
                 by_owner_or_staff=is_staff(actor) or customer.user_account_id == actor.user_id,
-                # A rental is opened at checkout, which is not built yet, so no
-                # reservation has one. The state still asks, so the rule is in
-                # place for the day one can exist.
+                # Checkout opens the rental in the same transaction that moves
+                # the reservation to COLLECTED, and a collected reservation is
+                # refused by its state before this is asked. So a reservation
+                # that can still be cancelled never has one. The state still
+                # asks, so the rule holds if that ever changes.
                 has_rental=False,
             )
             uow.reservations.save(reservation)

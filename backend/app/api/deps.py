@@ -47,9 +47,10 @@ from app.application.clock import Clock
 from app.application.notification.dispatcher import NotificationDispatcher
 from app.application.notification.ports import NotificationGateway
 from app.application.unit_of_work import UnitOfWork
+from app.config import settings
 from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, AuthorisationFailure, InactiveAccount
-from app.infrastructure.clock import SystemClock
+from app.infrastructure.clock import clock_for
 from app.infrastructure.database import get_session
 from app.infrastructure.models import UserAccount
 from app.infrastructure.security import read_access_claims
@@ -64,14 +65,16 @@ BEARER_PREFIX = "Bearer "
 # application factory sets it once, when the application is built.
 NOTIFICATION_GATEWAY_STATE_KEY = "notification_gateway"
 
-_SYSTEM_CLOCK = SystemClock()
+# Chosen once, at start-up. It is the real clock, unless a test process set
+# TEST_BUSINESS_TIME, which the settings refuse in every other environment.
+_CLOCK = clock_for(settings.test_business_time)
 
 SessionDependency = Annotated[Session, Depends(get_session)]
 
 
 def get_clock() -> Clock:
-    """Return the system clock. A test overrides this to hold the time still."""
-    return _SYSTEM_CLOCK
+    """Return the clock of the process. A test overrides this to hold the time still."""
+    return _CLOCK
 
 
 ClockDependency = Annotated[Clock, Depends(get_clock)]

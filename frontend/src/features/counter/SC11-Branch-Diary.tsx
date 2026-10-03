@@ -1,263 +1,162 @@
 /**
  * SC-11 Branch Diary.
  *
- * This screen replaces the paper book the branches run on today, so it has
- * to do everything the book does and then the things the book cannot: show
- * a whole week at once, carry yesterday's uncollected hire forward instead
- * of leaving it on a page nobody turns back to, and record a no-show at the
- * moment it happens rather than in a margin.
+ * This screen replaces the paper book the branches run on, so it does what the
+ * book does and then what the book cannot. It shows a day, or a whole week from
+ * Monday, of what goes out and what comes back at the branch the person works
+ * at. Previous and next move a day or a week, and one press goes back to today.
+ * A no show is recorded at the moment it happens and not in a margin.
+ *
+ * The day and the view live in the address, so a reload or a link brings the
+ * same page back. Today in day view is the plain address, so a tab left open
+ * overnight shows the new day after a reload. The address is user input, so a
+ * date that is not a day on the calendar falls back to today.
+ *
+ * The diary is one request for the days on the screen, and the server's lazy
+ * sweep runs before it answers. The branch comes from work-branch.ts through
+ * the gate, so counter staff see their own branch and an administrator the one
+ * they chose.
  */
 
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { CalendarCheck, ChevronLeft, ChevronRight } from 'lucide-react'
-import {
-  Card,
-  DataTable,
-  EmptyState,
-  Field,
-  Notice,
-  PageHeader,
-  StatusPill,
-} from '../../shared/ui'
-import { TODAY, branches } from '../../shared/fixtures'
-import { formatDate, formatDateTime } from '../../shared/format'
-import type { BranchCode } from '../../shared/types'
-import * as desk from './counter-desk-data'
-import { useHomeBranch } from './home-branch'
-import DiaryWeek from './SC11-Week-Grid'
-import NoShowAction from './SC11-No-Show-Action'
+import type { BranchDiary as Diary } from '../../shared/api/contract'
+import { overviewQueries } from '../../shared/api/counter-queries'
+import { queryPhase } from '../../shared/api/query-phase'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import { todayInBranchTime } from '../../shared/today'
+import { EmptyState, PageHeader } from '../../shared/ui'
+import { NEW_BOOKING_PATH } from './counter-links'
+import { DAYS_IN_WEEK, addDays, dayName, readIsoDate, startOfWeek } from './diary-dates'
+import { DiaryDaySection } from './SC11-Diary-Day'
+import { WorkBranchGate } from './work-branch-gate'
+import type { CounterBranch } from './work-branch-gate'
 
 type DiaryView = 'day' | 'week'
 
-const OUT_COLUMNS = ['Booking', 'Customer', 'Tools', 'Where it stands', 'Action']
-const BACK_COLUMNS = ['Hire', 'Customer', 'Tools', 'Due back', 'Where it stands']
+const VIEWS: readonly DiaryView[] = ['day', 'week']
 
-export default function BranchDiary() {
-  // The select below is a view filter. It starts at the branch on the account
-  // and changes only which branch this screen lists.
-  const home = useHomeBranch()
-  const [branchCode, setBranchCode] = useState<BranchCode>(home.code)
-  const branch = desk.branchByCode(branchCode)
-  const [view, setView] = useState<DiaryView>('day')
-  const [anchor, setAnchor] = useState(TODAY)
-  const [noShows, setNoShows] = useState<ReadonlySet<string>>(new Set())
-  const [confirming, setConfirming] = useState<string | null>(null)
+const VIEW_LABEL: Record<DiaryView, string> = { day: 'One day', week: 'Whole week' }
 
-  const step = view === 'day' ? 1 : 7
-  const collections = desk.collectionsOn(anchor, branch.code)
-  const returns = desk.returnsOn(anchor, branch.code)
-  const stillOut = anchor === TODAY ? desk.overdueReturns(branch.code) : []
+const DATE_PARAMETER = 'date'
+const VIEW_PARAMETER = 'view'
 
-  function markNoShow(reservationId: string) {
-    setNoShows((current) => new Set(current).add(reservationId))
-    setConfirming(null)
+/** Skeleton blocks to draw while the diary loads. */
+const DIARY_SKELETON_COUNT = 2
+
+function readView(value: string | null): DiaryView {
+  return VIEWS.find((view) => view === value) ?? 'day'
+}
+
+/** What the screen is showing, in words, for the status line. */
+function showing(view: DiaryView, date: string, branchName: string): string {
+  return view === 'day'
+    ? `${dayName(date)} at ${branchName}.`
+    : `The week starting ${dayName(startOfWeek(date))} at ${branchName}.`
+}
+
+function isEmpty(diary: Diary): boolean {
+  return diary.days.every((day) => day.collections.length === 0 && day.returns.length === 0)
+}
+
+function DiaryDesk({ branch }: { branch: CounterBranch }) {
+  const [params, setParams] = useSearchParams()
+  const today = todayInBranchTime()
+  const view = readView(params.get(VIEW_PARAMETER))
+  const date = readIsoDate(params.get(DATE_PARAMETER)) ?? today
+  const step = view === 'day' ? 1 : DAYS_IN_WEEK
+  const from = view === 'day' ? date : startOfWeek(date)
+  const diary = useQuery(overviewQueries.diary({ branchCode: branch.code, from, days: step }))
+  const phase = queryPhase(diary)
+  const data = diary.data
+
+  /** Write the day and the view to the address. A default is left out. */
+  function show(nextDate: string, nextView: DiaryView) {
+    const written = new URLSearchParams()
+    if (nextDate !== today) written.set(DATE_PARAMETER, nextDate)
+    if (nextView !== 'day') written.set(VIEW_PARAMETER, nextView)
+    setParams(written)
   }
 
-  function undoNoShow(reservationId: string) {
-    setNoShows((current) => {
-      const next = new Set(current)
-      next.delete(reservationId)
-      return next
-    })
-  }
-
+  const unit = view === 'day' ? 'day' : 'week'
   return (
-    <div>
-      <PageHeader
-        screenId="SC-11"
-        title="Branch diary"
-        subtitle={`What goes out and what comes back at ${branch.name}. ${
-          view === 'day' ? formatDate(anchor) : `Week of ${formatDate(desk.startOfWeek(anchor))}`
-        }.`}
-        actions={
-          <Link to="/counter/booking" className="btn-primary">
-            Add a booking
-          </Link>
-        }
-      />
-
-      <div className="mb-lg flex flex-wrap items-end gap-md">
-        <div role="group" aria-label="Day or week" className="flex gap-sm">
-          {(['day', 'week'] as DiaryView[]).map((option) => (
+    <>
+      <div className="mb-lg flex flex-wrap items-center gap-md">
+        <div role="group" aria-label="Show one day or a whole week" className="flex flex-wrap gap-sm">
+          {VIEWS.map((option) => (
             <button
               key={option}
               type="button"
               aria-pressed={view === option}
-              onClick={() => setView(option)}
-              className={
-                view === option ? 'btn bg-accent font-semibold text-accent-ink' : 'btn-secondary'
-              }
+              onClick={() => show(date, option)}
+              className={view === option ? 'btn bg-accent font-semibold text-accent-ink' : 'btn-secondary'}
             >
-              {option === 'day' ? 'One day' : 'Whole week'}
+              {VIEW_LABEL[option]}
             </button>
           ))}
         </div>
-
-        <div className="flex gap-sm">
-          <button
-            type="button"
-            onClick={() => setAnchor(desk.addDays(anchor, -step))}
-            className="btn-secondary px-md"
-          >
+        <div className="flex flex-wrap gap-sm">
+          <button type="button" className="btn-secondary px-md" onClick={() => show(addDays(date, -step), view)}>
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only">
-              {view === 'day' ? 'Previous day' : 'Previous week'}
-            </span>
+            <span className="sr-only">Previous {unit}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setAnchor(desk.addDays(anchor, step))}
-            className="btn-secondary px-md"
-          >
+          <button type="button" className="btn-secondary px-md" onClick={() => show(addDays(date, step), view)}>
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only">{view === 'day' ? 'Next day' : 'Next week'}</span>
+            <span className="sr-only">Next {unit}</span>
           </button>
-          <button type="button" onClick={() => setAnchor(TODAY)} className="btn-secondary">
+          <button type="button" className="btn-secondary px-md" onClick={() => show(today, view)}>
             <CalendarCheck className="h-4 w-4" aria-hidden="true" />
             Back to today
           </button>
         </div>
-
-        <div className="min-w-[12rem]">
-          <Field label="Branch" htmlFor="diary-branch">
-            <select
-              id="diary-branch"
-              className="field-input cursor-pointer"
-              value={branch.code}
-              onChange={(event) => setBranchCode(event.target.value as BranchCode)}
-            >
-              {branches.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
       </div>
 
-      {view === 'week' ? (
-        <DiaryWeek
-          anchor={anchor}
-          scope={branch.code}
-          noShows={noShows}
-          onOpenDay={(day) => {
-            setAnchor(day)
-            setView('day')
-          }}
-        />
+      <p role="status" className="mb-md text-sm text-slate-soft">
+        {showing(view, date, data?.branchName ?? branch.name)}
+      </p>
+
+      {phase === 'failed' ? (
+        <ErrorState what="the diary" error={diary.error} onRetry={() => void diary.refetch()} />
+      ) : data === undefined ? (
+        <LoadingState label="Loading the diary" shape="rows" count={DIARY_SKELETON_COUNT} />
+      ) : isEmpty(data) ? (
+        <div className="card">
+          <EmptyState
+            title={view === 'day' ? 'Nothing goes out or comes back on this day' : 'Nothing goes out or comes back this week'}
+            body={`Nothing is booked to be collected from ${data.branchName} and no hire is due back there. Use the arrows to look at another ${unit}.`}
+          />
+        </div>
       ) : (
-        <div className="flex flex-col gap-lg">
-          {stillOut.length > 0 && (
-            <Notice tone="error" title={`${stillOut.length} hire still out from an earlier day`}>
-              <p>
-                {stillOut
-                  .map(
-                    (entry) =>
-                      `${entry.customer.name}, due back ${formatDate(entry.dueOn)}, ${entry.daysLate} days late`,
-                  )
-                  .join('. ')}
-                . Work through these on the overdue list.
-              </p>
-              <Link to="/counter/overdue" className="btn-secondary mt-sm">
-                Open the overdue list
-              </Link>
-            </Notice>
-          )}
-
-          <Card title={`Going out, ${desk.weekdayName(anchor)} ${formatDate(anchor)}`}>
-            {collections.length === 0 ? (
-              <EmptyState
-                title="Nothing goes out on this day"
-                body="Use the arrows to look at another day, or add a booking."
-              />
-            ) : (
-              <DataTable caption="Bookings due for collection" columns={OUT_COLUMNS}>
-                {collections.map((entry) => {
-                  const marked = noShows.has(entry.reservation.id)
-                  const missed = marked || entry.reservation.status === 'NO_SHOW'
-                  const collected = entry.rental !== undefined
-                  return (
-                    <tr key={entry.key}>
-                      <td className="td font-mono">{entry.reservation.reference}</td>
-                      <td className="td">
-                        {entry.customer.name}
-                        <span className="block font-mono text-xs text-slate-soft">
-                          {entry.customer.phone}
-                        </span>
-                      </td>
-                      <td className="td">{entry.headline}</td>
-                      <td className="td">
-                        {missed ? (
-                          <StatusPill status="NO_SHOW" label="Did not arrive" />
-                        ) : entry.rental ? (
-                          <StatusPill
-                            status="COLLECTED"
-                            label={`Handed over ${formatDateTime(entry.rental.collectedAt).slice(-5)}`}
-                          />
-                        ) : (
-                          <StatusPill
-                            status={entry.reservation.status}
-                            label="Waiting for collection"
-                          />
-                        )}
-                      </td>
-                      <td className="td">
-                        <NoShowAction
-                          reservationId={entry.reservation.id}
-                          reference={entry.reservation.reference}
-                          startDate={entry.reservation.startDate}
-                          anchor={anchor}
-                          collected={collected}
-                          markedHere={marked}
-                          recordedInFixture={entry.reservation.status === 'NO_SHOW'}
-                          confirming={confirming === entry.reservation.id}
-                          onAsk={() => setConfirming(entry.reservation.id)}
-                          onCancel={() => setConfirming(null)}
-                          onConfirm={() => markNoShow(entry.reservation.id)}
-                          onUndo={() => undoNoShow(entry.reservation.id)}
-                        />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </DataTable>
-            )}
-          </Card>
-
-          <Card title={`Coming back, ${desk.weekdayName(anchor)} ${formatDate(anchor)}`}>
-            {returns.length === 0 ? (
-              <EmptyState
-                title="Nothing is due back on this day"
-                body="Returns show on the day the hire ends, whether or not it has been collected yet."
-              />
-            ) : (
-              <DataTable caption="Hires due back" columns={BACK_COLUMNS}>
-                {returns.map((entry) => (
-                  <tr key={entry.key}>
-                    <td className="td font-mono">
-                      {entry.rental?.reference ?? entry.reservation.reference}
-                    </td>
-                    <td className="td">{entry.customer.name}</td>
-                    <td className="td">{entry.headline}</td>
-                    <td className="td whitespace-nowrap">{formatDate(entry.dueOn)}</td>
-                    <td className="td">
-                      {entry.overdue ? (
-                        <StatusPill status="OVERDUE" label={`${entry.daysLate} days late`} />
-                      ) : entry.collected ? (
-                        <StatusPill status="OPEN" label="Out with the customer" />
-                      ) : (
-                        <StatusPill status="CONFIRMED" label="Not collected yet" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </DataTable>
-            )}
-          </Card>
+        <div className="flex flex-col gap-lg" aria-busy={diary.isFetching}>
+          {data.days.map((day) => (
+            <DiaryDaySection
+              key={day.date}
+              day={day}
+              today={today}
+              onOpenDay={view === 'week' ? (opened) => show(opened, 'day') : undefined}
+            />
+          ))}
         </div>
       )}
-    </div>
+    </>
+  )
+}
+
+export default function BranchDiary() {
+  return (
+    <>
+      <PageHeader
+        screenId="SC-11"
+        title="Branch diary"
+        subtitle="What goes out and what comes back at your branch, a day or a week at a time."
+        actions={
+          <Link to={NEW_BOOKING_PATH} className="btn-primary">
+            Add a booking
+          </Link>
+        }
+      />
+      <WorkBranchGate>{(branch) => <DiaryDesk branch={branch} />}</WorkBranchGate>
+    </>
   )
 }

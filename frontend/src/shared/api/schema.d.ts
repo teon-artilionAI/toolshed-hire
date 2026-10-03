@@ -99,6 +99,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a customer account and send the verification link
+         * @description Open a customer account, or answer in the same way when the address has one.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_register_api_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prove an email address with the token of a verification link
+         * @description Redeem a verification token. It works once.
+         *
+         *     Raises:
+         *         VerificationLinkInvalid: If the token is unknown, used or out of
+         *             time. HTTP 400.
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_email_verification_api_auth_email_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email-verification/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the signed in account its verification link again
+         * @description Issue a new verification link, or do nothing for a verified account.
+         *
+         *     Raises:
+         *         TooManyAttempts: If the account is throttled. HTTP 429.
+         */
+        post: operations["post_verification_resend_api_auth_email_verification_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for a password reset link
+         * @description Send a reset link to an address that has an account, and say nothing either way.
+         *
+         *     Raises:
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_password_reset_request_api_auth_password_reset_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose a new password with the token of a reset link
+         * @description Set the new password, end every session of the account and lift any lock.
+         *
+         *     Raises:
+         *         ResetLinkInvalid: If the token is unknown, used or out of time. HTTP 400.
+         *         ValidationFailure: If the new password is refused. HTTP 422.
+         *         TooManyAttempts: If the caller is throttled. HTTP 429.
+         */
+        post: operations["post_password_reset_completion_api_auth_password_reset_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -126,6 +246,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the signed in customer's own details
+         * @description Return the caller's profile and the account behind it.
+         *
+         *     Raises:
+         *         NotFound: If the account has no customer profile. HTTP 404.
+         */
+        get: operations["read_profile_api_me_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the signed in customer's contact and billing details
+         * @description Change the fields that were sent, all of them or none.
+         *
+         *     Raises:
+         *         NotFound: If the account has no customer profile. HTTP 404.
+         *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
+         */
+        patch: operations["patch_profile_api_me_profile_patch"];
+        trace?: never;
+    };
+    "/api/me/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed in customer's own rentals, newest first
+         * @description Return one page of the caller's own rentals, with no asset tag on any item.
+         */
+        get: operations["list_my_rentals_api_me_rentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find customers by name, phone or email, best match first
+         * @description Return one page of the customers the text matches.
+         */
+        get: operations["search_customers_api_customers_get"];
+        put?: never;
+        /**
+         * Register a walk-in customer who has no login
+         * @description Register the walk-in and answer with the customer and a `Location` header.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field is refused, or an administrator names no
+         *             branch. HTTP 422, naming the field.
+         *         BranchScopeError: If counter staff name another branch. HTTP 403.
+         */
+        post: operations["post_walk_in_api_customers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one customer
+         * @description Return the customer, or 404 when there is none with this key.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer profile with this key. HTTP 404.
+         */
+        get: operations["read_customer_api_customers__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations": {
         parameters: {
             query?: never;
@@ -141,7 +364,7 @@ export interface paths {
          *         AuthorisationFailure: If a customer narrows the list to another
          *             customer or to a branch. Mapped to HTTP 403.
          *         ValidationFailure: If the branch code is not the code of a trading
-         *             branch. Mapped to HTTP 422, naming `branch`.
+         *             branch. Mapped to HTTP 422, naming the parameter it was sent in.
          */
         get: operations["list_reservations_api_reservations_get"];
         put?: never;
@@ -238,6 +461,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reservations/{id}/no-show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a confirmed reservation as not collected, releasing its units
+         * @description Mark the reservation as a no show and count the strike on the customer.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         *         BranchScopeError: If counter staff act at another branch. HTTP 403.
+         *         StateTransitionError: If it is not confirmed or its hire has not
+         *             started. HTTP 409.
+         */
+        post: operations["post_no_show_api_reservations__id__no_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations/{id}": {
         parameters: {
             query?: never;
@@ -254,6 +503,348 @@ export interface paths {
          *             HTTP 404.
          */
         get: operations["read_reservation_api_reservations__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return what the counter needs to check a reservation out
+         * @description Return the reservation, its units and whether the caller may check it out now.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         */
+        get: operations["read_checkout_api_reservations__id__checkout_get"];
+        put?: never;
+        /**
+         * Check a confirmed reservation out, opening its rental
+         * @description Hand the equipment over in one transaction, or answer with the rental already opened.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         *         BranchScopeError: If counter staff check out at another branch. HTTP 403.
+         *         StateTransitionError: If the reservation is not confirmed or its hire
+         *             has not started. HTTP 409.
+         *         ValidationFailure: If the list of units is wrong or the agreement is
+         *             not signed. HTTP 422, naming the field.
+         */
+        post: operations["post_checkout_api_reservations__id__checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List rentals at any branch, the overdue first
+         * @description Return one page of rentals, the most overdue first and then the newest.
+         *
+         *     Raises:
+         *         ValidationFailure: If the branch code is not the code of a trading
+         *             branch. HTTP 422, naming `branchCode`.
+         */
+        get: operations["list_rentals_api_rentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one rental, by its key or its reference
+         * @description Return the rental, or 404 when it does not exist.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         */
+        get: operations["read_rental_api_rentals__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take units of a rental back, and settle the deposit when the last is back
+         * @description Record the return of the named units in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         *         BranchScopeError: If counter staff take units back at another branch. HTTP 403.
+         *         StateTransitionError: If a unit is already back. HTTP 409.
+         *         ValidationFailure: If a unit is listed twice, is not on the rental or
+         *             has a meter reading below the one it went out with. HTTP 422,
+         *             naming the field.
+         */
+        post: operations["post_return_api_rentals__id__returns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}/items/{itemId}/loss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a unit more than fourteen days late as lost
+         * @description Record the loss of one unit in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental, or the unit is not on it. HTTP 404.
+         *         BranchScopeError: If counter staff record a loss at another branch. HTTP 403.
+         *         StateTransitionError: If the unit is already back or not yet late
+         *             enough. HTTP 409.
+         */
+        post: operations["post_loss_api_rentals__id__items__itemId__loss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}/balance-payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record the simulated payment of a rental's balance
+         * @description Record the payment and settle the rental in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         *         BranchScopeError: If counter staff record a payment at another branch. HTTP 403.
+         *         StateTransitionError: If nothing is owed. HTTP 409.
+         */
+        post: operations["post_balance_payment_api_rentals__id__balance_payment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List damage reports at every branch, newest first
+         * @description Return one page of damage reports, newest first.
+         *
+         *     Raises:
+         *         ValidationFailure: If the branch code is not the code of a trading
+         *             branch. HTTP 422, naming `branchCode`.
+         */
+        get: operations["list_damage_reports_api_damage_reports_get"];
+        put?: never;
+        /**
+         * File a damage report, quarantine the unit and charge the decided recovery
+         * @description File the report in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If the tag is unknown, the decision is missing, the
+         *             amount to recover does not follow from it or is above the cap, or
+         *             the rental item is not a hire of the unit. HTTP 422, naming the field.
+         *         BranchScopeError: If counter staff file a report at another branch. HTTP 403.
+         *         StateTransitionError: If the unit is out on hire or retired, waits for
+         *             the report of another hire, or the deposit was already settled. HTTP 409.
+         */
+        post: operations["post_damage_report_api_damage_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one damage report, by its key or its reference
+         * @description Return the report, or 404 when it does not exist.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         */
+        get: operations["read_damage_report_api_damage_reports__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send an open damage report for repair, and its unit with it
+         * @description Send the report for repair in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         *         StateTransitionError: If the report is not OPEN. HTTP 409.
+         */
+        post: operations["post_repair_api_damage_reports__id__repair_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a damage report as resolved or written off
+         * @description Close the report in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         *         ValidationFailure: If a report is resolved without its actual cost.
+         *             HTTP 422, naming `actualRepairCost`.
+         *         StateTransitionError: If the report is already closed, or a write off
+         *             would retire a unit a booking still holds. HTTP 409.
+         */
+        post: operations["post_resolution_api_damage_reports__id__resolution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/counter/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return what is due today at a branch
+         * @description Return the collections, returns and overdue hires of today, after running the sweep.
+         *
+         *     Raises:
+         *         BranchScopeError: If counter staff name another branch. HTTP 403.
+         *         ValidationFailure: If an administrator names no branch, or one that is
+         *             not trading. HTTP 422, naming `branchCode`.
+         */
+        get: operations["read_dashboard_api_counter_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/counter/diary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the collections and returns of a branch for one to seven days
+         * @description Return the diary of the branch, one entry for each day, after running the sweep.
+         *
+         *     Raises:
+         *         BranchScopeError: If counter staff name another branch. HTTP 403.
+         *         ValidationFailure: If an administrator names no branch, or one that is
+         *             not trading, or the run ends past the last date there is. HTTP 422,
+         *             naming the parameter.
+         */
+        get: operations["read_diary_api_counter_diary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/locator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find units at every branch by tag or model name
+         * @description Return one page of the units the text matches, at every branch.
+         */
+        get: operations["locate_assets_api_assets_locator_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -430,6 +1021,60 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccountStatus
+         * @description Customer account standing. ON_HOLD is set by the no-show rule (BR-18).
+         * @enum {string}
+         */
+        AccountStatus: "ACTIVE" | "ON_HOLD" | "BLACKLISTED";
+        /**
+         * AssetLocationPageResponse
+         * @description One page of the units a search found, in tag order.
+         */
+        AssetLocationPageResponse: {
+            /** Items */
+            items: components["schemas"]["AssetLocationResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AssetLocationResponse
+         * @description Where one unit is. `dueBackOn` and `rentalReference` are set only while it is on hire.
+         */
+        AssetLocationResponse: {
+            /** Assettag */
+            assetTag: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            status: components["schemas"]["AssetStatus"];
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /** Duebackon */
+            dueBackOn: string | null;
+            /** Rentalreference */
+            rentalReference: string | null;
+        };
+        /**
+         * AssetStatus
+         * @description Asset lifecycle status. There is deliberately no RESERVED member.
+         *
+         *     Future occupancy is derived from AssetAllocation rows. A RESERVED status
+         *     would be a second source of truth able to disagree with the exclusion
+         *     constraint.
+         * @enum {string}
+         */
+        AssetStatus: "INTAKE" | "AVAILABLE" | "ON_HIRE" | "QUARANTINED" | "UNDER_REPAIR" | "LOST" | "RETIRED";
+        /**
          * AvailabilityPageResponse
          * @description One page of an availability search.
          *
@@ -457,6 +1102,14 @@ export interface components {
             pageSize: number;
             /** Total */
             total: number;
+        };
+        /**
+         * BalancePaymentRequest
+         * @description The simulated payment of a balance, by the reference the customer was given.
+         */
+        BalancePaymentRequest: {
+            /** Paymentreference */
+            paymentReference: string;
         };
         /**
          * BranchAvailabilityResponse
@@ -535,6 +1188,195 @@ export interface components {
             modelCount: number;
         };
         /**
+         * ChargeResponse
+         * @description One money line on a rental. A deposit release is a negative amount.
+         */
+        ChargeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            type: components["schemas"]["ChargeType"];
+            /** Description */
+            description: string;
+            /** Amountexvat */
+            amountExVat: string;
+            /** Vatrate */
+            vatRate: string;
+            /** Vatamount */
+            vatAmount: string;
+            /** Amountincvat */
+            amountIncVat: string;
+            status: components["schemas"]["ChargeStatus"];
+            /** Raisedat */
+            raisedAt: string;
+            /** Rentalitemid */
+            rentalItemId: string | null;
+        };
+        /**
+         * ChargeStatus
+         * @description Where a charge stands. A settled charge is never edited (BR-24).
+         * @enum {string}
+         */
+        ChargeStatus: "PENDING" | "SETTLED" | "WAIVED" | "REVERSED";
+        /**
+         * ChargeType
+         * @description What a money line on a rental is for. Deposit movements are charges too.
+         * @enum {string}
+         */
+        ChargeType: "HIRE" | "DEPOSIT_HOLD" | "DEPOSIT_RELEASE" | "DEPOSIT_FORFEIT" | "LATE_FEE" | "DAMAGE_RECOVERY" | "CLEANING" | "ADJUSTMENT";
+        /**
+         * CheckoutCustomerResponse
+         * @description The customer the equipment is handed to.
+         */
+        CheckoutCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Displayname */
+            displayName: string;
+            /** Phone */
+            phone: string;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            accountStatus: components["schemas"]["AccountStatus"];
+        };
+        /**
+         * CheckoutItemRequest
+         * @description What the counter records about one unit as it goes out.
+         */
+        CheckoutItemRequest: {
+            /**
+             * Allocationid
+             * Format: uuid
+             */
+            allocationId: string;
+            conditionOut: components["schemas"]["ConditionGrade"];
+            /** Accessoriesout */
+            accessoriesOut?: string | null;
+            /** Hourmeterout */
+            hourMeterOut?: number | null;
+        };
+        /**
+         * CheckoutPreviewResponse
+         * @description What the counter needs to hand the equipment of a reservation over.
+         *
+         *     `refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once
+         *     the reservation has been collected.
+         */
+        CheckoutPreviewResponse: {
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["ReservationStatus"];
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            customer: components["schemas"]["CheckoutCustomerResponse"];
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Hiredays */
+            hireDays: number;
+            /** Units */
+            units: components["schemas"]["CheckoutUnitResponse"][];
+            /** Hiretotalincvat */
+            hireTotalIncVat: string;
+            /** Deposittotal */
+            depositTotal: string;
+            /** Cancheckout */
+            canCheckOut: boolean;
+            /** Refusal */
+            refusal: string | null;
+            /** Rentalid */
+            rentalId: string | null;
+        };
+        /**
+         * CheckoutRequest
+         * @description Every unit of the reservation, once each, and the customer's signature.
+         */
+        CheckoutRequest: {
+            /** Items */
+            items: components["schemas"]["CheckoutItemRequest"][];
+            /** Agreementsigned */
+            agreementSigned: boolean;
+        };
+        /**
+         * CheckoutUnitResponse
+         * @description One unit the reservation holds, as the counter hands it over.
+         */
+        CheckoutUnitResponse: {
+            /**
+             * Allocationid
+             * Format: uuid
+             */
+            allocationId: string;
+            /** Assettag */
+            assetTag: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /** Hourmeter */
+            hourMeter: number | null;
+            /** Depositperunit */
+            depositPerUnit: string;
+        };
+        /**
+         * CollectionDueResponse
+         * @description A confirmed reservation due for collection.
+         */
+        CollectionDueResponse: {
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reference */
+            reference: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Unitcount */
+            unitCount: number;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ConditionGrade
+         * @description Condition grade recorded at checkout and return. A is best.
+         * @enum {string}
+         */
+        ConditionGrade: "A" | "B" | "C";
+        /**
          * CreateReservationRequest
          * @description A request for a draft reservation.
          *
@@ -562,6 +1404,307 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /**
+         * CustomerPageResponse
+         * @description One page of the customers a search found, best match first.
+         */
+        CustomerPageResponse: {
+            /** Items */
+            items: components["schemas"]["CustomerSummaryResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * CustomerSummaryResponse
+         * @description A customer as the counter sees one.
+         *
+         *     `email` is null and `hasLogin` is false for a walk-in, who has no account.
+         */
+        CustomerSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Displayname */
+            displayName: string;
+            /** Email */
+            email: string | null;
+            /** Phone */
+            phone: string;
+            /** Haslogin */
+            hasLogin: boolean;
+            /** Emailverified */
+            emailVerified: boolean;
+            customerType: components["schemas"]["CustomerType"];
+            /** Companyname */
+            companyName: string | null;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            accountStatus: components["schemas"]["AccountStatus"];
+            /** Tradediscountpercent */
+            tradeDiscountPercent: string;
+            /** Noshowcount */
+            noShowCount: number;
+            /** Homebranchcode */
+            homeBranchCode: string;
+        };
+        /**
+         * CustomerType
+         * @description Whether a customer hires as a member of the public or as a trade account.
+         * @enum {string}
+         */
+        CustomerType: "INDIVIDUAL" | "TRADE";
+        /**
+         * DamageAssessment
+         * @description Whether a unit that came back still waits for its damage to be assessed.
+         * @enum {string}
+         */
+        DamageAssessment: "NOT_NEEDED" | "REQUIRED" | "DONE";
+        /**
+         * DamageReportPageResponse
+         * @description One page of damage reports, newest first.
+         */
+        DamageReportPageResponse: {
+            /** Items */
+            items: components["schemas"]["DamageReportResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * DamageReportRequest
+         * @description A damage report as the counter files it.
+         */
+        DamageReportRequest: {
+            /** Assettag */
+            assetTag: string;
+            /** Rentalitemid */
+            rentalItemId?: string | null;
+            severity: components["schemas"]["DamageSeverity"];
+            /** Description */
+            description: string;
+            /** Repairestimate */
+            repairEstimate: string;
+            /** Chargeabletocustomer */
+            chargeableToCustomer: boolean;
+            /** Recoveryamount */
+            recoveryAmount?: string | null;
+        };
+        /**
+         * DamageReportResponse
+         * @description One damage report, as staff read it.
+         */
+        DamageReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reference */
+            reference: string;
+            /** Assettag */
+            assetTag: string;
+            /** Modelname */
+            modelName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Rentalid */
+            rentalId: string | null;
+            /** Rentalreference */
+            rentalReference: string | null;
+            /** Rentalitemid */
+            rentalItemId: string | null;
+            severity: components["schemas"]["DamageSeverity"];
+            status: components["schemas"]["DamageStatus"];
+            /** Description */
+            description: string;
+            /** Repairestimate */
+            repairEstimate: string;
+            /** Actualrepaircost */
+            actualRepairCost: string | null;
+            /** Chargeabletocustomer */
+            chargeableToCustomer: boolean;
+            /** Recoverycharged */
+            recoveryCharged: string | null;
+            /** Replacementvalue */
+            replacementValue: string;
+            /** Reportedat */
+            reportedAt: string;
+            /** Reportedbyname */
+            reportedByName: string;
+            /** Resolvedat */
+            resolvedAt: string | null;
+            /** Resolutionnotes */
+            resolutionNotes: string | null;
+        };
+        /**
+         * DamageSeverity
+         * @description How bad the damage is, as the counter judged it when the report was filed.
+         *
+         *     A WRITE_OFF severity does not retire the unit by itself. Only a report the
+         *     owner resolves as WRITTEN_OFF does that (BR-38), so the decision to retire
+         *     a unit is always the owner's.
+         * @enum {string}
+         */
+        DamageSeverity: "MINOR" | "MAJOR" | "WRITE_OFF";
+        /**
+         * DamageStatus
+         * @description Where a damage report stands between being raised and being closed.
+         * @enum {string}
+         */
+        DamageStatus: "OPEN" | "UNDER_REPAIR" | "RESOLVED" | "WRITTEN_OFF";
+        /**
+         * DashboardCountsResponse
+         * @description The true totals behind the dashboard, however long each list is.
+         */
+        DashboardCountsResponse: {
+            /** Collectionsdue */
+            collectionsDue: number;
+            /** Returnsdue */
+            returnsDue: number;
+            /** Overdue */
+            overdue: number;
+            /** Onhire */
+            onHire: number;
+            /** Quarantined */
+            quarantined: number;
+        };
+        /**
+         * DashboardResponse
+         * @description What is due today at one branch. Each list holds at most fifty rows.
+         */
+        DashboardResponse: {
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            counts: components["schemas"]["DashboardCountsResponse"];
+            /** Collectionsdue */
+            collectionsDue: components["schemas"]["CollectionDueResponse"][];
+            /** Returnsdue */
+            returnsDue: components["schemas"]["ReturnDueResponse"][];
+            /** Overdue */
+            overdue: components["schemas"]["OverdueRentalResponse"][];
+        };
+        /**
+         * DiaryCollectionResponse
+         * @description A reservation starting on a day of the diary.
+         */
+        DiaryCollectionResponse: {
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["ReservationStatus"];
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Unitcount */
+            unitCount: number;
+            /** Summary */
+            summary: string;
+            /** Canmarknoshow */
+            canMarkNoShow: boolean;
+        };
+        /**
+         * DiaryDayResponse
+         * @description One day of the diary.
+         */
+        DiaryDayResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Collections */
+            collections: components["schemas"]["DiaryCollectionResponse"][];
+            /** Returns */
+            returns: components["schemas"]["DiaryReturnResponse"][];
+        };
+        /**
+         * DiaryResponse
+         * @description The diary of one branch, one entry for each day asked for.
+         */
+        DiaryResponse: {
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /** Days */
+            days: components["schemas"]["DiaryDayResponse"][];
+        };
+        /**
+         * DiaryReturnResponse
+         * @description A rental due back on a day of the diary.
+         */
+        DiaryReturnResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["RentalStatus"];
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Itemsout */
+            itemsOut: number;
+            /** Itemcount */
+            itemCount: number;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * EmailDeliverableResponse
+         * @description Whether a message for the address would be delivered in this environment.
+         *
+         *     False when the environment only delivers mail to one address and this is
+         *     not it. It never depends on whether the address has an account.
+         */
+        EmailDeliverableResponse: {
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -583,6 +1726,12 @@ export interface components {
             /** Revision */
             revision: string;
         };
+        /**
+         * IdDocType
+         * @description The identity document a customer presented. Only its last four digits are kept.
+         * @enum {string}
+         */
+        IdDocType: "SA_ID" | "PASSPORT" | "DRIVING_LICENCE";
         /**
          * LoginRequest
          * @description Credentials posted to the sign in endpoint.
@@ -734,6 +1883,60 @@ export interface components {
             imagePath: string | null;
         };
         /**
+         * NoShowRequest
+         * @description Why nobody collected the reservation, which staff always say.
+         */
+        NoShowRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * OverdueRentalResponse
+         * @description A rental past its due date with a unit still out, and the late fee it has run up.
+         */
+        OverdueRentalResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Daysoverdue */
+            daysOverdue: number;
+            /** Itemsout */
+            itemsOut: number;
+            /** Latefeeaccrued */
+            lateFeeAccrued: string;
+        };
+        /**
+         * PasswordResetCompletionRequest
+         * @description The token of a reset link and the password chosen with it.
+         */
+        PasswordResetCompletionRequest: {
+            /** Token */
+            token: string;
+            /** Newpassword */
+            newPassword: string;
+        };
+        /**
+         * PasswordResetRequest
+         * @description The address a reset link is asked for.
+         */
+        PasswordResetRequest: {
+            /** Email */
+            email: string;
+        };
+        /**
          * ProblemDetail
          * @description An RFC 9457 problem document.
          *
@@ -760,6 +1963,76 @@ export interface components {
             errors?: Record<string, unknown> | null;
             /** Requestid */
             requestId?: string | null;
+        };
+        /**
+         * ProfileResponse
+         * @description A customer's own details.
+         *
+         *     `accountStatus`, `tradeDiscountPercent` and `noShowCount` are shown and
+         *     cannot be changed by the customer.
+         */
+        ProfileResponse: {
+            /** Fullname */
+            fullName: string;
+            /** Email */
+            email: string;
+            /** Emailverified */
+            emailVerified: boolean;
+            /** Phone */
+            phone: string;
+            customerType: components["schemas"]["CustomerType"];
+            /** Companyname */
+            companyName: string | null;
+            /** Vatnumber */
+            vatNumber: string | null;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingaddressline1 */
+            billingAddressLine1: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            /** Billingpostalcode */
+            billingPostalCode: string;
+            accountStatus: components["schemas"]["AccountStatus"];
+            /** Tradediscountpercent */
+            tradeDiscountPercent: string;
+            /** Noshowcount */
+            noShowCount: number;
+            /** Homebranchcode */
+            homeBranchCode: string;
+            /**
+             * Membersince
+             * Format: date
+             */
+            memberSince: string;
+        };
+        /**
+         * ProfileUpdateRequest
+         * @description The contact and billing fields a customer may change, each of them optional.
+         *
+         *     A field that is left out is left alone. `companyName` and `vatNumber` may
+         *     be sent as null or as an empty string to clear them.
+         */
+        ProfileUpdateRequest: {
+            /** Fullname */
+            fullName?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Billingaddressline1 */
+            billingAddressLine1?: string | null;
+            /** Billingsuburb */
+            billingSuburb?: string | null;
+            /** Billingcity */
+            billingCity?: string | null;
+            /** Billingpostalcode */
+            billingPostalCode?: string | null;
+            /** Companyname */
+            companyName?: string | null;
+            /** Vatnumber */
+            vatNumber?: string | null;
         };
         /**
          * QuoteBasis
@@ -810,6 +2083,173 @@ export interface components {
             /** Latefeeperday */
             lateFeePerDay: string;
         };
+        /**
+         * RegisterRequest
+         * @description What a person sends to open a customer account.
+         *
+         *     Only the last four characters of the identity document are sent. The full
+         *     number never reaches the service.
+         */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Fullname */
+            fullName: string;
+            /** Phone */
+            phone: string;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingaddressline1 */
+            billingAddressLine1: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            /** Billingpostalcode */
+            billingPostalCode: string;
+            /** Homebranchcode */
+            homeBranchCode: string;
+            /**
+             * Acceptsprivacynotice
+             * @constant
+             */
+            acceptsPrivacyNotice: true;
+        };
+        /**
+         * RentalItemResponse
+         * @description One unit on a rental.
+         *
+         *     `daysLateToday` and `lateFeeToday` are what the late fee would be if the
+         *     unit came back today, worked out on the server. `replacementValue` is the
+         *     value copied onto the booking line, the most a damage report may recover,
+         *     and is null for a customer, as `assetTag` is.
+         */
+        RentalItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assettag */
+            assetTag: string | null;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            conditionOut: components["schemas"]["ConditionGrade"];
+            conditionIn: components["schemas"]["ConditionGrade"] | null;
+            /** Hourmeterout */
+            hourMeterOut: number | null;
+            /** Hourmeterin */
+            hourMeterIn: number | null;
+            /** Accessoriesout */
+            accessoriesOut: string | null;
+            /** Accessoriesin */
+            accessoriesIn: string | null;
+            /** Returnedat */
+            returnedAt: string | null;
+            /** Dayslate */
+            daysLate: number;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+            /** Dayslatetoday */
+            daysLateToday: number;
+            /** Latefeetoday */
+            lateFeeToday: string;
+            damageAssessment: components["schemas"]["DamageAssessment"];
+            /** Replacementvalue */
+            replacementValue: string | null;
+        };
+        /**
+         * RentalPageResponse
+         * @description One page of rentals.
+         */
+        RentalPageResponse: {
+            /** Items */
+            items: components["schemas"]["RentalResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * RentalResponse
+         * @description One rental, as the caller is allowed to see it.
+         */
+        RentalResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["RentalStatus"];
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reservationreference */
+            reservationReference: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /**
+             * Customerprofileid
+             * Format: uuid
+             */
+            customerProfileId: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Checkedoutat */
+            checkedOutAt: string;
+            /** Returnedat */
+            returnedAt: string | null;
+            /** Items */
+            items: components["schemas"]["RentalItemResponse"][];
+            /** Charges */
+            charges: components["schemas"]["ChargeResponse"][];
+            /** Depositheld */
+            depositHeld: string;
+            /** Depositwithheld */
+            depositWithheld: string;
+            /** Depositrefunded */
+            depositRefunded: string;
+            /** Balancedue */
+            balanceDue: string;
+            /** Settledat */
+            settledAt: string | null;
+            /** Agreementsigned */
+            agreementSigned: boolean;
+            /** Canreturn */
+            canReturn: boolean;
+            settlementWaitingOn: components["schemas"]["SettlementWait"] | null;
+        };
+        /**
+         * RentalStatus
+         * @description Rental lifecycle status, governed by BR-29, BR-52 and BR-53.
+         * @enum {string}
+         */
+        RentalStatus: "OPEN" | "OVERDUE" | "PARTIALLY_RETURNED" | "RETURNED" | "SETTLED";
         /**
          * ReservationLineRequest
          * @description One model and how many of it.
@@ -929,6 +2369,94 @@ export interface components {
          */
         ReservationStatus: "DRAFT" | "HELD" | "CONFIRMED" | "COLLECTED" | "RETURNED" | "CANCELLED" | "NO_SHOW" | "EXPIRED";
         /**
+         * ResolutionRequest
+         * @description How an administrator closes a report.
+         */
+        ResolutionRequest: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "RESOLVED" | "WRITTEN_OFF";
+            /** Actualrepaircost */
+            actualRepairCost?: string | null;
+            /** Resolutionnotes */
+            resolutionNotes?: string | null;
+        };
+        /**
+         * ReturnDueResponse
+         * @description A rental due back today with a unit still out.
+         */
+        ReturnDueResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Itemsout */
+            itemsOut: number;
+            /** Itemcount */
+            itemCount: number;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ReturnItemRequest
+         * @description What the counter records about one unit as it comes back.
+         */
+        ReturnItemRequest: {
+            /**
+             * Rentalitemid
+             * Format: uuid
+             */
+            rentalItemId: string;
+            conditionIn: components["schemas"]["ConditionGrade"];
+            /** Hourmeterin */
+            hourMeterIn?: number | null;
+            /** Accessoriesin */
+            accessoriesIn?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Flaggedfordamage
+             * @default false
+             */
+            flaggedForDamage: boolean;
+        };
+        /**
+         * ReturnRequest
+         * @description One or more units of a rental that came back.
+         */
+        ReturnRequest: {
+            /** Items */
+            items: components["schemas"]["ReturnItemRequest"][];
+        };
+        /**
+         * SettlementWait
+         * @description What a rental is waiting on before its deposit can be settled.
+         * @enum {string}
+         */
+        SettlementWait: "ITEMS_OUT" | "DAMAGE_ASSESSMENT" | "BALANCE_PAYMENT";
+        /**
+         * TokenRequest
+         * @description The token of a verification link.
+         */
+        TokenRequest: {
+            /** Token */
+            token: string;
+        };
+        /**
          * TokenResponse
          * @description The access token and the account it belongs to.
          *
@@ -1003,6 +2531,39 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, unknown>;
+        };
+        /**
+         * WalkInRequest
+         * @description What the counter records to register a customer who has no login.
+         *
+         *     `branchCode` is for an administrator, who belongs to no branch. Counter
+         *     staff may leave it out, and the customer is registered at their branch.
+         *     `companyName` is required for a trade customer.
+         */
+        WalkInRequest: {
+            /** Displayname */
+            displayName: string;
+            /** Phone */
+            phone: string;
+            idDocumentType: components["schemas"]["IdDocType"];
+            /** Iddocumentlast4 */
+            idDocumentLast4: string;
+            /** Billingaddressline1 */
+            billingAddressLine1: string;
+            /** Billingsuburb */
+            billingSuburb: string;
+            /** Billingcity */
+            billingCity: string;
+            /** Billingpostalcode */
+            billingPostalCode: string;
+            /** @default INDIVIDUAL */
+            customerType: components["schemas"]["CustomerType"];
+            /** Companyname */
+            companyName?: string | null;
+            /** Vatnumber */
+            vatNumber?: string | null;
+            /** Branchcode */
+            branchCode?: string | null;
         };
     };
     responses: never;
@@ -1139,6 +2700,217 @@ export interface operations {
             };
         };
     };
+    post_register_api_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliverableResponse"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_email_verification_api_auth_email_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The token is unknown, already used or out of time. The answer is the same for all three. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_verification_resend_api_auth_email_verification_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliverableResponse"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_password_reset_request_api_auth_password_reset_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliverableResponse"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_password_reset_completion_api_auth_password_reset_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetCompletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The token is unknown, already used or out of time. The answer is the same for all three. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many attempts. `Retry-After` carries the wait in seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_me_api_me_get: {
         parameters: {
             query?: never;
@@ -1159,6 +2931,239 @@ export interface operations {
             };
         };
     };
+    read_profile_api_me_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description The account has no customer profile. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_profile_api_me_profile_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description The account has no customer profile. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_my_rentals_api_me_rentals_get: {
+        parameters: {
+            query?: {
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many rentals a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_customers_api_customers_get: {
+        parameters: {
+            query: {
+                /** @description Part of a name, a phone number or an email address. */
+                q: string;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many customers a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerPageResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_walk_in_api_customers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_customer_api_customers__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_reservations_api_reservations_get: {
         parameters: {
             query?: {
@@ -1167,6 +3172,11 @@ export interface operations {
                 /** @description Only this customer's. Staff only. */
                 customerProfileId?: string | null;
                 /** @description A branch code. Only reservations collected there. Staff only. */
+                branchCode?: string | null;
+                /**
+                 * @deprecated
+                 * @description The earlier name of `branchCode`, still accepted. Staff only.
+                 */
                 branch?: string | null;
                 /** @description The page, counted from 1. */
                 page?: number;
@@ -1431,6 +3441,69 @@ export interface operations {
             };
         };
     };
+    post_no_show_api_reservations__id__no_show_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoShowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_reservation_api_reservations__id__get: {
         parameters: {
             query?: never;
@@ -1468,6 +3541,765 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_checkout_api_reservations__id__checkout_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreviewResponse"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_checkout_api_reservations__id__checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description The reservation was already checked out. The rental it opened, unchanged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The reservation is not confirmed or its hire has not started, and `detail` says which, or a unit cannot go out on hire. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_rentals_api_rentals_get: {
+        parameters: {
+            query?: {
+                /** @description A branch code. Only rentals that went out there. */
+                branchCode?: string | null;
+                /** @description Only rentals in this status. */
+                status?: components["schemas"]["RentalStatus"] | null;
+                /** @description Only rentals with a unit out past its due date. */
+                overdueOnly?: boolean;
+                /** @description Only this customer's. */
+                customerProfileId?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many rentals a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalPageResponse"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_rental_api_rentals__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_return_api_rentals__id__returns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A unit named is already back, so nothing was returned. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_loss_api_rentals__id__items__itemId__loss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+                /** @description The key of the rental item. */
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental, or the unit is not on it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The unit is already back, or it is not yet more than fourteen days past its due date, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_balance_payment_api_rentals__id__balance_payment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BalancePaymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Nothing is owed on the rental, so there is no balance to pay. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_damage_reports_api_damage_reports_get: {
+        parameters: {
+            query?: {
+                /** @description An asset tag. Only the reports of that unit. */
+                assetTag?: string | null;
+                /** @description Only reports in this status. */
+                status?: components["schemas"]["DamageStatus"] | null;
+                /** @description A branch code. Only reports of units held there. */
+                branchCode?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many reports a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportPageResponse"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_damage_report_api_damage_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DamageReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The unit is out on hire or retired, it waits for the report of another hire, or the deposit of the hire was already settled, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_damage_report_api_damage_reports__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_repair_api_damage_reports__id__repair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The report cannot make that move from where it stands, or a booking still holds the unit it would retire, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_resolution_api_damage_reports__id__resolution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamageReportResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The report cannot make that move from where it stands, or a booking still holds the unit it would retire, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_dashboard_api_counter_dashboard_get: {
+        parameters: {
+            query?: {
+                /** @description The branch. Counter staff may leave it out and get their own. An administrator names one. */
+                branchCode?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_diary_api_counter_diary_get: {
+        parameters: {
+            query?: {
+                /** @description The branch. Counter staff may leave it out and get their own. An administrator names one. */
+                branchCode?: string | null;
+                /** @description The first day. Today when left out. */
+                from?: string | null;
+                /** @description How many days to show, from one to seven. */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    locate_assets_api_assets_locator_get: {
+        parameters: {
+            query: {
+                /** @description Part of an asset tag or of a model name. */
+                q: string;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many units a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetLocationPageResponse"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

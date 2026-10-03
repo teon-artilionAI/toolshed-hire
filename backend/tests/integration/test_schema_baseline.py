@@ -17,9 +17,13 @@ which are the application's statement of the schema. The migration has its own
 frozen statement under alembic/baseline and imports neither. Comparing the two
 through the live catalogue is what stops them drifting apart.
 
-The last class does the same for the SQLModel classes. Most of the seventeen
+The models class does the same for the SQLModel classes. Most of the seventeen
 tables have no flow written against them yet, so a misspelt column on one of
 those models would otherwise wait for the feature that first used it.
+
+The last class checks the columns later revisions added to a baseline table.
+Each one is NOT NULL with a default, and the default is what lets the release
+before the revision go on inserting rows that never name the column.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from sqlmodel import Session, SQLModel
 from app.infrastructure import models
 from app.infrastructure.schema_ddl import (
     ALLOCATION_TABLE,
+    COLUMNS_ADDED_AFTER_BASELINE,
     ENUM_TYPES,
     OVERLAP_CONSTRAINT_DEFINITION,
     OVERLAP_CONSTRAINT_NAME,
@@ -40,6 +45,7 @@ from app.infrastructure.schema_ddl import (
     TABLE_NAMES,
 )
 from tests.support.pg import (
+    column_default,
     column_nullability,
     constraint_definition,
     enum_type_labels,
@@ -179,4 +185,23 @@ class TestTheModelsMatchTheMigratedTables:
             f"The model for {table_name} and the migrated table disagree. The model alone "
             f"declares {only_on_model}, the database alone holds {only_in_database}, and "
             f"nullability differs on {nullability_differs}."
+        )
+
+
+class TestTheColumnsAddedAfterTheBaseline:
+    """A column a later revision adds is NOT NULL with the default the application expects."""
+
+    @pytest.mark.parametrize(
+        ("table_name", "column_name", "default"),
+        COLUMNS_ADDED_AFTER_BASELINE,
+        ids=[f"{table}.{column}" for table, column, _default in COLUMNS_ADDED_AFTER_BASELINE],
+    )
+    def test_the_column_is_not_null_and_carries_its_default(
+        self, postgres_session: Session, table_name: str, column_name: str, default: str
+    ) -> None:
+        nullable = column_nullability(postgres_session, table_name).get(column_name)
+        found = column_default(postgres_session, table_name, column_name)
+        assert (nullable, found) == (False, default), (
+            f"{table_name}.{column_name} should be NOT NULL with the default {default!r}. "
+            f"The database says nullable={nullable} and default={found!r}."
         )

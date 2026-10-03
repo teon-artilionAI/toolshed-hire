@@ -9,7 +9,8 @@ time, which is a gentler race than the one worth proving.
 
 `post_at_once` sends one request from each of a set of threads. A barrier
 holds every thread until all of them have arrived, so no request can finish
-before the last one has started.
+before the last one has started. `post_bodies_at_once` does the same for
+requests that carry a JSON body, such as two checkouts of one reservation.
 
 Nothing here shares a session between threads. A token is minted on the main
 thread and handed to the thread that uses it, and each thread drives a test
@@ -95,16 +96,39 @@ def post_at_once(
             resolve and the test must not hang waiting for.
 
     """
+    return post_bodies_at_once(application, [(path, headers, None) for path, headers in requests])
+
+
+def post_bodies_at_once(
+    application: FastAPI,
+    requests: Sequence[tuple[str, dict[str, str], dict[str, object] | None]],
+) -> list[Response]:
+    """Post every request with its JSON body from a thread of its own, released together.
+
+    Args:
+        application: The application to post to.
+        requests: The path, the headers and the body of each request. A
+            request with no body is posted with none.
+
+    Returns:
+        The responses, in the order the requests were given.
+
+    Raises:
+        TimeoutError: If a request has not finished within the result timeout.
+
+    """
     barrier = threading.Barrier(len(requests))
 
-    def _post(path: str, headers: dict[str, str]) -> Response:
+    def _post(path: str, headers: dict[str, str], body: dict[str, object] | None) -> Response:
         """Wait for every other thread, then post one request."""
         client = TestClient(application)
         barrier.wait(timeout=BARRIER_TIMEOUT_SECONDS)
-        return client.post(path, headers=headers)
+        if body is None:
+            return client.post(path, headers=headers)
+        return client.post(path, headers=headers, json=body)
 
     with ThreadPoolExecutor(max_workers=len(requests)) as pool:
-        futures = [pool.submit(_post, path, headers) for path, headers in requests]
+        futures = [pool.submit(_post, path, headers, body) for path, headers, body in requests]
         responses = [future.result(timeout=RESULT_TIMEOUT_SECONDS) for future in futures]
     logger.info(
         "test.requests_posted_at_once",
@@ -116,4 +140,4 @@ def post_at_once(
     return responses
 
 
-__all__ = ["application_on", "post_at_once"]
+__all__ = ["application_on", "post_at_once", "post_bodies_at_once"]

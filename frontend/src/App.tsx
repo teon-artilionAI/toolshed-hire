@@ -15,7 +15,8 @@
  * DEV-01 is routed from the same table and is not one of the twenty four. It
  * is the connectivity panel at /system. Keeping it in this table rather than
  * adding a second routing mechanism beside it is the whole reason the table
- * exists.
+ * exists. INFO-01, the privacy notice at /privacy, is routed the same way and
+ * is not one of the twenty four either.
  *
  * Every screen renders inside an error boundary. A screen that throws shows the
  * shared error state in its place, and the shell and its navigation stay up.
@@ -78,6 +79,7 @@ const SCREEN_MODULE: Record<string, ScreenLoader> = {
   'SC-22': () => import('./features/admin/SC22-Utilisation-Report'),
   'SC-23': () => import('./features/admin/SC23-User-Management'),
   'SC-24': () => import('./features/admin/SC24-Audit-Log'),
+  'INFO-01': () => import('./features/customer/PrivacyNotice'),
   'DEV-01': () => import('./features/system/SystemStatus'),
 }
 

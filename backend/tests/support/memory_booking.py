@@ -7,11 +7,12 @@ transaction commits and thrown away when it does not.
 
 It applies the scope of the caller the way the SQL repository does. A
 reservation that belongs to somebody else is answered as though it did not
-exist, so a use case can be tested for the refusal with no database.
+exist, so a use case can be tested for the refusal with no database. A
+customer's own list leaves out the baskets they abandoned, as the SQL one does.
 
-It makes no attempt at locking. `find_for_update` and `lock_due_holds` return
-what they find at once. The row locks are proved against PostgreSQL in
-tests/integration.
+It makes no attempt at locking. `find_for_update`, `lock_due_holds` and
+`lock_due_no_shows` return what they find at once. The row locks are proved
+against PostgreSQL in tests/integration.
 
 A reservation here has no stored creation time, so its place in the list is
 used for one. Each reservation is a second newer than the one before it,
@@ -20,9 +21,11 @@ which is all a test of the order of a list needs.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Final
+from uuid import UUID
 
+from app.application.booking.ports import DueNoShow
 from app.application.booking.read_models import (
     ReservationDetail,
     ReservationKey,
@@ -32,6 +35,7 @@ from app.application.booking.read_models import (
 )
 from app.application.ownership import OwnerScope
 from app.domain.booking import Reservation, ReservationLine, format_reference
+from app.domain.business_time import in_business_time
 from app.domain.enums import ReservationStatus
 
 if TYPE_CHECKING:
@@ -40,6 +44,8 @@ if TYPE_CHECKING:
 # The creation time of the first reservation a store is given.
 MEMORY_EPOCH: Final[datetime] = datetime(2026, 3, 1, 6, 0, tzinfo=UTC)
 ONE_SECOND: Final[timedelta] = timedelta(seconds=1)
+# The closing time the factories give a branch as well.
+DEFAULT_CLOSING_TIME: Final[time] = time(17, 0)
 
 
 class MemoryReservations:
@@ -84,6 +90,41 @@ class MemoryReservations:
         due.sort(key=lambda reservation: (reservation.hold_expires_at, str(reservation.id)))
         return due[:limit]
 
+    def lock_due_no_shows(self, now: datetime, limit: int) -> list[DueNoShow]:
+        """Return up to `limit` confirmed reservations whose branch has closed on day one.
+
+        The rule is the SQL query's. A first day before today is past its
+        closing time, and a first day of today once the clock in Cape Town is
+        later than the closing time of the branch.
+        """
+        local = in_business_time(now)
+        due = [
+            DueNoShow(reservation=reservation, branch_closes_at=self._closing_time(reservation))
+            for reservation in self._working.reservations
+            if self._store.stale_no_show_query
+            or (
+                reservation.status is ReservationStatus.CONFIRMED
+                and (
+                    reservation.period.start < local.date()
+                    or (
+                        reservation.period.start == local.date()
+                        and self._closing_time(reservation) < local.time()
+                    )
+                )
+            )
+        ]
+        due.sort(key=lambda found: (found.reservation.period.start, str(found.reservation.id)))
+        return due[:limit]
+
+    def count_no_shows_since(self, customer_profile_id: UUID, started_after: date) -> int:
+        """Return how many of a customer's reservations that started after a day were no shows."""
+        return sum(
+            reservation.customer_profile_id == customer_profile_id
+            and reservation.period.start > started_after
+            and reservation.status is ReservationStatus.NO_SHOW
+            for reservation in self._working.reservations
+        )
+
     def find_detail(self, key: ReservationKey, scope: OwnerScope) -> ReservationDetail | None:
         """Return one reservation as a read model, if the scope lets the caller see it."""
         found = self._find(key, scope)
@@ -94,7 +135,9 @@ class MemoryReservations:
         matching = [
             reservation
             for reservation in reversed(self._working.reservations)
-            if self._is_within(reservation, scope) and _matches(reservation, search)
+            if self._is_within(reservation, scope)
+            and _matches(reservation, search)
+            and not (scope.is_restricted and _is_an_abandoned_basket(reservation))
         ]
         page = matching[search.offset : search.offset + search.page_size]
         return ReservationPage(
@@ -103,6 +146,10 @@ class MemoryReservations:
             page_size=search.page_size,
             total=len(matching),
         )
+
+    def _closing_time(self, reservation: Reservation) -> time:
+        """Return when the collection branch closes, 17:00 unless a test said otherwise."""
+        return self._store.closing_times.get(reservation.branch_id, DEFAULT_CLOSING_TIME)
 
     def _find(self, key: ReservationKey, scope: OwnerScope) -> Reservation | None:
         """Return the one reservation a key names, when the scope reaches it."""
@@ -175,6 +222,16 @@ class MemoryReservations:
             allocated_count=len(tags),
             asset_tags=tuple(tags),
         )
+
+
+def _is_an_abandoned_basket(reservation: Reservation) -> bool:
+    """Return True for a reservation cancelled without ever holding a unit.
+
+    The SQL reads leave these out of a customer's own list, and so does this.
+    """
+    return reservation.status is ReservationStatus.CANCELLED and not any(
+        line.allocations for line in reservation.lines
+    )
 
 
 def _matches(reservation: Reservation, search: ReservationSearch) -> bool:

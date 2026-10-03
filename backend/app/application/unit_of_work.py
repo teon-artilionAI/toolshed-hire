@@ -20,6 +20,9 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_ports import DamageReportRepository
+from app.application.hire.ports import RentalRepository
+from app.application.identity.customer_directory import CustomerDirectory
 from app.application.identity.ports import (
     AccountRepository,
     BranchRepository,
@@ -49,6 +52,16 @@ class UnitOfWork(Protocol):
         ...
 
     @property
+    def rentals(self) -> RentalRepository:
+        """Return the rental repository of this transaction."""
+        ...
+
+    @property
+    def damage_reports(self) -> DamageReportRepository:
+        """Return the damage report repository of this transaction."""
+        ...
+
+    @property
     def branches(self) -> BranchRepository:
         """Return the branch repository of this transaction."""
         ...
@@ -61,6 +74,11 @@ class UnitOfWork(Protocol):
     @property
     def customers(self) -> CustomerRepository:
         """Return the customer repository of this transaction."""
+        ...
+
+    @property
+    def customer_directory(self) -> CustomerDirectory:
+        """Return the customer lookup of this transaction."""
         ...
 
     @property

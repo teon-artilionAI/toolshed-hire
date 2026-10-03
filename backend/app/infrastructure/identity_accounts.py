@@ -1,18 +1,23 @@
-"""The SQL side of signing in, which is accounts and refresh sessions.
+"""The SQL side of the sign in account, and the adapters for its cryptography.
 
-Two repositories and two small adapters. The repositories map the
-`user_account` and `refresh_session` rows to the domain entities and back, on
-the session of the unit of work that created them. The adapters put bcrypt and
-the token signer behind the two ports the use cases ask for.
+The repository maps the `user_account` rows to the domain entity and back, on
+the session of the unit of work that created it. The three adapters put bcrypt
+and the token signer behind the ports the use cases ask for. The refresh
+sessions are in `identity_sessions.py`.
 
-Two reads take a row lock. A sign in locks the account it is checking, so two
-attempts cannot both read the same failure count. A refresh locks the session
-it is rotating, so of two requests presenting one token the second finds it
-already used. The lock is released when the transaction ends.
+Four reads take a row lock. A sign in locks the account it is checking, so two
+attempts cannot both read the same failure count. A verification link and a
+reset link each lock the account that holds the token, so of two requests
+presenting one token the second finds it already used. The lock is released
+when the transaction ends.
 
-A family is revoked through the partial index on live sessions. The statement
-names the account as well as the family, so the database goes to the handful
-of live sessions that account holds and never reads the history.
+A token is looked up by its SHA-256, through the partial unique index on the
+column, and the token itself is never stored.
+
+A registration that loses a race for an address is told so. The violation is
+recognised by SQLSTATE `23505` together with the name of the constraint, both
+read from the diagnostics of the driver and never from the message. Any other
+integrity fault is raised unchanged.
 
 A timestamp read back from a database with no time zone type arrives without
 one. Every instant is stored in UTC, so a value without a zone is given UTC.
@@ -21,20 +26,26 @@ one. Every instant is stored in UTC, so a value without a zone is given UTC.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
+from typing import Final
 from uuid import UUID
 
-from sqlalchemy import CursorResult, update
+from sqlalchemy import ColumnElement
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.application.identity.ports import IssuedAccessToken
+from app.application.identity.ports import EmailAlreadyRegistered, IssuedAccessToken
 from app.domain import account as account_domain
-from app.domain import session as session_domain
-from app.domain.enums import RevokeReason
-from app.infrastructure.models import RefreshSession, UserAccount
+from app.domain.account_tokens import PendingToken
+from app.infrastructure.booking_mapping import in_utc
+from app.infrastructure.models import UserAccount
+from app.infrastructure.schema_ddl import ACCOUNT_EMAIL_CONSTRAINT_NAME
 from app.infrastructure.security import create_access_token, hash_password, verify_password
 
 logger = logging.getLogger(__name__)
+
+# PostgreSQL unique_violation.
+UNIQUE_VIOLATION_SQLSTATE: Final[str] = "23505"
 
 # What a password is compared against when there is no account to check, so a
 # refusal for an unknown address costs one bcrypt verification like any other.
@@ -42,7 +53,7 @@ _TIMING_EQUALISER_HASH = hash_password("not-a-real-password-timing-equaliser")
 
 
 class SqlAccountRepository:
-    """Reads sign in accounts and writes their lockout state through one session."""
+    """Reads and writes sign in accounts through one session."""
 
     def __init__(self, session: Session) -> None:
         """Bind the repository to the session of its unit of work."""
@@ -50,11 +61,27 @@ class SqlAccountRepository:
 
     def find_by_email_for_update(self, email: str) -> account_domain.Account | None:
         """Return the account with this address, locked for the rest of the transaction."""
-        logger.debug("identity.account_lookup_started")
-        statement = select(UserAccount).where(col(UserAccount.email) == email).with_for_update()
-        row = self._session.exec(statement).first()
-        logger.debug("identity.account_lookup_finished", extra={"found": row is not None})
-        return _account_of(row) if row is not None else None
+        return self._find_locked(col(UserAccount.email) == email, "email")
+
+    def find_by_email_verification_hash_for_update(
+        self, token_hash: str
+    ) -> account_domain.Account | None:
+        """Return the account holding this verification token hash, locked, or None."""
+        return self._find_locked(
+            col(UserAccount.email_verification_token_hash) == token_hash, "verification-link"
+        )
+
+    def find_by_password_reset_hash_for_update(
+        self, token_hash: str
+    ) -> account_domain.Account | None:
+        """Return the account holding this reset token hash, locked, or None."""
+        return self._find_locked(
+            col(UserAccount.password_reset_token_hash) == token_hash, "reset-link"
+        )
+
+    def get_for_update(self, account_id: UUID) -> account_domain.Account | None:
+        """Return the account with this key, locked for the rest of the transaction."""
+        return self._find_locked(col(UserAccount.id) == account_id, "key")
 
     def get(self, account_id: UUID) -> account_domain.Account | None:
         """Return the account with this key as it is stored now, or None."""
@@ -70,6 +97,40 @@ class SqlAccountRepository:
         )
         return _account_of(row) if row is not None else None
 
+    def add(self, account: account_domain.Account) -> None:
+        """Write a new account inside the current transaction.
+
+        Raises:
+            EmailAlreadyRegistered: If the unique constraint on the address
+                refused the row, because another transaction took the address.
+            IntegrityError: Unchanged, for every other integrity fault.
+
+        """
+        row = UserAccount(
+            id=account.id,
+            email=account.email,
+            password_hash=account.password_hash,
+            role=account.role,
+            full_name=account.full_name,
+            phone=account.phone,
+            branch_id=account.branch_id,
+            is_active=account.is_active,
+        )
+        _write_security_state(row, account)
+        self._session.add(row)
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            if is_duplicate_email(error):
+                logger.warning("identity.account_address_taken")
+                raise EmailAlreadyRegistered from error
+            logger.error(
+                "identity.account_insert_failed",
+                extra={"sqlstate": _sqlstate_of(error), "attempted": "insert a user_account row"},
+            )
+            raise
+        logger.info("identity.account_added", extra={"user_id": str(account.id)})
+
     def save_login_state(self, account: account_domain.Account) -> None:
         """Write the failure count, the lock and the last sign in of an account.
 
@@ -78,12 +139,7 @@ class SqlAccountRepository:
                 case is saving an account it never loaded.
 
         """
-        row = self._session.get(UserAccount, account.id)
-        if row is None:
-            raise RuntimeError(
-                f"Attempted to save the sign in state of account {account.id}, which has no "
-                "row. Load the account through this repository before saving it."
-            )
+        row = self._loaded(account.id)
         row.failed_login_count = account.failed_login_count
         row.locked_until = account.locked_until
         row.last_login_at = account.last_login_at
@@ -98,96 +154,55 @@ class SqlAccountRepository:
             },
         )
 
+    def save_security_state(self, account: account_domain.Account) -> None:
+        """Write the password hash, the verification, the two tokens and the lockout.
 
-class SqlSessionRepository:
-    """Stores refresh sessions through one session of the database."""
+        Raises:
+            RuntimeError: If the account has no row.
 
-    def __init__(self, session: Session) -> None:
-        """Bind the repository to the session of its unit of work."""
-        self._session = session
-
-    def add(self, session: session_domain.RefreshSession) -> None:
-        """Write a new refresh session inside the current transaction."""
-        self._session.add(
-            RefreshSession(
-                id=session.id,
-                user_account_id=session.user_account_id,
-                family_id=session.family_id,
-                token_hash=session.token_hash,
-                issued_at=session.issued_at,
-                expires_at=session.expires_at,
-                user_agent=session.user_agent,
-                ip_address=session.ip_address,
-            )
-        )
+        """
+        row = self._loaded(account.id)
+        row.password_hash = account.password_hash
+        _write_security_state(row, account)
+        self._session.add(row)
         self._session.flush()
         logger.debug(
-            "identity.refresh_session_added",
+            "identity.account_security_state_saved",
             extra={
-                "session_id": str(session.id),
-                "session_family_id": str(session.family_id),
-                "user_id": str(session.user_account_id),
+                "user_id": str(account.id),
+                "email_verified": account.email_verified,
+                "verification_pending": account.email_verification is not None,
+                "reset_pending": account.password_reset is not None,
             },
         )
 
-    def find_by_token_hash_for_update(
-        self, token_hash: str
-    ) -> session_domain.RefreshSession | None:
-        """Return the session a token hash names, locked for the rest of the transaction."""
+    def _find_locked(
+        self, condition: ColumnElement[bool], sought_by: str
+    ) -> account_domain.Account | None:
+        """Return the one account a condition picks, locked for the rest of the transaction."""
+        logger.debug("identity.account_lookup_started", extra={"sought_by": sought_by})
         statement = (
-            select(RefreshSession)
-            .where(col(RefreshSession.token_hash) == token_hash)
+            select(UserAccount)
+            .where(condition)
+            .execution_options(populate_existing=True)
             .with_for_update()
         )
         row = self._session.exec(statement).first()
-        logger.debug("identity.refresh_session_lookup_finished", extra={"found": row is not None})
-        return _session_of(row) if row is not None else None
+        logger.debug(
+            "identity.account_lookup_finished",
+            extra={"sought_by": sought_by, "found": row is not None},
+        )
+        return _account_of(row) if row is not None else None
 
-    def save_rotation(self, session: session_domain.RefreshSession) -> None:
-        """Write that a session was used, with when and why it stopped.
-
-        Raises:
-            RuntimeError: If the session has no row.
-
-        """
-        row = self._session.get(RefreshSession, session.id)
+    def _loaded(self, account_id: UUID) -> UserAccount:
+        """Return the row of an account a use case has already loaded."""
+        row = self._session.get(UserAccount, account_id)
         if row is None:
             raise RuntimeError(
-                f"Attempted to save refresh session {session.id}, which has no row. Load the "
-                "session through this repository before saving it."
+                f"Attempted to save account {account_id}, which has no row. Load the account "
+                "through this repository before saving it."
             )
-        row.rotated_at = session.rotated_at
-        row.revoked_at = session.revoked_at
-        row.revoked_reason = session.revoked_reason
-        self._session.add(row)
-        self._session.flush()
-        logger.debug("identity.refresh_session_rotated", extra={"session_id": str(session.id)})
-
-    def revoke_family(
-        self, *, user_account_id: UUID, family_id: UUID, reason: RevokeReason, at: datetime
-    ) -> int:
-        """Revoke every live session of a family and return how many there were."""
-        statement = (
-            update(RefreshSession)
-            .where(
-                col(RefreshSession.user_account_id) == user_account_id,
-                col(RefreshSession.family_id) == family_id,
-                col(RefreshSession.revoked_at).is_(None),
-            )
-            .values(revoked_at=at, revoked_reason=reason)
-        )
-        result = self._session.execute(statement)
-        revoked_count = result.rowcount if isinstance(result, CursorResult) else 0
-        logger.info(
-            "identity.refresh_family_revoked",
-            extra={
-                "session_family_id": str(family_id),
-                "user_id": str(user_account_id),
-                "reason": reason.value,
-                "revoked_session_count": revoked_count,
-            },
-        )
-        return revoked_count
+        return row
 
 
 class BcryptPasswordVerifier:
@@ -205,6 +220,14 @@ class BcryptPasswordVerifier:
         return verify_password(plain_password, stored_hash)
 
 
+class BcryptPasswordHasher:
+    """Hashes a chosen password with bcrypt at the work factor of the service (BR-45)."""
+
+    def hash(self, plain_password: str) -> str:
+        """Return the bcrypt hash of a password."""
+        return hash_password(plain_password)
+
+
 class JwtAccessTokenIssuer:
     """Signs access tokens with the key of the service."""
 
@@ -216,16 +239,40 @@ class JwtAccessTokenIssuer:
         return IssuedAccessToken(value=value, expires_in=expires_in)
 
 
-def _in_utc(instant: datetime | None) -> datetime | None:
-    """Return a stored instant with its zone, giving UTC to one that lost it."""
-    if instant is None or instant.tzinfo is not None:
-        return instant
-    return instant.replace(tzinfo=UTC)
+def is_duplicate_email(error: IntegrityError) -> bool:
+    """Return True when an integrity error is the unique constraint on the address."""
+    diagnostics = getattr(error.orig, "diag", None)
+    constraint = getattr(diagnostics, "constraint_name", None) if diagnostics is not None else None
+    return (
+        _sqlstate_of(error) == UNIQUE_VIOLATION_SQLSTATE
+        and constraint == ACCOUNT_EMAIL_CONSTRAINT_NAME
+    )
 
 
-def _required_utc(instant: datetime) -> datetime:
-    """Return a stored instant that is never null, with its zone."""
-    return instant if instant.tzinfo is not None else instant.replace(tzinfo=UTC)
+def _sqlstate_of(error: IntegrityError) -> str | None:
+    """Return the five character SQLSTATE the driver reported, if any."""
+    state = getattr(error.orig, "sqlstate", None)
+    return str(state) if state is not None else None
+
+
+def _write_security_state(row: UserAccount, account: account_domain.Account) -> None:
+    """Copy the verification, the two tokens and the lockout of an account onto its row."""
+    verification, reset = account.email_verification, account.password_reset
+    row.email_verified_at = account.email_verified_at
+    row.failed_login_count = account.failed_login_count
+    row.locked_until = account.locked_until
+    row.email_verification_token_hash = verification.token_hash if verification else None
+    row.email_verification_expires_at = verification.expires_at if verification else None
+    row.password_reset_token_hash = reset.token_hash if reset else None
+    row.password_reset_expires_at = reset.expires_at if reset else None
+
+
+def _pending(token_hash: str | None, expires_at: datetime | None) -> PendingToken | None:
+    """Return the pending token two columns hold, or None when either is empty."""
+    aware = in_utc(expires_at)
+    if token_hash is None or aware is None:
+        return None
+    return PendingToken(token_hash=token_hash, expires_at=aware)
 
 
 def _account_of(row: UserAccount) -> account_domain.Account:
@@ -236,29 +283,15 @@ def _account_of(row: UserAccount) -> account_domain.Account:
         password_hash=row.password_hash,
         role=row.role,
         full_name=row.full_name,
+        phone=row.phone,
         branch_id=row.branch_id,
         is_active=row.is_active,
-        email_verified_at=_in_utc(row.email_verified_at),
+        email_verified_at=in_utc(row.email_verified_at),
         failed_login_count=row.failed_login_count,
-        locked_until=_in_utc(row.locked_until),
-        last_login_at=_in_utc(row.last_login_at),
-    )
-
-
-def _session_of(row: RefreshSession) -> session_domain.RefreshSession:
-    """Return the domain session for a `refresh_session` row.
-
-    The address and the browser are written once and never read back, so they
-    are left out.
-    """
-    return session_domain.RefreshSession(
-        id=row.id,
-        user_account_id=row.user_account_id,
-        family_id=row.family_id,
-        token_hash=row.token_hash,
-        issued_at=_required_utc(row.issued_at),
-        expires_at=_required_utc(row.expires_at),
-        rotated_at=_in_utc(row.rotated_at),
-        revoked_at=_in_utc(row.revoked_at),
-        revoked_reason=row.revoked_reason,
+        locked_until=in_utc(row.locked_until),
+        last_login_at=in_utc(row.last_login_at),
+        email_verification=_pending(
+            row.email_verification_token_hash, row.email_verification_expires_at
+        ),
+        password_reset=_pending(row.password_reset_token_hash, row.password_reset_expires_at),
     )

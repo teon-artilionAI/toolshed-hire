@@ -13,6 +13,12 @@ instead of quietly seeding a different example.
 Three rules shape the amounts. Hire rates exclude VAT, so VAT is added on top.
 A late fee is quoted including VAT, so the VAT is taken out of it. A deposit
 movement carries no VAT at all.
+
+The late fee is the one the application's late fee policy charges, and it is
+taken apart by the application's own split, so the seeded example and a
+return at the counter cannot disagree about a cent. The description of the
+late fee names the model and not the unit, because a customer reads it and a
+customer is never shown an asset tag.
 """
 
 from __future__ import annotations
@@ -23,6 +29,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Final
 
 from app.domain.enums import ChargeType
+from app.domain.money import Money
+from app.domain.policies import StandardLateFeePolicy
+from app.domain.vat import split_vat_inclusive as split_with_the_application_rule
 from seeding.errors import SeedDataError
 
 RESERVATION_REFERENCE: Final[str] = "TSH-R-26-000123"
@@ -110,13 +119,12 @@ def vat_on(amount_ex_vat: Decimal) -> Decimal:
 def split_vat_inclusive(amount_inc_vat: Decimal) -> tuple[Decimal, Decimal]:
     """Split an amount that includes VAT into the part before VAT and the VAT.
 
-    The part before VAT is rounded to the cent and the VAT is whatever is left,
-    so the two always add back to the amount that was charged.
+    The split is the application's own. The part before VAT is rounded to the
+    cent and the VAT is whatever is left, so the two always add back to the
+    amount that was charged.
     """
-    amount_ex_vat = (amount_inc_vat * ONE_HUNDRED / (ONE_HUNDRED + VAT_RATE_PERCENT)).quantize(
-        CENT, ROUND_HALF_UP
-    )
-    return amount_ex_vat, amount_inc_vat - amount_ex_vat
+    split = split_with_the_application_rule(Money.create(amount_inc_vat))
+    return split.amount_ex_vat.amount, split.vat_amount.amount
 
 
 def compute_figures(
@@ -144,7 +152,15 @@ def compute_figures(
     subtotal_ex_vat = daily_rate * hire_days * QUANTITY
     hire_vat = vat_on(subtotal_ex_vat)
     deposit_held = deposit_amount * QUANTITY
-    late_fee_inc_vat = late_fee_per_day * days_late * QUANTITY
+    late_fee_inc_vat = (
+        StandardLateFeePolicy()
+        .late_fee(
+            due_back_on=HIRE_END,
+            returned_on=RETURNED_ON,
+            fee_per_day=Money.create(late_fee_per_day),
+        )
+        .amount.amount
+    )
     late_fee_ex_vat, late_fee_vat = split_vat_inclusive(late_fee_inc_vat)
     # The late fee comes out of the deposit first. Only what the deposit cannot
     # cover is left for the customer to pay.
@@ -176,8 +192,7 @@ def compute_figures(
         ChargeFigures(
             charge_type=ChargeType.LATE_FEE,
             description=(
-                f"{ASSET_TAG} returned {days_late} days late, R{late_fee_per_day} a day "
-                "including VAT"
+                f"Late fee for {days_late} days at R{late_fee_per_day} a day, including VAT"
             ),
             amount_ex_vat=late_fee_ex_vat,
             vat_rate=VAT_RATE_PERCENT,

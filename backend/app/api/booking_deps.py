@@ -29,6 +29,7 @@ from app.application.booking.cancel_reservation import CancelReservationUseCase
 from app.application.booking.confirm_reservation import ConfirmReservationUseCase
 from app.application.booking.create_reservation import CreateReservationUseCase
 from app.application.booking.hold_reservation import HoldReservationUseCase
+from app.application.booking.mark_no_show import MarkNoShowUseCase
 from app.application.booking.read_reservation import ReadReservations
 from app.domain.identity import Actor
 from app.infrastructure.models import UserAccount
@@ -70,6 +71,13 @@ def get_cancel_reservation_use_case(
     return CancelReservationUseCase(uow, clock)
 
 
+def get_mark_no_show_use_case(
+    uow: UnitOfWorkDependency, clock: ClockDependency
+) -> MarkNoShowUseCase:
+    """Return the use case by which staff mark a reservation as not collected."""
+    return MarkNoShowUseCase(uow, clock)
+
+
 def get_read_reservations(
     uow: UnitOfWorkDependency, clock: ClockDependency, sweep: HoldSweepDependency
 ) -> ReadReservations:
@@ -83,4 +91,5 @@ ConfirmReservation = Annotated[
     ConfirmReservationUseCase, Depends(get_confirm_reservation_use_case)
 ]
 CancelReservation = Annotated[CancelReservationUseCase, Depends(get_cancel_reservation_use_case)]
+MarkNoShow = Annotated[MarkNoShowUseCase, Depends(get_mark_no_show_use_case)]
 ReadReservationsDependency = Annotated[ReadReservations, Depends(get_read_reservations)]

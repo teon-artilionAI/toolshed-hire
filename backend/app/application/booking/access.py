@@ -31,6 +31,7 @@ from app.domain.booking import Reservation
 from app.domain.enums import UserRole
 from app.domain.errors import NotFound
 from app.domain.identity import Actor, CustomerProfile, ensure_branch_scope
+from app.domain.period import ensure_branch_open_for_start
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ RESERVATION_HELD_ACTION: Final[str] = "reservation.held"
 RESERVATION_CONFIRMED_ACTION: Final[str] = "reservation.confirmed"
 RESERVATION_CANCELLED_ACTION: Final[str] = "reservation.cancelled"
 RESERVATION_EXPIRED_ACTION: Final[str] = "reservation.expired"
+RESERVATION_COLLECTED_ACTION: Final[str] = "reservation.collected"
+RESERVATION_NO_SHOW_ACTION: Final[str] = "reservation.no_show"
 
 RESERVATION_NOT_FOUND_MESSAGE: Final[str] = (
     "We could not find that reservation. Check the reference and try again."
@@ -134,6 +137,27 @@ def customer_of(uow: UnitOfWork, reservation: Reservation) -> CustomerProfile:
             f"reservation {reservation.reference}, and it could not be read."
         )
     return customer
+
+
+def ensure_collection_branch_open(
+    uow: UnitOfWork, reservation: Reservation, now: datetime
+) -> None:
+    """Refuse a move that books a hire for today once its branch has closed for the day (BR-04).
+
+    Raises:
+        ValidationFailure: If the hire starts today and the branch has closed.
+        LookupError: If the collection branch cannot be read. A reservation
+            carries a foreign key to its branch and nothing is ever deleted,
+            so this is a fault in the data.
+
+    """
+    branch = uow.branches.get(reservation.branch_id)
+    if branch is None:
+        raise LookupError(
+            f"Attempted to read collection branch {reservation.branch_id} of reservation "
+            f"{reservation.reference}, and it could not be read."
+        )
+    ensure_branch_open_for_start(reservation.period, now=now, closes_at=branch.closes_at)
 
 
 def state_of(reservation: Reservation) -> dict[str, StateValue]:

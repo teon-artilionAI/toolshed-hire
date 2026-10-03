@@ -40,14 +40,14 @@ from passlib.context import CryptContext
 from app.config import settings
 from app.domain.enums import UserRole
 from app.domain.errors import AuthenticationFailure, ValidationFailure
+from app.domain.password_policy import MAXIMUM_PASSWORD_BYTES, MINIMUM_PASSWORD_LENGTH
 
 logger = logging.getLogger(__name__)
 
+# The two limits `hash_password` enforces are the password rule of the domain,
+# imported above. The seed and the tests hash through here with no use case in
+# front of them, so the rule is checked again at this boundary.
 BCRYPT_ROUNDS: Final[int] = 12
-MINIMUM_PASSWORD_LENGTH: Final[int] = 12
-# bcrypt silently truncates beyond 72 bytes, so a longer password is rejected
-# rather than accepted and quietly shortened.
-MAXIMUM_PASSWORD_BYTES: Final[int] = 72
 TOKEN_TYPE_ACCESS: Final[str] = "access"
 TOKEN_ISSUER: Final[str] = "toolshed-hire"
 KEY_ID_HEADER: Final[str] = "kid"

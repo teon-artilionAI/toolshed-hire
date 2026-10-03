@@ -4,7 +4,8 @@ Three things are pinned here (BR-41, C-20, C-21, C-25).
 
 Every route of the real application declares who may call it, and this test
 enumerates the route table to say so. A route added without a policy fails
-here, in the build, before it can fail a deployment.
+here, in the build, before it can fail a deployment. The policy expected of
+each route is listed in tests/api/route_policy_expectations.py.
 
 An application with one undeclared route refuses to start, and the message
 names the route.
@@ -27,7 +28,6 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.api.access_policy import (
-    AccessKind,
     UndeclaredPolicyError,
     declared_routes,
     enforce_declared_policies,
@@ -37,44 +37,19 @@ from app.config import Environment
 from app.domain.enums import UserRole
 from app.main import FRAMEWORK_ROUTE_PATHS, create_app
 from app.main import app as production_app
+from tests.api.route_policy_expectations import EXPECTED_POLICIES
 from tests.support.factories import Factory
-from tests.support.probe_app import (
-    ADMIN_PATH,
-    COUNTER_PATH,
-    CUSTOMER_PATH,
-    FRESH_ADMIN_PATH,
-)
+from tests.support.probe_app import ADMIN_PATH, COUNTER_PATH, CUSTOMER_PATH, FRESH_ADMIN_PATH
 from tests.support.tokens import authorization_header, mint_access_token
 
-ALL_ROLES: Final[frozenset[UserRole]] = frozenset(UserRole)
+# A key no customer and no reservation carries, so a route that lets the caller
+# in answers 404 and one that does not answers 401 or 403 before it looks.
+NOBODYS_KEY: Final[str] = "00000000-0000-4000-8000-000000000000"
 REFUSALS: Final[frozenset[int]] = frozenset(
     {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}
 )
 UNDECLARED_PATH: Final[str] = "/api/left-open-by-mistake"
 CONTRADICTORY_PATH: Final[str] = "/api/public-and-admin-at-once"
-
-# What the real application is expected to declare, route by route. A new
-# route has to be added here as well, which is the moment to decide its policy.
-EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
-    "GET /api/health": (AccessKind.PUBLIC, frozenset()),
-    "POST /api/auth/login": (AccessKind.PUBLIC, frozenset()),
-    "POST /api/auth/refresh": (AccessKind.REFRESH_COOKIE, frozenset()),
-    "POST /api/auth/logout": (AccessKind.REFRESH_COOKIE, frozenset()),
-    "GET /api/me": (AccessKind.ROLES, ALL_ROLES),
-    "POST /api/reservations": (AccessKind.ROLES, ALL_ROLES),
-    "POST /api/reservations/{id}/hold": (AccessKind.ROLES, ALL_ROLES),
-    "POST /api/reservations/{id}/confirm": (AccessKind.ROLES, ALL_ROLES),
-    "POST /api/reservations/{id}/cancellation": (AccessKind.ROLES, ALL_ROLES),
-    "GET /api/reservations": (AccessKind.ROLES, ALL_ROLES),
-    "GET /api/reservations/{id}": (AccessKind.ROLES, ALL_ROLES),
-    "GET /api/branches": (AccessKind.PUBLIC, frozenset()),
-    "GET /api/catalogue/categories": (AccessKind.PUBLIC, frozenset()),
-    "GET /api/catalogue/models": (AccessKind.PUBLIC, frozenset()),
-    "GET /api/catalogue/models/{slug}": (AccessKind.PUBLIC, frozenset()),
-    "GET /api/catalogue/availability": (AccessKind.PUBLIC, frozenset()),
-    "GET /api/catalogue/models/{slug}/availability": (AccessKind.PUBLIC, frozenset()),
-    "GET /api/catalogue/models/{slug}/quote": (AccessKind.PUBLIC, frozenset()),
-}
 
 
 class Caller(str, Enum):
@@ -90,6 +65,7 @@ EVERYONE: Final[frozenset[Caller]] = frozenset(Caller)
 SIGNED_IN: Final[frozenset[Caller]] = EVERYONE - {Caller.ANONYMOUS}
 STAFF: Final[frozenset[Caller]] = frozenset({Caller.COUNTER, Caller.ADMIN})
 ADMIN_ONLY: Final[frozenset[Caller]] = frozenset({Caller.ADMIN})
+CUSTOMER_ONLY: Final[frozenset[Caller]] = frozenset({Caller.CUSTOMER})
 API: Final[str] = "api"
 PROBE: Final[str] = "probe"
 
@@ -123,9 +99,38 @@ class MatrixRow:
 MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("health", API, "GET", "/api/health", EVERYONE),
     MatrixRow("auth", API, "POST", "/api/auth/login", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/register", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/email-verification", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/email-verification/resend", SIGNED_IN),
+    MatrixRow("auth", API, "POST", "/api/auth/password-reset/request", EVERYONE),
+    MatrixRow("auth", API, "POST", "/api/auth/password-reset/complete", EVERYONE),
     MatrixRow("identity", API, "GET", "/api/me", SIGNED_IN),
+    MatrixRow("identity", API, "GET", "/api/me/profile", CUSTOMER_ONLY),
+    MatrixRow("identity", API, "PATCH", "/api/me/profile", CUSTOMER_ONLY),
+    MatrixRow("identity", API, "GET", "/api/customers", STAFF),
+    MatrixRow("identity", API, "POST", "/api/customers", STAFF),
+    MatrixRow("identity", API, "GET", f"/api/customers/{NOBODYS_KEY}", STAFF),
     MatrixRow("booking", API, "GET", "/api/reservations", SIGNED_IN),
     MatrixRow("booking", API, "POST", "/api/reservations", SIGNED_IN),
+    MatrixRow("hire", API, "GET", f"/api/reservations/{NOBODYS_KEY}/checkout", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/reservations/{NOBODYS_KEY}/checkout", STAFF),
+    MatrixRow("hire", API, "GET", f"/api/rentals/{NOBODYS_KEY}", STAFF),
+    MatrixRow("hire", API, "GET", "/api/rentals", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/returns", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/balance-payment", STAFF),
+    MatrixRow(
+        "hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/items/{NOBODYS_KEY}/loss", STAFF
+    ),
+    MatrixRow("hire", API, "GET", "/api/me/rentals", CUSTOMER_ONLY),
+    MatrixRow("hire", API, "POST", "/api/damage-reports", STAFF),
+    MatrixRow("hire", API, "GET", "/api/damage-reports", STAFF),
+    MatrixRow("hire", API, "GET", f"/api/damage-reports/{NOBODYS_KEY}", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/damage-reports/{NOBODYS_KEY}/repair", ADMIN_ONLY),
+    MatrixRow("hire", API, "POST", f"/api/damage-reports/{NOBODYS_KEY}/resolution", ADMIN_ONLY),
+    MatrixRow("hire", API, "GET", "/api/counter/dashboard", STAFF),
+    MatrixRow("hire", API, "GET", "/api/counter/diary", STAFF),
+    MatrixRow("booking", API, "POST", f"/api/reservations/{NOBODYS_KEY}/no-show", STAFF),
+    MatrixRow("catalogue", API, "GET", "/api/assets/locator", STAFF),
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
     MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
     MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),
@@ -133,7 +138,7 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("administrator only", PROBE, "GET", ADMIN_PATH, ADMIN_ONLY),
     MatrixRow("administrator, read again", PROBE, "GET", FRESH_ADMIN_PATH, ADMIN_ONLY),
     MatrixRow("counter and administrator", PROBE, "GET", COUNTER_PATH, STAFF),
-    MatrixRow("customer only", PROBE, "GET", CUSTOMER_PATH, frozenset({Caller.CUSTOMER})),
+    MatrixRow("customer only", PROBE, "GET", CUSTOMER_PATH, CUSTOMER_ONLY),
 )
 CELLS: Final[list[tuple[MatrixRow, Caller]]] = [
     (row, caller) for row in MATRIX for caller in Caller

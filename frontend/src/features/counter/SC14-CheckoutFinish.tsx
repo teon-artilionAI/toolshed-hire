@@ -1,261 +1,182 @@
 /**
- * The last two panels of the SC-14 checkout wizard, the confirmation shown
- * once the equipment has gone out, and the recovery screen for an address
- * that does not match a hire.
+ * The end of a handover on SC-14. The deposit and the agreement, the question
+ * that comes before the last button, and what is shown once the equipment is
+ * out. Also the two answers that mean there is nothing to hand over. Once the
+ * equipment is out, and when it was out already, the screen links to the
+ * return of the hire on SC-15 by the key of the hire.
  *
- * The deposit is simulated and the panel says so plainly. A prototype that
- * showed a card being charged would be claiming something that is not true.
+ * The deposit is the server's figure and it is simulated. Nothing is
+ * authorised on a card, and the screen says so.
  */
 
+import type { RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import { Banknote, CreditCard, Landmark, PackageCheck } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { money } from '../../shared/format'
-import { rentals } from '../../shared/fixtures'
-import { Card, Field, Notice, PageHeader } from '../../shared/ui'
-import type { CheckoutRow, DepositMethod, ItemDraft } from './SC14-checkout-model'
-import { CONDITION_LABEL } from './SC14-checkout-model'
-import { CheckRow } from './SC14-CheckoutSteps'
+import { Loader2, PackageCheck, Undo2 } from 'lucide-react'
+import type { Rental, ReservationCheckout } from '../../shared/api/contract'
+import { formatDate, money } from '../../shared/format'
+import { Card, Notice } from '../../shared/ui'
+import { AGREEMENT_ID, handoverSentence } from './checkout-form'
+import type { CheckoutErrors } from './checkout-form'
+import { CheckRow } from './counter-fields'
+import { CONDITION_GRADE_LABEL, ID_DOCUMENT_LABEL } from './counter-labels'
+import { COUNTER_HOME_PATH, CUSTOMERS_PATH, customerHref, rentalHref } from './counter-links'
 
-/** Shown when the address carries a reference no hire matches. */
-export function HireNotFound({ searched }: { searched: string }) {
-  const openHires = rentals.filter((rental) => rental.status !== 'SETTLED')
-  return (
-    <>
-      <PageHeader
-        screenId="SC-14"
-        title="Checkout and deposit"
-        subtitle="We could not find that hire."
-      />
-      <Notice tone="error" title={`No hire matches "${searched}"`}>
-        The reference in the address does not match a hire on the system. Check
-        it against the paperwork, or pick one of the open hires below.
-      </Notice>
-      <Card title="Open hires" className="mt-md">
-        <ul className="flex flex-col gap-sm">
-          {openHires.map((hire) => (
-            <li key={hire.id}>
-              <Link
-                to={`/counter/checkout/${hire.id}`}
-                className="btn-secondary w-full justify-start font-mono"
-              >
-                {hire.reference}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </>
-  )
-}
-
-const DEPOSIT_METHODS: {
-  value: DepositMethod
-  label: string
-  detail: string
-  Icon: LucideIcon
-}[] = [
-  { value: 'CARD_HOLD', label: 'Card hold', detail: 'Held on the card, released at return', Icon: CreditCard },
-  { value: 'CASH', label: 'Cash at the counter', detail: 'Counted into the till and receipted', Icon: Banknote },
-  { value: 'EFT', label: 'EFT already received', detail: 'Paid in before collection', Icon: Landmark },
-]
-
-export function DepositStep({
-  amount,
-  method,
-  onMethod,
-  reference,
-  onReference,
+/** The money to take and the agreement to sign. */
+export function DepositAndAgreement({
+  checkout,
+  signed,
+  onSigned,
+  errors,
+  disabled,
 }: {
-  amount: number
-  method: DepositMethod | null
-  onMethod: (next: DepositMethod) => void
-  reference: string
-  onReference: (next: string) => void
+  checkout: ReservationCheckout
+  signed: boolean
+  onSigned: (signed: boolean) => void
+  errors: CheckoutErrors
+  disabled: boolean
 }) {
   return (
-    <div className="flex flex-col gap-md">
+    <Card title="Deposit and agreement">
       <div className="rounded bg-muted p-md">
-        <p className="text-sm text-slate-soft">Refundable deposit to take now</p>
-        <p className="tabular mt-xs text-3xl font-semibold text-ink">
-          {money(amount)}
+        <p className="text-sm text-slate-soft">Deposit to take now</p>
+        <p className="tabular mt-xs text-3xl font-semibold text-ink">{money(checkout.depositTotal)}</p>
+        <p className="tabular mt-xs text-sm text-slate-soft">
+          The hire itself comes to {money(checkout.hireTotalIncVat)} with VAT.
         </p>
       </div>
-
-      <Notice tone="info" title="No money moves in this prototype">
-        The deposit is simulated. Nothing is authorised on a card and nothing
-        reaches a bank. The amount and the method are recorded so the return
-        inspection has something real to settle against.
-      </Notice>
-
-      <fieldset className="min-w-0">
-        <legend className="field-label">How the deposit is being taken</legend>
-        <div className="mt-xs grid gap-sm sm:grid-cols-3">
-          {DEPOSIT_METHODS.map(({ value, label, detail, Icon }) => {
-            const active = method === value
-            return (
-              <label
-                key={value}
-                htmlFor={`dep-${value}`}
-                className={`flex min-h-[2.75rem] cursor-pointer items-start gap-sm rounded border p-sm transition-colors duration-200 ${
-                  active ? 'border-accent bg-accent-wash' : 'border-line hover:bg-muted'
-                }`}
-              >
-                <input
-                  id={`dep-${value}`}
-                  type="radio"
-                  name="deposit-method"
-                  value={value}
-                  checked={active}
-                  onChange={() => onMethod(value)}
-                  className="mt-xs h-5 w-5 shrink-0 cursor-pointer accent-accent"
-                />
-                <span className="min-w-0">
-                  <span className="flex items-center gap-xs text-sm font-medium text-ink">
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {label}
-                  </span>
-                  <span className="mt-xs block text-sm text-slate-soft">{detail}</span>
-                </span>
-              </label>
-            )
-          })}
-        </div>
-      </fieldset>
-
-      <Field
-        label="Receipt or authorisation reference"
-        htmlFor="deposit-reference"
-        help="Whatever you would write on the paper slip. Any short reference will do."
-      >
-        <input
-          id="deposit-reference"
-          type="text"
-          className="field-input"
-          value={reference}
-          onChange={(e) => onReference(e.target.value)}
-          placeholder="AUTH-4471"
-        />
-      </Field>
-    </div>
+      <p className="mt-sm text-sm text-slate-soft">
+        The deposit is simulated. Nothing is authorised on a card and nothing reaches a bank. The amount
+        is recorded so the return has something to settle against.
+      </p>
+      <p className="mt-md text-sm text-ink">
+        Check the identity document first. It should be a {ID_DOCUMENT_LABEL[checkout.customer.idDocumentType]}{' '}
+        ending {checkout.customer.idDocumentLast4}, in the name of {checkout.customer.displayName}.
+      </p>
+      <div className="mt-md">
+        <CheckRow id={AGREEMENT_ID} checked={signed} onChange={onSigned} error={errors[AGREEMENT_ID]} disabled={disabled}>
+          The customer has read the hire agreement and signed it. Late returns are charged by the day and
+          damage up to the value of the unit.
+        </CheckRow>
+      </div>
+    </Card>
   )
 }
 
-export function AgreementStep({
-  accepted,
-  onAccepted,
-  signedName,
-  onSignedName,
-  customerName,
+/** The question before the last button, with what it will do written out. */
+export function ConfirmHandover({
+  checkout,
+  pending,
+  headingRef,
+  onConfirm,
+  onBack,
 }: {
-  accepted: boolean
-  onAccepted: (next: boolean) => void
-  signedName: string
-  onSignedName: (next: string) => void
-  customerName: string
+  checkout: ReservationCheckout
+  pending: boolean
+  headingRef: RefObject<HTMLHeadingElement | null>
+  onConfirm: () => void
+  onBack: () => void
 }) {
   return (
-    <div className="flex flex-col gap-md">
-      <div className="max-h-56 overflow-y-auto rounded border border-line bg-muted p-md text-sm text-slate-soft">
-        <h3 className="text-sm font-semibold text-ink">Hire agreement, short form</h3>
-        <p className="mt-sm">
-          The hirer takes the equipment listed on this hire in the condition
-          recorded at collection, and returns it in the same condition, fair
-          wear and tear excepted.
-        </p>
-        <p className="mt-sm">
-          Late return is charged at the daily late fee shown against each model,
-          per unit, per day, from the day after the due date.
-        </p>
-        <p className="mt-sm">
-          Damage beyond fair wear and tear is charged at the cost of repair, up
-          to the replacement value of the unit. The deposit is held against late
-          fees and damage, and the balance is released at the return inspection.
-        </p>
-        <p className="mt-sm">
-          Petrol equipment goes out with a full tank and comes back full, or is
-          refuelled at cost.
-        </p>
+    <section className="card border-2 border-ink p-lg" aria-labelledby="handover-question">
+      <h2 id="handover-question" ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-ink">
+        Step 2 of 3. Hand the equipment over to {checkout.customer.displayName}?
+      </h2>
+      <p className="mt-sm text-sm text-ink">{handoverSentence(checkout)}</p>
+      <div className="mt-lg flex flex-wrap gap-sm">
+        <button type="button" className="btn-primary px-lg" disabled={pending} onClick={onConfirm}>
+          {pending ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+          ) : (
+            <PackageCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+          )}
+          {pending ? 'Handing the equipment over' : 'Yes, hand it over'}
+        </button>
+        <button type="button" className="btn-secondary px-md" disabled={pending} onClick={onBack}>
+          <Undo2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Go back and change something
+        </button>
       </div>
-
-      <CheckRow
-        id="agreement-accepted"
-        checked={accepted}
-        onChange={onAccepted}
-        title="The customer has read the agreement and accepts it"
-        detail="Read the late fee and damage clauses out loud before ticking this."
-      />
-
-      <Field
-        label="Signed at the counter by"
-        htmlFor="signed-name"
-        help={`Type the name of whoever is collecting. On file: ${customerName}.`}
-      >
-        <input
-          id="signed-name"
-          type="text"
-          className="field-input"
-          value={signedName}
-          onChange={(e) => onSignedName(e.target.value)}
-          placeholder={customerName}
-        />
-      </Field>
-    </div>
+    </section>
   )
 }
 
-export function ReleaseConfirmation({
-  reference,
-  rows,
-  draft,
-  deposit,
-  signedName,
-}: {
-  reference: string
-  rows: CheckoutRow[]
-  draft: Record<string, ItemDraft>
-  deposit: number
-  signedName: string
-}) {
+/** What is shown once the server has made the hire. */
+export function HandedOver({ rental, headingRef }: { rental: Rental; headingRef: RefObject<HTMLHeadingElement | null> }) {
   return (
-    <>
-      <PageHeader
-        screenId="SC-14"
-        title="Checkout and deposit"
-        subtitle={`${reference} is out. Hand over the paperwork and send them on their way.`}
-      />
-      <Notice tone="success" title="Equipment released">
-        Signed for by {signedName}. {money(deposit)} recorded as held. No card
-        was charged, this is a simulated deposit.
+    <section aria-labelledby="handed-over">
+      <h2 id="handed-over" ref={headingRef} tabIndex={-1} className="mb-md text-lg font-semibold text-ink">
+        Step 3 of 3. The equipment is out on hire {rental.reference}
+      </h2>
+      <Notice tone="success" title={`Hire ${rental.reference} is open`}>
+        <p>
+          {rental.customerName} has the equipment from {rental.branchName}. It is due back on{' '}
+          {formatDate(rental.dueBackOn)}. {money(rental.depositHeld)} is recorded as the deposit held.
+        </p>
       </Notice>
-      <Card title="What was recorded" className="mt-md">
+      <Card title="What went out" className="mt-lg">
         <ul className="flex flex-col gap-md">
-          {rows.map((row) => (
-            <li key={row.itemId} className="flex items-start gap-sm">
-              <PackageCheck
-                className="mt-xs h-5 w-5 shrink-0 text-status-available"
-                aria-hidden="true"
-              />
+          {rental.items.map((item) => (
+            <li key={item.id} className="flex items-start gap-sm">
+              <PackageCheck className="mt-xs h-5 w-5 shrink-0 text-status-available" aria-hidden="true" />
               <div className="min-w-0">
-                <p className="font-mono text-sm font-medium text-ink">{row.tag}</p>
+                <p className="font-mono text-sm font-medium text-ink">{item.assetTag ?? item.modelSlug}</p>
                 <p className="text-sm text-slate-soft">
-                  Out at {CONDITION_LABEL[draft[row.itemId].conditionOut]}
-                  {row.hasMeter && `, ${draft[row.itemId].meter} hours on the meter`}
-                  {draft[row.itemId].note && `. ${draft[row.itemId].note}`}
+                  {item.modelName}, out at {CONDITION_GRADE_LABEL[item.conditionOut]}
+                  {item.hourMeterOut !== null ? `, ${item.hourMeterOut} hours on the meter` : ''}
+                  {item.accessoriesOut ? `. With ${item.accessoriesOut}` : ''}.
                 </p>
               </div>
             </li>
           ))}
         </ul>
-        <div className="mt-lg flex flex-wrap gap-sm border-t border-line pt-md">
-          <Link to="/counter" className="btn-primary px-md">
-            Back to today
+        <dl className="tabular mt-lg grid gap-xs border-t border-line pt-md text-sm">
+          <div className="flex justify-between gap-md">
+            <dt className="text-slate-soft">Deposit held</dt>
+            <dd className="font-semibold text-ink">{money(rental.depositHeld)}</dd>
+          </div>
+          <div className="flex justify-between gap-md">
+            <dt className="text-slate-soft">Due back on</dt>
+            <dd className="font-semibold text-ink">{formatDate(rental.dueBackOn)}</dd>
+          </div>
+        </dl>
+        <div className="mt-lg flex flex-wrap gap-sm">
+          <Link to={customerHref(rental.customerProfileId)} className="btn-primary px-md">
+            Back to {rental.customerName}
           </Link>
-          <Link to="/counter/locator" className="btn-secondary px-md">
-            Find another unit
+          <Link to={rentalHref(rental.id)} className="btn-secondary px-md">
+            Open the hire
+          </Link>
+          <Link to={COUNTER_HOME_PATH} className="btn-secondary px-md">
+            Back to today
           </Link>
         </div>
       </Card>
-    </>
+    </section>
+  )
+}
+
+/** The reservation was collected before. */
+export function AlreadyOut({ checkout }: { checkout: ReservationCheckout }) {
+  return (
+    <Notice tone="info" title={`${checkout.reference} is already out`}>
+      <p>This booking has been collected, so there is nothing more to hand over.</p>
+      {checkout.rentalId !== null && (
+        <Link to={rentalHref(checkout.rentalId)} className="btn-secondary mt-sm px-md">
+          Open the hire
+        </Link>
+      )}
+    </Notice>
+  )
+}
+
+/** The server says this cannot go out now, and says why. */
+export function CannotCheckOut({ checkout }: { checkout: ReservationCheckout }) {
+  return (
+    <Notice tone="warn" title={`${checkout.reference} cannot go out now`}>
+      <p>{checkout.refusal ?? 'The server did not say why.'}</p>
+      <Link to={CUSTOMERS_PATH} className="btn-secondary mt-sm px-md">
+        Find a customer
+      </Link>
+    </Notice>
   )
 }

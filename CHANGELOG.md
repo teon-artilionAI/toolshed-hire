@@ -9,6 +9,60 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
+Registration and the counter journey. A new customer can open an account, and
+a counter assistant can find or register a customer, book for them, hand the
+equipment over, take it back late or damaged and settle the deposit. The
+worked example in the design document gives its documented figures.
+
+### Added
+
+- Registration with an email verification link, a password reset link and
+  profile editing. The API answers the same way whether or not an address has
+  an account, the tokens are single use, stored only as hashes and time
+  limited, and a completed reset signs every device out.
+- A privacy notice, linked from every screen and from the registration form.
+- Customer lookup by name, phone or email and walk in registration with no
+  login at the counter, with a trigram index over the digits of a phone number.
+- Counter bookings through the same create, hold and confirm path as an online
+  booking, held to the assistant's own branch.
+- Checkout, which creates the rental, its items and the hire and deposit
+  charges and puts each unit on hire in one transaction. A repeated checkout
+  returns the existing rental.
+- The counter dashboard, the branch diary by day or week and the asset locator
+  across every branch, each a query with a fixed number of statements.
+- No shows. The lazy sweep turns a confirmed booking that was never collected
+  into a no show once its branch has closed, and three no shows in twelve
+  months put the customer on hold. Staff can also mark one by hand.
+- The late fee policy, the second Strategy, which charges each whole day past
+  due per unit and stops at fourteen days. Late fees are VAT inclusive.
+- Returns item by item, deposit settlement with the remainder released, a
+  simulated balance payment, recording a unit as lost, and an overdue list.
+- Damage reports with an explicit chargeable decision, quarantine at return,
+  recovery capped at the replacement value, and resolution or write off by
+  the owner.
+- A customer's hire history with charges and deposit position.
+
+### Changed
+
+- An account is locked after five failed sign ins inside fifteen minutes,
+  rather than five in a row.
+- A reservation cancelled without ever holding a unit no longer shows in the
+  customer's list.
+- A booking can no longer start today once its branch has closed for the day.
+- The dependency audit fails on any high or critical advisory that has no
+  reviewed exception still in date, instead of on every advisory alike. The
+  one exception today is a build time advisory in Tailwind CSS 3.
+- A test fails the build when the committed API description no longer matches
+  the code.
+
+### Fixed
+
+- My Reservations and My Account no longer run off the side of a phone screen.
+- The Today item in the counter menu no longer shows as the current page on
+  every counter screen.
+
 ## [0.2.0] - 2026-10-02
 
 The customer journey. A visitor can browse the catalogue and check availability

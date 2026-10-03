@@ -15,6 +15,12 @@ is on hold when its units are about to be given to somebody else.
 Only staff may narrow a list to one customer or one branch. A customer's list
 is already their own.
 
+A customer's list leaves out the baskets they abandoned. A reservation that
+was cancelled without ever holding a unit is a draft that was replaced by a
+changed basket or thrown away, and not a cancelled booking. The query leaves
+it out, so a page is never short of what it says it holds. Staff still see
+every reservation, and anybody may still read an abandoned one by its key.
+
 What degrades first as the data grows is the list. A page is found with
 OFFSET, so a deep page reads and throws away every row before it, and the
 total is a count of every row that matches. A customer's list is short and
@@ -76,6 +82,8 @@ class ListReservationsQuery:
         branch_code: Only those collected at this branch. Staff only.
         page: The page wanted, counted from one.
         page_size: How many reservations a page holds.
+        branch_parameter: The name the branch code was sent under, which a
+            refusal of it names.
 
     """
 
@@ -85,6 +93,7 @@ class ListReservationsQuery:
     branch_code: str | None = None
     page: int = FIRST_PAGE
     page_size: int = DEFAULT_PAGE_SIZE
+    branch_parameter: str = BRANCH_PARAMETER
 
 
 class ReadReservations:
@@ -150,7 +159,7 @@ class ReadReservations:
             search = ReservationSearch(
                 status=query.status,
                 customer_profile_id=query.customer_profile_id,
-                branch_id=_branch_id_of(uow, query.branch_code),
+                branch_id=_branch_id_of(uow, query.branch_code, query.branch_parameter),
                 page=query.page,
                 page_size=query.page_size,
             )
@@ -175,16 +184,17 @@ class ReadReservations:
             settle_overdue_hold(uow, reservation, self._clock.now())
 
 
-def _branch_id_of(uow: UnitOfWork, branch_code: str | None) -> UUID | None:
+def _branch_id_of(uow: UnitOfWork, branch_code: str | None, parameter: str) -> UUID | None:
     """Return the key of the trading branch a list is narrowed to, or None.
 
     Raises:
-        ValidationFailure: Naming `branch` when no trading branch has the code.
+        ValidationFailure: Naming the parameter the code was sent under when
+            no trading branch has the code.
 
     """
     if branch_code is None:
         return None
     branch = uow.branches.find_active_by_code(branch_code)
     if branch is None:
-        raise refused(BRANCH_PARAMETER, UNKNOWN_BRANCH_MESSAGE, {"branch": branch_code})
+        raise refused(parameter, UNKNOWN_BRANCH_MESSAGE, {"branch": branch_code})
     return branch.id

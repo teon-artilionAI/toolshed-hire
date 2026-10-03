@@ -15,6 +15,7 @@ sign in account and its lockout rule are in `app.domain.account`.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import time
 from decimal import Decimal
 from typing import Final
 from uuid import UUID
@@ -29,7 +30,13 @@ BRANCH_SCOPE_MESSAGE: Final[str] = (
     "Counter staff can only work on bookings at their own branch. This one is at another "
     "branch."
 )
+# An account goes on hold only through the no show rule, so the refusal says so.
 ACCOUNT_ON_HOLD_MESSAGE: Final[str] = (
+    "This customer account is on hold because three bookings in the last twelve months "
+    "were not collected. It cannot make a reservation until an administrator lifts the "
+    "hold. Please speak to the branch."
+)
+ACCOUNT_NOT_IN_GOOD_STANDING_MESSAGE: Final[str] = (
     "This customer account is on hold, so it cannot make a reservation at the moment. "
     "Please speak to the branch."
 )
@@ -56,6 +63,14 @@ class Actor:
     branch_id: UUID | None = None
 
 
+def within_branch_scope(actor: Actor, branch_id: UUID) -> bool:
+    """Return True when the actor may write at a branch (BR-43).
+
+    Only counter staff are scoped, and only to the branch they are assigned to.
+    """
+    return actor.role is not UserRole.COUNTER_STAFF or actor.branch_id == branch_id
+
+
 def ensure_branch_scope(actor: Actor, branch_id: UUID) -> None:
     """Refuse a write by counter staff to a branch that is not their own (BR-43).
 
@@ -74,7 +89,7 @@ def ensure_branch_scope(actor: Actor, branch_id: UUID) -> None:
             the one they are assigned to.
 
     """
-    if actor.role is not UserRole.COUNTER_STAFF or actor.branch_id == branch_id:
+    if within_branch_scope(actor, branch_id):
         return
     raise BranchScopeError(
         BRANCH_SCOPE_MESSAGE, {"branch_id": str(branch_id)}, rule=BRANCH_SCOPE_RULE
@@ -89,12 +104,15 @@ class Branch:
         id: The branch key.
         code: The short code staff use, for example CBD.
         name: The display name.
+        closes_at: When the counter closes, on a clock in Cape Town. A hire
+            can no longer start on a day once it has passed (BR-04).
 
     """
 
     id: UUID
     code: str
     name: str
+    closes_at: time
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +145,9 @@ class CustomerProfile:
         """Refuse a customer whose account is not in good standing (BR-18).
 
         An account on hold and a blacklisted one are both refused. Only an
-        active account may create a reservation or put one on hold.
+        active account may create a reservation or put one on hold. The
+        refusal of an account on hold says why it is on hold, which is three
+        bookings that were not collected.
 
         Raises:
             AccountOnHoldError: If the account status is anything but ACTIVE.
@@ -135,8 +155,13 @@ class CustomerProfile:
         """
         if self.account_status is AccountStatus.ACTIVE:
             return
+        message = (
+            ACCOUNT_ON_HOLD_MESSAGE
+            if self.account_status is AccountStatus.ON_HOLD
+            else ACCOUNT_NOT_IN_GOOD_STANDING_MESSAGE
+        )
         raise AccountOnHoldError(
-            ACCOUNT_ON_HOLD_MESSAGE,
+            message,
             {"account_status": self.account_status.value},
             rule=ACCOUNT_STANDING_RULE,
         )

@@ -25,6 +25,11 @@
  * also empties the hire basket, for the same reason. A session that ends by
  * itself leaves the basket alone, because the same person is about to sign in
  * again and carry on with it.
+ *
+ * There is one more way a session ends. A password reset ends every session
+ * of the account on the server. A person who was signed in while they reset
+ * it is signed out of this page too, where they stand, so the screen that says
+ * every device has been signed out is telling the truth about this one.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
@@ -83,6 +88,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })
   }, [signingOut, pathname, queryClient])
 
+  const endSessionHere = useCallback(async () => {
+    await endSession()
+    queryClient.clear()
+  }, [queryClient])
+
   useEffect(() => {
     if (snapshot.endedBecause !== 'expired') {
       expiryHandled.current = false
@@ -107,8 +117,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signingOut,
       signIn,
       signOut,
+      endSessionHere,
     }),
-    [snapshot, signingOut, signOut],
+    [snapshot, signingOut, signOut, endSessionHere],
   )
 
   return (

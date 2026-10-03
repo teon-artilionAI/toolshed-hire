@@ -1,4 +1,4 @@
-"""Fixed window throttling, counted in the database (C-17).
+"""Fixed window throttling and a sliding count, both kept in the database (C-17).
 
 The instances of the service share no memory, so a counter kept in a process
 would be a separate counter on each of them. The counts live in
@@ -20,9 +20,17 @@ began more than a day ago, and each process issues it at most once in fifteen
 minutes, so the table holds a day of counters at most and no request pays for
 the housekeeping twice.
 
-This belongs to no module. Signing in uses it today, and registration, the
-verification email and the password reset will use the same component with
-rules of their own.
+A second kind of count slides with the clock. The sign in lockout asks how
+many times an account failed in the fifteen minutes that end now (BR-46), and
+a fixed window cannot answer that, because five failures can straddle the
+moment one window ends and the next begins. So each event of a sliding window
+is counted in the second it happened in, and the total is the sum of the
+seconds the span covers. That makes the count exact to the second. An event
+that is less than a second older than the span is still counted, which errs
+towards counting an event and never towards missing one.
+
+This belongs to no module. Signing in, registration, the verification email
+and the password reset all use the same component with rules of their own.
 """
 
 from __future__ import annotations
@@ -42,6 +50,8 @@ SWEEP_RETENTION: Final[timedelta] = timedelta(hours=24)
 # How often one process deletes old windows.
 SWEEP_INTERVAL: Final[timedelta] = timedelta(minutes=15)
 MINIMUM_RETRY_AFTER_SECONDS: Final[int] = 1
+# How finely an event of a sliding window is timed.
+SLIDING_RESOLUTION: Final[timedelta] = timedelta(seconds=1)
 KEY_SEPARATOR: Final[str] = "\x1f"
 KEY_ENCODING: Final[str] = "utf-8"
 
@@ -59,6 +69,10 @@ class RateLimitStore(Protocol):
 
     def delete_windows_before(self, cutoff: datetime) -> int:
         """Delete every counter whose window began before `cutoff`, and return how many."""
+        ...
+
+    def total_since(self, bucket_key_hash: str, since: datetime) -> int:
+        """Return the sum of the counters of a bucket whose windows began at or after `since`."""
         ...
 
 
@@ -107,6 +121,44 @@ class ThrottleRule:
 
 
 @dataclass(frozen=True, slots=True)
+class SlidingWindow:
+    """What is counted over a span of time that ends at the present moment.
+
+    Attributes:
+        name: A short name that keeps its counters apart from every other
+            count, for example `login-failure`.
+        span: How far back from now an event still counts.
+
+    """
+
+    name: str
+    span: timedelta
+
+    def __post_init__(self) -> None:
+        """Refuse a window with no name, or a span the sweep would cut short.
+
+        Raises:
+            ValueError: If the name is blank, or the span is not a whole
+                number of seconds between one second and the sweep retention.
+
+        """
+        seconds = self.span.total_seconds()
+        if not self.name.strip():
+            raise ValueError("Attempted to build a sliding window with no name.")
+        if seconds < 1 or seconds != int(seconds) or self.span > SWEEP_RETENTION:
+            raise ValueError(
+                f"Attempted to build the sliding window {self.name!r} with a span of "
+                f"{self.span}. A span is a whole number of seconds, at least one and at "
+                f"most {SWEEP_RETENTION}."
+            )
+
+    def second_of(self, now: datetime) -> datetime:
+        """Return the start of the second `now` falls in, which is where an event is counted."""
+        resolution = int(SLIDING_RESOLUTION.total_seconds())
+        return datetime.fromtimestamp(int(now.timestamp()) // resolution * resolution, tz=UTC)
+
+
+@dataclass(frozen=True, slots=True)
 class ThrottleVerdict:
     """Whether an attempt may go ahead, and how long to wait when it may not.
 
@@ -145,10 +197,39 @@ class Throttle:
         self._sweep_lock = threading.Lock()
         self._next_sweep_at: datetime | None = None
 
-    def bucket_key_hash(self, rule: ThrottleRule, subject: str) -> str:
+    def bucket_key_hash(self, rule: ThrottleRule | SlidingWindow, subject: str) -> str:
         """Return the salted SHA-256 that stands for one subject under one rule."""
         material = KEY_SEPARATOR.join((self._salt, rule.name, subject))
         return hashlib.sha256(material.encode(KEY_ENCODING)).hexdigest()
+
+    def count_in_span(
+        self, store: RateLimitStore, window: SlidingWindow, subject: str, now: datetime
+    ) -> int:
+        """Count one event and return how many the span that ends at `now` holds.
+
+        Args:
+            store: The counters, inside the transaction of the caller.
+            window: What is being counted and over how long a span.
+            subject: Who or what the event belongs to. It is hashed and never stored.
+            now: The current instant, from the clock.
+
+        Returns:
+            The events of this subject inside the span, this one included.
+
+        """
+        bucket = self.bucket_key_hash(window, subject)
+        second = window.second_of(now)
+        store.increment(bucket, second)
+        events = store.total_since(bucket, second - window.span)
+        logger.debug(
+            "throttle.event_counted",
+            extra={
+                "window": window.name,
+                "events_in_span": events,
+                "span_seconds": int(window.span.total_seconds()),
+            },
+        )
+        return events
 
     def check(
         self, store: RateLimitStore, rule: ThrottleRule, subject: str, now: datetime

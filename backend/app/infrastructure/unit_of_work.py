@@ -26,6 +26,9 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_ports import DamageReportRepository
+from app.application.hire.ports import RentalRepository
+from app.application.identity.customer_directory import CustomerDirectory
 from app.application.identity.ports import (
     AccountRepository,
     BranchRepository,
@@ -37,11 +40,16 @@ from app.application.throttle import RateLimitStore
 from app.infrastructure.audit import SqlAuditLog
 from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
+from app.infrastructure.branch_repository import SqlBranchRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
-from app.infrastructure.identity import SqlBranchRepository, SqlCustomerRepository
-from app.infrastructure.identity_accounts import SqlAccountRepository, SqlSessionRepository
+from app.infrastructure.customer_search import SqlCustomerDirectory
+from app.infrastructure.damage_reports import SqlDamageReportRepository
+from app.infrastructure.identity import SqlCustomerRepository
+from app.infrastructure.identity_accounts import SqlAccountRepository
+from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
 from app.infrastructure.rate_limit import SqlRateLimitStore
+from app.infrastructure.rentals import SqlRentalRepository
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +59,12 @@ class SqlAlchemyUnitOfWork:
 
     reservations: ReservationRepository
     assets: AssetRepository
+    rentals: RentalRepository
+    damage_reports: DamageReportRepository
     branches: BranchRepository
     product_models: ProductModelRepository
     customers: CustomerRepository
+    customer_directory: CustomerDirectory
     accounts: AccountRepository
     sessions: SessionRepository
     rate_limits: RateLimitStore
@@ -93,9 +104,12 @@ class SqlAlchemyUnitOfWork:
         self._session = session
         self.reservations = SqlReservationRepository(session)
         self.assets = SqlAssetRepository(session)
+        self.rentals = SqlRentalRepository(session)
+        self.damage_reports = SqlDamageReportRepository(session)
         self.branches = SqlBranchRepository(session)
         self.product_models = SqlProductModelRepository(session)
         self.customers = SqlCustomerRepository(session)
+        self.customer_directory = SqlCustomerDirectory(session)
         self.accounts = SqlAccountRepository(session)
         self.sessions = SqlSessionRepository(session)
         self.rate_limits = SqlRateLimitStore(session)

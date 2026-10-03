@@ -15,7 +15,9 @@ Faults are switched on through the store, so a test can make the audit log or
 the outbox fail at the moment it wants to and then look at what was kept.
 
 The reservation repository is in `memory_booking`, with the read models it
-builds, and the repositories of the reference data are in `memory_reference`.
+builds, the part of the rental repository the sweep needs is in
+`memory_hire`, and the repositories of the reference data are in
+`memory_reference`.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ import copy
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from types import TracebackType
 from typing import Final, Self
 from uuid import UUID
@@ -33,12 +35,14 @@ from app.domain.audit import AuditEvent
 from app.domain.availability import AssetAllocation
 from app.domain.booking import Reservation
 from app.domain.catalogue import Asset, ProductModel
-from app.domain.enums import NotificationStatus
+from app.domain.enums import AccountStatus, NotificationStatus
 from app.domain.errors import AllocationConflictError
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.notification import Notification
 from app.domain.period import BookingPeriod
+from app.domain.rental import Rental
 from tests.support.memory_booking import MemoryReservations
+from tests.support.memory_hire import MemoryRentals
 from tests.support.memory_reference import (
     MemoryBranches,
     MemoryCustomers,
@@ -64,6 +68,9 @@ class Records:
     audit_events: list[AuditEvent] = field(default_factory=list)
     notifications: dict[UUID, Notification] = field(default_factory=dict)
     late_cancellations: dict[UUID, int] = field(default_factory=dict)
+    no_shows: dict[UUID, int] = field(default_factory=dict)
+    account_statuses: dict[UUID, AccountStatus] = field(default_factory=dict)
+    rentals: list[Rental] = field(default_factory=list)
 
 
 @dataclass
@@ -79,6 +86,9 @@ class MemoryStore:
         assets: The fleet.
         unpublished_slugs: The slugs of models that exist and are not published.
         closed_branch_codes: The codes of branches that have stopped trading.
+        closing_times: When a branch closes, by its key. 17:00 for any not named.
+        stale_no_show_query: True to make the no show query return everything.
+        stale_overdue_query: True to make the overdue query return everything.
         journal: `commit` and `rollback`, in the order they happened.
         fail_audit: When True, recording an audit event raises.
         fail_outbox_read: When True, reading the queued notifications raises.
@@ -94,6 +104,9 @@ class MemoryStore:
     assets: list[Asset] = field(default_factory=list)
     unpublished_slugs: set[str] = field(default_factory=set)
     closed_branch_codes: set[str] = field(default_factory=set)
+    closing_times: dict[UUID, time] = field(default_factory=dict)
+    stale_no_show_query: bool = False
+    stale_overdue_query: bool = False
     journal: list[str] = field(default_factory=list)
     fail_audit: bool = False
     fail_outbox_read: bool = False
@@ -226,6 +239,7 @@ class InMemoryUnitOfWork:
     """A unit of work that keeps its records in memory."""
 
     reservations: MemoryReservations
+    rentals: MemoryRentals
     assets: _Assets
     branches: MemoryBranches
     product_models: MemoryProductModels
@@ -266,10 +280,22 @@ class InMemoryUnitOfWork:
         self._bind(copy.deepcopy(self.store.committed))
         self.store.journal.append(ROLLBACK)
 
+    def working_records(self) -> Records:
+        """Return the working copy of the open transaction.
+
+        Raises:
+            RuntimeError: If the unit of work is not open.
+
+        """
+        if self._working is None:
+            raise RuntimeError("Attempted to read an in memory unit of work that is not open.")
+        return self._working
+
     def _bind(self, working: Records) -> None:
         """Point every repository at one working copy."""
         self._working = working
         self.reservations = MemoryReservations(self.store, working)
+        self.rentals = MemoryRentals(self.store, working)
         self.assets = _Assets(self.store, working)
         self.branches = MemoryBranches(self.store)
         self.product_models = MemoryProductModels(self.store)

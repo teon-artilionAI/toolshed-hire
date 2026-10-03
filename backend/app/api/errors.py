@@ -66,10 +66,12 @@ from app.domain.errors import (
     InvalidCredentials,
     NotFound,
     OriginNotAllowed,
+    ResetLinkInvalid,
     SessionExpired,
     StateTransitionError,
     TooManyAttempts,
     ValidationFailure,
+    VerificationLinkInvalid,
 )
 from app.request_context import current_request_id
 
@@ -94,6 +96,8 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     InvalidCredentials: status.HTTP_401_UNAUTHORIZED,
     SessionExpired: status.HTTP_401_UNAUTHORIZED,
     TooManyAttempts: status.HTTP_429_TOO_MANY_REQUESTS,
+    VerificationLinkInvalid: status.HTTP_400_BAD_REQUEST,
+    ResetLinkInvalid: status.HTTP_400_BAD_REQUEST,
     OriginNotAllowed: status.HTTP_403_FORBIDDEN,
     AuthorisationFailure: status.HTTP_403_FORBIDDEN,
     InactiveAccount: status.HTTP_403_FORBIDDEN,

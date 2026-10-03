@@ -15,8 +15,10 @@ name on the wire, for example `body.from`. A value the framework refused for
 its type keeps the framework's wording, as every request body does. A value a
 rule refused carries a plain sentence.
 
-The cases are in tests/api/reservation_create_refusals.py and
-tests/api/reservation_move_refusals.py. These run against the in memory
+The cases are in tests/api/reservation_create_refusals.py,
+tests/api/reservation_move_refusals.py,
+tests/api/reservation_checkout_refusals.py and
+tests/api/reservation_no_show_refusals.py. These run against the in memory
 database, and the clock stands still on Monday the second of March
 2026 until a case moves it.
 """
@@ -34,8 +36,10 @@ from app.domain.enums import UserRole
 from app.infrastructure.models import AssetAllocation, AuditEvent, Notification, Reservation
 from app.main import FRAMEWORK_ROUTE_PATHS
 from app.main import app as production_app
+from tests.api.reservation_checkout_refusals import CHECKOUT_REFUSALS
 from tests.api.reservation_create_refusals import CREATE_REFUSALS
 from tests.api.reservation_move_refusals import MOVE_REFUSALS
+from tests.api.reservation_no_show_refusals import NO_SHOW_REFUSALS
 from tests.api.reservation_refusal_cases import Refusal, Stage
 from tests.api.test_plain_refusals import FORBIDDEN_PATTERNS, sentences_of
 from tests.support.booking_api import BookingClient, build_booking_world
@@ -44,7 +48,12 @@ from tests.support.factories import Factory
 from tests.support.http import problem_code, problem_of
 
 RESERVATIONS_PREFIX: Final[str] = "/api/reservations"
-REFUSALS: Final[list[Refusal]] = [*CREATE_REFUSALS, *MOVE_REFUSALS]
+REFUSALS: Final[list[Refusal]] = [
+    *CREATE_REFUSALS,
+    *MOVE_REFUSALS,
+    *CHECKOUT_REFUSALS,
+    *NO_SHOW_REFUSALS,
+]
 CASE_IDS: Final[list[str]] = [refusal.name for refusal in REFUSALS]
 
 

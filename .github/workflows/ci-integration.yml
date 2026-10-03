@@ -157,10 +157,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # High and critical findings block the merge. Lower ones are reported.
+      # High and critical findings block the merge unless audit-exceptions.json
+      # holds a reviewed, unexpired exception for that advisory. Lower ones are
+      # reported.
       - name: Audit Node dependencies
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: npm run audit:check
 
   # The browser tests run against the real API and a seeded PostgreSQL, the
   # same way a visitor's browser reaches them. The built frontend is served by
@@ -202,6 +204,11 @@ jobs:
       # a string of 429 responses.
       LOGIN_ATTEMPTS_PER_EMAIL: "200"
       LOGIN_ATTEMPTS_PER_ADDRESS: "400"
+      # The counter journey books for today and checks out on the same day,
+      # which a branch refuses once it has closed. This pins the API's clock
+      # to mid morning on today's date, so the run behaves the same whatever
+      # hour it starts. The API honours it only in the test environment.
+      TEST_BUSINESS_TIME: "10:00"
       # Makes a browser test that needs the API fail instead of skipping
       # itself when the API is not there.
       E2E_REQUIRE_BACKEND: "1"

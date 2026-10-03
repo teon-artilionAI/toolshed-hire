@@ -15,6 +15,19 @@
  *
  * The booking spec needs the reservation routes on top of the session ones,
  * and asks a third question about those.
+ *
+ * The account spec needs the registration and account routes, and asks a
+ * fourth question about those.
+ *
+ * The counter spec needs the customer and checkout routes, and asks a fifth
+ * question about those.
+ *
+ * The counter overview spec needs the dashboard, the diary and the asset
+ * locator, and asks a sixth question about those.
+ *
+ * The counter spec takes the unit it checked out back again and a customer
+ * reads their hire history, so it also needs the returns and settlement
+ * routes, and asks a seventh question about those.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -23,12 +36,12 @@ import type { APIRequestContext } from '@playwright/test'
 const HEALTH_PATH = '/api/health'
 
 /** How long the health check may take. A backend that is there answers at once. */
-const HEALTH_TIMEOUT_MS = 5000
+export const HEALTH_TIMEOUT_MS = 5000
 
 /** Set in the pipeline, where the API is started for the browser tests. There a
  *  missing backend is a failure. On my machine it is a reason to skip. */
-const REQUIRE_BACKEND_VARIABLE = 'E2E_REQUIRE_BACKEND'
-const BACKEND_IS_REQUIRED = Boolean(process.env[REQUIRE_BACKEND_VARIABLE])
+export const REQUIRE_BACKEND_VARIABLE = 'E2E_REQUIRE_BACKEND'
+export const BACKEND_IS_REQUIRED = Boolean(process.env[REQUIRE_BACKEND_VARIABLE])
 
 /** The reason shown beside a skipped spec in the report. */
 export const BACKEND_NEEDED =
@@ -57,10 +70,10 @@ const SESSION_PROBE_PATH = '/api/auth/refresh'
 
 /** What a backend answers for a route it does not have. 404 when nothing is
  *  mounted on the path, and 405 when the path exists for another method. */
-const ROUTE_ABSENT_STATUSES: readonly number[] = [404, 405]
+export const ROUTE_ABSENT_STATUSES: readonly number[] = [404, 405]
 
 /** The lowest status that means the API itself did not answer properly. */
-const SERVER_FAILURE_FROM = 500
+export const SERVER_FAILURE_FROM = 500
 
 /** The reason shown beside a skipped session spec in the report. */
 export const SESSION_ROUTES_NEEDED =
@@ -125,4 +138,161 @@ export async function reservationRoutesArePresent(request: APIRequestContext): P
     )
   }
   return present
+}
+
+/** One of the registration and account routes. If it is there, the others
+ *  were built with it. */
+const ACCOUNT_PROBE_PATH = '/api/me/profile'
+
+/** The reason shown beside a skipped account spec in the report. */
+export const ACCOUNT_ROUTES_NEEDED =
+  `This needs the registration and account routes on the real backend, and GET ${ACCOUNT_PROBE_PATH} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that ' +
+  'can register a customer, reset a password and read and change a profile.'
+
+/**
+ * Ask whether the backend has the registration and account routes.
+ *
+ * I ask for the profile with no token. A backend that has the route refuses
+ * that with a 401, which is an answer from the route and so proves it exists.
+ * A backend that does not have it answers 404 or 405. The account spec signs a
+ * new customer in, so the session routes have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the session routes, and
+ *   the profile route answered for itself. An absent backend is a false and
+ *   not a throw.
+ */
+export async function accountRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await sessionRoutesArePresent(request))) return false
+  const response = await request.get(ACCOUNT_PROBE_PATH, { timeout: HEALTH_TIMEOUT_MS })
+  const status = response.status()
+  const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+  if (!present && BACKEND_IS_REQUIRED) {
+    throw new Error(
+      `${REQUIRE_BACKEND_VARIABLE} is set, so the registration and account routes have to be ` +
+        `there, and GET ${ACCOUNT_PROBE_PATH} answered ${status}. A skipped spec would hide that.`,
+    )
+  }
+  return present
+}
+
+/** The customer lookup and the checkout of a reservation, the two ends of a
+ *  counter booking. The reference does not have to exist. A route that is
+ *  there refuses a request with no token before it looks. */
+const COUNTER_PROBE_PATHS: readonly string[] = [
+  '/api/customers?q=probe',
+  '/api/reservations/TSH-R-00-000000/checkout',
+]
+
+/** The reason shown beside a skipped counter spec in the report. */
+export const COUNTER_ROUTES_NEEDED =
+  `This needs the counter routes on the real backend, and one of ${COUNTER_PROBE_PATHS.join(' and ')} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that can ' +
+  'look a customer up, register a walk in and check a reservation out.'
+
+/**
+ * Ask whether the backend has the counter routes.
+ *
+ * I ask the customer lookup and a checkout with no token. A backend that has a
+ * route refuses that with a 401, which is an answer from the route and so
+ * proves it exists. A backend that does not have it answers 404 or 405. The
+ * counter spec books through the reservation routes and signs in, so those
+ * have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the reservation and
+ *   session routes, and both counter routes answered for themselves.
+ */
+export async function counterRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await reservationRoutesArePresent(request))) return false
+  for (const path of COUNTER_PROBE_PATHS) {
+    const response = await request.get(path, { timeout: HEALTH_TIMEOUT_MS })
+    const status = response.status()
+    const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+    if (present) continue
+    if (BACKEND_IS_REQUIRED) {
+      throw new Error(
+        `${REQUIRE_BACKEND_VARIABLE} is set, so the counter routes have to be there, and ` +
+          `GET ${path} answered ${status}. A skipped spec would hide that.`,
+      )
+    }
+    return false
+  }
+  return true
+}
+
+/** The dashboard, the diary and the locator. The branch and the search do not
+ *  have to match anything. A route that is there refuses a request with no
+ *  token before it looks. */
+const OVERVIEW_PROBE_PATHS: readonly string[] = [
+  '/api/counter/dashboard?branchCode=CBD',
+  '/api/counter/diary?branchCode=CBD',
+  '/api/assets/locator?q=probe',
+]
+
+/** The reason shown beside a skipped counter overview spec in the report. */
+export const OVERVIEW_ROUTES_NEEDED =
+  `This needs the counter overview routes on the real backend, and one of ${OVERVIEW_PROBE_PATHS.join(', ')} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that has the ' +
+  'counter dashboard, the branch diary and the asset locator.'
+
+/**
+ * Ask whether the backend has the counter overview routes.
+ *
+ * I ask each of the three with no token. A backend that has a route refuses
+ * that with a 401, which is an answer from the route and so proves it exists.
+ * A backend that does not have it answers 404 or 405. The spec signs a counter
+ * assistant in, so the session routes have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the session routes, and
+ *   all three overview routes answered for themselves.
+ */
+export async function overviewRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await sessionRoutesArePresent(request))) return false
+  for (const path of OVERVIEW_PROBE_PATHS) {
+    const response = await request.get(path, { timeout: HEALTH_TIMEOUT_MS })
+    const status = response.status()
+    const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+    if (present) continue
+    if (BACKEND_IS_REQUIRED) {
+      throw new Error(
+        `${REQUIRE_BACKEND_VARIABLE} is set, so the counter overview routes have to be there, and ` +
+          `GET ${path} answered ${status}. A skipped spec would hide that.`,
+      )
+    }
+    return false
+  }
+  return true
+}
+
+/** The overdue list and the customer's own hires, the two reads of returns and
+ *  settlement. A route that is there refuses a request with no token first. */
+const RETURN_PROBE_PATHS: readonly string[] = ['/api/rentals?overdueOnly=true', '/api/me/rentals']
+
+/** The reason shown beside a skipped returns journey in the report. */
+export const RETURN_ROUTES_NEEDED =
+  `This needs the returns and settlement routes on the real backend, and one of ${RETURN_PROBE_PATHS.join(' and ')} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that can take a hire ' +
+  'back, settle its deposit and list the hires of a customer.'
+
+/**
+ * Ask whether the backend has the returns and settlement routes, on top of the
+ * counter routes the journey checks a unit out through.
+ *
+ * @returns True only when the counter routes are there and both of these
+ *   answered for themselves. An absent backend is a false and not a throw.
+ */
+export async function returnRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await counterRoutesArePresent(request))) return false
+  for (const path of RETURN_PROBE_PATHS) {
+    const status = (await request.get(path, { timeout: HEALTH_TIMEOUT_MS })).status()
+    if (!ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM) continue
+    if (BACKEND_IS_REQUIRED) {
+      throw new Error(
+        `${REQUIRE_BACKEND_VARIABLE} is set, so the returns and settlement routes have to be there, and ` +
+          `GET ${path} answered ${status}. A skipped spec would hide that.`,
+      )
+    }
+    return false
+  }
+  return true
 }
