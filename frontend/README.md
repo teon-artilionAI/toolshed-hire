@@ -15,7 +15,8 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-06` Sign In and Password Reset | The API, through the session described below and the reset routes described under Registration and account security |
 | `SC-05` Register, `SC-09` My Account and Hire History | The API, through the routes described under Registration and account security |
 | `SC-12` Customer Lookup and Walk-in Registration, `SC-13` New Booking and Asset Allocation, `SC-14` Checkout and Deposit | The API, through the routes described under Booking at the counter |
-| `SC-10`, `SC-11` and `SC-15` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-10` Counter Dashboard, `SC-11` Branch Diary, `SC-17` Asset Locator | The API, through the routes described under The counter's day |
+| `SC-15`, `SC-16` and `SC-18` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -114,6 +115,11 @@ signed out of that page as well.
 - What the menu offers. The layout and the menu follow the signed in person.
   Counter staff see the name of the branch on their account, which the shell
   looks up from `GET /api/branches`.
+- Which menu item is the current page. An item is current on every address
+  that starts with its path, so My Hires stays marked on the detail of one
+  hire. The home of a role is the start of every other address of its area,
+  so `isHomePath` in `src/shared/navigation.ts` marks a home only on its own
+  address. Otherwise Today would be marked on every counter screen.
 - Where a person lands after signing in. They go to the screen they were
   trying to reach, when it is a screen of this application that their role may
   open. Otherwise they go to the home of their role. The address travels in
@@ -223,8 +229,15 @@ commits as `../backend/openapi.json`.
   are in `api/contract-account.ts`, built from the generated file the same way.
 - The counter routes, which are the customer lookup, the walk in, the checkout
   and the hire, are in the document as well. Their types are in
-  `api/contract-counter.ts`, built from the generated file the same way. No
-  wire type is written by hand any more.
+  `api/contract-counter.ts`, built from the generated file the same way.
+- The counter overview routes, which are the dashboard, the diary, the no show
+  and the asset locator, are the one exception. The backend adds them in the
+  same change, so the document does not describe them yet. Their types are
+  written by hand from the agreed contract in `api/contract-overview.ts`, and
+  the readers beside each route check every member. They are built from the
+  generated file once the document has the routes. The states of a unit are
+  the backend's own list, `INTAKE`, `AVAILABLE`, `ON_HIRE`, `QUARANTINED`,
+  `UNDER_REPAIR`, `LOST` and `RETIRED`, because the contract names none.
 - The document describes the 201 answer of a checkout and not the 200 one,
   which the API sends with the same hire when the booking is already out. So
   `Rental` is built from the 201 body and the rental route, and the reader in
@@ -270,6 +283,10 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   the counter reads to hand a reservation over is kept under the reservation
   segment, so it is never fresh either, and a handover marks everything about
   reservations as out of date.
+- The counter's dashboard and diary, under the `counter` segment, and the
+  locator, under the `assets` segment, are never fresh. They are left open all
+  day, so they are read again whenever the window comes back into focus. A no
+  show marks the dashboard and every day of the diary as out of date.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -525,8 +542,7 @@ reads the branch from. Counter staff work at the branch on their session, as
 `work-branch-gate.tsx` asks which branch they are working at before the
 screen opens, and the choice is kept for the tab by `work-branch-storage.ts`.
 A line at the top of the screen says which branch it is and offers to change
-it. The dashboard and the diary, which still show sample data, take their
-branch from the same place through `home-branch.ts`.
+it. The dashboard and the diary take their branch from the same place.
 
 #### `SC-12` Customer Lookup and Walk-in Registration
 
@@ -596,6 +612,76 @@ Each step change moves focus to the heading of the new step, and a polite
 status says what the last request did. Every error is tied to its field with
 `aria-describedby`, every target is at least 44 pixels, and all three screens
 fit a phone 360 pixels wide with nothing to scroll sideways.
+
+### The counter's day
+
+The dashboard on `SC-10` says what is due today at the branch, the diary on
+`SC-11` says what goes out and comes back on any day, and the locator on
+`SC-17` finds a unit at any branch. The reads are in
+`api/counter-overview.ts` and `api/locator.ts`, the no show is in
+`api/reservations.ts`, and the cached reads are in `api/counter-queries.ts`.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-10` | `GET /api/counter/dashboard?branchCode=` | The five counts, then who collects today, what is due back today and what is overdue |
+| `SC-11` | `GET /api/counter/diary?branchCode=&from=&days=` | One day, or a week from Monday, with each booking going out and each hire coming back |
+| `SC-11` | `POST /api/reservations/{id}/no-show` | The booking as the server now has it, a no show |
+| `SC-17` | `GET /api/assets/locator?q=&page=&pageSize=` | The units whose tag or model matches, twenty to a page, at every branch |
+
+#### `SC-10` Counter Dashboard
+
+- One request for the branch the person works at. It has the loading, failed
+  and empty states for the whole screen, and a sentence for each list that is
+  empty. The counts are true totals and a list holds at most fifty, so a list
+  shorter than its count says how many it shows.
+- A collection links to the checkout of its booking. A return and an overdue
+  hire link to the return screen of the hire, `/counter/return/:rentalId`,
+  which is connected in a later change.
+- The days overdue and the late fee are shown as the server sends them. The
+  browser works out no fee.
+- The quarantined figure is a count. The server sends nothing about bookings
+  that need a unit swapped, so the screen has no such panel.
+- The screen is read again when the window comes back into focus, and on the
+  refresh button. The line above the figures says when they were read.
+
+#### `SC-11` Branch Diary
+
+- One day, or seven from the Monday of the week, with previous, next and back
+  to today. The day and the view are in the address as `?date=` and
+  `?view=week`, so a reload keeps them. Today in day view is the plain
+  address, so a tab left open overnight shows the new day after a reload. A
+  date in the address that is not a day on the calendar falls back to today.
+- Each booking and each hire says its status in words. A confirmed booking
+  that starts today or earlier links to its checkout. A collected or returned
+  booking links to its hire. The diary does not send the key of that hire, so
+  the link goes through the checkout of the booking, which says it is out and
+  opens the hire. A hire due back links to its return screen.
+- Where `canMarkNoShow` is true the booking offers "Mark as no show". It asks
+  for the reason, says that the units go back on the shelf and a strike is
+  recorded against the customer, and sends one request. The answer is the
+  server's. A 409 shows the server's sentence and reads the diary again, and a
+  refused reason shows its message under the box. The question is in
+  `SC11-No-Show-Action.tsx` and the request in `use-no-show.ts`.
+
+#### `SC-17` Asset Locator
+
+- One search box for a tag or part of a model name. It searches from two
+  characters, a moment after the last key, at every branch, with the loading,
+  failed and empty states and page controls. The search and the page are in
+  the address.
+- Each unit says its tag, its model, its branch, its state in words and its
+  condition, and the day it is due back and its hire when it is out. Nothing on
+  the screen changes anything, and it needs no branch, so an administrator can
+  use it straight away.
+
+#### Accessibility of these screens
+
+Every list is a real list, or a table with headers that is drawn as one block
+for each unit below the `sm` width. Every status carries words beside its
+colour, every target is at least 44 pixels, and all three screens fit a phone
+360 pixels wide with nothing to scroll sideways. The no show question takes
+focus when it opens, gives it back to its button when it closes, and moves it
+to the answer when the server has answered.
 
 ### Model pictures
 
@@ -700,13 +786,15 @@ npx playwright install chromium
 backend. With no backend, the catalogue home and the search are scanned in
 their failed state, and the registration form with its branch menu in its
 failed state. The privacy notice is scanned too. The counter's customer
-lookup, new booking and checkout are scanned loaded, with a signed in
-assistant, a customer and a booking whose answers the spec gives itself, from
-`e2e/counter-answers.ts`. The new booking is scanned again with a tool on it,
-and the checkout again with every problem of its form on the screen.
+lookup, new booking, checkout, dashboard, diary and locator are scanned
+loaded, with a signed in assistant, a customer, a booking, a day and units
+whose answers the spec gives itself, from `e2e/counter-answers.ts` and
+`e2e/overview-answers.ts`. The new booking is scanned again with a tool on it,
+the checkout again with every problem of its form on the screen, and the diary
+again with the no show question open.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires, My Account and the three counter screens at 360 pixels wide and
+My Hires, My Account and the six counter screens at 360 pixels wide and
 checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
 database holds.
@@ -787,6 +875,16 @@ first. A 404 or a 405 from either means the routes are not there, and the
 journey skips itself. A run leaves the unit it checked out on hire, because a
 return is a later change.
 
+`e2e/counter-overview.spec.ts` needs the dashboard, the diary and the asset
+locator. A seeded counter assistant signs in, sees the name of their branch and
+the five figures on the dashboard, opens the diary for today and then the
+whole of next week, and finds `TSH-DR-0042`, which the seed always makes at
+Cape Town CBD, by its tag in the locator. The figures are checked to be whole
+numbers and not particular ones, because the other journeys book at the same
+branches during the run. The spec asks the three routes with no token first. A
+404 or a 405 from any of them means the routes are not there, and the journey
+skips itself.
+
 The customers, the password rule and the sign in are in `e2e/customer.ts`, the
 counter assistants in `e2e/staff.ts`, and the dates are counted from today at
 the branches by `e2e/hire-dates.ts`.
@@ -804,10 +902,11 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-The counter journey signs each of the two counter assistants in once, which
-counts against their own addresses.
+The counter journey and the counter overview journey each sign the two
+counter assistants in once, so each assistant twice in a run, which counts
+against their own addresses.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all five skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all six skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

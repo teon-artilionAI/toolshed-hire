@@ -9,9 +9,12 @@
 
 import type {
   AccountStatus,
+  AssetStatus,
   ConditionGrade,
   CustomerType,
+  DiaryCollectionStatus,
   IdDocumentType,
+  RentalStatus,
 } from '../../shared/api/contract'
 
 export const ACCOUNT_STANDING_LABEL: Record<AccountStatus, string> = {
@@ -49,6 +52,39 @@ export const CONDITION_GRADE_LABEL: Record<ConditionGrade, string> = {
   A: 'A, as new',
   B: 'B, good working order',
   C: 'C, worn but serviceable',
+}
+
+/** Where a booking in the diary stands, said the way the branch says it. */
+export const DIARY_COLLECTION_LABEL: Record<DiaryCollectionStatus, string> = {
+  CONFIRMED: 'Booked, not collected yet',
+  COLLECTED: 'Collected',
+  RETURNED: 'Collected and back',
+  NO_SHOW: 'No show',
+}
+
+/** Where a hire stands. */
+export const RENTAL_STATUS_LABEL: Record<RentalStatus, string> = {
+  OPEN: 'Out with the customer',
+  OVERDUE: 'Overdue',
+  PARTIALLY_RETURNED: 'Partly back',
+  RETURNED: 'Back',
+  SETTLED: 'Back and settled',
+}
+
+/** Where a unit stands, in words that can be read down the phone. */
+export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
+  INTAKE: 'Being booked in, not hireable yet',
+  AVAILABLE: 'On the shelf',
+  ON_HIRE: 'Out on hire',
+  QUARANTINED: 'Quarantined until inspected',
+  UNDER_REPAIR: 'In the workshop',
+  LOST: 'Reported lost',
+  RETIRED: 'Retired from the fleet',
+}
+
+/** A count with its noun, for example "1 unit" or "3 units". */
+export function countOf(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`
 }
 
 /** Whether a customer may be booked for. Only good standing may. */

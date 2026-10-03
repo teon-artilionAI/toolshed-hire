@@ -28,7 +28,7 @@ import { LogOut, ShoppingCart } from 'lucide-react'
 import { catalogueQueries } from './api/catalogue-queries'
 import { basketUnitCount } from './basket-store'
 import type { ScreenDef } from './navigation'
-import { CATALOGUE_PATH, PRIVACY_PATH, SIGN_IN_PATH } from './navigation'
+import { CATALOGUE_PATH, PRIVACY_PATH, SIGN_IN_PATH, isHomePath } from './navigation'
 import { SampleDataNotice } from './sample-data-notice'
 import { navFor } from './screen-access'
 import { BrandMark, MobileTabBar, NavIcon, SkipLink } from './shell-nav'
@@ -108,6 +108,7 @@ function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { i
             <li key={s.id}>
               <NavLink
                 to={s.path}
+                end={isHomePath(s.path)}
                 className={navItemClass(`flex cursor-pointer items-center gap-sm rounded px-md py-sm transition-colors ${size}`, idle)}
               >
                 <NavIcon screen={s} />
@@ -145,7 +146,7 @@ function CustomerHeader({ items }: { items: ScreenDef[] }) {
               <li key={s.id}>
                 <NavLink
                   to={s.path}
-                  end={s.path === CATALOGUE_PATH}
+                  end={isHomePath(s.path)}
                   className={navItemClass('btn px-md', 'text-slate hover:bg-muted hover:text-ink', 'bg-accent-wash font-semibold text-ink')}
                 >
                   {s.navLabel ?? s.name}

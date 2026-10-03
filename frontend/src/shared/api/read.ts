@@ -134,6 +134,16 @@ export function readDate(source: Record<string, unknown>, key: string, requestPa
   return value
 }
 
+/** Read a calendar date the contract allows to be null, such as the day a unit
+ *  is due back, which only a unit on hire has. A missing field is not null. */
+export function readNullableDate(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+): IsoDate | null {
+  return source[key] === null ? null : readDate(source, key, requestPath)
+}
+
 /** Read an instant the contract allows to be null, and refuse a string that
  *  is not one. A missing field is not null. */
 export function readNullableTimestamp(
