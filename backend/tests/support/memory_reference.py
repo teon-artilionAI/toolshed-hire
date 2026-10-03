@@ -2,17 +2,20 @@
 
 Branches, product models and customer profiles are set up by a test and then
 only read, so they live in the store and not in the working copy of a
-transaction. The one exception is the count of late cancellations on a
-profile (BR-16). That is a change, so it is kept in the working copy and only
-survives a commit.
+transaction. The exceptions are the counts of late cancellations and of no
+shows on a profile (BR-16, BR-17) and the standing a no show can change
+(BR-18). Those are changes, so they are kept in the working copy and only
+survive a commit, and a profile is read back with the standing it was given.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.domain.catalogue import ProductModel
+from app.domain.enums import AccountStatus
 from app.domain.identity import Branch, CustomerProfile
 
 if TYPE_CHECKING:
@@ -71,16 +74,35 @@ class MemoryCustomers:
 
     def profile_for_account(self, user_account_id: UUID) -> CustomerProfile | None:
         """Return the profile of an account, if it has one."""
-        return self._store.profiles.get(user_account_id)
+        return self._as_it_stands(self._store.profiles.get(user_account_id))
 
     def get(self, customer_profile_id: UUID) -> CustomerProfile | None:
         """Return the profile with this key, if there is one."""
-        return self._store.profile_with_id(customer_profile_id)
+        return self._as_it_stands(self._store.profile_with_id(customer_profile_id))
+
+    def get_for_update(self, customer_profile_id: UUID) -> CustomerProfile | None:
+        """Return the profile with this key. Nothing is locked in memory."""
+        return self.get(customer_profile_id)
 
     def record_late_cancellation(self, customer_profile_id: UUID) -> None:
         """Count one late cancellation against a profile, inside the transaction."""
         counted = self._working.late_cancellations.get(customer_profile_id, 0)
         self._working.late_cancellations[customer_profile_id] = counted + 1
+
+    def record_no_show(self, customer_profile_id: UUID) -> None:
+        """Count one booking a customer did not collect, inside the transaction."""
+        counted = self._working.no_shows.get(customer_profile_id, 0)
+        self._working.no_shows[customer_profile_id] = counted + 1
+
+    def save_account_status(self, customer_profile_id: UUID, status: AccountStatus) -> None:
+        """Keep the new standing of a customer, inside the transaction."""
+        self._working.account_statuses[customer_profile_id] = status
+
+    def _as_it_stands(self, profile: CustomerProfile | None) -> CustomerProfile | None:
+        """Return a profile with the standing this transaction has given it, if any."""
+        if profile is None or profile.id not in self._working.account_statuses:
+            return profile
+        return replace(profile, account_status=self._working.account_statuses[profile.id])
 
 
 __all__ = ["MemoryBranches", "MemoryCustomers", "MemoryProductModels"]

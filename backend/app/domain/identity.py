@@ -29,7 +29,13 @@ BRANCH_SCOPE_MESSAGE: Final[str] = (
     "Counter staff can only work on bookings at their own branch. This one is at another "
     "branch."
 )
+# An account goes on hold only through the no show rule, so the refusal says so.
 ACCOUNT_ON_HOLD_MESSAGE: Final[str] = (
+    "This customer account is on hold because three bookings in the last twelve months "
+    "were not collected. It cannot make a reservation until an administrator lifts the "
+    "hold. Please speak to the branch."
+)
+ACCOUNT_NOT_IN_GOOD_STANDING_MESSAGE: Final[str] = (
     "This customer account is on hold, so it cannot make a reservation at the moment. "
     "Please speak to the branch."
 )
@@ -135,7 +141,9 @@ class CustomerProfile:
         """Refuse a customer whose account is not in good standing (BR-18).
 
         An account on hold and a blacklisted one are both refused. Only an
-        active account may create a reservation or put one on hold.
+        active account may create a reservation or put one on hold. The
+        refusal of an account on hold says why it is on hold, which is three
+        bookings that were not collected.
 
         Raises:
             AccountOnHoldError: If the account status is anything but ACTIVE.
@@ -143,8 +151,13 @@ class CustomerProfile:
         """
         if self.account_status is AccountStatus.ACTIVE:
             return
+        message = (
+            ACCOUNT_ON_HOLD_MESSAGE
+            if self.account_status is AccountStatus.ON_HOLD
+            else ACCOUNT_NOT_IN_GOOD_STANDING_MESSAGE
+        )
         raise AccountOnHoldError(
-            ACCOUNT_ON_HOLD_MESSAGE,
+            message,
             {"account_status": self.account_status.value},
             rule=ACCOUNT_STANDING_RULE,
         )

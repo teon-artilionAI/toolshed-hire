@@ -18,6 +18,10 @@ branch get 403 (BR-43).
 There is no route that deletes anything (BR-51). A reservation is cancelled
 by posting a cancellation, and it stays readable afterwards.
 
+Staff mark a confirmed booking nobody collected by posting a no show with a
+reason, from the first day of the hire (BR-17). Counter staff do it at their
+own branch only.
+
 The two reads are in `app/api/routers/reservation_reads.py`.
 """
 
@@ -32,9 +36,10 @@ from app.api.booking_deps import (
     ConfirmReservation,
     CreateReservation,
     HoldReservation,
+    MarkNoShow,
     actor_of,
 )
-from app.api.deps import AnyRoleUser
+from app.api.deps import AnyRoleUser, CounterUser
 from app.api.reservation_presenter import (
     BOOKING_TAG,
     READ_RESERVATION_ROUTE_NAME,
@@ -50,10 +55,12 @@ from app.api.reservation_schemas import (
     UNKNOWN_RESERVATION_RESPONSE,
     CancellationRequest,
     CreateReservationRequest,
+    NoShowRequest,
     ReservationResponse,
 )
 from app.application.booking.access import ReservationCommand
 from app.application.booking.cancel_reservation import CancelReservationCommand
+from app.application.booking.mark_no_show import MarkNoShowCommand
 from app.application.booking.read_models import ReservationKey
 from app.application.booking.reservation_request import (
     CreateReservationCommand,
@@ -198,5 +205,35 @@ def post_cancellation(
         actor=actor,
         key=ReservationKey.parse(reservation_key),
         reason=payload.reason if payload is not None else None,
+    )
+    return reservation_response(use_case.execute(command))
+
+
+@router.post(
+    "/{id}/no-show",
+    response_model=ReservationResponse,
+    summary="Mark a confirmed reservation as not collected, releasing its units",
+    responses={
+        **MOVE_RESPONSES,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: REFUSED_BODY_RESPONSE,
+    },
+)
+def post_no_show(
+    reservation_key: ReservationPathKey,
+    payload: NoShowRequest,
+    user: CounterUser,
+    use_case: MarkNoShow,
+) -> ReservationResponse:
+    """Mark the reservation as a no show and count the strike on the customer.
+
+    Raises:
+        NotFound: If there is no such reservation. HTTP 404.
+        BranchScopeError: If counter staff act at another branch. HTTP 403.
+        StateTransitionError: If it is not confirmed or its hire has not
+            started. HTTP 409.
+
+    """
+    command = MarkNoShowCommand(
+        actor=actor_of(user), key=ReservationKey.parse(reservation_key), reason=payload.reason
     )
     return reservation_response(use_case.execute(command))

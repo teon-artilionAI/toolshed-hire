@@ -29,7 +29,6 @@ from app.domain.period import ensure_within_booking_window
 from app.domain.states.base import ReservationState, UnitAllocator
 from app.domain.states.guards import (
     ALREADY_ON_HIRE_MESSAGE,
-    BRANCH_STILL_OPEN_MESSAGE,
     CANCELLATION_RULE,
     COLLECTION_DAY_RULE,
     DRAFT_HOLDS_UNITS_MESSAGE,
@@ -41,12 +40,12 @@ from app.domain.states.guards import (
     HOLD_STILL_RUNNING_MESSAGE,
     LATE_CANCELLATION_CUTOFF,
     NO_LINES_MESSAGE,
-    NO_SHOW_RULE,
     NOT_EVERY_UNIT_HELD_MESSAGE,
     ONE_DAY,
     TOO_EARLY_TO_COLLECT_MESSAGE,
     VERIFIED_EMAIL_RULE,
     ensure_every_unit_is_held,
+    ensure_no_show_is_due,
     ensure_owner_or_staff,
     mark_cancelled,
 )
@@ -269,21 +268,18 @@ class ConfirmedState(ReservationState):
         mark_cancelled(reservation, now, reason)
 
     def mark_no_show(
-        self, reservation: Reservation, *, now: datetime, branch_closed_at: datetime
+        self, reservation: Reservation, *, now: datetime, branch_closed_at: datetime | None
     ) -> None:
-        """Record that nobody came, once the branch has closed on the first day (BR-17).
+        """Record that nobody came, and let the units go with the reason NO_SHOW (BR-17).
+
+        The sweep may do it once the branch has closed on the first day, and
+        staff at the counter from the start of that day.
 
         Raises:
-            StateTransitionError: If the branch has not closed yet.
+            StateTransitionError: If it is too soon to call the booking a no show.
 
         """
-        if now <= branch_closed_at:
-            raise StateTransitionError(
-                BRANCH_STILL_OPEN_MESSAGE,
-                from_status=self.status.value,
-                to_status=ReservationStatus.NO_SHOW.value,
-                rule=NO_SHOW_RULE,
-            )
+        ensure_no_show_is_due(reservation, now, branch_closed_at)
         reservation.release_allocations(ReleaseReason.NO_SHOW, now)
         reservation.status = ReservationStatus.NO_SHOW
 

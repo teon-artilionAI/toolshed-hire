@@ -41,6 +41,7 @@ RESERVATION_CONFIRMED_ACTION: Final[str] = "reservation.confirmed"
 RESERVATION_CANCELLED_ACTION: Final[str] = "reservation.cancelled"
 RESERVATION_EXPIRED_ACTION: Final[str] = "reservation.expired"
 RESERVATION_COLLECTED_ACTION: Final[str] = "reservation.collected"
+RESERVATION_NO_SHOW_ACTION: Final[str] = "reservation.no_show"
 
 RESERVATION_NOT_FOUND_MESSAGE: Final[str] = (
     "We could not find that reservation. Check the reference and try again."

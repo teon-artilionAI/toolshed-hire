@@ -287,11 +287,12 @@ class Reservation:
         """Lapse a hold that has run out and let its units go (BR-13)."""
         self.state.expire(self, now=now)
 
-    def mark_no_show(self, *, now: datetime, branch_closed_at: datetime) -> None:
+    def mark_no_show(self, *, now: datetime, branch_closed_at: datetime | None) -> None:
         """Record that a confirmed reservation was never collected (BR-17).
 
-        `branch_closed_at` is the instant the collection branch closed on the
-        first day of the hire.
+        The sweep passes the instant the collection branch closed on the first
+        day of the hire. Staff at the counter pass None and may mark it from
+        the start of that day.
         """
         self.state.mark_no_show(self, now=now, branch_closed_at=branch_closed_at)
 
