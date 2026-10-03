@@ -136,7 +136,9 @@ class RentalItemResponse(CamelModel):
     """One unit on a rental.
 
     `daysLateToday` and `lateFeeToday` are what the late fee would be if the
-    unit came back today, worked out on the server.
+    unit came back today, worked out on the server. `replacementValue` is the
+    value copied onto the booking line, the most a damage report may recover,
+    and is null for a customer, as `assetTag` is.
     """
 
     id: UUID
@@ -155,6 +157,7 @@ class RentalItemResponse(CamelModel):
     days_late_today: int = Field(serialization_alias="daysLateToday")
     late_fee_today: Money = Field(serialization_alias="lateFeeToday")
     damage_assessment: DamageAssessment = Field(serialization_alias="damageAssessment")
+    replacement_value: Money | None = Field(serialization_alias="replacementValue")
 
     # `model_name` and `model_slug` are the documented names and collide with nothing.
     model_config = ConfigDict(protected_namespaces=())

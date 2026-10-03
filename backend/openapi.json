@@ -1915,6 +1915,404 @@
         }
       }
     },
+    "/api/damage-reports": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "File a damage report, quarantine the unit and charge the decided recovery",
+        "description": "File the report in one transaction.\n\nRaises:\n    ValidationFailure: If the tag is unknown, the decision is missing, the\n        amount to recover does not follow from it or is above the cap, or\n        the rental item is not a hire of the unit. HTTP 422, naming the field.\n    BranchScopeError: If counter staff file a report at another branch. HTTP 403.\n    StateTransitionError: If the unit is out on hire or retired, waits for\n        the report of another hire, or the deposit was already settled. HTTP 409.",
+        "operationId": "post_damage_report_api_damage_reports_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DamageReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamageReportResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The unit is out on hire or retired, it waits for the report of another hire, or the deposit of the hire was already settled, and `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "List damage reports at every branch, newest first",
+        "description": "Return one page of damage reports, newest first.\n\nRaises:\n    ValidationFailure: If the branch code is not the code of a trading\n        branch. HTTP 422, naming `branchCode`.",
+        "operationId": "list_damage_reports_api_damage_reports_get",
+        "parameters": [
+          {
+            "name": "assetTag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "An asset tag. Only the reports of that unit.",
+              "title": "Assettag"
+            },
+            "description": "An asset tag. Only the reports of that unit."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DamageStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only reports in this status.",
+              "title": "Status"
+            },
+            "description": "Only reports in this status."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A branch code. Only reports of units held there.",
+              "title": "Branchcode"
+            },
+            "description": "A branch code. Only reports of units held there."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "How many reports a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many reports a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamageReportPageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/damage-reports/{id}": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return one damage report, by its key or its reference",
+        "description": "Return the report, or 404 when it does not exist.\n\nRaises:\n    NotFound: If there is no such report. HTTP 404.",
+        "operationId": "read_damage_report_api_damage_reports__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the damage report, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the damage report, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamageReportResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such damage report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/damage-reports/{id}/repair": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Send an open damage report for repair, and its unit with it",
+        "description": "Send the report for repair in one transaction.\n\nRaises:\n    NotFound: If there is no such report. HTTP 404.\n    StateTransitionError: If the report is not OPEN. HTTP 409.",
+        "operationId": "post_repair_api_damage_reports__id__repair_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the damage report, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the damage report, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamageReportResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such damage report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The report cannot make that move from where it stands, or a booking still holds the unit it would retire, and `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/damage-reports/{id}/resolution": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Close a damage report as resolved or written off",
+        "description": "Close the report in one transaction.\n\nRaises:\n    NotFound: If there is no such report. HTTP 404.\n    ValidationFailure: If a report is resolved without its actual cost.\n        HTTP 422, naming `actualRepairCost`.\n    StateTransitionError: If the report is already closed, or a write off\n        would retire a unit a booking still holds. HTTP 409.",
+        "operationId": "post_resolution_api_damage_reports__id__resolution_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the damage report, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the damage report, or its reference."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolutionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamageReportResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such damage report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The report cannot make that move from where it stands, or a booking still holds the unit it would retire, and `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/counter/dashboard": {
       "get": {
         "tags": [
@@ -3691,6 +4089,281 @@
         "title": "DamageAssessment",
         "description": "Whether a unit that came back still waits for its damage to be assessed."
       },
+      "DamageReportPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DamageReportResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "DamageReportPageResponse",
+        "description": "One page of damage reports, newest first."
+      },
+      "DamageReportRequest": {
+        "properties": {
+          "assetTag": {
+            "type": "string",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Assettag"
+          },
+          "rentalItemId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalitemid"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/DamageSeverity"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "repairEstimate": {
+            "type": "string",
+            "pattern": "^\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Repairestimate"
+          },
+          "chargeableToCustomer": {
+            "type": "boolean",
+            "title": "Chargeabletocustomer"
+          },
+          "recoveryAmount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recoveryamount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "assetTag",
+          "severity",
+          "description",
+          "repairEstimate",
+          "chargeableToCustomer"
+        ],
+        "title": "DamageReportRequest",
+        "description": "A damage report as the counter files it."
+      },
+      "DamageReportResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "rentalId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalid"
+          },
+          "rentalReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalreference"
+          },
+          "rentalItemId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalitemid"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/DamageSeverity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DamageStatus"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "repairEstimate": {
+            "type": "string",
+            "title": "Repairestimate"
+          },
+          "actualRepairCost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actualrepaircost"
+          },
+          "chargeableToCustomer": {
+            "type": "boolean",
+            "title": "Chargeabletocustomer"
+          },
+          "recoveryCharged": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recoverycharged"
+          },
+          "replacementValue": {
+            "type": "string",
+            "title": "Replacementvalue"
+          },
+          "reportedAt": {
+            "type": "string",
+            "title": "Reportedat"
+          },
+          "reportedByName": {
+            "type": "string",
+            "title": "Reportedbyname"
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolvedat"
+          },
+          "resolutionNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolutionnotes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "reference",
+          "assetTag",
+          "modelName",
+          "branchCode",
+          "rentalId",
+          "rentalReference",
+          "rentalItemId",
+          "severity",
+          "status",
+          "description",
+          "repairEstimate",
+          "actualRepairCost",
+          "chargeableToCustomer",
+          "recoveryCharged",
+          "replacementValue",
+          "reportedAt",
+          "reportedByName",
+          "resolvedAt",
+          "resolutionNotes"
+        ],
+        "title": "DamageReportResponse",
+        "description": "One damage report, as staff read it."
+      },
+      "DamageSeverity": {
+        "type": "string",
+        "enum": [
+          "MINOR",
+          "MAJOR",
+          "WRITE_OFF"
+        ],
+        "title": "DamageSeverity",
+        "description": "How bad the damage is. WRITE_OFF retires the unit (BR-38)."
+      },
+      "DamageStatus": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "UNDER_REPAIR",
+          "RESOLVED",
+          "WRITTEN_OFF"
+        ],
+        "title": "DamageStatus",
+        "description": "Where a damage report stands between being raised and being closed."
+      },
       "DashboardCountsResponse": {
         "properties": {
           "collectionsDue": {
@@ -5016,6 +5689,17 @@
           },
           "damageAssessment": {
             "$ref": "#/components/schemas/DamageAssessment"
+          },
+          "replacementValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacementvalue"
           }
         },
         "type": "object",
@@ -5035,10 +5719,11 @@
           "lateFeePerDay",
           "daysLateToday",
           "lateFeeToday",
-          "damageAssessment"
+          "damageAssessment",
+          "replacementValue"
         ],
         "title": "RentalItemResponse",
-        "description": "One unit on a rental.\n\n`daysLateToday` and `lateFeeToday` are what the late fee would be if the\nunit came back today, worked out on the server."
+        "description": "One unit on a rental.\n\n`daysLateToday` and `lateFeeToday` are what the late fee would be if the\nunit came back today, worked out on the server. `replacementValue` is the\nvalue copied onto the booking line, the most a damage report may recover,\nand is null for a customer, as `assetTag` is."
       },
       "RentalPageResponse": {
         "properties": {
@@ -5526,6 +6211,49 @@
         ],
         "title": "ReservationStatus",
         "description": "Reservation lifecycle status, governed by the State pattern in the domain."
+      },
+      "ResolutionRequest": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "RESOLVED",
+              "WRITTEN_OFF"
+            ],
+            "title": "Outcome"
+          },
+          "actualRepairCost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actualrepaircost"
+          },
+          "resolutionNotes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolutionnotes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "outcome"
+        ],
+        "title": "ResolutionRequest",
+        "description": "How an administrator closes a report."
       },
       "ReturnDueResponse": {
         "properties": {

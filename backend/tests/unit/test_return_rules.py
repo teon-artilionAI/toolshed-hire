@@ -86,18 +86,18 @@ class TestWhatAReturnDoes:
 
     def test_the_unit_is_recorded_shelved_and_its_allocation_let_go(self) -> None:
         hire = a_hire()
-        returns = back(hire, condition_in=ConditionGrade.B, hour_meter_in=500, notes=" Dusty ")
+        returns = back(hire, condition_in=ConditionGrade.A, hour_meter_in=500, notes=" Dusty ")
         (closed,) = returned(hire, days_after_due(2), returns).units
 
         item = closed.item
         assert (item.condition_in, item.hour_meter_in, item.notes, item.days_late) == (
-            ConditionGrade.B, 500, "Dusty", 2
+            ConditionGrade.A, 500, "Dusty", 2
         )
         assert (closed.unit_before.status, closed.unit.status) == (
             AssetStatus.ON_HIRE, AssetStatus.AVAILABLE
         )
         assert (closed.unit.condition_grade, closed.unit.hour_meter_reading) == (
-            ConditionGrade.B, 500
+            ConditionGrade.A, 500
         )
         (allocation,) = hire.reservation.lines[0].allocations
         assert allocation.release_reason is ReleaseReason.RETURNED

@@ -111,6 +111,8 @@ class RentalItem:
         returned_at: When it came back or was recorded as lost. None while it is out.
         days_late: The whole days it came back late, worked out at return.
         notes: Anything the counter wrote about it.
+        damage_reported: True once a damage report names the unit. It is read
+            with the item and never stored on it, because the report is.
         id: The item key, generated here so it is known before the insert.
 
     """
@@ -129,6 +131,7 @@ class RentalItem:
     returned_at: datetime | None = None
     days_late: int = NO_DAYS_LATE
     notes: str | None = None
+    damage_reported: bool = False
     id: UUID = field(default_factory=uuid4)
 
     def is_out(self) -> bool:

@@ -90,6 +90,7 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ix_refresh_session_live",
     "ux_user_account_email_verification_token_hash",
     "ux_user_account_password_reset_token_hash",
+    "ix_damage_report_rental_item",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -99,6 +100,8 @@ REFERENCE_SEQUENCE_START: Final[int] = 124
 # Rental references come from a sequence of their own. The worked example is
 # rental TSH-H-26-000098, and the migration starts the sequence after it.
 RENTAL_REFERENCE_SEQUENCE: Final[str] = "rental_reference_seq"
+# Damage report references come from the third sequence of the baseline.
+DAMAGE_REPORT_REFERENCE_SEQUENCE: Final[str] = "damage_report_reference_seq"
 
 # The three indexes the counter's customer lookup stands on. The first two
 # are in the baseline. The third is revision 0003, a trigram index over the
@@ -119,6 +122,14 @@ PHONE_PUNCTUATION_REMOVED: Final[tuple[str, ...]] = (" ", "-", "(", ")", "+")
 ASSET_TAG_SEARCH_INDEX: Final[str] = "ix_asset_tag_trgm"
 ASSET_MODEL_INDEX: Final[str] = "ix_asset_product_model"
 RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
+
+# The two indexes of revision 0005. Every read of a rental asks whether a
+# damage report names each of its units, through the first, which is partial
+# because a report outside a hire names no unit of a hire. The reports of one
+# unit, which a list by tag and the close of a report read, are reached
+# through the second.
+DAMAGE_REPORT_RENTAL_ITEM_INDEX: Final[str] = "ix_damage_report_rental_item"
+DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
 
 # The seventeen native enumerated types and their members, read from the domain
 # enumerations so there is one Python statement of each.

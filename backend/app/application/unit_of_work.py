@@ -20,6 +20,7 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
 from app.application.identity.customer_directory import CustomerDirectory
 from app.application.identity.ports import (
@@ -53,6 +54,11 @@ class UnitOfWork(Protocol):
     @property
     def rentals(self) -> RentalRepository:
         """Return the rental repository of this transaction."""
+        ...
+
+    @property
+    def damage_reports(self) -> DamageReportRepository:
+        """Return the damage report repository of this transaction."""
         ...
 
     @property

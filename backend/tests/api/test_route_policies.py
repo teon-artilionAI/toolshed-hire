@@ -39,12 +39,7 @@ from app.main import FRAMEWORK_ROUTE_PATHS, create_app
 from app.main import app as production_app
 from tests.api.route_policy_expectations import EXPECTED_POLICIES
 from tests.support.factories import Factory
-from tests.support.probe_app import (
-    ADMIN_PATH,
-    COUNTER_PATH,
-    CUSTOMER_PATH,
-    FRESH_ADMIN_PATH,
-)
+from tests.support.probe_app import ADMIN_PATH, COUNTER_PATH, CUSTOMER_PATH, FRESH_ADMIN_PATH
 from tests.support.tokens import authorization_header, mint_access_token
 
 # A key no customer and no reservation carries, so a route that lets the caller
@@ -127,6 +122,11 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
         "hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/items/{NOBODYS_KEY}/loss", STAFF
     ),
     MatrixRow("hire", API, "GET", "/api/me/rentals", CUSTOMER_ONLY),
+    MatrixRow("hire", API, "POST", "/api/damage-reports", STAFF),
+    MatrixRow("hire", API, "GET", "/api/damage-reports", STAFF),
+    MatrixRow("hire", API, "GET", f"/api/damage-reports/{NOBODYS_KEY}", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/damage-reports/{NOBODYS_KEY}/repair", ADMIN_ONLY),
+    MatrixRow("hire", API, "POST", f"/api/damage-reports/{NOBODYS_KEY}/resolution", ADMIN_ONLY),
     MatrixRow("hire", API, "GET", "/api/counter/dashboard", STAFF),
     MatrixRow("hire", API, "GET", "/api/counter/diary", STAFF),
     MatrixRow("booking", API, "POST", f"/api/reservations/{NOBODYS_KEY}/no-show", STAFF),

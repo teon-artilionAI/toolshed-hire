@@ -26,6 +26,7 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
 from app.application.identity.customer_directory import CustomerDirectory
 from app.application.identity.ports import (
@@ -42,6 +43,7 @@ from app.infrastructure.booking import SqlReservationRepository
 from app.infrastructure.branch_repository import SqlBranchRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
 from app.infrastructure.customer_search import SqlCustomerDirectory
+from app.infrastructure.damage_reports import SqlDamageReportRepository
 from app.infrastructure.identity import SqlCustomerRepository
 from app.infrastructure.identity_accounts import SqlAccountRepository
 from app.infrastructure.identity_sessions import SqlSessionRepository
@@ -58,6 +60,7 @@ class SqlAlchemyUnitOfWork:
     reservations: ReservationRepository
     assets: AssetRepository
     rentals: RentalRepository
+    damage_reports: DamageReportRepository
     branches: BranchRepository
     product_models: ProductModelRepository
     customers: CustomerRepository
@@ -102,6 +105,7 @@ class SqlAlchemyUnitOfWork:
         self.reservations = SqlReservationRepository(session)
         self.assets = SqlAssetRepository(session)
         self.rentals = SqlRentalRepository(session)
+        self.damage_reports = SqlDamageReportRepository(session)
         self.branches = SqlBranchRepository(session)
         self.product_models = SqlProductModelRepository(session)
         self.customers = SqlCustomerRepository(session)

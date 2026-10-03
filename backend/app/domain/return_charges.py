@@ -9,8 +9,9 @@ fee is quoted including VAT (BR-30), so it is taken apart by
 always add back to the fee.
 
 A recovery charge for a unit recorded as lost is owed in the same way, and it
-is quoted including VAT for the same reason. A damage report raises one too in
-the change after this one.
+is quoted including VAT for the same reason. A damage report the customer is
+charged for raises one as well, for the amount the report recovers, and the
+charge points back at the report (BR-39).
 
 The deposit forfeited for a lost unit and the deposit released at settlement
 are deposit movements, so they carry no VAT (BR-23). Both happen at the moment
@@ -102,6 +103,43 @@ def recovery_charge(
         raised_at=now,
         raised_by_user_id=raised_by,
         rental_item_id=item.id,
+    )
+
+
+def damage_recovery_charge(
+    *,
+    rental: Rental,
+    item: RentalItem,
+    report_id: UUID,
+    report_reference: str,
+    amount_inc_vat: Money,
+    raised_by: UUID,
+    now: datetime,
+) -> Charge:
+    """Return the recovery a damage report charges for one unit, owed and split for VAT (BR-39).
+
+    Args:
+        rental: The rental the unit was hired on.
+        item: The unit the report names.
+        report_id: The key of the report, which the charge points back at.
+        report_reference: The reference of the report, which the description names.
+        amount_inc_vat: What is recovered, including VAT.
+        raised_by: The member of staff filing the report.
+        now: The current instant, from the clock.
+
+    """
+    split = split_vat_inclusive(amount_inc_vat)
+    return Charge.owed(
+        rental_id=rental.id,
+        charge_type=ChargeType.DAMAGE_RECOVERY,
+        description=f"Damage recovery for report {report_reference}, including VAT",
+        amount_ex_vat=split.amount_ex_vat,
+        vat_rate=split.vat_rate,
+        vat_amount=split.vat_amount,
+        raised_at=now,
+        raised_by_user_id=raised_by,
+        rental_item_id=item.id,
+        damage_report_id=report_id,
     )
 
 

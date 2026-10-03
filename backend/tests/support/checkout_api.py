@@ -48,7 +48,7 @@ ITEM_MEMBERS: Final[frozenset[str]] = frozenset(
     {
         "id", "assetTag", "modelName", "modelSlug", "conditionOut", "conditionIn", "hourMeterOut",
         "hourMeterIn", "accessoriesOut", "accessoriesIn", "returnedAt", "daysLate",
-        "lateFeePerDay", "daysLateToday", "lateFeeToday", "damageAssessment",
+        "lateFeePerDay", "daysLateToday", "lateFeeToday", "damageAssessment", "replacementValue",
     }
 )  # fmt: skip
 CHARGE_MEMBERS: Final[frozenset[str]] = frozenset(

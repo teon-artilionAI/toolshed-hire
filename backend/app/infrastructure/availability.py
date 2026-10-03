@@ -164,7 +164,7 @@ class SqlAssetRepository:
         return [_asset_of(row) for row in rows]
 
     def save_units(self, assets: Sequence[catalogue.Asset]) -> None:
-        """Write the status, the condition and the meter reading of units locked earlier.
+        """Write the status, the condition, the meter and the retirement of units locked earlier.
 
         Raises:
             LookupError: If a unit was never stored, which would mean a use
@@ -180,6 +180,7 @@ class SqlAssetRepository:
             row.status = asset.status
             row.condition_grade = asset.condition_grade
             row.hour_meter_reading = asset.hour_meter_reading
+            row.retired_on = asset.retired_on
             self._session.add(row)
         self._session.flush()
         logger.debug("asset.units_saved", extra={"unit_count": len(assets)})
@@ -221,6 +222,7 @@ def _asset_of(row: Asset) -> catalogue.Asset:
         status=row.status,
         condition_grade=row.condition_grade,
         hour_meter_reading=row.hour_meter_reading,
+        retired_on=row.retired_on,
     )
 
 

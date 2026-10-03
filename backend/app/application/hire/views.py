@@ -15,7 +15,9 @@ checkout tries them. The branch comes first, then a rental that already
 exists, then the status and the date.
 
 A customer is never shown an asset tag (US-07). Counter staff and
-administrators are, because they hand the units over.
+administrators are, because they hand the units over. Staff are also shown the
+replacement value copied onto each unit's booking line, which caps what a
+damage report may recover (BR-39), and a customer is not.
 """
 
 from __future__ import annotations
@@ -183,9 +185,10 @@ def _checkout_refusal(actor: Actor, detail: CheckoutDetail, today: date) -> str 
 def _item_view(
     actor: Actor, item: RentalItemDetail, due_back_on: date, today: date, policy: LateFeePolicy
 ) -> RentalItemView:
-    """Return one unit as the caller sees it, without its tag for a customer (US-07)."""
+    """Return one unit as the caller sees it, with no tag and no value for a customer (US-07)."""
     late = late_fee_if_returned_today(item, due_back_on, today, policy)
-    shown = replace(item, asset_tag=None) if actor.role is UserRole.CUSTOMER else item
+    customer = actor.role is UserRole.CUSTOMER
+    shown = replace(item, asset_tag=None, replacement_value=None) if customer else item
     return RentalItemView(
         item=shown,
         days_late_today=late.days_late,

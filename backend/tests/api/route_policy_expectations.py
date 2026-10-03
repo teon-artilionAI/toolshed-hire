@@ -16,6 +16,7 @@ from app.domain.enums import UserRole
 ALL_ROLES: Final[frozenset[UserRole]] = frozenset(UserRole)
 CUSTOMER_ROLE: Final[frozenset[UserRole]] = frozenset({UserRole.CUSTOMER})
 STAFF_ROLES: Final[frozenset[UserRole]] = frozenset({UserRole.COUNTER_STAFF, UserRole.ADMIN})
+ADMIN_ROLE: Final[frozenset[UserRole]] = frozenset({UserRole.ADMIN})
 NO_ROLES: Final[frozenset[UserRole]] = frozenset()
 
 EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
@@ -49,6 +50,11 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "POST /api/rentals/{id}/items/{itemId}/loss": (AccessKind.ROLES, STAFF_ROLES),
     "POST /api/rentals/{id}/balance-payment": (AccessKind.ROLES, STAFF_ROLES),
     "GET /api/me/rentals": (AccessKind.ROLES, CUSTOMER_ROLE),
+    "POST /api/damage-reports": (AccessKind.ROLES, STAFF_ROLES),
+    "GET /api/damage-reports": (AccessKind.ROLES, STAFF_ROLES),
+    "GET /api/damage-reports/{id}": (AccessKind.ROLES, STAFF_ROLES),
+    "POST /api/damage-reports/{id}/repair": (AccessKind.ROLES, ADMIN_ROLE),
+    "POST /api/damage-reports/{id}/resolution": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/counter/dashboard": (AccessKind.ROLES, STAFF_ROLES),
     "GET /api/counter/diary": (AccessKind.ROLES, STAFF_ROLES),
     "GET /api/assets/locator": (AccessKind.ROLES, STAFF_ROLES),
@@ -61,4 +67,4 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "GET /api/catalogue/models/{slug}/quote": (AccessKind.PUBLIC, NO_ROLES),
 }
 
-__all__ = ["ALL_ROLES", "CUSTOMER_ROLE", "EXPECTED_POLICIES", "STAFF_ROLES"]
+__all__ = ["ADMIN_ROLE", "ALL_ROLES", "CUSTOMER_ROLE", "EXPECTED_POLICIES", "STAFF_ROLES"]
