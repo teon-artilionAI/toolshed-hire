@@ -1,13 +1,13 @@
 /**
- * Derivations shared by the counter desk screens, SC-10 to SC-13.
+ * Derivations shared by the counter desk screens that still read sample data,
+ * SC-10 and SC-11.
  *
- * The prototype has no back end, so the questions a counter assistant asks
- * all afternoon ("what is going out today", "is this unit free next week",
- * "who has this booked already") are answered by reading the fixtures the
- * same way every time. Doing that in one module rather than four keeps the
- * diary, the dashboard and the booking screen telling one story: if the
- * diary says a unit is spoken for, the booking screen refuses it for the
- * same reason and names the same reservation.
+ * Those two screens are not connected to the API yet, so the questions a
+ * counter assistant asks all afternoon ("what is going out today", "who has
+ * this booked already") are answered by reading the fixtures the same way
+ * every time. Doing that in one module keeps the diary and the dashboard
+ * telling one story. The customer lookup, the booking and the checkout read
+ * from the API and use none of this.
  *
  * Periods are half open, [start, end), which is what the schema and the
  * hire terms both say. A hire returned on the 10th frees the 10th.

@@ -14,7 +14,8 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-04` Hire Basket and Booking Review, `SC-07` My Reservations, `SC-08` Reservation Detail and Cancellation | The API, through the reservation routes described under Booking a hire |
 | `SC-06` Sign In and Password Reset | The API, through the session described below and the reset routes described under Registration and account security |
 | `SC-05` Register, `SC-09` My Account and Hire History | The API, through the routes described under Registration and account security |
-| `SC-10` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-12` Customer Lookup and Walk-in Registration, `SC-13` New Booking and Asset Allocation, `SC-14` Checkout and Deposit | The API, through the routes described under Booking at the counter |
+| `SC-10`, `SC-11` and `SC-15` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -50,12 +51,15 @@ session routes are `POST /api/auth/login`, `POST /api/auth/refresh` and
   `toolshed.session-hint` says this browser may hold a session.
   `toolshed.sign-out-owed` says a sign out never reached the server.
   `src/shared/session-markers.ts` is the only file that touches `localStorage`.
-- The one other thing in web storage is the hire basket, under
-  `toolshed.basket` in `sessionStorage`. It is described under Hire basket
-  below. It holds dates, a branch code, model slugs, quantities and the id of a
-  booking that is under way, and no name, address or token.
-  `src/shared/basket-storage.ts` is the only file that touches
-  `sessionStorage`.
+- The other things in web storage are the hire basket, under
+  `toolshed.basket` in `sessionStorage`, and the branch an administrator chose
+  to work the counter at, under `toolshed.counter-branch` in `sessionStorage`.
+  The basket is described under Hire basket below. It holds dates, a branch
+  code, model slugs, quantities and the id of a booking that is under way, and
+  no name, address or token. The chosen branch is one branch code and nothing
+  else, and counter staff never write it. `src/shared/basket-storage.ts` and
+  `src/features/counter/work-branch-storage.ts` are the only files that touch
+  `sessionStorage`, one key each.
 - `src/shared/web-storage.test.ts` runs every path that handles a token with a
   basket and a booking beside it. It proves that `localStorage` is only ever
   written under the two marker keys with the fixed word, that `sessionStorage`
@@ -215,12 +219,15 @@ commits as `../backend/openapi.json`.
   from the generated file like every other. They sit in
   `api/contract-booking.ts` to keep each file short, and `contract.ts` passes
   them on.
-- The registration and account routes are agreed and are not in the document
-  yet. Their types are in `api/contract-account.ts`, and they are the only
-  wire types written by hand. Every name in them is the one the agreed
-  contract uses. Once the routes are in the document, run `npm run api:types`
-  and rebuild those types from the generated file, the way
-  `contract-booking.ts` does.
+- The registration and account routes are in the document too. Their types
+  are in `api/contract-account.ts`, built from the generated file the same way.
+- The counter routes, which are the customer lookup, the walk in, the checkout
+  and the hire, are agreed and are not in the document yet. Their types are in
+  `api/contract-counter.ts`, and they are the only wire types written by hand.
+  Every name in them is the one the agreed contract uses, and the words a
+  charge, a hire or an item can be in are the backend's own enumerations. Once
+  the routes are in the document, run `npm run api:types` and rebuild those
+  types from the generated file, the way `contract-booking.ts` does.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -258,6 +265,10 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
 - The customer's own profile is never fresh either. A branch can put the
   account on hold, and a link opened in another tab can confirm the email
   address.
+- A customer the counter looks up is never fresh, for the same reason. What
+  the counter reads to hand a reservation over is kept under the reservation
+  segment, so it is never fresh either, and a handover marks everything about
+  reservations as out of date.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -488,6 +499,98 @@ field with `aria-describedby`, and every link and button is a 44 pixel target.
 `SC-09` used to push the whole page wider than a narrow phone. Its grid now
 lets each cell shrink, and long names and addresses wrap.
 
+### Booking at the counter
+
+A counter assistant finds or registers a customer on `SC-12`, books for them
+on `SC-13` and hands the equipment over on `SC-14`. The calls are in
+`api/customers.ts` and `api/checkout.ts`, the hire is read by
+`api/rental-read.ts`, and the cached reads are in `api/counter-queries.ts`.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-12` | `GET /api/customers?q=&page=&pageSize=` | The customers who match, best match first, ten to a page |
+| `SC-12` | `GET /api/customers/{id}` and `GET /api/reservations?customerProfileId=` | The chosen customer and their bookings |
+| `SC-12` | `POST /api/customers` | The new walk in, chosen |
+| `SC-13` | `GET /api/catalogue/availability` with `branch`, and `GET /api/catalogue/models/{slug}/availability` | What is free at the branch for the dates, and whether each line is free for its quantity |
+| `SC-13` | `POST /api/reservations`, then `/hold`, then `/confirm` | The server's figures, then the units it set aside, then the reference |
+| `SC-14` | `GET /api/reservations/{id}/checkout` | The units to hand over and the deposit to take, or the server's reason why not |
+| `SC-14` | `POST /api/reservations/{id}/checkout` | The hire, with its reference, its units, the deposit held and the day it is due back |
+
+#### The branch a member of staff works at
+
+`src/features/counter/work-branch.ts` is the one place every counter screen
+reads the branch from. Counter staff work at the branch on their session, as
+`branchCode`, and cannot change it. An administrator has none, so
+`work-branch-gate.tsx` asks which branch they are working at before the
+screen opens, and the choice is kept for the tab by `work-branch-storage.ts`.
+A line at the top of the screen says which branch it is and offers to change
+it. The dashboard and the diary, which still show sample data, take their
+branch from the same place through `home-branch.ts`.
+
+#### `SC-12` Customer Lookup and Walk-in Registration
+
+- One search box matches a name, a phone number or an email address. It
+  searches from two characters, a moment after the last key, and has the
+  loading, failed and empty states and page controls. The search, the page
+  and the chosen customer live in the address.
+- Each customer says who it is, how the account stands, whether there is a
+  login, and offers "New booking". An account on hold or blacklisted says so
+  and offers no booking.
+- Choosing a customer shows their bookings at every branch. One that is
+  confirmed, starts today or earlier and is collected at this branch has
+  "Check out" beside it.
+- The walk in form asks for the last four characters of the identity document
+  and never the whole number. It is checked before it is sent, a 422 puts
+  each message under its field, and once the server answers the new customer
+  is chosen. An administrator's walk in names the branch they chose. The rules
+  and the body are in `walkin-form.ts`.
+
+#### `SC-13` New Booking and Asset Allocation
+
+- The customer comes in the address as `?customer=<id>`, so a reload keeps
+  them. The booking is collected at the assistant's own branch and may start
+  today.
+- The tools come from the availability search narrowed to that branch, and
+  each line asks the single model route whether its quantity is free there.
+  The units are allocated by the server when the booking is held. There is no
+  way to pick a unit by hand.
+- The booking takes the same three requests as an online one, in
+  `use-counter-booking.ts`, one press of a button each, and each button is
+  disabled while its request is in flight. Every figure is the server's.
+- A 409 on the hold shows the server's `detail` and offers the tools to
+  change. Going back cancels the reservation first when the server says it
+  can be cancelled, so a hold gives its units back at once and a priced draft
+  is not left behind. A 403 for an account on hold shows the server's message
+  and offers no way to book. A 409 on the confirmation says the hold ran out.
+- The confirmed step shows the reference, the asset tags of the units set
+  aside, the totals and the deposit to take at collection, and offers "Check
+  out now" when the booking starts today.
+
+#### `SC-14` Checkout and Deposit
+
+- The address is `/counter/checkout/:reservationId`, and the value is the key
+  of a reservation or its reference.
+- When `canCheckOut` is false the screen shows the server's `refusal` and no
+  form. When `rentalId` is set it says the booking is already out and links to
+  the hire.
+- For each unit the assistant ticks that the tag on the unit matches, and
+  records the grade it goes out in, starting at the grade it has now, the
+  accessories and the hour meter. The deposit to take is the server's figure.
+  The customer signs the agreement, and "Check out the equipment" asks a
+  question that says in words what is about to happen. "Yes, hand it over" is
+  the one request. The rules and the body are in `checkout-form.ts`.
+- The answer shows the hire reference, the units, the deposit held and the day
+  it is due back. A 409 or a 403 shows the server's message and offers to read
+  the booking again. A 422 goes back to the form with each message under its
+  control.
+
+#### Accessibility of these screens
+
+Each step change moves focus to the heading of the new step, and a polite
+status says what the last request did. Every error is tied to its field with
+`aria-describedby`, every target is at least 44 pixels, and all three screens
+fit a phone 360 pixels wide with nothing to scroll sideways.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -590,12 +693,17 @@ npx playwright install chromium
 `e2e/smoke.spec.ts` and `e2e/accessibility.spec.ts` run with or without the
 backend. With no backend, the catalogue home and the search are scanned in
 their failed state, and the registration form with its branch menu in its
-failed state. The privacy notice is scanned too.
+failed state. The privacy notice is scanned too. The counter's customer
+lookup, new booking and checkout are scanned loaded, with a signed in
+assistant, a customer and a booking whose answers the spec gives itself, from
+`e2e/counter-answers.ts`. The new booking is scanned again with a tool on it,
+and the checkout again with every problem of its form on the screen.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires and My Account at 360 pixels wide and checks that nothing has to be
-scrolled sideways. It is the one browser spec that answers the API itself,
-because a layout check should not depend on what a database holds.
+My Hires, My Account and the three counter screens at 360 pixels wide and
+checks that nothing has to be scrolled sideways. It answers the API itself,
+like the counter scans, because a layout check should not depend on what a
+database holds.
 
 `e2e/catalogue.spec.ts` needs the real backend with seeded data on port 8000.
 It follows a visitor from picking dates on the home screen, through the search
@@ -659,8 +767,23 @@ built from the time, and touches no seeded account. It follows no link from an
 email, because the address is not one this system delivers to. The component
 tests cover where the links land.
 
-The customers, the password rule and the sign in are in `e2e/customer.ts`, and
-the dates are counted from today at the branches by `e2e/hire-dates.ts`.
+`e2e/counter.spec.ts` needs the customer and checkout routes. A seeded counter
+assistant signs in, registers a walk in with a name and a number nobody has
+used, books one unit for them for today at the assistant's own branch, checks
+it out and sees the reference of the hire. The model is the first one the
+availability search for that branch lists, so a rerun finds a unit the last
+run did not take. The desktop project signs in as the assistant at Cape Town
+CBD, `elmarie@toolshedhire.co.za`, and the phone project as the one at
+Bellville, `thabo@toolshedhire.co.za`, so the two never compete for a unit.
+The password comes from `E2E_STAFF_PASSWORD` and falls back to the development
+seed password. The spec asks `GET /api/customers` and a checkout with no token
+first. A 404 or a 405 from either means the routes are not there, and the
+journey skips itself. A run leaves the unit it checked out on hire, because a
+return is a later change.
+
+The customers, the password rule and the sign in are in `e2e/customer.ts`, the
+counter assistants in `e2e/staff.ts`, and the dates are counted from today at
+the branches by `e2e/hire-dates.ts`.
 
 One run makes twelve sign ins. `session.spec.ts` signs the first customer in
 four times, twice in each browser project, and the booking journey twice more.
@@ -675,7 +798,10 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all four skips into failures. The pipeline
+The counter journey signs each of the two counter assistants in once, which
+counts against their own addresses.
+
+Set `E2E_REQUIRE_BACKEND=1` to turn all five skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

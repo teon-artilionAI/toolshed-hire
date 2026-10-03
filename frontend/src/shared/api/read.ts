@@ -16,6 +16,9 @@ import type { IsoDate, IsoTimestamp, Money } from './contract'
 /** Money on the wire. Digits, a point, and exactly two decimals. */
 const MONEY_PATTERN = /^\d+\.\d{2}$/
 
+/** Money that may run the other way, such as a deposit given back. */
+const SIGNED_MONEY_PATTERN = /^-?\d+\.\d{2}$/
+
 /** A percentage on the wire. Digits, a point, and exactly two decimals. */
 const PERCENT_PATTERN = /^\d+\.\d{2}$/
 
@@ -76,6 +79,30 @@ export function readMoney(source: Record<string, unknown>, key: string, requestP
     )
   }
   return value
+}
+
+/** Read an amount that may be negative, such as a charge that gives a deposit
+ *  back. Anything that is not a string with two decimals is refused. */
+export function readSignedMoney(source: Record<string, unknown>, key: string, requestPath: string): Money {
+  const value = readText(source, key, requestPath)
+  if (!SIGNED_MONEY_PATTERN.test(value)) {
+    throw malformedResponse(
+      requestPath,
+      `Expected field ${key} in the response from ${requestPath} to be money written as a ` +
+        `string with two decimals and an optional minus, for example "-960.00", got "${value}".`,
+    )
+  }
+  return value
+}
+
+/** Read a whole number of zero or more that the contract allows to be null,
+ *  such as an hour meter reading. A missing field is not null. */
+export function readNullableCount(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+): number | null {
+  return source[key] === null ? null : readCount(source, key, requestPath)
 }
 
 /** Read a percentage, and refuse anything that is not a string with two
@@ -143,6 +170,17 @@ export function readOneOf<Word extends string>(
     )
   }
   return word
+}
+
+/** Read a field that must be one of a fixed set of words or null. A missing
+ *  field is not null. */
+export function readNullableOneOf<Word extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+  words: readonly Word[],
+): Word | null {
+  return source[key] === null ? null : readOneOf(source, key, requestPath, words)
 }
 
 /** Read a field that must be an array, reading every item with `readItem`. */
