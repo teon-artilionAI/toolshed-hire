@@ -47,7 +47,9 @@ export function rentalHref(rentalId: string): string {
   return `/counter/return/${encodeURIComponent(rentalId)}`
 }
 
-/** SC-16, a damage report for one unit that came back on a hire. */
-export function damageHref(assetTag: string, rentalItemId: string): string {
-  return `/counter/damage/${encodeURIComponent(assetTag)}?${RENTAL_ITEM_PARAMETER}=${encodeURIComponent(rentalItemId)}`
+/** SC-16, the damage reports of one unit, by its tag. With the unit of a hire
+ *  when the report is for one that came back on that hire. */
+export function damageHref(assetTag: string, rentalItemId?: string): string {
+  const unit = `/counter/damage/${encodeURIComponent(assetTag)}`
+  return rentalItemId === undefined ? unit : `${unit}?${RENTAL_ITEM_PARAMETER}=${encodeURIComponent(rentalItemId)}`
 }

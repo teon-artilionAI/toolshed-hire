@@ -14,14 +14,16 @@
  *
  * The counter's customer lookup, new booking and checkout need a signed in
  * assistant and a customer with a booking, the counter's dashboard, diary and
- * locator need a day with something on it and units to find, and the return
+ * locator need a day with something on it and units to find, the return
  * screen and the overdue worklist need a hire partly back and units long
- * overdue. The spec answers the API for those itself, through
- * counter-answers.ts, so all eight are scanned loaded every time. The new
- * booking is scanned again with a tool on it, the checkout again with every
- * problem of its form on the screen, the diary again with the no show question
- * open and its problem showing, the return again with its question open, and
- * the worklist again with the question about a lost unit open.
+ * overdue, and the damage screen needs a unit with reports on it. The spec
+ * answers the API for those itself, through counter-answers.ts, so all nine
+ * are scanned loaded every time. The new booking is scanned again with a tool
+ * on it, the checkout again with every problem of its form on the screen, the
+ * diary again with the no show question open and its problem showing, the
+ * return again with its question open, the worklist again with the question
+ * about a lost unit open, and the damage screen again with every problem of
+ * its form showing, then with the amount to recover and its question open.
  */
 
 import { expect, test } from '@playwright/test'
@@ -114,5 +116,27 @@ test('the overdue worklist with a loss question open has no serious or critical 
   await page.getByRole('button', { name: /^Record as lost / }).first().click()
   await expect(page.getByRole('button', { name: 'Yes, record it as lost' })).toBeVisible()
 
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+test('a damage report with its problems, its amount and its question has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  await openCounterScreen(page, counterScreen('Record damage'))
+  const form = page.getByRole('form', { name: 'What happened' })
+
+  await form.getByRole('button', { name: 'Record the damage and quarantine the unit' }).click()
+  await expect(page.getByText(/Nothing has been filed yet\. 4 answers need fixing\./)).toBeVisible()
+  expect(await blockingViolations(page)).toEqual([])
+
+  await form.getByRole('radio', { name: /^Major/ }).check()
+  await form.getByLabel('Describe the damage').fill('Base plate cracked across the weld.')
+  await form.getByLabel('Estimated repair cost, in rand').fill('1450.00')
+  await form.getByRole('radio', { name: /^Charge the customer/ }).check()
+  await form.getByLabel('Amount to recover from the customer, in rand, including VAT').fill('1150.00')
+  expect(await blockingViolations(page)).toEqual([])
+
+  await form.getByRole('button', { name: 'Record the damage and quarantine the unit' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: /^File this damage report for / })).toBeFocused()
   expect(await blockingViolations(page)).toEqual([])
 })

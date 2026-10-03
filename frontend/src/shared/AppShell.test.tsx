@@ -176,10 +176,10 @@ describe('the current page in the menu', () => {
 
 describe('the sample data notice in the shell', () => {
   it('is above a screen that is not connected yet', async () => {
-    mockApi(signedInAs(COUNTER_STAFF))
+    mockApi(signedInAs(ADMIN))
 
-    renderApp('/counter/damage/TSH-DR-0042')
-    const title = await findScreenHeading('Record damage')
+    renderApp('/admin/users')
+    const title = await findScreenHeading('Users, roles and account holds')
 
     const notice = screen.getByText(SAMPLE_DATA_TITLE)
     expect(notice).toBeVisible()

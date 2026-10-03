@@ -16,7 +16,8 @@
  * contract-account.ts, the counter types are in contract-counter.ts, the
  * counter overview types are in contract-overview.ts, and the returns and
  * settlement types are in contract-returns.ts. All five are passed on from
- * here.
+ * here. So are the damage types in contract-damage.ts, the one module written
+ * by hand, because the document does not describe those routes yet.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -91,6 +92,16 @@ export type {
   LocatorQuery,
   NoShowRequest,
 } from './contract-overview'
+export type {
+  DamageOutcome,
+  DamageReport,
+  DamageReportListQuery,
+  DamageReportPage,
+  DamageSeverity,
+  DamageStatus,
+  FileDamageReportRequest,
+  ResolveDamageReportRequest,
+} from './contract-damage'
 export type {
   BalancePaymentRequest,
   MyRentalsQuery,

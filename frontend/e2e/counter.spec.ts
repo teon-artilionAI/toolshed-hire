@@ -15,9 +15,17 @@
  * business hours, so the booking for today goes out and comes back on the
  * same day whenever the run happens.
  *
+ * A third journey checks a second hire out, takes it back one grade worse,
+ * sees the deposit waiting for a damage report, files a chargeable report
+ * under the cap on SC-16 and sees the deposit settled with the recovery
+ * withheld. The owner then resolves the report, so the unit goes back on the
+ * shelf. Its steps are in `e2e/damage-journey.ts`.
+ *
  * It needs the customer, checkout and returns routes, which a healthy backend
  * may not have yet, so `e2e/backend.ts` asks for each of them by name. When
- * they are not there both journeys skip themselves and the run still passes.
+ * they are not there the journeys skip themselves and the run still passes.
+ * The damage journey also needs the damage routes, and `e2e/damage-backend.ts`
+ * asks for those.
  *
  * Nothing here names a tool. The model is picked through the availability
  * search for the assistant's branch, which lists only what is free there for
@@ -34,7 +42,16 @@ import type { Locator, Page } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { RETURN_ROUTES_NEEDED, returnRoutesArePresent } from './backend.ts'
 import { RAND, REFERENCE, figure } from './booking.ts'
+import { bookForTodayAtTheCounter } from './counter-booking.ts'
 import { SECOND_CUSTOMER_EMAIL, signInAsCustomer } from './customer.ts'
+import { DAMAGE_ROUTES_NEEDED, damageRoutesArePresent } from './damage-backend.ts'
+import {
+  checkOutAndOpenTheHire,
+  fileAChargeableReport,
+  ownerResolves,
+  seeTheRecoveryWithheld,
+  takeItBackWorse,
+} from './damage-journey.ts'
 import { signInAsStaff, staffFor } from './staff.ts'
 
 /** A hire reference, for example TSH-H-26-000099. */
@@ -217,5 +234,26 @@ test.describe('a booking at the counter and its return against the real backend'
     await expect(history.getByText(/TSH-[A-Z]{2}-\d{4}/)).toHaveCount(0)
     await expect(page.getByText('This screen still shows sample data')).toHaveCount(0)
     expect(await blockingViolations(page)).toEqual([])
+  })
+})
+
+test.describe('a second hire that comes back damaged, against the real backend', () => {
+  test.beforeEach(async ({ request }) => {
+    test.skip(!(await damageRoutesArePresent(request)), DAMAGE_ROUTES_NEEDED)
+  })
+
+  test('an assistant takes a hire back a grade worse, files a chargeable report and sees the recovery withheld', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await signInAsStaff(page, staffFor(testInfo.project.name))
+    await bookForTodayAtTheCounter(page, testInfo.project.name, 'damage')
+
+    await checkOutAndOpenTheHire(page)
+    const tag = await takeItBackWorse(page)
+    const reference = await fileAChargeableReport(page, tag)
+    await seeTheRecoveryWithheld(page)
+
+    await ownerResolves(browser, testInfo, tag, reference)
   })
 })

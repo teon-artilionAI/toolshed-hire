@@ -14,6 +14,8 @@ import type {
   ChargeType,
   ConditionGrade,
   CustomerType,
+  DamageSeverity,
+  DamageStatus,
   DiaryCollectionStatus,
   IdDocumentType,
   RentalStatus,
@@ -102,6 +104,29 @@ export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
   UNDER_REPAIR: 'In the workshop',
   LOST: 'Reported lost',
   RETIRED: 'Retired from the fleet',
+}
+
+/** How bad the damage is, in the words the workshop uses. */
+export const DAMAGE_SEVERITY_LABEL: Record<DamageSeverity, string> = {
+  MINOR: 'Minor',
+  MAJOR: 'Major',
+  WRITE_OFF: 'Not worth repairing',
+}
+
+/** Where a damage report stands. */
+export const DAMAGE_STATUS_LABEL: Record<DamageStatus, string> = {
+  OPEN: 'Open, unit in quarantine',
+  UNDER_REPAIR: 'In the workshop',
+  RESOLVED: 'Resolved, repaired',
+  WRITTEN_OFF: 'Written off',
+}
+
+/** The status pill each report status is drawn with, so colour follows the words. */
+export const DAMAGE_STATUS_PILL: Record<DamageStatus, string> = {
+  OPEN: 'QUARANTINED',
+  UNDER_REPAIR: 'UNDER_REPAIR',
+  RESOLVED: 'RESOLVED',
+  WRITTEN_OFF: 'RETIRED',
 }
 
 /** A count with its noun, for example "1 unit" or "3 units". */

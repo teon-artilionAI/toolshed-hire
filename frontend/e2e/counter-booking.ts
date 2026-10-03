@@ -10,9 +10,11 @@
  * counter.spec.ts walks the same screens and checks each step on the way. This
  * walks them without stopping, and leaves that checking to it.
  *
- * Both journeys run in the same browser project, so both work at the same
- * branch. That one takes the last model free on the first page and has its
- * unit out on hire while it runs, so this one takes the model before it.
+ * The journeys run in the same browser project, so all of them work at the
+ * same branch. counter.spec.ts takes the last model free on the first page and
+ * has its unit out on hire while it runs. The no show journey takes the model
+ * before it, and the damage journey the one before that, so no two of them
+ * take the same unit.
  */
 
 import { expect } from '@playwright/test'
@@ -22,9 +24,25 @@ import { REFERENCE } from './booking.ts'
 /** How many digits of the time go into a phone number, after its prefix. */
 const PHONE_TIME_DIGITS = 8
 
-/** Counted back from the end of the models free at the branch. The last is
- *  the one counter.spec.ts takes. */
-const MODELS_FROM_THE_END = 2
+/** What a booking is for. Each keeps its walk in and its model apart from
+ *  every other journey's. */
+export type BookingPurpose = 'noShow' | 'damage'
+
+interface PurposeDetails {
+  /** The word in the walk in's name. */
+  word: string
+  /** The digit after the leading zero of the walk in's number, in each project. */
+  mobileDigit: string
+  desktopDigit: string
+  /** Counted back from the end of the models free at the branch. The last is
+   *  the one counter.spec.ts takes. */
+  modelsFromTheEnd: number
+}
+
+const PURPOSES: Record<BookingPurpose, PurposeDetails> = {
+  noShow: { word: 'Noshow', mobileDigit: '5', desktopDigit: '6', modelsFromTheEnd: 2 },
+  damage: { word: 'Damage', mobileDigit: '3', desktopDigit: '4', modelsFromTheEnd: 3 },
+}
 
 const CONFIRMED_STEP = 'Step 4 of 4. The booking is confirmed'
 
@@ -36,13 +54,14 @@ export interface CounterBooking {
 
 /** A full name and a mobile number nobody has used. The time keeps one run
  *  apart from the next, and the project keeps the two browsers of one run
- *  apart. The digit after the zero differs from counter.spec.ts. */
-function unusedWalkIn(projectName: string): { name: string; phone: string } {
+ *  apart. The digit after the zero differs from counter.spec.ts and between
+ *  purposes. */
+function unusedWalkIn(projectName: string, purpose: PurposeDetails): { name: string; phone: string } {
   const mobile = projectName.includes('mobile')
   const stamp = String(Date.now())
   return {
-    name: `${mobile ? 'Mobile' : 'Desktop'} Noshow${stamp}`,
-    phone: `0${mobile ? '5' : '6'}${stamp.slice(-PHONE_TIME_DIGITS)}`,
+    name: `${mobile ? 'Mobile' : 'Desktop'} ${purpose.word}${stamp}`,
+    phone: `0${mobile ? purpose.mobileDigit : purpose.desktopDigit}${stamp.slice(-PHONE_TIME_DIGITS)}`,
   }
 }
 
@@ -52,10 +71,16 @@ function unusedWalkIn(projectName: string): { name: string; phone: string } {
  * The assistant must already be signed in.
  *
  * @param projectName The browser project, which decides the name and number.
+ * @param purpose What the booking is for, which decides the model it takes.
  * @returns The walk in's name and the reference the API gave the booking.
  */
-export async function bookForTodayAtTheCounter(page: Page, projectName: string): Promise<CounterBooking> {
-  const { name, phone } = unusedWalkIn(projectName)
+export async function bookForTodayAtTheCounter(
+  page: Page,
+  projectName: string,
+  purpose: BookingPurpose = 'noShow',
+): Promise<CounterBooking> {
+  const details = PURPOSES[purpose]
+  const { name, phone } = unusedWalkIn(projectName, details)
 
   // SC-12. The walk in, with no login, at the assistant's branch.
   await page.goto('/counter/customers')
@@ -78,8 +103,10 @@ export async function bookForTodayAtTheCounter(page: Page, projectName: string):
   await expect(finder.getByRole('status').filter({ hasText: freeModels })).toBeVisible()
   const addButtons = finder.getByRole('button', { name: /^Add / })
   const freeCount = await addButtons.count()
-  expect(freeCount, 'the branch needs two free models for today').toBeGreaterThanOrEqual(MODELS_FROM_THE_END)
-  await addButtons.nth(freeCount - MODELS_FROM_THE_END).click()
+  expect(freeCount, `the branch needs ${details.modelsFromTheEnd} free models for today`).toBeGreaterThanOrEqual(
+    details.modelsFromTheEnd,
+  )
+  await addButtons.nth(freeCount - details.modelsFromTheEnd).click()
   await expect(page.getByText(/^1 unit free at .+ for these dates$/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Work out the cost' }).click()

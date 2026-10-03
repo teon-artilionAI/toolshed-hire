@@ -14,14 +14,16 @@
  *
  * Each unit says its state in words as well as colour. A unit on hire says the
  * day it is due back and the hire it is on, and any other unit says it is not
- * on hire. The line above the list is a polite status, so a person who cannot
- * see the list change still hears that it did.
+ * on hire. A unit out of service, quarantined or in the workshop, links to its
+ * damage reports on SC-16, which is the one thing in the list to press. The
+ * line above the list is a polite status, so a person who cannot see the list
+ * change still hears that it did.
  */
 
 import type { ReactNode, RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin } from 'lucide-react'
-import type { LocatedUnit, LocatorPage } from '../../shared/api/contract'
+import type { AssetStatus, LocatedUnit, LocatorPage } from '../../shared/api/contract'
 import { locatorQueries } from '../../shared/api/counter-queries'
 import { MIN_LOCATOR_SEARCH_LENGTH } from '../../shared/api/locator'
 import { queryPhase } from '../../shared/api/query-phase'
@@ -31,12 +33,18 @@ import { formatDate } from '../../shared/format'
 import Pagination from '../../shared/pagination'
 import { EmptyState, StatusPill } from '../../shared/ui'
 import { ASSET_STATUS_LABEL, CONDITION_GRADE_LABEL, countOf } from './counter-labels'
+import { EntryLink } from './counter-entry'
+import { damageHref } from './counter-links'
 
 /** How many units a page of results holds. The API's own default. */
 const LOCATOR_PAGE_SIZE = 20
 
 /** Pages are counted from one. */
 export const FIRST_PAGE = 1
+
+/** The states of a unit that is out of service because of damage. Each links
+ *  to the unit's damage reports. */
+const OUT_OF_SERVICE: readonly AssetStatus[] = ['QUARANTINED', 'UNDER_REPAIR']
 
 /** Skeleton blocks to draw while a search runs. */
 const RESULT_SKELETON_COUNT = 3
@@ -93,7 +101,14 @@ function UnitRow({ unit }: { unit: LocatedUnit }) {
       </td>
       <td role="cell" className={LABELLED_CELL}>
         <ColumnName>{COLUMN.status}</ColumnName>
-        <StatusPill status={unit.status} label={ASSET_STATUS_LABEL[unit.status]} />
+        <span className="flex flex-col items-end gap-xs sm:items-start">
+          <StatusPill status={unit.status} label={ASSET_STATUS_LABEL[unit.status]} />
+          {OUT_OF_SERVICE.includes(unit.status) && (
+            <EntryLink to={damageHref(unit.assetTag)} reference={unit.assetTag}>
+              Damage reports
+            </EntryLink>
+          )}
+        </span>
       </td>
       <td role="cell" className={LABELLED_CELL}>
         <ColumnName>{COLUMN.grade}</ColumnName>

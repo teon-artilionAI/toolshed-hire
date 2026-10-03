@@ -36,12 +36,12 @@ import type { APIRequestContext } from '@playwright/test'
 const HEALTH_PATH = '/api/health'
 
 /** How long the health check may take. A backend that is there answers at once. */
-const HEALTH_TIMEOUT_MS = 5000
+export const HEALTH_TIMEOUT_MS = 5000
 
 /** Set in the pipeline, where the API is started for the browser tests. There a
  *  missing backend is a failure. On my machine it is a reason to skip. */
-const REQUIRE_BACKEND_VARIABLE = 'E2E_REQUIRE_BACKEND'
-const BACKEND_IS_REQUIRED = Boolean(process.env[REQUIRE_BACKEND_VARIABLE])
+export const REQUIRE_BACKEND_VARIABLE = 'E2E_REQUIRE_BACKEND'
+export const BACKEND_IS_REQUIRED = Boolean(process.env[REQUIRE_BACKEND_VARIABLE])
 
 /** The reason shown beside a skipped spec in the report. */
 export const BACKEND_NEEDED =
@@ -70,10 +70,10 @@ const SESSION_PROBE_PATH = '/api/auth/refresh'
 
 /** What a backend answers for a route it does not have. 404 when nothing is
  *  mounted on the path, and 405 when the path exists for another method. */
-const ROUTE_ABSENT_STATUSES: readonly number[] = [404, 405]
+export const ROUTE_ABSENT_STATUSES: readonly number[] = [404, 405]
 
 /** The lowest status that means the API itself did not answer properly. */
-const SERVER_FAILURE_FROM = 500
+export const SERVER_FAILURE_FROM = 500
 
 /** The reason shown beside a skipped session spec in the report. */
 export const SESSION_ROUTES_NEEDED =
