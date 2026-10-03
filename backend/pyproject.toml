@@ -201,14 +201,14 @@ warn_unreachable = true
 module = ["passlib.*"]
 ignore_missing_imports = true
 
-# disallow_any_explicit is left on everywhere else, and off in exactly the nine
+# disallow_any_explicit is left on everywhere else, and off in exactly the eleven
 # modules that declare pydantic models. The Any it objects to is not in this
 # source. pydantic marks BaseModel with @dataclass_transform, and for every
 # such class mypy synthesises a hidden "__mypy-replace" member whose keyword
 # parameters are typed Any. The flag then reports that synthesised member
 # against the class statement itself, so the only ways to satisfy it are to
 # stop using pydantic or to switch the flag off for the file. Narrowing it to
-# these nine modules keeps the check live across the domain, the application
+# these eleven modules keeps the check live across the domain, the application
 # layer and the routers, which is where an Any written by hand would actually
 # do damage.
 [[tool.mypy.overrides]]
@@ -219,8 +219,10 @@ module = [
     "app.api.account_schemas",
     "app.api.customer_schemas",
     "app.api.hire_schemas",
+    "app.api.return_schemas",
     "app.api.counter_schemas",
     "app.config",
     "app.config_limits",
+    "app.config_clock",
 ]
 disallow_any_explicit = false

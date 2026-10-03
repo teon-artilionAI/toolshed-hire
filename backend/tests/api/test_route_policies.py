@@ -120,6 +120,13 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("hire", API, "GET", f"/api/reservations/{NOBODYS_KEY}/checkout", STAFF),
     MatrixRow("hire", API, "POST", f"/api/reservations/{NOBODYS_KEY}/checkout", STAFF),
     MatrixRow("hire", API, "GET", f"/api/rentals/{NOBODYS_KEY}", STAFF),
+    MatrixRow("hire", API, "GET", "/api/rentals", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/returns", STAFF),
+    MatrixRow("hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/balance-payment", STAFF),
+    MatrixRow(
+        "hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/items/{NOBODYS_KEY}/loss", STAFF
+    ),
+    MatrixRow("hire", API, "GET", "/api/me/rentals", CUSTOMER_ONLY),
     MatrixRow("hire", API, "GET", "/api/counter/dashboard", STAFF),
     MatrixRow("hire", API, "GET", "/api/counter/diary", STAFF),
     MatrixRow("booking", API, "POST", f"/api/reservations/{NOBODYS_KEY}/no-show", STAFF),

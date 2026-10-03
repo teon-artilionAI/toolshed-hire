@@ -4,8 +4,9 @@ A rental is answered as a `RentalView`. It is the stored rental, less anything
 the caller may not see, with what the late fee would be today for each unit
 still out, whether a returned unit waits for its damage to be assessed, what
 the deposit is waiting on, and whether the caller may record a return right
-now. The three answers that belong to later changes come from
-`app.application.hire.progress`.
+now. Those answers are worked out in `app.application.hire.progress`, the late
+fee by the late fee policy the caller hands in. A page of rentals is a
+`RentalViewPage`, each rental on it built the same way.
 
 A checkout is answered as a `CheckoutView`, which says whether the caller may
 hand the equipment over right now and, when not, why, in the sentence the
@@ -24,6 +25,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.application.booking.access import is_staff
+from app.application.hire.list_models import RentalPage
 from app.application.hire.progress import (
     damage_assessment_of,
     late_fee_if_returned_today,
@@ -34,6 +36,7 @@ from app.domain.checkout import ALREADY_CHECKED_OUT_MESSAGE, collection_refusal
 from app.domain.checkout_charges import deposit_to_hold
 from app.domain.enums import RentalStatus, UserRole
 from app.domain.identity import BRANCH_SCOPE_MESSAGE, Actor, within_branch_scope
+from app.domain.policies.late_fee import LateFeePolicy
 from app.domain.rental import DamageAssessment, SettlementWait
 
 
@@ -91,16 +94,40 @@ class CheckoutView:
     refusal: str | None
 
 
-def rental_view_for(actor: Actor, detail: RentalDetail, today: date) -> RentalView:
+@dataclass(frozen=True, slots=True)
+class RentalViewPage:
+    """One page of rentals as one caller sees them.
+
+    Attributes:
+        items: The rentals on the page.
+        page: The page this is, counted from one.
+        page_size: How many rentals a page holds.
+        total: How many rentals match across every page.
+
+    """
+
+    items: tuple[RentalView, ...]
+    page: int
+    page_size: int
+    total: int
+
+
+def rental_view_for(
+    actor: Actor, detail: RentalDetail, today: date, policy: LateFeePolicy
+) -> RentalView:
     """Build what one caller is shown of a rental they may read.
 
     Args:
         actor: Who is asking, with the role and the branch they hold.
         detail: The rental as it is stored.
         today: The current business day, from the clock.
+        policy: The late fee policy, which says what each unit still out
+            would owe if it came back today.
 
     """
-    items = tuple(_item_view(actor, item, today) for item in detail.items)
+    items = tuple(
+        _item_view(actor, item, detail.due_back_on, today, policy) for item in detail.items
+    )
     return RentalView(
         detail=detail,
         items=items,
@@ -111,6 +138,18 @@ def rental_view_for(actor: Actor, detail: RentalDetail, today: date) -> RentalVi
             and any(item.is_out() for item in detail.items)
         ),
         settlement_waiting_on=settlement_waiting_on(detail),
+    )
+
+
+def rental_page_for(
+    actor: Actor, page: RentalPage, today: date, policy: LateFeePolicy
+) -> RentalViewPage:
+    """Build what one caller is shown of a page of rentals."""
+    return RentalViewPage(
+        items=tuple(rental_view_for(actor, detail, today, policy) for detail in page.items),
+        page=page.page,
+        page_size=page.page_size,
+        total=page.total,
     )
 
 
@@ -141,9 +180,11 @@ def _checkout_refusal(actor: Actor, detail: CheckoutDetail, today: date) -> str 
     return collection_refusal(detail.status, detail.start_date, today)
 
 
-def _item_view(actor: Actor, item: RentalItemDetail, today: date) -> RentalItemView:
+def _item_view(
+    actor: Actor, item: RentalItemDetail, due_back_on: date, today: date, policy: LateFeePolicy
+) -> RentalItemView:
     """Return one unit as the caller sees it, without its tag for a customer (US-07)."""
-    late = late_fee_if_returned_today(item, today)
+    late = late_fee_if_returned_today(item, due_back_on, today, policy)
     shown = replace(item, asset_tag=None) if actor.role is UserRole.CUSTOMER else item
     return RentalItemView(
         item=shown,

@@ -4,10 +4,17 @@ The hire module owns the rental, its items and its charges, and is the only
 module that writes them. The repository adds a whole rental at once, with its
 items and its charges, so no caller can store half a checkout.
 
-The two reads that return read models sit behind the same port, so a use case
+A rental that is going to change is read locked, with its items, the figures
+copied onto their booking lines and its charges, and written back whole by
+`save`. Two returns of one rental therefore take turns. `save` adds the
+charges that are new and moves a pending charge to settled, and it never
+touches a charge that was already settled (BR-24). `lock_due_overdue` is the
+part of the lazy sweep that finds the hires past their due date (BR-52).
+
+The reads that return read models sit behind the same port, so a use case
 reads what it has just written inside the transaction that wrote it, the way
 the booking module does. Each one takes a bounded number of statements however
-many units a hire has.
+many units a hire has, and a page of rentals however many it holds.
 
 The counter's dashboard and diary are read through a port of their own,
 `CounterOverviewQuery`. They write nothing, so they need no unit of work, and
@@ -21,8 +28,10 @@ from typing import Protocol
 from uuid import UUID
 
 from app.application.booking.read_models import ReservationKey
+from app.application.hire.list_models import RentalPage, RentalSearch
 from app.application.hire.overview_models import DashboardRows, DiaryRows
 from app.application.hire.read_models import CheckoutDetail, RentalDetail, RentalKey
+from app.application.ownership import OwnerScope
 from app.domain.rental import Rental
 
 
@@ -82,4 +91,39 @@ class RentalRepository(Protocol):
 
     def find_checkout(self, key: ReservationKey) -> CheckoutDetail | None:
         """Return what the counter needs to check a reservation out, or None when there is none."""
+        ...
+
+    def find_for_update(self, key: RentalKey) -> Rental | None:
+        """Return one rental with its items and its charges, locked for a change.
+
+        A rental another transaction is changing is waited for, not skipped.
+        """
+        ...
+
+    def save(self, rental: Rental) -> None:
+        """Write what a return, a loss or a settlement changed on a rental read for a change.
+
+        Raises:
+            LookupError: If the rental was never stored.
+            StateTransitionError: If a charge that is no longer pending would
+                be changed (BR-24).
+
+        """
+        ...
+
+    def lock_due_overdue(self, today: date, limit: int) -> list[Rental]:
+        """Lock and return up to `limit` rentals with a unit out past their due date.
+
+        Only rentals that do not read OVERDUE already are returned, earliest
+        due date first. A rental another transaction is changing is waited
+        for, so the caller checks each one again once it holds the lock.
+        """
+        ...
+
+    def search(self, search: RentalSearch, scope: OwnerScope) -> RentalPage:
+        """Return one page of the rentals the scope lets the caller see.
+
+        Overdue rentals come first, the most overdue first, and then the rest,
+        newest first.
+        """
         ...

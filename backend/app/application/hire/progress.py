@@ -1,15 +1,19 @@
-"""Where a rental stands on the way to being settled, one replaceable function per question.
+"""Where a rental stands on the way to being settled, worked out for the read of it.
 
-A rental is read with three answers that belong to the changes after this one.
-What the late fee would be if a unit came back today belongs to the late fee
-policy (BR-30). Whether a returned unit waits for its damage to be assessed
-belongs to damage and quarantine (BR-35). What the deposit is waiting on before
-it can be settled belongs to returns and settlement (BR-32, BR-53).
+A rental is read with three answers that are worked out and not stored.
 
-Each answer is worked out here by one function, and each function is the one
-thing its change replaces. Until then they answer as a rental that has just
-gone out stands. Nothing is late yet, nothing needs assessing, and the deposit
-waits for the units to come back.
+What the late fee would be if a unit came back today comes from the late fee
+policy (BR-30), asked exactly as a return would ask it, so the figure the
+counter is shown is the figure a return today would charge. A unit that is
+back accrues nothing more.
+
+What the deposit is waiting on comes from `settlement_wait` in the domain,
+which is the same rule the return asks before it settles the deposit (BR-32,
+BR-53). So the screen and the settlement cannot disagree.
+
+Whether a returned unit waits for its damage to be assessed belongs to damage
+and quarantine (BR-35), which is the next change. Until then no unit is ever
+flagged, and `damage_assessment_of` is the one function it replaces.
 """
 
 from __future__ import annotations
@@ -20,7 +24,10 @@ from decimal import Decimal
 from typing import Final
 
 from app.application.hire.read_models import RentalDetail, RentalItemDetail
+from app.domain.money import Money
+from app.domain.policies.late_fee import LateFeePolicy
 from app.domain.rental import NO_DAYS_LATE, DamageAssessment, SettlementWait
+from app.domain.settlement import settlement_wait
 
 NO_LATE_FEE: Final[Decimal] = Decimal("0.00")
 
@@ -39,28 +46,47 @@ class LateFeeToday:
     amount: Decimal
 
 
-def late_fee_if_returned_today(item: RentalItemDetail, today: date) -> LateFeeToday:
+def late_fee_if_returned_today(
+    item: RentalItemDetail, due_back_on: date, today: date, policy: LateFeePolicy
+) -> LateFeeToday:
     """Return the late fee a unit still out would carry if it came back today.
 
-    The late fee policy is the next change. Until it is built nothing accrues,
-    so this answers nothing for every unit, whether it is out or back.
+    Args:
+        item: The unit, as it is stored.
+        due_back_on: The day the hire was due back.
+        today: The current business day, from the clock.
+        policy: The late fee policy, asked as a return today would ask it.
+
+    Returns:
+        The days late and the fee, or nothing for a unit that is back.
+
     """
-    return LateFeeToday(days_late=NO_DAYS_LATE, amount=NO_LATE_FEE)
+    if not item.is_out():
+        return LateFeeToday(days_late=NO_DAYS_LATE, amount=NO_LATE_FEE)
+    late = policy.late_fee(
+        due_back_on=due_back_on,
+        returned_on=today,
+        fee_per_day=Money.create(item.late_fee_per_day),
+    )
+    return LateFeeToday(days_late=late.days_late, amount=late.amount.amount)
 
 
 def damage_assessment_of(item: RentalItemDetail) -> DamageAssessment:
     """Return whether a unit waits for its damage to be assessed.
 
-    Damage and quarantine come later. Until then no unit is ever flagged.
+    Damage and quarantine come in the next change. Until then no unit is
+    ever flagged.
     """
     return DamageAssessment.NOT_NEEDED
 
 
 def settlement_waiting_on(rental: RentalDetail) -> SettlementWait | None:
-    """Return what the deposit of a rental waits on before it can be settled.
-
-    Returns and settlement come later. Until then a rental with a unit out
-    waits for it, and one with nothing out waits on nothing, which is the
-    closed hire of the worked example.
-    """
-    return SettlementWait.ITEMS_OUT if any(item.is_out() for item in rental.items) else None
+    """Return what the deposit of a rental waits on before it can be settled, or None."""
+    return settlement_wait(
+        status=rental.status,
+        items_out=sum(item.is_out() for item in rental.items),
+        assessments_due=sum(
+            damage_assessment_of(item) is DamageAssessment.REQUIRED for item in rental.items
+        ),
+        balance_due=rental.balance_due,
+    )

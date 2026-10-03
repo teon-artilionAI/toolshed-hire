@@ -25,6 +25,7 @@ from app.application.unit_of_work import UnitOfWork
 from app.domain.checkout import HandOver
 from app.domain.enums import ConditionGrade
 from app.domain.identity import Actor
+from app.domain.policies import StandardLateFeePolicy
 from app.infrastructure.models import (
     Asset,
     AssetAllocation,
@@ -89,7 +90,7 @@ def run_checkout(
         for allocation in held_allocations(engine, reservation_id)
     )
     build = unit_of_work or opening(engine)
-    return CheckoutRentalUseCase(build(), FixedClock()).execute(
+    return CheckoutRentalUseCase(build(), FixedClock(), StandardLateFeePolicy()).execute(
         CheckoutCommand(
             actor=actor,
             key=ReservationKey.of(reservation_id),

@@ -203,6 +203,37 @@ are each rounded once from the exact figure, because those are the two amounts
 a charge is written with. The total is their sum and the discount shown is the
 subtotal less the amount charged, so the figures on a quote add up to the cent.
 
+The second Strategy is the late fee (BR-30, BR-31). `LateFeePolicy` is a port
+in `app/domain/policies/late_fee.py`, `StandardLateFeePolicy` is the one that
+runs, and `FixedLateFeePolicy` is its counterpart for tests, one fixed fee for
+a unit that is late at all. `app/api/late_fee_deps.py` builds the standard one
+once at start-up and hands it to the returns, the losses, the reads of a
+rental and the counter's dashboard, so every late fee the API shows or charges
+comes from the one policy.
+
+```python
+late = policy.late_fee(due_back_on=due, returned_on=today, fee_per_day=fee)
+```
+
+A policy is asked about one unit, because a late fee accrues per asset, with
+the late fee per day copied onto its booking. Both days are business days in
+Cape Town. It charges each whole day between the due date and the return, so a
+return on the due date owes nothing, and it stops after
+`ACCRUAL_LIMIT_DAYS`, which is fourteen, named on the policy. It answers with
+the days late, the days charged, the fee, and whether the unit is beyond the
+limit, which is what a loss is decided by. `StandardLateFeePolicy.late_fee` is
+the only place a late fee per day is multiplied by a number of days, and
+`tests/unit/test_one_place_for_a_late_fee.py` reads every module of `app` to
+keep it so.
+
+A late fee is quoted including VAT, so two days at R120.00 is R240.00 and
+nothing is added to it. `split_vat_inclusive` in `app/domain/vat.py`, beside
+the rate, is the one place such an amount is taken apart. The part before VAT
+is worked back from the amount, rounded half up to the cent, and the VAT is
+what is left, so R240.00 is written as R208.70 plus R31.30 and the two always
+add back to the amount quoted. The seed's worked example uses the same split
+and the same policy.
+
 ### State
 
 BR-11 says a reservation changes status only along the permitted transitions.
@@ -223,9 +254,8 @@ reservation.confirm(now=now, email_verified=verified)   # asks HeldState, or is 
 A state checks its guards before it changes anything, so a refused move leaves
 the reservation exactly as it was. The thirty minutes of a hold and the 17:00
 cutoff for a late cancellation are named constants beside the guards that use
-them. Checkout calls `collect`. `mark_no_show` and `close` are built and tested
-in the states, and the use cases that call them come with the no-show sweep
-and with returns.
+them. Checkout calls `collect`, the no show sweep and the counter call
+`mark_no_show`, and the return that brings the last unit back calls `close`.
 
 A tagged unit has a state model of its own, the asset states of the design
 document. `PERMITTED_ASSET_MOVES` in `app/domain/asset_lifecycle.py` is its
@@ -240,6 +270,15 @@ instants in UTC and works out the business day in `Africa/Johannesburg`, so a
 booking made at half past midnight in Cape Town belongs to the new day. The
 tests use a clock that stands still, and one test reads the source of both
 layers to make sure neither calls `datetime.now()` or `date.today()`.
+
+A test process may set `TEST_BUSINESS_TIME`, for example `10:00`. The clock
+the API uses then reads today's real date in Cape Town when the process
+starts, starts at that time of day on it, and runs on in real time, which is
+`StartedAtBusinessTimeClock` in `app/infrastructure/clock.py`. The browser
+tests book for today and check out, and a hire can only start today while the
+branch is open, so without it they would fail whenever CI ran after closing
+time. The setting is honoured only when `ENVIRONMENT=test`, and every other
+environment refuses to start with it set.
 
 ## The read side
 
@@ -580,17 +619,29 @@ looks at their reservations and cancels one (FR-05 to FR-11).
 
 | From | To | Move | Guards and effects |
 |---|---|---|---|
-| DRAFT | HELD | `hold` | The start is not before today and not more than 90 days ahead. The hire is within the limits of every model. Every line is given all of its units at the collection branch. The hold expires thirty minutes later. |
+| DRAFT | HELD | `hold` | The start is not before today and not more than 90 days ahead, and not today once the collection branch has closed. The hire is within the limits of every model. Every line is given all of its units at the collection branch. The hold expires thirty minutes later. |
 | DRAFT | CANCELLED | `cancel` | Nothing is held, so nothing is released. |
-| HELD | CONFIRMED | `confirm` | The hold has not run out. Every line holds its quantity. The customer has a verified email address, or staff are confirming for them. The expiry is cleared and the confirmation is queued. |
+| HELD | CONFIRMED | `confirm` | The hold has not run out. A hire for today is refused once the collection branch has closed. Every line holds its quantity. The customer has a verified email address, or staff are confirming for them. The expiry is cleared and the confirmation is queued. |
 | HELD | CANCELLED | `cancel` | The caller owns it or is staff. The units are released with the reason `CANCELLED`. |
 | HELD | EXPIRED | `expire` | The hold has run out. The units are released with the reason `EXPIRED`. |
 | CONFIRMED | COLLECTED | `collect` | On or after the first day of the hire, by staff at the collection branch. `CheckoutRentalUseCase` makes the move in the transaction that opens the rental. |
 | CONFIRMED | CANCELLED | `cancel` | The caller owns it or is staff, and no rental exists. The units are released. After 17:00 on the day before collection it is counted as a late cancellation. |
 | CONFIRMED | NO_SHOW | `mark_no_show` | The sweep, once the collection branch has closed on the first day of the hire, or staff at the counter from the start of that day. The units are released with the reason `NO_SHOW` and the strike is counted. |
-| COLLECTED | RETURNED | `close` | Built in the states. The use case comes with returns. |
+| COLLECTED | RETURNED | `close` | The last unit of its rental is back or recorded as lost. `ReturnRentalItemsUseCase` or `RecordLossUseCase` makes the move in the transaction that closes the hire. |
 
 Any other move is a `StateTransitionError`, which is a 409.
+
+**Today closes with the branch (BR-04).** A hire may start today only while
+the collection branch is open. Once it has closed nobody can collect, and the
+sweep would call a confirmed booking for today a no show at once, with a
+strike against the customer. So `ensure_branch_open_for_start` in
+`app/domain/period.py`, beside the booking window, refuses today as a start
+date from the moment after closing time by the clock in Cape Town. The branch
+is still open at the very instant it closes, the instant the sweep counts
+from, so the two rules meet without a gap. Creating a draft is refused with a
+422 naming `from`, "The branch has closed for today. The earliest a hire can
+start is tomorrow." Putting a draft on hold and confirming a hold ask again,
+because a draft made before closing can be acted on after it.
 
 **A draft is a basket.** `CreateReservationUseCase` creates it with its totals
 and allocates nothing. The rates, the deposit, the late fee and the replacement
@@ -730,12 +781,13 @@ a second rental if anything got past it.
 
 **Reading a rental.** `ReadRentals` returns a rental by its key or its
 reference, with its items and its charges, in three statements however many
-units it has. The checkout read is two. Three answers belong to the changes
-after this one, and each comes from one function in
-`app/application/hire/progress.py` that its change replaces. Until then
-`daysLateToday` is 0, `lateFeeToday` is `0.00`, `damageAssessment` is
-`NOT_NEEDED`, and `settlementWaitingOn` is `ITEMS_OUT` while a unit is out and
-null once none is. A customer is never shown a tag.
+units it has. The checkout read is two. `daysLateToday` and `lateFeeToday` are
+what the late fee policy says a unit still out would owe if it came back
+today, and `settlementWaitingOn` is the domain's `settlement_wait`, the same
+rule the return asks before it settles, both worked out in
+`app/application/hire/progress.py`. `damageAssessment` is `NOT_NEEDED` until
+damage and quarantine arrive, and `damage_assessment_of` is the one function
+that change replaces. A customer is never shown a tag.
 
 What degrades first as the data grows is the customer search on a short text.
 A trigram index cannot narrow a name pattern of two characters, so a search
@@ -798,10 +850,9 @@ with the true totals and the units on hire and in quarantine at the branch. The
 diary lists, for one to seven days from any date, the bookings starting each
 day in `CONFIRMED`, `COLLECTED`, `RETURNED` or `NO_SHOW`, and the hires due
 back each day. `canMarkNoShow` comes from `no_show_refusal`, the rule the route
-enforces. `lateFeeAccrued` comes from `late_fee_accrued` in
-`app/domain/policies/late_fee.py`, which is the late fee per day copied onto
-the booking, times the whole days overdue up to fourteen, for each unit still
-out. The late fee policy of the next change replaces that function.
+enforces. `lateFeeAccrued` is what the late fee policy says each unit still
+out would owe if it came back today, added up, so the dashboard shows what the
+counter would charge.
 
 **The asset locator.** `GET /api/assets/locator` is `LocateAssets` over
 `SqlAssetLocator`, for staff at every branch. It matches part of the tag or of
@@ -818,9 +869,10 @@ order, and a unit on hire carries the day it is due back and its rental.
 and with many, and `tests/integration/test_counter_read_indexes.py` asks the
 planner to prove each index is used.
 
-**What the sweep costs a request.** Two statements when nothing is due, one
-for each half, each read through a partial index that holds only rows that
-could be due. When something is due, each reservation of a batch is loaded
+**What the sweep costs a request.** Three statements when nothing is due, one
+for each part, each read through a partial index that holds only rows that
+could be due. The third part, which marks hires overdue, is described under
+Returns and settlement. When something is due, each reservation of a batch is loaded
 with its lines and allocations and written by its own statements, and a no
 show adds the lock, the count and the update of its customer. Twenty five of
 each is the most a request ever pays for.
@@ -834,6 +886,127 @@ contract shows every booking of a day, so seven days of a branch with
 hundreds of hires a day are a few thousand rows held at once. The locator on a
 two character text is the third, because a trigram index cannot narrow a
 pattern that short, so the counter screen should ask for three.
+
+## Returns and settlement
+
+Units come back, the late fee is charged, the deposit is settled and what it
+cannot cover is paid at the counter (FR-18, FR-19, FR-21, US-23, US-25, US-26,
+US-29, BR-24, BR-29 to BR-33, BR-52, BR-53). There is no new table and no new
+column.
+
+**Taking units back.** `ReturnRentalItemsUseCase` does it all in one unit of
+work, for counter staff of the branch the hire went out from and
+administrators. It locks the rental, then the reservation, then the units
+coming back, always in that order, and hands the rest to `return_items` in
+`app/domain/returns.py`. The domain refuses a unit listed twice, one that is
+not on the rental and a meter reading below the one it went out with (422,
+naming the field), and then a unit already back (409), so a refused return
+changes nothing. For each unit it records the condition, the meter, the
+accessories, the notes and the time, asks the late fee policy for the days
+late and the fee, raises a `LATE_FEE` charge when there is one, lets the
+allocation go with the reason `RETURNED` and moves the unit to `AVAILABLE`
+through the asset state model, so it can be booked from that day. The rental
+moves to the status `Rental.status_on` gives it, and when the last unit is
+back it records when and by whom and the reservation is closed through its
+state. The use case writes `rental.items_returned`, an `asset.status_changed`
+for every unit and `reservation.returned`, and commits once. Two returns of
+one unit at once take turns on the lock of the rental, and the second is
+answered 409. `flaggedForDamage` is accepted now and acted on by damage and
+quarantine.
+
+**Settling the deposit (BR-32, BR-53).** `settle_when_nothing_waits` in
+`app/application/hire/settle.py` asks `settlement_wait` what the rental still
+waits on, the units, then any damage assessment, then a balance. When the
+answer is nothing it calls `settle_deposit` in `app/domain/settlement.py` in
+the same unit of work. `deposit_settlement_of` is the calculation, with no
+database. What is owed is the late fees and recovery charges still pending.
+The deposit pays what it can, so what is withheld is never more than what is
+held, the rest is released as a `DEPOSIT_RELEASE` charge with a negative
+amount, and what the deposit cannot cover is `balanceDue`. Each pending charge
+the deposit covers in full, in the order they were raised, becomes `SETTLED`
+with a simulated reference that numbers it on the rental. With nothing due
+every charge is settled, the rental is `SETTLED` and `settled_at` is stamped.
+With a balance due the rental stays `RETURNED` and `settlementWaitingOn` is
+`BALANCE_PAYMENT`. Damage and quarantine add a wait by making
+`assessments_due_on` answer more than nought, and call the same function when
+the last assessment is done.
+
+| Charge | Amount | VAT | Status when raised |
+|---|---|---|---|
+| `LATE_FEE` | What the policy says, split by `split_vat_inclusive`. | Included in the amount. | `PENDING` until the deposit or a payment covers it. |
+| `DEPOSIT_RELEASE` | What is left of the deposit, negative. | None (BR-23). | `SETTLED`. |
+| `DEPOSIT_FORFEIT` | The deposit of a lost unit. | None. | `SETTLED`, from the deposit held. |
+| `DAMAGE_RECOVERY` | The replacement value of a lost unit less its deposit kept, split for VAT. | Included in the amount. | `PENDING`, like a late fee. |
+
+The worked example holds. R1,200.00 held, two days late at R120.00, R240.00
+withheld as R208.70 plus R31.30 VAT, R960.00 released, R0.00 due, `SETTLED`.
+`tests/api/test_returns.py` follows it through the routes.
+
+**A settled charge is never edited (BR-24).** `Charge.settled` is the one way
+a charge moves on, and it refuses a charge that is no longer `PENDING`. The
+repository writes a charge's status only from `PENDING` to `SETTLED`, and
+refuses to write over a stored charge that is settled, waived or reversed, so
+no path in the application edits one.
+
+**A lost unit (BR-31).** `POST /api/rentals/{id}/items/{itemId}/loss` is
+`RecordLossUseCase`, for a unit more than fourteen days past its due date. I
+read the rule as four things done together, in `app/domain/loss.py`. The unit
+is charged the fourteen days of late fee the policy charges. Its allocation is
+let go first, because a unit may not be marked lost while it holds one
+(BR-37), with the reason `RETURNED`, since there is no reason for a loss, and
+the unit moves from `ON_HIRE` to `LOST`. The deposit copied onto its booking
+line is kept as `DEPOSIT_FORFEIT`. The rest of its replacement value is
+recovered as `DAMAGE_RECOVERY`, the replacement value less the deposit kept,
+never below nothing and so never above the replacement value. The unit is
+closed on the rental with the time it was recorded and no condition, which is
+how a lost unit is told from one that came back, and the rental moves on as
+though it had. At settlement the forfeit counts as withheld and is not
+available to pay anything else.
+
+**The balance payment (BR-33).** `POST /api/rentals/{id}/balance-payment` with
+a `paymentReference` of 1 to 40 characters is `RecordBalancePaymentUseCase`.
+It settles every pending charge with that reference, brings the balance to
+nothing and settles the rental. A rental with nothing due is a 409. No gateway
+is called.
+
+**Overdue (BR-52).** The lazy sweep has a third part,
+`mark_overdue_rentals` in `app/application/hire/overdue.py`. It locks at most
+25 rentals with a unit out past their due date that do not already read
+`OVERDUE`, earliest due date first, through `ix_rental_open_due_back`, asks
+`Rental.status_on` again under the lock, moves each one and writes
+`rental.overdue` with no actor. I read BR-52 as the status a rental reads as,
+so a partial return of an overdue hire with a unit still out leaves it
+`OVERDUE`, a partial return before the due date makes it
+`PARTIALLY_RETURNED`, and the last unit back makes it `RETURNED`.
+
+**The lists.** `GET /api/rentals` is `ListRentals.for_staff`. It runs the sweep
+first and lists rentals at any branch, the overdue first, the most overdue
+first, and then the rest newest first, narrowed by `branchCode`, `status`,
+`overdueOnly` and `customerProfileId`. `GET /api/me/rentals` lists the caller's
+own rentals newest first, with `assetTag` null on every item. Each is four
+statements however long the page is, the count, the page and then the items
+and the charges of every rental on it, in `app/infrastructure/rental_list_query.py`.
+
+| Operation | Statements | Locks |
+|---|---|---|
+| Return | The rental, its items and its charges, the reservation and its lines, the units, then the writes and the read of the answer | The rental, the reservation, the units, in that order |
+| Loss | As a return, for one unit | As a return |
+| Balance payment | The rental, its items and its charges, the writes and the read | The rental |
+| Overdue sweep | One when nothing is due, and three to load a batch | The rentals of the batch |
+| A list | Four | None |
+
+**What degrades first as the data grows.** The staff list with no filter. Its
+order puts the overdue first and then the newest, which no index holds, so
+every rental is sorted to find one page, and the page is found with OFFSET. A
+branch, a customer or the overdue filter narrows it first through an index.
+At ten times today's hires that is still quick. At a hundred times it wants a
+page keyed on when the hire went out, with an index behind it, and the overdue
+hires as a list of their own. A return writes one update and one audit event
+for every unit, which is linear in the units of one hire and bounded by what
+one reservation can carry. The overdue part of the sweep clears one batch a
+request, so a backlog of hires gone overdue would read `OPEN` for a while,
+which costs a status on a screen and never a late fee, because the fee is
+worked out from the dates.
 
 ## The schema
 
@@ -972,7 +1145,12 @@ uvicorn app.main:app --reload --port 8000
 | GET | `/api/reservations/{id}` | Any active account. Somebody else's is a 404 for a customer. |
 | GET | `/api/reservations/{id}/checkout` | Counter staff and administrators. |
 | POST | `/api/reservations/{id}/checkout` | Counter staff of the collection branch, and administrators. |
+| GET | `/api/rentals` | Counter staff and administrators, every branch. |
 | GET | `/api/rentals/{id}` | Counter staff and administrators. |
+| POST | `/api/rentals/{id}/returns` | Counter staff of the rental's branch, and administrators. |
+| POST | `/api/rentals/{id}/items/{itemId}/loss` | Counter staff of the rental's branch, and administrators. |
+| POST | `/api/rentals/{id}/balance-payment` | Counter staff of the rental's branch, and administrators. |
+| GET | `/api/me/rentals` | A customer. |
 | GET | `/api/counter/dashboard` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/counter/diary` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/assets/locator` | Counter staff and administrators, every branch. |
@@ -1072,6 +1250,11 @@ sentence names a business rule. The rule goes to the log.
 | `GET /api/reservations/{id}/checkout` | none | 200 with the reservation, its customer, its units, `hireTotalIncVat`, `depositTotal`, `canCheckOut`, `refusal` and `rentalId`. 404. |
 | `POST /api/reservations/{id}/checkout` | `items` of `allocationId`, `conditionOut`, `accessoriesOut` and `hourMeterOut`, and `agreementSigned` | 201 with the `Rental` and a `Location` header. 200 with the existing rental when it was already checked out. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming the field. |
 | `GET /api/rentals/{id}` | none | 200 with the `Rental`. 404 when there is no such rental. |
+| `GET /api/rentals` | `branchCode`, `status`, `overdueOnly`, `customerProfileId`, `page`, `pageSize` | 200 with `items` of `Rental`, `page`, `pageSize` and `total`, the overdue first. 422 naming `query.branchCode`. |
+| `POST /api/rentals/{id}/returns` | `items` of `rentalItemId`, `conditionIn`, `hourMeterIn`, `accessoriesIn`, `notes` and `flaggedForDamage` | 200 with the `Rental`. 409 `state-transition` for a unit already back. 403 `branch-scope`. 404. 422 naming the field. |
+| `POST /api/rentals/{id}/items/{itemId}/loss` | none | 200 with the `Rental`. 409 `state-transition` when the unit is back or not yet more than fourteen days late. 403 `branch-scope`. 404 for a rental or a unit that is not there. |
+| `POST /api/rentals/{id}/balance-payment` | `paymentReference`, 1 to 40 characters | 200 with the `Rental`, now `SETTLED`. 409 `state-transition` when nothing is due. 403 `branch-scope`. 404. 422 naming `body.paymentReference`. |
+| `GET /api/me/rentals` | `page`, `pageSize` | 200 with the caller's own rentals, newest first, `assetTag` null on every item. 403 for staff. |
 | `POST /api/reservations/{id}/no-show` | `reason`, 1 to 200 characters | 200 with the reservation, now `NO_SHOW`. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming `body.reason`. |
 | `GET /api/counter/dashboard` | `branchCode`, which an administrator must send | 200 with `branchCode`, `branchName`, `date`, `counts` and the three lists. 403 `branch-scope` when counter staff name another branch. 422 naming `query.branchCode`. |
 | `GET /api/counter/diary` | `branchCode`, `from` which is today by default, `days` from 1 to 7 and 1 by default | 200 with `branchCode`, `branchName` and one entry of `days` for each day. 403 and 422 as for the dashboard, and 422 naming `query.days` or `query.from`. |
@@ -1310,6 +1493,13 @@ customer's booking to somebody else.
 
 The key is never logged and never appears in a receipt or an error message.
 
+`TEST_BUSINESS_TIME`, for example `10:00`, starts the clock of a test process
+at that time of day in Cape Town on today's real date, and lets it run on in
+real time from there (see The clock). It is honoured only when
+`ENVIRONMENT=test`. Development, staging and production refuse to start with
+it set, so no deployed service can run on a clock that lies. The start-up log
+shows it as `test_business_time`, or `off`.
+
 ## Checks
 
 I run these from this directory before I publish a change. The pipeline runs
@@ -1422,8 +1612,8 @@ counter with the seeded worked example.
 
 The counter overview is tested the same way. `tests/unit` holds the moment a
 booking becomes a no show, before, at and after closing time and for staff
-from the start of the first day, the strike window and the hold, the late fee
-of the overdue list, the no show half of the sweep and the manual move against
+from the start of the first day, the strike window and the hold, the no show
+half of the sweep and the manual move against
 the in memory stores, and the dashboard and the diary against fakes of their
 ports. `tests/api` pins the shapes of the dashboard, the diary and the locator,
 the branch rule for both roles, the limits of the diary and of a search, and
@@ -1433,6 +1623,25 @@ reads, `test_no_show_races.py` runs two sweeps at once, staged and unstaged,
 and two no shows of one customer at once, and `test_counter_reads.py` and
 `test_counter_read_indexes.py` read rows built by `tests/support/hire_factories.py`
 and count the statements and the indexes.
+
+Returns and settlement are tested the same way. `tests/unit` holds the late
+fee policy at the due date, one, two, fourteen and fifteen days, an early
+return and a line of two units, the split of an amount that includes VAT and
+its rounding, the settlement with nothing owed, the worked example, owed equal
+to held, owed above held and a release that is never negative, the guard on a
+settled charge, the moves of the rental's status, the refusals of a return and
+a loss, and the overdue part of the sweep against the in memory stores.
+`test_one_place_for_a_late_fee.py` reads every module to prove no other one
+works out a late fee. `tests/api` follows the worked example through the
+routes, pins a partial and a last return, the loss, the balance payment and
+both lists, and asks every rental route for every refusal in
+`rental_return_refusals.py` and `rental_settlement_refusals.py`. On PostgreSQL,
+`test_return_transaction.py` makes a return fail at the audit write and at the
+commit and finds nothing kept, holds a unit that came back early for days its
+old hire still covered, records a loss within the checks of the schema and
+proves the repository refuses an edit of a settled charge, and
+`test_return_races_and_overdue.py` posts two returns of one unit at once and
+runs the overdue sweep a batch at a time.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

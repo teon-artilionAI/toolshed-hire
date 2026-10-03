@@ -1,35 +1,38 @@
-"""The lazy sweep, which lapses holds that ran out and marks bookings nobody collected.
+"""The lazy sweep, which lapses holds, marks bookings nobody collected and hires gone overdue.
 
-A hold lasts thirty minutes (BR-13), and a confirmed booking that is not
-collected by the time its branch closes on the first day of the hire is a no
-show (BR-17). Nothing wakes up for either, because there is no scheduler and
-no process that is always on. Both are dealt with the next time somebody asks
-a question they could spoil instead. That is before a hold, before a
+A hold lasts thirty minutes (BR-13), a confirmed booking that is not collected
+by the time its branch closes on the first day of the hire is a no show
+(BR-17), and a hire with a unit still out after its due date is overdue
+(BR-52). Nothing wakes up for any of them, because there is no scheduler and
+no process that is always on. Each is dealt with the next time somebody asks a
+question it could spoil instead. That is before a hold, before a
 confirmation, before a reservation or a list of them is read, before an
-availability search is answered, and before the counter's dashboard or diary
-is read. Until a sweep runs the exclusion constraint still protects the units,
-so a sweep that runs late costs a little availability and never costs
-correctness.
+availability search is answered, before the counter's dashboard or diary is
+read, and before a list of rentals is read. Until a sweep runs the exclusion
+constraint still protects the units, so a sweep that runs late costs a little
+availability and never costs correctness.
 
-The sweep has two halves and each runs in a transaction of its own. The first
-lapses holds, at most `HOLD_SWEEP_BATCH_SIZE` a call, oldest expiry first. The
-second marks no shows, at most `NO_SHOW_SWEEP_BATCH_SIZE` a call, earliest
-first day first, through `app.application.booking.no_show`. In both the due
-rows are locked and then checked again, because a row can change between being
-found and being locked. Two sweeps at once therefore take turns on a row, and
-the second one finds it already dealt with.
+The sweep has three parts and each runs in a transaction of its own. The
+first lapses holds, at most `HOLD_SWEEP_BATCH_SIZE` a call, oldest expiry
+first. The second marks no shows, at most `NO_SHOW_SWEEP_BATCH_SIZE` a call,
+earliest first day first, through `app.application.booking.no_show`. The third
+marks hires overdue, at most `OVERDUE_SWEEP_BATCH_SIZE` a call, earliest due
+date first, through `app.application.hire.overdue`. In each the due rows are
+locked and then checked again, because a row can change between being found
+and being locked. Two sweeps at once therefore take turns on a row, and the
+second one finds it already dealt with.
 
 A lapse releases its units with the reason `EXPIRED`, and a no show with the
-reason `NO_SHOW` and counts the strike on the customer. Each writes its own
-audit event in the same unit of work (BR-49), with no actor, because nobody
-asked for it.
+reason `NO_SHOW` and counts the strike on the customer. A hire gone overdue
+only changes its status. Each writes its own audit event in the same unit of
+work (BR-49), with no actor, because nobody asked for it.
 
 `settle_overdue_hold` does the same for one reservation a use case has already
 locked. The batch is bounded, so a use case that is about to decide something
 about one reservation makes sure of that one itself.
 
-What the sweep costs a request is two statements when nothing is due, one for
-each half, each read through a partial index that holds only the rows that
+What the sweep costs a request is three statements when nothing is due, one
+for each part, each read through a partial index that holds only the rows that
 could be due. When something is due, each reservation in a batch is loaded with
 its lines and allocations and written by its own statements, which the batch
 size bounds. What degrades first as the data grows is the backlog. The sweep
@@ -50,6 +53,7 @@ from uuid import UUID
 
 from app.application.booking.access import RESERVATION_EXPIRED_ACTION, record_change, state_of
 from app.application.booking.no_show import NoShowSweep, mark_due_no_shows
+from app.application.hire.overdue import mark_overdue_rentals
 from app.application.unit_of_work import UnitOfWork
 from app.application.use_case import UseCase
 from app.domain.booking import Reservation
@@ -62,6 +66,9 @@ HOLD_SWEEP_BATCH_SIZE: Final[int] = 25
 # The most reservations one sweep marks as no shows. Each one also locks and
 # counts on its customer, so the batch is the same size as the other half.
 NO_SHOW_SWEEP_BATCH_SIZE: Final[int] = 25
+# The most rentals one sweep marks as overdue. Each one is a status and an
+# event, so the batch is the same size again.
+OVERDUE_SWEEP_BATCH_SIZE: Final[int] = 25
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,11 +78,13 @@ class SweepCommand:
     Attributes:
         batch_size: The most reservations to lapse in this call.
         no_show_batch_size: The most reservations to mark as no shows.
+        overdue_batch_size: The most rentals to mark as overdue.
 
     """
 
     batch_size: int = HOLD_SWEEP_BATCH_SIZE
     no_show_batch_size: int = NO_SHOW_SWEEP_BATCH_SIZE
+    overdue_batch_size: int = OVERDUE_SWEEP_BATCH_SIZE
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +95,14 @@ class SweepResult:
         expired_references: The references of the reservations it lapsed.
         no_show_references: The references of the ones it marked as no shows.
         customers_put_on_hold: The customers those no shows put on hold.
+        overdue_references: The references of the rentals it marked as overdue.
 
     """
 
     expired_references: tuple[str, ...] = ()
     no_show_references: tuple[str, ...] = ()
     customers_put_on_hold: tuple[UUID, ...] = ()
+    overdue_references: tuple[str, ...] = ()
 
     @property
     def expired_count(self) -> int:
@@ -159,25 +170,27 @@ def settle_overdue_hold(uow: UnitOfWork, reservation: Reservation, now: datetime
 
 
 class ExpireHoldsAndNoShowsUseCase(UseCase[SweepCommand, SweepResult]):
-    """Lapse the holds that ran out and mark the bookings nobody collected, a batch of each."""
+    """Lapse the holds that ran out, mark the no shows and the overdue hires, a batch of each."""
 
     def execute(self, command: SweepCommand) -> SweepResult:
-        """Run both halves of the sweep once, each in its own transaction.
+        """Run the three parts of the sweep once, each in its own transaction.
 
         Args:
-            command: How many reservations each half takes at most.
+            command: How many reservations or rentals each part takes at most.
 
         Returns:
-            The references of the reservations lapsed and marked, and the
-            customers put on hold.
+            The references of the reservations lapsed and marked, the
+            customers put on hold, and the rentals marked overdue.
 
         """
         expired = self._lapse_holds(command.batch_size)
         no_shows = self._mark_no_shows(command.no_show_batch_size)
+        overdue = self._mark_overdue(command.overdue_batch_size)
         return SweepResult(
             expired_references=expired,
             no_show_references=no_shows.marked,
             customers_put_on_hold=no_shows.customers_put_on_hold,
+            overdue_references=overdue,
         )
 
     def _lapse_holds(self, batch_size: int) -> tuple[str, ...]:
@@ -224,3 +237,23 @@ class ExpireHoldsAndNoShowsUseCase(UseCase[SweepCommand, SweepResult]):
             },
         )
         return swept
+
+    def _mark_overdue(self, batch_size: int) -> tuple[str, ...]:
+        """Mark up to a batch of hires past their due date as overdue, and commit them."""
+        now = self._clock.now()
+        today = self._clock.today()
+        with self._uow as uow:
+            swept = mark_overdue_rentals(uow, now, today, batch_size)
+            if swept.marked:
+                uow.commit()
+        log = logger.info if swept.marked else logger.debug
+        log(
+            "rental.overdue_sweep_finished",
+            extra={
+                "due_count": swept.due_count,
+                "overdue_count": len(swept.marked),
+                "overdue_references": list(swept.marked),
+                "batch_size": batch_size,
+            },
+        )
+        return swept.marked

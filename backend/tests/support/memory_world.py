@@ -44,6 +44,7 @@ from app.domain.period import BookingPeriod
 from app.domain.policies import PricingPolicy, StandardPricingPolicy
 from app.infrastructure.notification import FakeEmailGateway
 from tests.support.clock import FixedClock
+from tests.support.factories import CLOSES_AT
 from tests.support.memory import InMemoryUnitOfWork, MemoryStore
 
 SINGLE_ASSET: Final[int] = 1
@@ -146,7 +147,7 @@ def build_memory_world(
         max_hire_days: The longest hire the model may be booked for.
 
     """
-    branch = Branch(id=uuid4(), code="CBD", name="Cape Town CBD")
+    branch = Branch(id=uuid4(), code="CBD", name="Cape Town CBD", closes_at=CLOSES_AT)
     product_model = ProductModel(
         id=uuid4(),
         sku="TSH-PM-0001",

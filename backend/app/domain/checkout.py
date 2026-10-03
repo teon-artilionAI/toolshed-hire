@@ -38,7 +38,7 @@ from app.domain.checkout_charges import deposit_hold_charge, deposit_to_hold, hi
 from app.domain.customer_account import REFUSED_FIELD
 from app.domain.enums import AssetStatus, ConditionGrade, ReservationStatus
 from app.domain.errors import StateTransitionError, ValidationFailure
-from app.domain.rental import Rental, RentalItem
+from app.domain.rental import Rental, RentalItem, UnitTerms
 from app.domain.states import state_for
 from app.domain.states.base import COLLECT_MOVE, COLLECTED, refusal_sentence
 from app.domain.states.guards import TOO_EARLY_TO_COLLECT_MESSAGE
@@ -276,6 +276,11 @@ def _item_of(rental: Rental, unit: HandedOverUnit, now: datetime) -> RentalItem:
         asset_id=unit.allocation.asset_id,
         condition_out=unit.hand_over.condition_out,
         checked_out_at=now,
+        terms=UnitTerms(
+            late_fee_per_day=unit.line.late_fee_per_day_snapshot,
+            deposit=unit.line.deposit_snapshot,
+            replacement_value=unit.line.replacement_value_snapshot,
+        ),
         hour_meter_out=unit.hand_over.hour_meter_out,
         accessories_out=accessories or None,
     )

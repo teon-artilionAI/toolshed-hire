@@ -14,28 +14,51 @@ unique key on its reservation, so a reservation is collected once, and
 key to the allocation and its unit, so an allocation becomes one item and an
 item cannot name a unit its allocation does not hold.
 
-The two reads that return read models are in `app.infrastructure.rental_query`
-and `app.infrastructure.checkout_query`.
+A rental that is going to change is read with `SELECT ... FOR UPDATE` on the
+rental row, so two returns of one rental take turns, and the second reads
+what the first committed. The lock waits and does not skip, because a rental
+is a particular row. The aggregate it is read into, and the writing back of a
+change, are in `app.infrastructure.rental_aggregates`.
+
+`lock_due_overdue` is the overdue part of the lazy sweep (BR-52). It reads
+through the partial index `ix_rental_open_due_back`, which holds only the
+hires with a unit still out, and it takes the rentals that do not already
+read OVERDUE, earliest due date first.
+
+The reads that return read models are in `app.infrastructure.rental_query`,
+`app.infrastructure.rental_list_query` and `app.infrastructure.checkout_query`.
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import date
+from typing import Final
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlmodel import Session, col, select
 
 from app.application.booking.read_models import ReservationKey
+from app.application.hire.list_models import RentalPage, RentalSearch
 from app.application.hire.read_models import CheckoutDetail, RentalDetail, RentalKey
-from app.domain import charge as domain_charge
+from app.application.ownership import OwnerScope
 from app.domain import rental as domain
+from app.domain.enums import RentalStatus
 from app.infrastructure.checkout_query import SqlCheckoutReads
-from app.infrastructure.models import Charge, Rental, RentalItem
-from app.infrastructure.rental_query import SqlRentalReads
+from app.infrastructure.models import Rental, RentalItem
+from app.infrastructure.rental_aggregates import charge_row, rental_aggregates_of, write_rental
+from app.infrastructure.rental_list_query import SqlRentalList
+from app.infrastructure.rental_query import SqlRentalReads, rental_key_condition
 from app.infrastructure.schema_ddl import RENTAL_REFERENCE_SEQUENCE
 
 logger = logging.getLogger(__name__)
+
+# The statuses a rental may be moved to OVERDUE from by the sweep (BR-52).
+OVERDUE_FROM: Final[tuple[RentalStatus, ...]] = (
+    RentalStatus.OPEN,
+    RentalStatus.PARTIALLY_RETURNED,
+)
 
 
 class SqlRentalRepository:
@@ -46,6 +69,7 @@ class SqlRentalRepository:
         self._session = session
         self._rentals = SqlRentalReads(session)
         self._checkouts = SqlCheckoutReads(session)
+        self._list = SqlRentalList(session)
 
     def next_reference(self, year: int) -> str:
         """Return the next rental reference, for example TSH-H-26-000099."""
@@ -70,7 +94,7 @@ class SqlRentalRepository:
         self._session.flush()
         self._session.add_all([_item_row(item) for item in rental.items])
         self._session.flush()
-        self._session.add_all([_charge_row(charge) for charge in rental.charges])
+        self._session.add_all([charge_row(charge) for charge in rental.charges])
         self._session.flush()
         logger.debug(
             "hire.rental_insert_finished",
@@ -95,6 +119,52 @@ class SqlRentalRepository:
     def find_checkout(self, key: ReservationKey) -> CheckoutDetail | None:
         """Return what the counter needs to check a reservation out, or None when there is none."""
         return self._checkouts.find(key)
+
+    def find_for_update(self, key: RentalKey) -> domain.Rental | None:
+        """Return one rental with its items and its charges, locked for a change."""
+        # populate_existing, so a row this session already holds is read again
+        # under the lock and not answered from memory.
+        statement = (
+            select(Rental)
+            .where(rental_key_condition(key))
+            .with_for_update(of=Rental)
+            .execution_options(populate_existing=True)
+        )
+        row = self._session.exec(statement).first()
+        logger.debug(
+            "hire.rental_locked", extra={"rental": str(key), "found": row is not None}
+        )
+        if row is None:
+            return None
+        return rental_aggregates_of(self._session, [row])[0]
+
+    def save(self, rental: domain.Rental) -> None:
+        """Write what a return, a loss or a settlement changed on a rental read for a change."""
+        write_rental(self._session, rental)
+
+    def lock_due_overdue(self, today: date, limit: int) -> list[domain.Rental]:
+        """Lock and return up to `limit` rentals with a unit out past their due date."""
+        statement = (
+            select(Rental)
+            .where(
+                col(Rental.returned_at).is_(None),
+                col(Rental.due_back_on) < today,
+                col(Rental.status).in_(OVERDUE_FROM),
+            )
+            .order_by(col(Rental.due_back_on), col(Rental.id))
+            .limit(limit)
+            .with_for_update(of=Rental)
+            .execution_options(populate_existing=True)
+        )
+        rows = self._session.exec(statement).all()
+        logger.debug(
+            "hire.due_overdue_locked", extra={"due_count": len(rows), "limit": limit}
+        )
+        return rental_aggregates_of(self._session, rows)
+
+    def search(self, search: RentalSearch, scope: OwnerScope) -> RentalPage:
+        """Return one page of the rentals the scope lets the caller see."""
+        return self._list.search(search, scope)
 
 
 def _rental_row(rental: domain.Rental) -> Rental:
@@ -136,24 +206,4 @@ def _item_row(item: domain.RentalItem) -> RentalItem:
         returned_at=item.returned_at,
         days_late=item.days_late,
         notes=item.notes,
-    )
-
-
-def _charge_row(charge: domain_charge.Charge) -> Charge:
-    """Return the table row for one charge."""
-    return Charge(
-        id=charge.id,
-        rental_id=charge.rental_id,
-        rental_item_id=charge.rental_item_id,
-        charge_type=charge.charge_type,
-        description=charge.description,
-        amount_ex_vat=charge.amount_ex_vat,
-        vat_rate=charge.vat_rate,
-        vat_amount=charge.vat_amount,
-        amount_inc_vat=charge.amount_inc_vat,
-        status=charge.status,
-        raised_at=charge.raised_at,
-        raised_by_user_id=charge.raised_by_user_id,
-        settled_at=charge.settled_at,
-        payment_reference=charge.payment_reference,
     )

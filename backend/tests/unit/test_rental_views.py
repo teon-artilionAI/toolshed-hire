@@ -2,9 +2,9 @@
 
 The read models are built by hand and handed to the two view builders of the
 hire module. These pin that a customer is never shown a tag, who may record a
-return, what the deposit waits on, the three answers that belong to later
-changes, the order the refusals of a checkout are tried in, and the bounds of
-the two keys and of a customer search.
+return, what the deposit waits on, what the late fee policy says a unit still
+out would owe today, the order the refusals of a checkout are tried in, and
+the bounds of the two keys and of a customer search.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from app.domain.enums import (
     UserRole,
 )
 from app.domain.identity import BRANCH_SCOPE_MESSAGE, Actor
+from app.domain.policies import StandardLateFeePolicy
 from app.domain.rental import DamageAssessment, SettlementWait
 from app.domain.states.guards import TOO_EARLY_TO_COLLECT_MESSAGE
 
@@ -48,6 +49,8 @@ NOW: Final[datetime] = datetime(2026, 3, 9, 6, 30, tzinfo=UTC)
 FIRST_DAY: Final[date] = date(2026, 3, 9)
 DAY_BEFORE: Final[date] = date(2026, 3, 8)
 TAG: Final[str] = "TSH-DR-0042"
+DUE_BACK_ON: Final[date] = date(2026, 3, 12)
+POLICY: Final[StandardLateFeePolicy] = StandardLateFeePolicy()
 
 
 def an_actor(role: UserRole, *, at_the_branch: bool = True) -> Actor:
@@ -94,7 +97,7 @@ def a_rental(
         customer_name="Nomsa Dlamini",
         customer_phone="082 441 7719",
         start_date=FIRST_DAY,
-        due_back_on=date(2026, 3, 12),
+        due_back_on=DUE_BACK_ON,
         checked_out_at=NOW,
         returned_at=None,
         items=items or (an_item(),),
@@ -162,8 +165,8 @@ class TestARentalAsACallerSeesIt:
 
     def test_staff_see_the_tag_and_a_customer_does_not(self) -> None:
         rental = a_rental()
-        staff_view = rental_view_for(an_actor(UserRole.ADMIN), rental, FIRST_DAY)
-        customer_view = rental_view_for(an_actor(UserRole.CUSTOMER), rental, FIRST_DAY)
+        staff_view = rental_view_for(an_actor(UserRole.ADMIN), rental, FIRST_DAY, POLICY)
+        customer_view = rental_view_for(an_actor(UserRole.CUSTOMER), rental, FIRST_DAY, POLICY)
         assert staff_view.items[0].item.asset_tag == TAG
         assert customer_view.items[0].item.asset_tag is None
         assert rental.items[0].asset_tag == TAG, "The stored rental was changed."
@@ -180,29 +183,57 @@ class TestARentalAsACallerSeesIt:
     def test_only_staff_of_the_branch_or_an_administrator_may_record_a_return(
         self, actor: Actor, can_return: bool
     ) -> None:
-        assert rental_view_for(actor, a_rental(), FIRST_DAY).can_return is can_return
+        assert rental_view_for(actor, a_rental(), FIRST_DAY, POLICY).can_return is can_return
 
     def test_nothing_is_returned_once_everything_is_back_or_the_hire_is_settled(self) -> None:
         administrator = an_actor(UserRole.ADMIN)
         back = a_rental(an_item(returned_at=NOW))
         settled = a_rental(status=RentalStatus.SETTLED)
-        assert rental_view_for(administrator, back, FIRST_DAY).can_return is False
-        assert rental_view_for(administrator, settled, FIRST_DAY).can_return is False
+        assert rental_view_for(administrator, back, FIRST_DAY, POLICY).can_return is False
+        assert rental_view_for(administrator, settled, FIRST_DAY, POLICY).can_return is False
 
     def test_the_deposit_waits_for_the_units_that_are_still_out(self) -> None:
         administrator = an_actor(UserRole.ADMIN)
         partly = a_rental(an_item(), an_item(returned_at=NOW))
         back = a_rental(an_item(returned_at=NOW))
-        assert rental_view_for(administrator, partly, FIRST_DAY).settlement_waiting_on is (
+        assert rental_view_for(administrator, partly, FIRST_DAY, POLICY).settlement_waiting_on is (
             SettlementWait.ITEMS_OUT
         )
-        assert rental_view_for(administrator, back, FIRST_DAY).settlement_waiting_on is None
+        assert rental_view_for(administrator, back, FIRST_DAY, POLICY).settlement_waiting_on is None
 
-    def test_until_the_later_changes_nothing_is_late_and_nothing_needs_assessing(self) -> None:
-        view = rental_view_for(an_actor(UserRole.ADMIN), a_rental(), date(2026, 4, 30))
-        (item,) = view.items
-        assert (item.days_late_today, item.late_fee_today) == (0, Decimal("0.00"))
+    def test_a_balance_left_after_settlement_waits_for_its_payment(self) -> None:
+        owing = replace(
+            a_rental(an_item(returned_at=NOW), status=RentalStatus.RETURNED),
+            balance_due=Decimal("300.00"),
+        )
+        settled = replace(owing, status=RentalStatus.SETTLED, balance_due=Decimal("0.00"))
+        administrator = an_actor(UserRole.ADMIN)
+        assert rental_view_for(administrator, owing, FIRST_DAY, POLICY).settlement_waiting_on is (
+            SettlementWait.BALANCE_PAYMENT
+        )
+        assert rental_view_for(administrator, settled, FIRST_DAY, POLICY).settlement_waiting_on is (
+            None
+        )
+
+    @pytest.mark.parametrize(
+        ("today", "days_late", "fee"),
+        [
+            (DUE_BACK_ON, 0, Decimal("0.00")),
+            (date(2026, 3, 14), 2, Decimal("240.00")),
+            (date(2026, 4, 30), 49, Decimal("1680.00")),
+        ],
+    )
+    def test_a_unit_still_out_shows_what_the_policy_would_charge_today(
+        self, today: date, days_late: int, fee: Decimal
+    ) -> None:
+        (item,) = rental_view_for(an_actor(UserRole.ADMIN), a_rental(), today, POLICY).items
+        assert (item.days_late_today, item.late_fee_today) == (days_late, fee)
         assert item.damage_assessment is DamageAssessment.NOT_NEEDED
+
+    def test_a_unit_that_is_back_accrues_nothing_more(self) -> None:
+        back = a_rental(an_item(returned_at=NOW))
+        (item,) = rental_view_for(an_actor(UserRole.ADMIN), back, date(2026, 4, 30), POLICY).items
+        assert (item.days_late_today, item.late_fee_today) == (0, Decimal("0.00"))
 
 
 class TestACheckoutAsTheCounterSeesIt:
