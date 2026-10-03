@@ -7,8 +7,8 @@
  * the status and the total out of sight, and the account screen pushed the
  * whole page wider than the window. Only a real browser can measure that, so
  * the check is here and not among the component tests. The counter's customer
- * lookup, new booking and checkout are checked the same way, because an
- * assistant may hold a phone at the counter.
+ * lookup, new booking, checkout, dashboard, diary and locator are checked the
+ * same way, because an assistant may hold a phone at the counter.
  *
  * This spec does not use the real backend. The screens need a signed in person
  * with bookings and a profile, and a layout check should not depend on what a

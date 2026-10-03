@@ -21,6 +21,9 @@
  *
  * The counter spec needs the customer and checkout routes, and asks a fifth
  * question about those.
+ *
+ * The counter overview spec needs the dashboard, the diary and the asset
+ * locator, and asks a sixth question about those.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -205,6 +208,50 @@ export async function counterRoutesArePresent(request: APIRequestContext): Promi
     if (BACKEND_IS_REQUIRED) {
       throw new Error(
         `${REQUIRE_BACKEND_VARIABLE} is set, so the counter routes have to be there, and ` +
+          `GET ${path} answered ${status}. A skipped spec would hide that.`,
+      )
+    }
+    return false
+  }
+  return true
+}
+
+/** The dashboard, the diary and the locator. The branch and the search do not
+ *  have to match anything. A route that is there refuses a request with no
+ *  token before it looks. */
+const OVERVIEW_PROBE_PATHS: readonly string[] = [
+  '/api/counter/dashboard?branchCode=CBD',
+  '/api/counter/diary?branchCode=CBD',
+  '/api/assets/locator?q=probe',
+]
+
+/** The reason shown beside a skipped counter overview spec in the report. */
+export const OVERVIEW_ROUTES_NEEDED =
+  `This needs the counter overview routes on the real backend, and one of ${OVERVIEW_PROBE_PATHS.join(', ')} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that has the ' +
+  'counter dashboard, the branch diary and the asset locator.'
+
+/**
+ * Ask whether the backend has the counter overview routes.
+ *
+ * I ask each of the three with no token. A backend that has a route refuses
+ * that with a 401, which is an answer from the route and so proves it exists.
+ * A backend that does not have it answers 404 or 405. The spec signs a counter
+ * assistant in, so the session routes have to be there as well.
+ *
+ * @returns True only when the backend is healthy, has the session routes, and
+ *   all three overview routes answered for themselves.
+ */
+export async function overviewRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await sessionRoutesArePresent(request))) return false
+  for (const path of OVERVIEW_PROBE_PATHS) {
+    const response = await request.get(path, { timeout: HEALTH_TIMEOUT_MS })
+    const status = response.status()
+    const present = !ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM
+    if (present) continue
+    if (BACKEND_IS_REQUIRED) {
+      throw new Error(
+        `${REQUIRE_BACKEND_VARIABLE} is set, so the counter overview routes have to be there, and ` +
           `GET ${path} answered ${status}. A skipped spec would hide that.`,
       )
     }

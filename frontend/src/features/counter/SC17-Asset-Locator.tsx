@@ -1,84 +1,75 @@
 /**
  * SC-17 Asset Locator.
  *
- * The client's second complaint, answered directly: staff cannot tell which
- * branch a unit is at without ringing round. Type a tag or a model name and
- * the answer to "where is the plate compactor" is on screen, across all three
- * branches, with what state the unit is in and who has it.
+ * The client's second complaint, answered directly. Staff cannot tell which
+ * branch a unit is at without ringing round. Type a tag or part of a model
+ * name and the answer is on the screen, across all three branches, with the
+ * state each unit is in and the day it is due back when it is out.
  *
- * Deliberately read only. Nothing here changes anything, which is why it can
- * be used one handed while someone is on the phone.
+ * It is read only and needs no branch. Nothing here changes anything, which is
+ * why it can be used one handed while someone is holding on the phone.
+ *
+ * The search runs on the server from two characters, a moment after the last
+ * key, so it never runs on every keystroke. The search and the page live in
+ * the address, so a reload brings the same results back. A page in the address
+ * that is not a whole number from one falls back to the first.
  */
 
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { MapPin, Search, X } from 'lucide-react'
-import { branches } from '../../shared/fixtures'
-import type { AssetStatus, BranchCode } from '../../shared/types'
-import { humanise } from '../../shared/format'
-import {
-  Card,
-  DataTable,
-  EmptyState,
-  PageHeader,
-  StatTile,
-  StatusPill,
-} from '../../shared/ui'
-import { LOCATED_ASSETS } from './SC17-locator-data'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Search, X } from 'lucide-react'
+import { MAX_LOCATOR_SEARCH_LENGTH, MIN_LOCATOR_SEARCH_LENGTH } from '../../shared/api/locator'
+import { Field, PageHeader } from '../../shared/ui'
+import { FIRST_PAGE, UnitResults } from './SC17-Unit-Results'
 
-type BranchFilter = 'ALL' | BranchCode
-type StateFilter = 'ALL' | AssetStatus
+/** How long the search waits after the last key before it runs. */
+const SEARCH_DEBOUNCE_MS = 300
 
-const BRANCH_OPTIONS: { code: BranchFilter; name: string }[] = [
-  { code: 'ALL', name: 'All three branches' },
-  ...branches.map((branch) => ({ code: branch.code as BranchFilter, name: branch.name })),
-]
+const QUERY_PARAMETER = 'q'
+const PAGE_PARAMETER = 'page'
 
-const STATE_FILTERS: { value: StateFilter; label: string }[] = [
-  { value: 'ALL', label: 'Any state' },
-  { value: 'AVAILABLE', label: 'On the shelf' },
-  { value: 'RESERVED', label: 'Held for a booking' },
-  { value: 'ON_HIRE', label: 'Out on hire' },
-  { value: 'QUARANTINED', label: 'Quarantined' },
-  { value: 'MAINTENANCE', label: 'In the workshop' },
-  { value: 'RETIRED', label: 'Retired' },
-]
+function readPage(value: string | null): number {
+  const page = Number.parseInt(value ?? '', 10)
+  return Number.isInteger(page) && page >= FIRST_PAGE ? page : FIRST_PAGE
+}
 
 export default function AssetLocator() {
-  const [query, setQuery] = useState('')
-  const [branchFilter, setBranchFilter] = useState<BranchFilter>('ALL')
-  const [stateFilter, setStateFilter] = useState<StateFilter>('ALL')
+  const [params, setParams] = useSearchParams()
+  const searched = (params.get(QUERY_PARAMETER) ?? '').trim()
+  const page = readPage(params.get(PAGE_PARAMETER))
+  const resultsRef = useRef<HTMLElement>(null)
 
-  const results = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    return LOCATED_ASSETS.filter((row) => {
-      if (branchFilter !== 'ALL' && row.branchCode !== branchFilter) return false
-      if (stateFilter !== 'ALL' && row.status !== stateFilter) return false
-      if (!needle) return true
-      return [row.tag, row.modelLabel, row.categoryName, row.sku]
-        .join(' ')
-        .toLowerCase()
-        .includes(needle)
-    }).sort((a, b) => {
-      const needleLower = query.trim().toLowerCase()
-      const aExact = a.tag.toLowerCase() === needleLower ? 0 : 1
-      const bExact = b.tag.toLowerCase() === needleLower ? 0 : 1
-      return aExact - bExact || a.tag.localeCompare(b.tag)
-    })
-  }, [query, branchFilter, stateFilter])
+  /** Write the search and the page to the address. A default is left out. */
+  const show = useCallback(
+    (q: string, nextPage: number) => {
+      const written = new URLSearchParams()
+      if (q) written.set(QUERY_PARAMETER, q)
+      if (nextPage > FIRST_PAGE) written.set(PAGE_PARAMETER, String(nextPage))
+      setParams(written, { replace: true })
+    },
+    [setParams],
+  )
 
-  const onShelf = results.filter((r) => r.status === 'AVAILABLE').length
-  const onHire = results.filter((r) => r.status === 'ON_HIRE').length
-  const inWorkshop = results.filter(
-    (r) => r.status === 'QUARANTINED' || r.status === 'MAINTENANCE',
-  ).length
+  // The box holds what is being typed and the address holds what was last
+  // searched. When the address changes from somewhere else, the box follows.
+  const [draft, setDraft] = useState(searched)
+  const [lastSearched, setLastSearched] = useState(searched)
+  if (searched !== lastSearched) {
+    setLastSearched(searched)
+    if (searched !== draft.trim()) setDraft(searched)
+  }
+  useEffect(() => {
+    const typed = draft.trim()
+    if (typed === searched) return
+    const timer = window.setTimeout(() => show(typed, FIRST_PAGE), SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [draft, searched, show])
 
-  const filtered = query.trim() !== '' || branchFilter !== 'ALL' || stateFilter !== 'ALL'
-
-  function clearEverything() {
-    setQuery('')
-    setBranchFilter('ALL')
-    setStateFilter('ALL')
+  function goToPage(next: number) {
+    show(searched, next)
+    // The new page replaces the list, so focus goes to the top of it and a
+    // keyboard user reads the new page from its first unit.
+    resultsRef.current?.focus()
   }
 
   return (
@@ -89,156 +80,43 @@ export default function AssetLocator() {
         subtitle="Search any asset tag or model across all three branches. Nothing on this screen changes anything, so it is safe to use while you are on the phone."
       />
 
-      <Card className="mb-lg">
-        <div className="flex flex-col gap-md">
-          <div>
-            <label className="field-label" htmlFor="locator-search">
-              Asset tag or model
-            </label>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-sm top-1/2 h-5 w-5 -translate-y-1/2 text-slate-faint"
-                aria-hidden="true"
-              />
-              <input
-                id="locator-search"
-                type="search"
-                className="field-input pl-[2.5rem]"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="TSH-PC-0021, or plate compactor"
-                autoComplete="off"
-              />
-            </div>
-            <p className="field-help">
-              Part of a tag works too. Searching "compactor" finds every one on
-              the fleet.
-            </p>
-          </div>
-
-          <fieldset className="min-w-0">
-            <legend className="field-label">Branch</legend>
-            <div className="mt-xs flex flex-wrap gap-sm">
-              {BRANCH_OPTIONS.map((option) => {
-                const active = branchFilter === option.code
-                return (
-                  <button
-                    key={option.code}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setBranchFilter(option.code)}
-                    className={`btn px-md ${
-                      active
-                        ? 'bg-accent font-semibold text-accent-ink'
-                        : 'border border-line bg-surface text-ink hover:bg-muted'
-                    }`}
-                  >
-                    {option.name}
-                  </button>
-                )
-              })}
-            </div>
-          </fieldset>
-
-          <div className="flex flex-wrap items-end gap-md">
-            <div className="min-w-[14rem] flex-1">
-              <label className="field-label" htmlFor="locator-state">
-                State
-              </label>
-              <select
-                id="locator-state"
-                className="field-input cursor-pointer"
-                value={stateFilter}
-                onChange={(e) => setStateFilter(e.target.value as StateFilter)}
+      <div className="mb-lg max-w-xl">
+        <Field
+          label="Asset tag or model"
+          htmlFor="locator-search"
+          help={`Part of a tag works too, and "compactor" finds every compactor on the fleet. ${MIN_LOCATOR_SEARCH_LENGTH} characters or more.`}
+        >
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-md top-1/2 h-5 w-5 -translate-y-1/2 text-slate-faint"
+              aria-hidden="true"
+            />
+            <input
+              id="locator-search"
+              type="search"
+              className="field-input pl-[2.75rem] pr-[3rem]"
+              value={draft}
+              maxLength={MAX_LOCATOR_SEARCH_LENGTH}
+              placeholder="TSH-PC-0021, or plate compactor"
+              autoComplete="off"
+              onChange={(event) => setDraft(event.target.value)}
+              aria-describedby="locator-search-help"
+            />
+            {draft.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setDraft('')}
+                className="absolute right-xs top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-slate-soft transition-colors duration-200 hover:bg-muted hover:text-ink"
               >
-                {STATE_FILTERS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {filtered && (
-              <button type="button" className="btn-secondary px-md" onClick={clearEverything}>
-                <X className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Clear the search
+                <X className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Clear the search</span>
               </button>
             )}
           </div>
-        </div>
-      </Card>
-
-      <p aria-live="polite" className="sr-only">
-        {results.length} {results.length === 1 ? 'unit' : 'units'} found
-      </p>
-
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Units matching" value={results.length} />
-        <StatTile label="On the shelf" value={onShelf} tone="good" hint="Can go out today" />
-        <StatTile label="Out on hire" value={onHire} hint="With a customer now" />
-        <StatTile
-          label="Workshop hold"
-          value={inWorkshop}
-          tone={inWorkshop > 0 ? 'warn' : 'default'}
-          hint="Quarantined or in for repair"
-        />
+        </Field>
       </div>
 
-      {results.length === 0 ? (
-        <div className="card">
-          <EmptyState
-            title="Nothing matches that search"
-            body="Check the tag against the plate on the unit, or search by model instead. Widening the branch filter to all three branches often finds it."
-            action={
-              <button type="button" className="btn-primary px-md" onClick={clearEverything}>
-                Clear the search and start again
-              </button>
-            }
-          />
-        </div>
-      ) : (
-        <DataTable
-          caption="Every unit matching the search, with its branch and current state"
-          columns={['Tag', 'Model', 'Branch', 'State', 'Grade', 'Where it is now']}
-        >
-          {results.map((row) => (
-            <tr key={row.id} className="transition-colors duration-200 hover:bg-muted">
-              <th scope="row" className="td whitespace-nowrap font-mono font-medium text-ink">
-                {row.tag}
-              </th>
-              <td className="td text-ink">
-                {row.modelLabel}
-                {row.meterHours !== undefined && (
-                  <span className="tabular block text-xs text-slate-soft">
-                    {row.meterHours} hours on the meter
-                  </span>
-                )}
-              </td>
-              <td className="td whitespace-nowrap text-ink">
-                <span className="flex items-center gap-xs">
-                  <MapPin className="h-4 w-4 shrink-0 text-slate-faint" aria-hidden="true" />
-                  {row.branchName}
-                </span>
-              </td>
-              <td className="td">
-                <StatusPill status={row.status} label={humanise(row.status)} />
-              </td>
-              <td className="td tabular text-ink">{row.condition}</td>
-              <td className="td text-slate-soft">
-                {row.whereabouts}
-                {row.late && (
-                  <Link
-                    to="/counter/overdue"
-                    className="mt-xs flex min-h-[2.75rem] items-center font-medium text-status-overdue underline"
-                  >
-                    Overdue, open the worklist
-                  </Link>
-                )}
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-      )}
+      <UnitResults searched={searched} page={page} regionRef={resultsRef} onPage={goToPage} />
     </>
   )
 }
