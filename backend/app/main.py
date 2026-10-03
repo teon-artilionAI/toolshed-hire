@@ -70,7 +70,7 @@ from app.logging_config import configure_logging
 logger = logging.getLogger(__name__)
 
 APPLICATION_TITLE = "Toolshed Hire API"
-APPLICATION_VERSION = "0.2.0"
+APPLICATION_VERSION = "0.3.0"
 APPLICATION_DESCRIPTION = (
     "Rental system for Toolshed Hire. Availability is the allocation of specific "
     "tagged assets over half open date periods, enforced by a PostgreSQL GiST "
