@@ -153,7 +153,12 @@ class ChargeStatus(DomainEnum):
 
 
 class DamageSeverity(DomainEnum):
-    """How bad the damage is. WRITE_OFF retires the unit (BR-38)."""
+    """How bad the damage is, as the counter judged it when the report was filed.
+
+    A WRITE_OFF severity does not retire the unit by itself. Only a report the
+    owner resolves as WRITTEN_OFF does that (BR-38), so the decision to retire
+    a unit is always the owner's.
+    """
 
     MINOR = "MINOR"
     MAJOR = "MAJOR"

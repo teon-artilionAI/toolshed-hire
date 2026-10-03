@@ -4351,7 +4351,7 @@
           "WRITE_OFF"
         ],
         "title": "DamageSeverity",
-        "description": "How bad the damage is. WRITE_OFF retires the unit (BR-38)."
+        "description": "How bad the damage is, as the counter judged it when the report was filed.\n\nA WRITE_OFF severity does not retire the unit by itself. Only a report the\nowner resolves as WRITTEN_OFF does that (BR-38), so the decision to retire\na unit is always the owner's."
       },
       "DamageStatus": {
         "type": "string",
