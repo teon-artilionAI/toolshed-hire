@@ -201,6 +201,9 @@ test.describe('a booking at the counter and its return against the real backend'
 
   test('a customer opens their account and finds the hire history', async ({ page }) => {
     await signInAsCustomer(page, SECOND_CUSTOMER_EMAIL)
+    // The sign in has to finish before the page is left, or the refresh cookie
+    // it sets is lost with the request and the account asks for a sign in.
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
     // SC-09. The history is read from the API and says how many hires there
     // are, or that there are none yet. No tag is ever shown to a customer.

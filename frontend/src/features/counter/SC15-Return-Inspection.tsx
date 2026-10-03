@@ -34,7 +34,7 @@ import { OVERDUE_PATH } from './counter-links'
 import { isNotFound } from './counter-refusal'
 import { ReturnedItem } from './SC15-ItemInspection'
 import { ReturnForm } from './SC15-Return-Form'
-import { itemsOut } from './SC15-return-model'
+import { isLost, itemsOut } from './SC15-return-model'
 import { SettlementSummary } from './SC15-SettlementSummary'
 
 const TITLE = 'Return and condition inspection'
@@ -111,14 +111,18 @@ function ReturnView({
 }) {
   const out = itemsOut(rental)
   const back = rental.items.filter((item) => item.returnedAt !== null)
+  // The server moves a hire to overdue when it lists hires, not when it reads
+  // one, so a hire opened by its reference can still say open. The days late
+  // of each unit still out are worked out on every read, so they decide it too.
+  const overdue = rental.status === 'OVERDUE' || out.some((item) => item.daysLateToday > 0)
   return (
     <div className="flex flex-col gap-lg">
       <div className="grid gap-md sm:grid-cols-3">
         <StatTile
           label="Due back"
           value={formatDate(rental.dueBackOn)}
-          tone={rental.status === 'OVERDUE' ? 'bad' : 'default'}
-          hint={rental.status === 'OVERDUE' ? 'Overdue' : `Out since ${formatDate(rental.from)}`}
+          tone={overdue ? 'bad' : 'default'}
+          hint={overdue ? 'Overdue' : `Out since ${formatDate(rental.from)}`}
         />
         <StatTile
           label="Units still out"
@@ -150,7 +154,7 @@ function ReturnView({
       )}
 
       {back.length > 0 && (
-        <Card title="Units already back">
+        <Card title={back.some(isLost) ? 'Units back or recorded as lost' : 'Units already back'}>
           <ul className="flex flex-col gap-md">
             {back.map((item) => (
               <li key={item.id}>

@@ -21,9 +21,14 @@
  * The booking journey cancels what it booked, so the unit is free for the next
  * run. If it fails before that, a confirmed reservation is left on the seeded
  * customer for those dates, and the next run takes whichever model is free.
+ *
+ * The hold counts down with the browser's clock to an instant on the API's, so
+ * when the API runs on a pinned clock the browser's is started at the same
+ * time. api-clock.ts says how.
  */
 
 import { expect, test } from '@playwright/test'
+import { startBrowserClockWithTheApi } from './api-clock.ts'
 import { blockingViolations } from './axe.ts'
 import {
   BACKEND_NEEDED,
@@ -118,8 +123,10 @@ test.describe('the hire basket against the real backend', () => {
 })
 
 test.describe('a booking against the real backend', () => {
-  test.beforeEach(async ({ request }) => {
+  test.beforeEach(async ({ page, request }) => {
     test.skip(!(await reservationRoutesArePresent(request)), RESERVATION_ROUTES_NEEDED)
+    // The hold counts down to an instant on the API's clock.
+    await startBrowserClockWithTheApi(page)
   })
 
   test('a customer adds a model, reviews, holds, confirms, finds the booking and cancels it', async ({

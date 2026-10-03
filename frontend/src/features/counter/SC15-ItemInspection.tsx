@@ -1,6 +1,7 @@
 /**
- * One unit on SC-15. A unit still out, being inspected on its way back in, or
- * a unit that is already back.
+ * One unit on SC-15. A unit still out, being inspected on its way back in, a
+ * unit that is already back, or a unit recorded as lost from the overdue
+ * worklist.
  *
  * A unit still out says what the late fee is if it comes back today. That is
  * the server's figure, `lateFeeToday` for `daysLateToday` days, and the screen
@@ -17,12 +18,12 @@ import { CheckCircle2, TriangleAlert } from 'lucide-react'
 import { MAX_ACCESSORIES_LENGTH } from '../../shared/api/checkout'
 import type { RentalCharge, RentalItem } from '../../shared/api/contract'
 import { CONDITION_GRADES } from '../../shared/api/rental-read'
-import { money } from '../../shared/format'
+import { isNegativeMoney, money, unsignedMoney } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Notice, StatusPill } from '../../shared/ui'
 import { CheckRow, SelectInput, TextInput } from './counter-fields'
-import { CONDITION_GRADE_LABEL, countOf } from './counter-labels'
-import { isWorse, itemControlId, itemLabel } from './SC15-return-model'
+import { CHARGE_TYPE_LABEL, CONDITION_GRADE_LABEL, countOf } from './counter-labels'
+import { isLost, isWorse, itemControlId, itemLabel } from './SC15-return-model'
 import type { ItemDraft, ReturnErrors } from './SC15-return-model'
 
 const GRADE_OPTIONS = CONDITION_GRADES.map((grade) => ({ value: grade, label: CONDITION_GRADE_LABEL[grade] }))
@@ -164,8 +165,42 @@ export function ItemInspection({
   )
 }
 
-/** A unit that is already back, with when, how and what it was charged. */
+/**
+ * A unit recorded as lost, with when and what the loss charged. The charges
+ * are the server's, the ones that carry this unit's id, other than its hire.
+ */
+function LostItem({ item, charges }: { item: RentalItem; charges: readonly RentalCharge[] }) {
+  const forTheLoss = charges.filter((charge) => charge.rentalItemId === item.id && charge.type !== 'HIRE')
+  return (
+    <div className="min-w-0 rounded-lg border border-line bg-muted p-md">
+      <div className="flex flex-wrap items-center justify-between gap-sm">
+        <p className="font-mono text-sm font-semibold text-ink">{itemLabel(item)}</p>
+        <StatusPill status="LOST" label="Recorded as lost" />
+      </div>
+      <p className="mt-xs break-words text-sm text-ink">
+        {item.modelName}. Recorded as lost {item.returnedAt === null ? '' : branchDateTime(item.returnedAt)},{' '}
+        {countOf(item.daysLate, 'day', 'days')} after it was due back.
+      </p>
+      {forTheLoss.length > 0 && (
+        <ul aria-label={`Charges for the loss of ${itemLabel(item)}`} className="mt-xs flex flex-col gap-xs text-sm">
+          {forTheLoss.map((charge) => (
+            <li key={charge.id} className="tabular break-words text-slate-soft">
+              {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}{' '}
+              {isNegativeMoney(charge.amountIncVat)
+                ? `${unsignedMoney(charge.amountIncVat)} back to the customer`
+                : money(charge.amountIncVat)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** A unit that is already back, with when, how and what it was charged. A unit
+ *  recorded as lost is closed too, and says so instead. */
 export function ReturnedItem({ item, charges }: { item: RentalItem; charges: readonly RentalCharge[] }) {
+  if (isLost(item)) return <LostItem item={item} charges={charges} />
   const lateFees = charges.filter((charge) => charge.type === 'LATE_FEE' && charge.rentalItemId === item.id)
   return (
     <div className="min-w-0 rounded-lg border border-line bg-muted p-md">

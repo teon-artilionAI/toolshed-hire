@@ -277,6 +277,26 @@ export interface paths {
         patch: operations["patch_profile_api_me_profile_patch"];
         trace?: never;
     };
+    "/api/me/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed in customer's own rentals, newest first
+         * @description Return one page of the caller's own rentals, with no asset tag on any item.
+         */
+        get: operations["list_my_rentals_api_me_rentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers": {
         parameters: {
             query?: never;
@@ -526,6 +546,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List rentals at any branch, the overdue first
+         * @description Return one page of rentals, the most overdue first and then the newest.
+         *
+         *     Raises:
+         *         ValidationFailure: If the branch code is not the code of a trading
+         *             branch. HTTP 422, naming `branchCode`.
+         */
+        get: operations["list_rentals_api_rentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rentals/{id}": {
         parameters: {
             query?: never;
@@ -543,6 +587,85 @@ export interface paths {
         get: operations["read_rental_api_rentals__id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take units of a rental back, and settle the deposit when the last is back
+         * @description Record the return of the named units in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         *         BranchScopeError: If counter staff take units back at another branch. HTTP 403.
+         *         StateTransitionError: If a unit is already back. HTTP 409.
+         *         ValidationFailure: If a unit is listed twice, is not on the rental or
+         *             has a meter reading below the one it went out with. HTTP 422,
+         *             naming the field.
+         */
+        post: operations["post_return_api_rentals__id__returns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}/items/{itemId}/loss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a unit more than fourteen days late as lost
+         * @description Record the loss of one unit in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental, or the unit is not on it. HTTP 404.
+         *         BranchScopeError: If counter staff record a loss at another branch. HTTP 403.
+         *         StateTransitionError: If the unit is already back or not yet late
+         *             enough. HTTP 409.
+         */
+        post: operations["post_loss_api_rentals__id__items__itemId__loss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rentals/{id}/balance-payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record the simulated payment of a rental's balance
+         * @description Record the payment and settle the rental in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         *         BranchScopeError: If counter staff record a payment at another branch. HTTP 403.
+         *         StateTransitionError: If nothing is owed. HTTP 409.
+         */
+        post: operations["post_balance_payment_api_rentals__id__balance_payment_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -869,6 +992,14 @@ export interface components {
             pageSize: number;
             /** Total */
             total: number;
+        };
+        /**
+         * BalancePaymentRequest
+         * @description The simulated payment of a balance, by the reference the customer was given.
+         */
+        BalancePaymentRequest: {
+            /** Paymentreference */
+            paymentReference: string;
         };
         /**
          * BranchAvailabilityResponse
@@ -1823,6 +1954,20 @@ export interface components {
             damageAssessment: components["schemas"]["DamageAssessment"];
         };
         /**
+         * RentalPageResponse
+         * @description One page of rentals.
+         */
+        RentalPageResponse: {
+            /** Items */
+            items: components["schemas"]["RentalResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * RentalResponse
          * @description One rental, as the caller is allowed to see it.
          */
@@ -2040,6 +2185,37 @@ export interface components {
             itemCount: number;
             /** Summary */
             summary: string;
+        };
+        /**
+         * ReturnItemRequest
+         * @description What the counter records about one unit as it comes back.
+         */
+        ReturnItemRequest: {
+            /**
+             * Rentalitemid
+             * Format: uuid
+             */
+            rentalItemId: string;
+            conditionIn: components["schemas"]["ConditionGrade"];
+            /** Hourmeterin */
+            hourMeterIn?: number | null;
+            /** Accessoriesin */
+            accessoriesIn?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Flaggedfordamage
+             * @default false
+             */
+            flaggedForDamage: boolean;
+        };
+        /**
+         * ReturnRequest
+         * @description One or more units of a rental that came back.
+         */
+        ReturnRequest: {
+            /** Items */
+            items: components["schemas"]["ReturnItemRequest"][];
         };
         /**
          * SettlementWait
@@ -2597,6 +2773,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_my_rentals_api_me_rentals_get: {
+        parameters: {
+            query?: {
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many rentals a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3223,6 +3433,48 @@ export interface operations {
             };
         };
     };
+    list_rentals_api_rentals_get: {
+        parameters: {
+            query?: {
+                /** @description A branch code. Only rentals that went out there. */
+                branchCode?: string | null;
+                /** @description Only rentals in this status. */
+                status?: components["schemas"]["RentalStatus"] | null;
+                /** @description Only rentals with a unit out past its due date. */
+                overdueOnly?: boolean;
+                /** @description Only this customer's. */
+                customerProfileId?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many rentals a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalPageResponse"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_rental_api_rentals__id__get: {
         parameters: {
             query?: never;
@@ -3260,6 +3512,193 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_return_api_rentals__id__returns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A unit named is already back, so nothing was returned. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_loss_api_rentals__id__items__itemId__loss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+                /** @description The key of the rental item. */
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental, or the unit is not on it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The unit is already back, or it is not yet more than fourteen days past its due date, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_balance_payment_api_rentals__id__balance_payment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BalancePaymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Nothing is owed on the rental, so there is no balance to pay. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

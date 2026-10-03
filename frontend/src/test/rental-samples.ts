@@ -121,11 +121,12 @@ export const SETTLED_HIRE: Rental = {
   settlementWaitingOn: null,
 }
 
-/** Both units back, and the charges came to more than the deposit. */
+/** Both units back, and the charges came to more than the deposit. A charge the
+ *  deposit covered only in part stays pending until the balance is paid. */
 export const OWES_A_BALANCE: Rental = {
   ...SETTLED_HIRE,
   status: 'RETURNED',
-  charges: [DEPOSIT_HOLD, LATE_FEE_CHARGE],
+  charges: [DEPOSIT_HOLD, { ...LATE_FEE_CHARGE, status: 'PENDING' }],
   depositRefunded: '0.00',
   balanceDue: '777.77',
   settledAt: null,
@@ -146,16 +147,43 @@ export const ESCALATED_HIRE: Rental = {
   items: OVERDUE_HIRE.items.map((item) => ({ ...item, daysLateToday: 16, lateFeeToday: '1919.19' })),
 }
 
-/** The hire the loss of the first unit answers with. */
+/** When the loss of the first unit was recorded. */
+export const LOST_AT = '2026-03-29T09:05:00+02:00'
+
+/**
+ * The hire the loss of the first unit answers with. The API closes a lost unit
+ * with the time of the loss and no grade, and the charges for it carry its id.
+ * The second unit is still out past its due date, so the hire stays overdue.
+ */
 export const AFTER_THE_LOSS: Rental = {
   ...ESCALATED_HIRE,
+  items: [
+    { ...ESCALATED_HIRE.items[0], returnedAt: LOST_AT, daysLate: 16, daysLateToday: 0, lateFeeToday: '0.00' },
+    ESCALATED_HIRE.items[1],
+  ],
   charges: [
     DEPOSIT_HOLD,
-    charge('4', { type: 'LATE_FEE', description: 'Fourteen days of late fee', amountIncVat: '1680.00', rentalItemId: FIRST_ITEM.id }),
+    charge('4', { type: 'LATE_FEE', description: 'Fourteen days of late fee', amountIncVat: '1680.00', status: 'PENDING', rentalItemId: FIRST_ITEM.id }),
     charge('5', { type: 'DEPOSIT_FORFEIT', description: 'Deposit forfeited for TSH-PC-0007', vatRate: '0.00', amountIncVat: '1500.00', rentalItemId: FIRST_ITEM.id }),
-    charge('6', { type: 'DAMAGE_RECOVERY', description: 'Recovery of TSH-PC-0007', amountIncVat: '8888.88', rentalItemId: FIRST_ITEM.id }),
+    charge('6', { type: 'DAMAGE_RECOVERY', description: 'Recovery of TSH-PC-0007', amountIncVat: '8888.88', status: 'PENDING', rentalItemId: FIRST_ITEM.id }),
   ],
+  balanceDue: '0.00',
+}
+
+/**
+ * The hire the loss answers with when the lost unit was the last one out. The
+ * server settles the deposit as it records the loss, and what the deposit could
+ * not cover is the balance due.
+ */
+export const LOST_THE_LAST_UNIT: Rental = {
+  ...AFTER_THE_LOSS,
+  status: 'RETURNED',
+  items: [AFTER_THE_LOSS.items[0], SETTLED_HIRE.items[1]],
+  returnedAt: LOST_AT,
+  depositWithheld: '5555.55',
   balanceDue: '6543.21',
+  canReturn: false,
+  settlementWaitingOn: 'BALANCE_PAYMENT',
 }
 
 /** What the server writes on the late fee for a customer, who is never told a tag. */

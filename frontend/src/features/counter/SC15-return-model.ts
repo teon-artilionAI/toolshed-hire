@@ -58,6 +58,17 @@ export function itemsOut(rental: Rental): RentalItem[] {
   return rental.items.filter((item) => item.returnedAt === null)
 }
 
+/**
+ * Whether a unit was recorded as lost rather than taken back.
+ *
+ * The API closes a lost unit with the time the loss was recorded and no grade,
+ * and an item carries no flag that says lost. Every return carries a grade, so
+ * a closed unit with none is a lost one. Its loss charges carry its id.
+ */
+export function isLost(item: RentalItem): boolean {
+  return item.returnedAt !== null && item.conditionIn === null
+}
+
 /** How a unit is named at the counter. Its tag, or its model when there is none. */
 export function itemLabel(item: RentalItem): string {
   return item.assetTag ?? item.modelName

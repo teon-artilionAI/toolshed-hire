@@ -4,8 +4,8 @@
  *
  * The screen reads the hire by the key in the address. Loading, failed and not
  * found, then a hire with every unit out, the late fee of each unit as the
- * server sent it, a hire partly back, one settled, one that owes a balance and
- * one waiting for a damage report. Taking units back is in
+ * server sent it, a hire partly back, one with a unit recorded as lost, one
+ * settled, one that owes a balance and one waiting for a damage report. Taking units back is in
  * SC15-Return-Writes.test.tsx, and what the files share is in SC15-test-kit.tsx.
  */
 
@@ -18,6 +18,7 @@ import { TEST_NOW } from '../../test/catalogue-samples'
 import { RENTAL, RENTAL_ID, RENTAL_REFERENCE } from '../../test/counter-samples'
 import { SCREEN_WAIT } from '../../test/render-app'
 import {
+  AFTER_THE_LOSS,
   LATE_FEE_CHARGE,
   ODD_FEE_TODAY,
   OVERDUE_HIRE,
@@ -106,6 +107,15 @@ describe('a hire with every unit out', () => {
     expect(screen.getByText('Overdue', { selector: '.pill' })).toBeVisible()
   })
 
+  it('says the hire is overdue from the days late of its units, before the server has swept it to overdue', async () => {
+    await openReturn(showing({ ...OVERDUE_HIRE, status: 'OPEN' }))
+    await findUnitsStillOut()
+
+    expect(screen.getByText('Out with the customer', { selector: '.pill' })).toBeVisible()
+    expect(screen.getByText('Overdue', { selector: 'p' })).toBeVisible()
+    expect(screen.queryByText(/^Out since /)).not.toBeInTheDocument()
+  })
+
   it('opens the grade at the one each unit went out at, and the meter at its reading then', async () => {
     const { user } = await openReturn(showing(RENTAL))
     await findUnitsStillOut()
@@ -134,6 +144,23 @@ describe('a hire partly back', () => {
   })
 })
 
+describe('a hire with a unit recorded as lost', () => {
+  it('says the unit is lost and not back, with what the loss charged, and offers only the one still out', async () => {
+    await openReturn(showing(AFTER_THE_LOSS))
+    const out = await findUnitsStillOut()
+
+    expect(within(out).queryByRole('group', { name: 'TSH-PC-0007' })).not.toBeInTheDocument()
+    expect(within(out).getByRole('group', { name: 'TSH-PC-0011' })).toBeVisible()
+    const closed = screen.getByText('Units back or recorded as lost').closest('section') as HTMLElement
+    expect(within(closed).getByText('Recorded as lost', { selector: '.pill' })).toBeVisible()
+    expect(within(closed).getByText(/Recorded as lost 29 Mar 2026 at 09:05, 16 days after it was due back\./)).toBeVisible()
+    expect(within(closed).queryByText(/no grade on record/)).not.toBeInTheDocument()
+    const charged = within(closed).getByRole('list', { name: 'Charges for the loss of TSH-PC-0007' })
+    expect(within(charged).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(charged).getByText(new RegExp(`Recovery of TSH-PC-0007 ${money('8888.88')}`))).toBeVisible()
+  })
+})
+
 describe('a hire with every unit back', () => {
   it('shows the settlement exactly as the server worked it out, with why each rand was withheld', async () => {
     await openReturn(showing(SETTLED_HIRE))
@@ -145,6 +172,7 @@ describe('a hire with every unit back', () => {
     expect(settlementLine('Released to the customer')).toContain(money('4999.99'))
     expect(settlementLine('Balance due')).toContain(money('0.00'))
     expect(screen.getByText(`Late fee. ${LATE_FEE_CHARGE.description}`)).toBeVisible()
+    expect(screen.getByText('Settled', { selector: 'span' })).toBeVisible()
     expect(screen.getByText(/Nothing is due\./)).toBeVisible()
     expect(document.body.textContent).not.toMatch(/-\s?R\s\d|R\s-\d/)
   })
@@ -157,6 +185,8 @@ describe('a hire with every unit back', () => {
     expect(screen.getByRole('form', { name: 'Pay the balance' })).toBeVisible()
     expect(screen.getByLabelText('Payment reference')).toBeVisible()
     expect(screen.getByRole('button', { name: /^Record the payment of R 777[,.]77$/ })).toBeEnabled()
+    const charged = screen.getByText('Charged against the deposit').closest('div') as HTMLElement
+    expect(within(charged).getByText('Not settled yet')).toBeVisible()
   })
 
   it('says the deposit is waiting for a damage report, and links each unit to its report', async () => {

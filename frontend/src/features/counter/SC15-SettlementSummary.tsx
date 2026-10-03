@@ -1,10 +1,10 @@
 /**
  * The deposit settlement on SC-15, once every unit is back.
  *
- * Every figure is the server's. The deposit held, what was withheld and why,
- * what was released and the balance due are read off the hire, and the reasons
- * for what was withheld are the charges the server raised, with the sentence
- * it wrote for each. Nothing here adds anything up.
+ * Every figure is the server's. The deposit held, what was withheld, what was
+ * released and the balance due are read off the hire. Under them are the
+ * charges the server set against the deposit, with the sentence it wrote for
+ * each and whether it is settled yet. Nothing here adds anything up.
  *
  * The figures are a real table, because they are a column of money read out to
  * a customer. A deposit given back is written as released, never with a bare
@@ -22,7 +22,7 @@ import type { ChargeType, Rental, RentalCharge } from '../../shared/api/contract
 import { isNegativeMoney, isNoMoney, money, unsignedMoney } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Card, DataTable, Notice } from '../../shared/ui'
-import { CHARGE_TYPE_LABEL } from './counter-labels'
+import { CHARGE_STATUS_LABEL, CHARGE_TYPE_LABEL } from './counter-labels'
 import { damageHref } from './counter-links'
 import { BalancePayment } from './SC15-Balance-Payment'
 import { itemLabel } from './SC15-return-model'
@@ -55,16 +55,23 @@ function FigureRow({ label, amount, strong = false }: { label: string; amount: s
   )
 }
 
-function WithheldBecause({ charges }: { charges: readonly RentalCharge[] }) {
-  if (charges.length === 0) return <p className="mt-md text-sm text-slate-soft">Nothing was withheld.</p>
+/**
+ * The charges set against the deposit, each with where it stands. When the
+ * deposit covers them all they are settled with it. When it does not, the
+ * server keeps a charge it covered only in part pending until the balance is
+ * paid, so the list can come to more than was withheld.
+ */
+function ChargedAgainstDeposit({ charges }: { charges: readonly RentalCharge[] }) {
+  if (charges.length === 0) return <p className="mt-md text-sm text-slate-soft">Nothing was charged against the deposit.</p>
   return (
     <div className="mt-md">
-      <h3 className="text-sm font-semibold text-ink">Withheld because</h3>
+      <h3 className="text-sm font-semibold text-ink">Charged against the deposit</h3>
       <ul className="mt-xs flex flex-col gap-xs">
         {charges.map((charge) => (
           <li key={charge.id} className="flex flex-wrap justify-between gap-x-md gap-y-xs rounded bg-muted p-sm text-sm">
             <span className="min-w-0 break-words text-ink">
               {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}
+              <span className="block text-xs text-slate-soft">{CHARGE_STATUS_LABEL[charge.status]}</span>
             </span>
             <span className="tabular font-mono text-ink">{amountInWords(charge.amountIncVat)}</span>
           </li>
@@ -136,7 +143,7 @@ function Settled({ rental }: { rental: Rental }) {
 }
 
 export function SettlementSummary({ rental, onPaid }: { rental: Rental; onPaid: (rental: Rental) => void }) {
-  const withheld = rental.charges.filter((charge) => WITHHOLDING_CHARGES.includes(charge.type))
+  const charged = rental.charges.filter((charge) => WITHHOLDING_CHARGES.includes(charge.type))
   return (
     <Card title="Deposit settlement">
       <Settled rental={rental} />
@@ -146,7 +153,7 @@ export function SettlementSummary({ rental, onPaid }: { rental: Rental; onPaid: 
         <FigureRow label="Released to the customer" amount={money(rental.depositRefunded)} strong />
         <FigureRow label="Balance due" amount={money(rental.balanceDue)} strong />
       </DataTable>
-      <WithheldBecause charges={withheld} />
+      <ChargedAgainstDeposit charges={charged} />
       <Waiting rental={rental} onPaid={onPaid} />
     </Card>
   )

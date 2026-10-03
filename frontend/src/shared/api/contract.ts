@@ -16,8 +16,7 @@
  * contract-account.ts, the counter types are in contract-counter.ts, the
  * counter overview types are in contract-overview.ts, and the returns and
  * settlement types are in contract-returns.ts. All five are passed on from
- * here. The returns types are the one group written by hand, because the
- * document does not describe those routes yet, and that file says why.
+ * here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member

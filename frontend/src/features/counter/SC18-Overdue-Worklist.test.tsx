@@ -22,6 +22,7 @@ import { SCREEN_WAIT, findScreenHeading, renderApp } from '../../test/render-app
 import {
   AFTER_THE_LOSS,
   ESCALATED_HIRE,
+  LOST_THE_LAST_UNIT,
   METERED,
   ODD_FEE_TODAY,
   OVERDUE_HIRE,
@@ -174,10 +175,22 @@ describe('recording a unit as lost', () => {
     const notice = said.closest('[role="status"]') as HTMLElement
     expect(within(notice).getByText(/Deposit forfeited\. Deposit forfeited for TSH-PC-0007/)).toBeVisible()
     expect(within(notice).getByText(new RegExp(`Recovery charge\\. Recovery of TSH-PC-0007 ${money('8888.88')}`))).toBeVisible()
-    expect(within(notice).getByText(/Balance due R 6 543[,.]21/)).toBeVisible()
+    expect(within(notice).getByText(/once the last unit is back\.$/)).toBeVisible()
+    expect(within(notice).queryByText(/Balance due/)).not.toBeInTheDocument()
     expect(network.requestsTo(lossRoute(METERED.id))).toHaveLength(1)
     expect(network.requestsTo(lossRoute(METERED.id))[0].body).toBeUndefined()
     await waitFor(() => expect(network.requestsTo(RENTALS_ROUTE)).toHaveLength(2))
+  })
+
+  it('shows the balance due the server worked out when the lost unit was the last one out', async () => {
+    const { user } = await openWorklist({ ...listing([ESCALATED_HIRE]), [lossRoute(METERED.id)]: () => jsonResponse(LOST_THE_LAST_UNIT) })
+    await user.click(await screen.findByRole('button', { name: RECORD }, SCREEN_WAIT))
+
+    await user.click(screen.getByRole('button', { name: YES }))
+
+    const said = await screen.findByText(`TSH-PC-0007 on ${RENTAL_REFERENCE} is recorded as lost`, {}, SCREEN_WAIT)
+    const notice = said.closest('[role="status"]') as HTMLElement
+    expect(within(notice).getByText(/The hire is now back\. Balance due R 6 543[,.]21\./)).toBeVisible()
   })
 
   it('shows the server sentence when the unit is not that late any more', async () => {

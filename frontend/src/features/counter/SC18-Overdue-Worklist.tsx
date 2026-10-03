@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import type { RentalPage } from '../../shared/api/contract'
+import type { Rental, RentalPage } from '../../shared/api/contract'
 import { queryPhase } from '../../shared/api/query-phase'
 import type { QueryPhase } from '../../shared/api/query-phase'
 import { rentalQueries } from '../../shared/api/rental-queries'
@@ -53,6 +53,18 @@ function statusLine(phase: QueryPhase, data: RentalPage | undefined, branch: Cou
   return `${countOf(data.total, 'hire is', 'hires are')} overdue at ${branch.name}, most overdue first.`
 }
 
+/**
+ * Where the money stands after a loss. The server works the balance out when
+ * it settles the deposit, which waits for the last unit, so while any unit is
+ * still out its balance due is nought and says nothing yet.
+ */
+function balanceAfterLoss(rental: Rental): string {
+  if (rental.settlementWaitingOn === 'ITEMS_OUT') {
+    return 'The deposit is settled, and any balance worked out, once the last unit is back.'
+  }
+  return `Balance due ${money(rental.balanceDue)}.`
+}
+
 /** What a loss did, from the hire the server answered with. */
 function LossRecorded({ outcome }: { outcome: LossOutcome }) {
   const { rental, label, itemId } = outcome
@@ -60,7 +72,7 @@ function LossRecorded({ outcome }: { outcome: LossOutcome }) {
   return (
     <Notice tone="success" title={`${label} on ${rental.reference} is recorded as lost`}>
       <p>
-        The hire is now {RENTAL_STATUS_LABEL[rental.status].toLowerCase()}. Balance due {money(rental.balanceDue)}.
+        The hire is now {RENTAL_STATUS_LABEL[rental.status].toLowerCase()}. {balanceAfterLoss(rental)}
       </p>
       {charges.length > 0 && (
         <ul className="mt-xs flex flex-col gap-xs">

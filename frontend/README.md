@@ -238,13 +238,11 @@ commits as `../backend/openapi.json`.
   and the 200 the API sends with the same hire when the booking is already
   out. `Rental` is built from both and from the rental route, and the reader in
   `api/rental-read.ts` reads both answers the same way.
-- The returns and settlement routes are not in the document yet. Their bodies,
-  queries and pages are in `api/contract-returns.ts`, and they are the one
-  group written by hand, word for word from the contract. Every one of those
-  routes answers with the generated `Rental`, so the hire itself is still
-  checked against the document. When the backend commits the document with
-  these routes, the hand written types become refinements of the generated
-  ones like the rest, and any difference stops the application compiling.
+- The returns and settlement routes, which are the return, the loss, the
+  balance payment and the two lists of hires, are in the document too. Their
+  bodies, queries and pages are in `api/contract-returns.ts`, built from the
+  generated file the same way. Every one of those routes answers with the
+  `Rental` above, or a page of them.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -727,8 +725,18 @@ out a late fee, a settlement or a balance, and never adds money up.
   happen, including every late fee, and "Yes, take them back" is the one
   request. The answer is the hire as the server now has it. While units are
   still out the screen says the hire is partially returned. Once the last one
-  is back it shows the deposit held, what was withheld and the charges that
-  say why, what was released and the balance due.
+  is back it shows the deposit held, what was withheld, what was released and
+  the balance due, and under them the charges set against the deposit, each
+  with whether it is settled yet. A charge the deposit covered only in part
+  stays pending until the balance is paid, so that list can come to more than
+  was withheld.
+- A unit recorded as lost from `SC-18` comes back from the API closed, with the
+  time of the loss and no grade, and with no flag of its own. The screen reads
+  a closed unit with no grade as lost, says so, and lists the charges that
+  carry its id.
+- The hire reads as overdue when the server says so, or when any unit still out
+  is late today. The server moves a hire to overdue when it lists hires, not
+  when it reads one, so a hire opened by its reference can still say open.
 - When the deposit is waiting on a balance, a form takes the reference of the
   payment and posts it. When it is waiting on a damage report, each unit that
   needs one links to `/counter/damage/<assetTag>?rentalItem=<id>`.
@@ -750,7 +758,9 @@ out a late fee, a settlement or a balance, and never adds money up.
   fourteen days of late fee are charged, the deposit for the unit is
   forfeited, a recovery charge up to the replacement value is raised and the
   unit is marked lost. The answer is shown above the lists with the charges the
-  server raised, so it stays when the list is read again.
+  server raised, so it stays when the list is read again. The server works the
+  balance out only when it settles the deposit, which waits for the last unit,
+  so while another unit is out the answer says that and shows no balance.
 - The branch and age filters, the reminder to ring a customer and the list of
   units out with no hire against them are gone, because the server sends
   nothing for them.
