@@ -156,7 +156,7 @@ class TestWhatAReturnDoesToTheUnit:
         rental = on_hire(booking, world, assistant)
         body = return_body(
             *item_ids(rental),
-            conditionIn="B",
+            conditionIn="A",
             hourMeterIn=HOUR_METER_IN,
             accessoriesIn="  Chuck key  ",
             notes="Dusty",
@@ -165,12 +165,13 @@ class TestWhatAReturnDoesToTheUnit:
 
         (item,) = back["items"]
         assert (item["conditionIn"], item["hourMeterIn"], item["accessoriesIn"]) == (
-            "B", HOUR_METER_IN, "Chuck key"
+            "A", HOUR_METER_IN, "Chuck key"
         )
+        assert item["damageAssessment"] == "NOT_NEEDED"
         unit = session.exec(select(Asset).where(col(Asset.asset_tag) == item["assetTag"])).one()
         session.refresh(unit)
         assert (unit.status, unit.condition_grade.value, unit.hour_meter_reading) == (
-            AssetStatus.AVAILABLE, "B", HOUR_METER_IN
+            AssetStatus.AVAILABLE, "A", HOUR_METER_IN
         )
         allocation = session.exec(
             select(AssetAllocation).where(col(AssetAllocation.asset_id) == unit.id)

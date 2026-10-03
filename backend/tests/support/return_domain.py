@@ -83,6 +83,7 @@ def back(
     hour_meter_in: int | None = None,
     accessories_in: str | None = None,
     notes: str | None = None,
+    flagged_for_damage: bool = False,
 ) -> list[ItemReturn]:
     """Return what the counter records for the items at the positions named, every one if none."""
     chosen = positions or tuple(range(len(hire.rental.items)))
@@ -93,6 +94,7 @@ def back(
             hour_meter_in=hour_meter_in,
             accessories_in=accessories_in,
             notes=notes,
+            flagged_for_damage=flagged_for_damage,
         )
         for position in chosen
     ]

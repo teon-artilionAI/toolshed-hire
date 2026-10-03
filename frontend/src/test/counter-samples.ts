@@ -178,6 +178,10 @@ export const READY_CHECKOUT: ReservationCheckout = {
   rentalId: null,
 }
 
+/** The replacement value copied onto the booking of each unit, which no model
+ *  price list would give. */
+export const REPLACEMENT_VALUES = ['9876.54', '8765.43']
+
 /** The hire the handover makes. */
 export const RENTAL: Rental = {
   id: RENTAL_ID,
@@ -211,6 +215,7 @@ export const RENTAL: Rental = {
     daysLateToday: 0,
     lateFeeToday: '0.00',
     damageAssessment: 'NOT_NEEDED',
+    replacementValue: REPLACEMENT_VALUES[index],
   })),
   charges: [
     {

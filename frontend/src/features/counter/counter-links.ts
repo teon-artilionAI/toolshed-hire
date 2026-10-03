@@ -41,13 +41,27 @@ export const OVERDUE_PATH = '/counter/overdue'
 /** The query parameter SC-16 carries the unit of a hire in. */
 export const RENTAL_ITEM_PARAMETER = 'rentalItem'
 
+/** The query parameter SC-16 carries the key of that hire in, so it can read
+ *  the replacement value of the unit off the hire. */
+export const RENTAL_PARAMETER = 'rental'
+
+/** The unit of a hire that came back damaged, by the keys of both. */
+export interface UnitOfHire {
+  rentalId: string
+  rentalItemId: string
+}
+
 /** SC-15, the return of one hire, by its key. The screen takes a reference
  *  too, but every link to it carries the key. */
 export function rentalHref(rentalId: string): string {
   return `/counter/return/${encodeURIComponent(rentalId)}`
 }
 
-/** SC-16, a damage report for one unit that came back on a hire. */
-export function damageHref(assetTag: string, rentalItemId: string): string {
-  return `/counter/damage/${encodeURIComponent(assetTag)}?${RENTAL_ITEM_PARAMETER}=${encodeURIComponent(rentalItemId)}`
+/** SC-16, the damage reports of one unit, by its tag. With the hire and its
+ *  unit when the report is for one that came back on that hire. */
+export function damageHref(assetTag: string, hire?: UnitOfHire): string {
+  const unit = `/counter/damage/${encodeURIComponent(assetTag)}`
+  if (hire === undefined) return unit
+  const query = new URLSearchParams({ [RENTAL_PARAMETER]: hire.rentalId, [RENTAL_ITEM_PARAMETER]: hire.rentalItemId })
+  return `${unit}?${query.toString()}`
 }

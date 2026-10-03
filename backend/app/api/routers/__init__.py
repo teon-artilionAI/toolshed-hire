@@ -19,6 +19,7 @@ from app.api.routers import (
     checkout,
     counter,
     customers,
+    damage_reports,
     health,
     me,
     my_rentals,
@@ -43,6 +44,7 @@ api_router.include_router(reservations.router)
 api_router.include_router(reservation_reads.router)
 api_router.include_router(checkout.router)
 api_router.include_router(rentals.router)
+api_router.include_router(damage_reports.router)
 api_router.include_router(counter.router)
 api_router.include_router(assets.router)
 api_router.include_router(branches.router)

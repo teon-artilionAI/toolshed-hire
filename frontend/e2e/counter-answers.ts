@@ -9,11 +9,13 @@
  * names, which are what break a layout. The dashboard, the diary and the
  * locator, SC-10, SC-11 and SC-17, are scanned the same way, and their answers
  * are in overview-answers.ts. So are the return screen and the overdue
- * worklist, SC-15 and SC-18, whose answers are in return-answers.ts.
+ * worklist, SC-15 and SC-18, whose answers are in return-answers.ts, and the
+ * damage screen, SC-16, whose answers are in damage-answers.ts.
  */
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { DAMAGE_ANSWERS, DAMAGE_PATH } from './damage-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
 import { OVERVIEW_ANSWERS } from './overview-answers.ts'
 import { RETURN_ANSWERS, RETURN_RENTAL_ID } from './return-answers.ts'
@@ -156,6 +158,7 @@ const ANSWERS: Record<string, unknown> = {
   [`GET /api/reservations/${REFERENCE}/checkout`]: CHECKOUT,
   ...OVERVIEW_ANSWERS,
   ...RETURN_ANSWERS,
+  ...DAMAGE_ANSWERS,
 }
 
 async function answerTheApi(route: Route): Promise<void> {
@@ -186,6 +189,7 @@ export const COUNTER_SCREENS: readonly CounterScreen[] = [
   { path: '/counter/locator?q=TSH', heading: 'Where is it', loaded: 'Quarantined until inspected' },
   { path: `/counter/return/${RETURN_RENTAL_ID}`, heading: 'Return and condition inspection', loaded: 'Units still out' },
   { path: '/counter/overdue', heading: 'Overdue and late fees', loaded: 'Escalation queue, more than 14 days late' },
+  { path: DAMAGE_PATH, heading: 'Record damage', loaded: 'TSH-D-26-00012' },
 ]
 
 /** Open a counter screen as a signed in assistant, with the API answered here. */

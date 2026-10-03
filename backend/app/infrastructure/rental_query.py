@@ -2,10 +2,11 @@
 
 One rental is three statements however many units the hire has. One finds the
 rental with its reservation, its branch and its customer. One finds every item
-with its unit, its model and the late fee copied onto its reservation line.
-One finds every charge. A page of rentals is the same three statements for
-every rental on the page at once, with a count before them, so nothing loops
-over the database. The list itself is in `app.infrastructure.rental_list_query`.
+with its unit, its model, the late fee copied onto its reservation line and
+whether a damage report names it. One finds every charge. A page of rentals is
+the same three statements for every rental on the page at once, with a count
+before them, so nothing loops over the database. The list itself is in
+`app.infrastructure.rental_list_query`.
 
 The items come in line order and then tag order, which is the order the
 counter's checkout sheet lists them in. The charges come in the order they
@@ -25,7 +26,8 @@ from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, UnaryExpression
+from sqlalchemy import ColumnElement, Label, UnaryExpression
+from sqlalchemy import select as select_columns
 from sqlalchemy.orm import Mapped
 from sqlmodel import Session, col, select
 
@@ -42,6 +44,7 @@ from app.infrastructure.models import (
     Branch,
     Charge,
     CustomerProfile,
+    DamageReport,
     ProductModel,
     Rental,
     RentalItem,
@@ -54,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 CHECKED_OUT_AT_COLUMN: Final[str] = "rental.checked_out_at"
 RAISED_AT_COLUMN: Final[str] = "charge.raised_at"
+DAMAGE_REPORTED_LABEL: Final[str] = "damage_reported"
 
 # One rental found, with the reservation, the branch and the customer it is read with.
 type RentalRow = tuple[Rental, Reservation, Branch, CustomerProfile]
@@ -64,6 +68,21 @@ def rental_key_condition(key: RentalKey) -> ColumnElement[bool]:
     if key.rental_id is not None:
         return col(Rental.id) == key.rental_id
     return col(Rental.reference) == key.reference
+
+
+def damage_reported() -> Label[bool]:
+    """Return the column that says whether a damage report names the rental item of the row.
+
+    It is a correlated EXISTS, answered through `ix_damage_report_rental_item`
+    of revision 0005, so it adds no statement to a read.
+    """
+    return (
+        select_columns(col(DamageReport.id))
+        .where(col(DamageReport.rental_item_id) == col(RentalItem.id))
+        .correlate(RentalItem)
+        .exists()
+        .label(DAMAGE_REPORTED_LABEL)
+    )
 
 
 def charge_order() -> tuple[Mapped[datetime], UnaryExpression[str | None], Mapped[UUID]]:
@@ -113,8 +132,8 @@ class SqlRentalReads:
     def _items_by_rental(self, rental_ids: list[UUID]) -> dict[UUID, list[RentalItemDetail]]:
         """Return the items of every rental named, with their units and models, in one statement."""
         line_of_allocation = col(ReservationLine.id) == col(AssetAllocation.reservation_line_id)
-        rows = self._session.exec(
-            select(RentalItem, Asset, ProductModel, ReservationLine)
+        rows = self._session.execute(
+            select_columns(RentalItem, Asset, ProductModel, ReservationLine, damage_reported())
             .join(AssetAllocation, col(AssetAllocation.id) == col(RentalItem.asset_allocation_id))
             .join(ReservationLine, line_of_allocation)
             .join(ProductModel, col(ProductModel.id) == col(ReservationLine.product_model_id))
@@ -127,7 +146,7 @@ class SqlRentalReads:
             )
         ).all()
         grouped: dict[UUID, list[RentalItemDetail]] = defaultdict(list)
-        for item, asset, model, line in rows:
+        for item, asset, model, line, reported in rows:
             grouped[item.rental_id].append(
                 RentalItemDetail(
                     id=item.id,
@@ -143,6 +162,9 @@ class SqlRentalReads:
                     returned_at=in_utc(item.returned_at),
                     days_late=item.days_late,
                     late_fee_per_day=Decimal(line.late_fee_per_day_snapshot),
+                    flagged_for_damage=item.flagged_for_damage,
+                    damage_reported=bool(reported),
+                    replacement_value=Decimal(line.replacement_value_snapshot),
                 )
             )
         return grouped

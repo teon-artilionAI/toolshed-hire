@@ -45,7 +45,7 @@ export function TextInput({
   inputRef,
 }: ControlProps & {
   type?: 'text' | 'tel' | 'search'
-  inputMode?: 'text' | 'tel' | 'numeric'
+  inputMode?: 'text' | 'tel' | 'numeric' | 'decimal'
   autoComplete?: string
   maxLength?: number
   placeholder?: string
@@ -65,6 +65,34 @@ export function TextInput({
         disabled={disabled}
         value={value}
         onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, help, error)}
+        className={`field-input ${error ? 'border-status-overdue' : ''}`}
+      />
+    </Field>
+  )
+}
+
+/** Several lines of text, such as a description of damage. */
+export function TextArea({
+  id,
+  label,
+  value,
+  onChange,
+  help,
+  error,
+  disabled,
+  rows,
+}: ControlProps & { rows: number }) {
+  return (
+    <Field label={label} htmlFor={id} help={help} error={error}>
+      <textarea
+        id={id}
+        name={id}
+        rows={rows}
+        disabled={disabled}
+        value={value}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, help, error)}
         className={`field-input ${error ? 'border-status-overdue' : ''}`}

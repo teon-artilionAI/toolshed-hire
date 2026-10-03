@@ -88,5 +88,5 @@ class AssetRepository(Protocol):
         ...
 
     def save_units(self, assets: Sequence[Asset]) -> None:
-        """Write the status, the condition and the meter reading of units locked earlier."""
+        """Write the status, the condition, the meter and the retirement of units locked earlier."""
         ...

@@ -5,7 +5,9 @@ back in, its meter reading and what came back with it. For each one the late
 fee policy says how many whole days late it is and what that costs (BR-30),
 and a late fee is raised when there is one. Its allocation is let go with the
 reason RETURNED, and the unit moves back to AVAILABLE through the asset state
-model, so it can be booked from that day (US-23).
+model, so it can be booked from that day (US-23). A unit the counter flagged,
+or one back in a worse grade than it went out in, goes to QUARANTINED instead
+and waits for its damage to be assessed (BR-35, `app.domain.quarantine`).
 
 The rental's status then follows its units (BR-29, BR-52). Once the last unit
 is back the rental records when and by whom, and the reservation is closed
@@ -16,10 +18,6 @@ that is not on the rental and a meter reading below the one it went out with
 are refused as a `ValidationFailure` naming the field, which the API answers
 with 422. A unit that is already back is a `StateTransitionError`, answered
 with 409. So a refused return changes nothing.
-
-`flagged_for_damage` is carried for the change after this one, which sends a
-unit flagged or worse than it went out to quarantine and holds the deposit
-back until the damage is assessed. Here every unit goes back on the shelf.
 """
 
 from __future__ import annotations
@@ -39,6 +37,7 @@ from app.domain.enums import AssetStatus, ConditionGrade, ReleaseReason, RentalS
 from app.domain.errors import StateTransitionError, ValidationFailure
 from app.domain.money import Money
 from app.domain.policies.late_fee import LateFee, LateFeePolicy
+from app.domain.quarantine import status_on_return
 from app.domain.rental import Rental, RentalItem
 from app.domain.return_charges import late_fee_charge
 
@@ -69,7 +68,7 @@ class ItemReturn:
         accessories_in: What came back with it, or None.
         notes: Anything the counter wants to write about it, or None.
         flagged_for_damage: Whether the counter flagged it for a damage
-            assessment, which the next change acts on.
+            assessment, which sends it to quarantine.
 
     """
 
@@ -276,6 +275,7 @@ def _take_back(
     item.hour_meter_in = back.hour_meter_in
     item.accessories_in = accessories or None
     item.notes = notes or None
+    item.flagged_for_damage = back.flagged_for_damage
     item.returned_at = now
     item.days_late = late.days_late
     charge = None
@@ -286,8 +286,9 @@ def _take_back(
         rental.charges.append(charge)
     release_allocation_of(reservation, item, now)
     reading = back.hour_meter_in if back.hour_meter_in is not None else unit.hour_meter_reading
+    target = status_on_return(item.condition_out, back.condition_in, back.flagged_for_damage)
     shelved = replace(
-        moved(unit, AssetStatus.AVAILABLE),
+        moved(unit, target),
         condition_grade=back.condition_in,
         hour_meter_reading=reading,
     )

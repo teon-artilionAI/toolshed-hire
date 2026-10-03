@@ -48,9 +48,10 @@ function lastSearch(network: ApiMock): string {
   return network.requestsTo(LOCATOR_ROUTE).at(-1)?.query.toString() ?? ''
 }
 
-/** The row of one unit, found by its tag. */
+/** The row of one unit, found by the tag at its head. A unit out of service
+ *  names its tag again in its link, so the tag alone is not one element. */
 async function rowOf(tag: string): Promise<HTMLElement> {
-  const row = (await within(results()).findByText(tag, {}, SCREEN_WAIT)).closest('tr')
+  const row = (await within(results()).findByRole('rowheader', { name: tag }, SCREEN_WAIT)).closest('tr')
   if (!row) throw new Error(`No row in the results shows ${tag}.`)
   return row
 }
@@ -155,12 +156,16 @@ describe('the units found', () => {
     expect(withdrawn.getByText('GBH 2-26 DRE Rotary Hammer')).toBeVisible()
   })
 
-  it('is read only, with nothing in the results to press', async () => {
+  it('changes nothing, and links only a unit out of service to its damage reports', async () => {
     await openLocator({ [LOCATOR_ROUTE]: threeBranches }, '/counter/locator?q=TSH')
 
     const table = await screen.findByRole('table', {}, SCREEN_WAIT)
     expect(within(table).queryAllByRole('button')).toHaveLength(0)
-    expect(within(table).queryAllByRole('link')).toHaveLength(0)
+    const links = within(table).getAllByRole('link')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAccessibleName(`Damage reports ${QUARANTINED_UNIT.assetTag}`)
+    expect(links[0]).toHaveAttribute('href', `/counter/damage/${QUARANTINED_UNIT.assetTag}`)
+    expect(within(await rowOf(QUARANTINED_UNIT.assetTag)).getByRole('link')).toBe(links[0])
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
       'Asset tag',
       'Model',

@@ -26,6 +26,7 @@ import {
   readList,
   readMoney,
   readNullableCount,
+  readNullableMoney,
   readNullableOneOf,
   readNullableText,
   readNullableTimestamp,
@@ -97,6 +98,7 @@ function readRentalItem(value: unknown, path: string): RentalItem {
     daysLateToday: readCount(record, 'daysLateToday', path),
     lateFeeToday: readMoney(record, 'lateFeeToday', path),
     damageAssessment: readOneOf(record, 'damageAssessment', path, DAMAGE_ASSESSMENTS),
+    replacementValue: readNullableMoney(record, 'replacementValue', path),
   }
 }
 

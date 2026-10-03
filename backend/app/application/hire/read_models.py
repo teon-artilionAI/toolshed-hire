@@ -33,6 +33,10 @@ from app.domain.enums import (
 
 # The width of the reference column. Nothing longer can be a reference.
 REFERENCE_MAX_LENGTH: Final[int] = 16
+# The statuses a rental with a unit out past its due date moves to OVERDUE from (BR-52).
+OVERDUE_FROM: Final[frozenset[RentalStatus]] = frozenset(
+    {RentalStatus.OPEN, RentalStatus.PARTIALLY_RETURNED}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +89,11 @@ class RentalItemDetail:
         returned_at: When it came back. None while it is out.
         days_late: The whole days it came back late, worked out at return.
         late_fee_per_day: The late fee copied onto its reservation line (BR-20).
+        flagged_for_damage: Whether the counter flagged it as it came back.
+        damage_reported: Whether a damage report names it.
+        replacement_value: The replacement value copied onto its reservation
+            line, which caps a damage recovery (BR-39). None in what a
+            customer is shown.
 
     """
 
@@ -101,6 +110,9 @@ class RentalItemDetail:
     returned_at: datetime | None
     days_late: int
     late_fee_per_day: Decimal
+    flagged_for_damage: bool = False
+    damage_reported: bool = False
+    replacement_value: Decimal | None = None
 
     def is_out(self) -> bool:
         """Return True while the unit is still with the customer."""
@@ -177,6 +189,19 @@ class RentalDetail:
     balance_due: Decimal
     settled_at: datetime | None
     agreement_signed: bool
+
+    def is_stored_short_of_overdue(self, today: date) -> bool:
+        """Return True when a unit is out past the due date and the stored status says otherwise.
+
+        Nothing wakes up when a due date passes, so the status stored for a
+        hire can lag a day behind what it reads as (BR-52). The read of one
+        rental asks this before it answers, and moves the rental on first.
+        """
+        return (
+            self.status in OVERDUE_FROM
+            and today > self.due_back_on
+            and any(item.is_out() for item in self.items)
+        )
 
 
 @dataclass(frozen=True, slots=True)

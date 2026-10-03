@@ -81,6 +81,16 @@ export function readMoney(source: Record<string, unknown>, key: string, requestP
   return value
 }
 
+/** Read an amount the contract allows to be null, such as the cost of a repair
+ *  not yet done. A missing field is not null. */
+export function readNullableMoney(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+): Money | null {
+  return source[key] === null ? null : readMoney(source, key, requestPath)
+}
+
 /** Read an amount that may be negative, such as a charge that gives a deposit
  *  back. Anything that is not a string with two decimals is refused. */
 export function readSignedMoney(source: Record<string, unknown>, key: string, requestPath: string): Money {

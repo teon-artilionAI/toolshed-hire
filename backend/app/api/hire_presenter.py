@@ -80,6 +80,7 @@ def rental_response(view: RentalView) -> RentalResponse:
                 days_late_today=shown.days_late_today,
                 late_fee_today=shown.late_fee_today,
                 damage_assessment=shown.damage_assessment,
+                replacement_value=shown.item.replacement_value,
             )
             for shown in view.items
         ],

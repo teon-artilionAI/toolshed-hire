@@ -17,7 +17,13 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-12` Customer Lookup and Walk-in Registration, `SC-13` New Booking and Asset Allocation, `SC-14` Checkout and Deposit | The API, through the routes described under Booking at the counter |
 | `SC-10` Counter Dashboard, `SC-11` Branch Diary, `SC-17` Asset Locator | The API, through the routes described under The counter's day |
 | `SC-15` Return and Condition Inspection, `SC-18` Overdue and Late Fee Worklist, and the hire history of `SC-09` | The API, through the routes described under Returns and settlement |
-| `SC-16` and `SC-19` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-16` Damage Report Capture | The API, through the routes described under Damage and quarantine |
+| `SC-19` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+
+No customer or counter screen reads `src/shared/fixtures.ts` any more. The
+modules that still do are the administration screens and their helpers in
+`src/features/admin/`, and `src/shared/format.ts`, whose two overdue helpers
+take the fixture date as their default and are used only by those screens.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -216,7 +222,12 @@ commits as `../backend/openapi.json`.
   wire type from. It gives each type the name the screens use. Where the
   generated type says less than the screens rely on, such as money typed as a
   plain `string` or a role typed as any `string`, it keeps a more precise type
-  and says why.
+  and says why. It holds the session types itself and passes every other type
+  on from the module it is built in.
+- The branch and catalogue types, which are the branches, the categories, the
+  models, the availability searches and the quote, are in
+  `api/contract-catalogue.ts`, built from the generated file the same way, so
+  `contract.ts` stays a size that can be read in one sitting.
 - The six reservation routes are in the document, and their types are built
   from the generated file like every other. They sit in
   `api/contract-booking.ts` to keep each file short, and `contract.ts` passes
@@ -243,6 +254,13 @@ commits as `../backend/openapi.json`.
   bodies, queries and pages are in `api/contract-returns.ts`, built from the
   generated file the same way. Every one of those routes answers with the
   `Rental` above, or a page of them.
+- The damage and quarantine routes, which are filing a report, the list and
+  the read of reports, sending one for repair and resolving it, are in the
+  document too. Their types are in `api/contract-damage.ts`, built from the
+  generated file the same way. The severities are the backend's own list,
+  `MINOR`, `MAJOR` and `WRITE_OFF`, and a severity retires nothing on its own.
+  Each unit of a hire also carries `replacementValue` for staff, which is null
+  for a customer, as its tag is.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -293,6 +311,12 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   segment. A return, a loss or a balance payment puts the hire the server
   answered with into the cache under its key and its reference, and marks the
   lists, the counter's day, the reservations and the locator as out of date.
+- The damage reports of a unit, under the `damage` segment, are never fresh. A
+  damage write puts the report the server answered with into every list that
+  holds it, and marks the reports, the locator and the counter's day as out of
+  date. Filing a report against a hire drops that hire from the cache
+  altogether, so the return screen reads it afresh and never shows the deposit
+  still waiting while it does.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -676,9 +700,10 @@ The dashboard on `SC-10` says what is due today at the branch, the diary on
   failed and empty states and page controls. The search and the page are in
   the address.
 - Each unit says its tag, its model, its branch, its state in words and its
-  condition, and the day it is due back and its hire when it is out. Nothing on
-  the screen changes anything, and it needs no branch, so an administrator can
-  use it straight away.
+  condition, and the day it is due back and its hire when it is out. A unit
+  that is quarantined or in the workshop links to its damage reports on
+  `SC-16`. Nothing on the screen changes anything, and it needs no branch, so
+  an administrator can use it straight away.
 
 #### Accessibility of these screens
 
@@ -734,12 +759,15 @@ out a late fee, a settlement or a balance, and never adds money up.
   time of the loss and no grade, and with no flag of its own. The screen reads
   a closed unit with no grade as lost, says so, and lists the charges that
   carry its id.
-- The hire reads as overdue when the server says so, or when any unit still out
-  is late today. The server moves a hire to overdue when it lists hires, not
-  when it reads one, so a hire opened by its reference can still say open.
+- The hire reads as overdue when the server says so. The read of one hire
+  moves it to overdue before it answers, so its status is never behind the
+  lists.
 - When the deposit is waiting on a balance, a form takes the reference of the
   payment and posts it. When it is waiting on a damage report, each unit that
-  needs one links to `/counter/damage/<assetTag>?rentalItem=<id>`.
+  needs one links to
+  `/counter/damage/<assetTag>?rental=<rentalId>&rentalItem=<id>`. Coming back
+  from there, the hire is read afresh and shows the settlement the server made
+  when the report was filed.
 - A 409 or a 403 shows the server's message and offers to read the hire again.
   A 422 goes back to the form with each message under its control. The writes
   share `use-rental-write.ts`, which sends each one once.
@@ -782,6 +810,75 @@ each write takes focus when it opens. Every status carries words beside its
 colour, every target is at least 44 pixels, money is written with the rand
 sign and two decimals through `money`, and all three screens fit a phone 360
 pixels wide with nothing to scroll sideways.
+
+### Damage and quarantine
+
+The damage screen on `SC-16` records a damage report with an explicit decision
+on whether the customer is charged, and lets the owner say how it was
+resolved. The routes are in `api/damage-reports.ts`, which also reads a report,
+and the cached list of a unit's reports is in `api/damage-queries.ts`. The unit
+is found through the locator route.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-16` | `GET /api/assets/locator?q=<tag>&page=1&pageSize=50` | The unit with that tag, where it is and its state |
+| `SC-16` | `GET /api/damage-reports?assetTag=&page=&pageSize=` | The reports already filed against the unit, newest first |
+| `SC-16` | `GET /api/rentals/{id}` | The hire the unit came back on, when the address names one, for the replacement value of the unit |
+| `SC-16` | `POST /api/damage-reports` | The report, with its reference, and the unit in quarantine |
+| `SC-16` | `POST /api/damage-reports/{id}/repair` | The report, for an administrator, in the workshop |
+| `SC-16` | `POST /api/damage-reports/{id}/resolution` | The report, for an administrator, resolved or written off |
+
+#### `SC-16` Damage Report Capture
+
+- The address is `/counter/damage/:assetTag`. A link from a return also carries
+  the hire and its unit, as `?rental=<rentalId>&rentalItem=<id>`. The screen
+  has a loading, a failed and a not found state for the unit, and the reports
+  have their own, so the form works while they load.
+- The form takes the severity, a description, the repair estimate and the
+  decision on whether the customer is charged. The decision has no default.
+  Neither answer is chosen when the form opens, the form is not sent without
+  one (BR-40), and the group says that fair wear and tear is not charged. When
+  the customer is charged on a hire, the form also takes the amount to
+  recover, VAT inclusive. The server holds it to the replacement value copied
+  onto the booking (BR-39), and when it refuses, its message, which names the
+  most it will take, lands under the amount. The screen reads the hire named in
+  the address and names the replacement value its unit carries, before any
+  report exists. While the hire loads, or when it cannot be read, the box says
+  only that the server checks the amount. The rules and the body are in
+  `SC16-damage-model.ts`.
+- A unit that came back damaged waits for the report of that return, and the
+  server refuses a report about it that does not name that unit of the hire
+  with a 409. So a report for such a unit is filed from its return, and the
+  locator's link shows the server's sentence when it is tried from there. A
+  unit already in the workshop stays there when a report is filed, and the
+  screen says so instead of saying it is quarantined.
+- There is no photograph upload in this release.
+- "Record the damage and quarantine the unit" asks a question that says in
+  words what is about to happen, that the unit is quarantined and cannot be
+  booked until the report is resolved, and what the customer is charged. "Yes,
+  file the report" is the one request. The answer gives the reference of the
+  report and, when it belongs to a hire, a link back to its return.
+- A 422 goes back to the form with each message under its field. A 409 or a
+  403 shows the server's message. A counter assistant looking at a unit held at
+  another branch is told first that the server refuses a report from there.
+- Each open report offers "Send for repair" and "Resolve" to a signed in
+  administrator and to nobody else. Resolve asks for the outcome, repaired or
+  written off, with neither chosen, the actual repair cost, which a repair
+  needs, and notes, says in words what will happen to the unit, and posts to
+  the resolution route. Counter staff see the status of each report and a
+  sentence that the owner resolves reports. The rules are in
+  `SC16-resolve-model.ts`, and the writes share `use-damage-write.ts`, which
+  sends each one once.
+
+#### Accessibility of this screen
+
+Each choice is a radio group in a fieldset with a legend, with its help and
+its error tied to the group, and each option is the whole target. Every error
+is tied to its field and listed above the form with a link to it. The question
+takes focus when it opens, and what a write did is said in a notice that takes
+focus. Every status carries words beside its colour, every target is at least
+44 pixels, and the screen fits a phone 360 pixels wide with nothing to scroll
+sideways.
 
 ### Model pictures
 
@@ -888,17 +985,20 @@ npx playwright install chromium
 backend. With no backend, the catalogue home and the search are scanned in
 their failed state, and the registration form with its branch menu in its
 failed state. The privacy notice is scanned too. The counter's customer
-lookup, new booking, checkout, dashboard, diary, locator, return screen and
-overdue worklist are scanned loaded, with a signed in assistant, a customer, a
-booking, a day, units and hires whose answers the spec gives itself, from
-`e2e/counter-answers.ts`, `e2e/overview-answers.ts` and
-`e2e/return-answers.ts`. The new booking is scanned again with a tool on it,
+lookup, new booking, checkout, dashboard, diary, locator, return screen,
+overdue worklist and damage screen are scanned loaded, with a signed in
+assistant, a customer, a booking, a day, units, hires and damage reports whose
+answers the spec gives itself, from `e2e/counter-answers.ts`,
+`e2e/overview-answers.ts`, `e2e/return-answers.ts` and
+`e2e/damage-answers.ts`. The new booking is scanned again with a tool on it,
 the checkout again with every problem of its form on the screen, the diary
 again with the no show question open, the return again with its question
-open, and the worklist again with the question about a lost unit open.
+open, the worklist again with the question about a lost unit open, and the
+damage screen again with every problem of its form showing, then with the
+amount to recover and its question open.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires, My Account with a hire in its history, and the eight counter screens
+My Hires, My Account with a hire in its history, and the nine counter screens
 at 360 pixels wide and checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
 database holds.
@@ -983,6 +1083,20 @@ seed password. The spec asks `GET /api/customers`, a checkout,
 405 from any of them means the routes are not there, and both journeys skip
 themselves. The unit goes back on the shelf at the end of the run.
 
+A third journey in `e2e/counter.spec.ts` needs the damage routes as well. The
+assistant books one unit for a new walk in through `e2e/counter-booking.ts`,
+which takes the third last model free at the branch, checks it out, takes it
+back one grade worse and sees the deposit waiting for a damage report. They
+follow the link to `SC-16`, file a report that charges the customer R50.00,
+far under any replacement value, and go back to the return, which shows the
+deposit settled with the R50.00 withheld. Then the owner,
+`marius@toolshedhire.co.za`, signs in on a browser of their own and resolves
+the report as repaired, so the unit goes back on the shelf. A repair does not
+raise the grade again, so a unit that went out at C is flagged for damage
+instead. The steps are in `e2e/damage-journey.ts`. It asks
+`GET /api/damage-reports` with no token first, through `e2e/damage-backend.ts`,
+and skips itself when that route is not there.
+
 `e2e/counter-overview.spec.ts` needs the dashboard, the diary and the asset
 locator. A seeded counter assistant signs in, sees the name of their branch and
 the five figures on the dashboard, opens the diary for today and then the
@@ -1026,11 +1140,12 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-The counter journey and the two counter overview journeys each sign the two
-counter assistants in once, so each assistant three times in a run, which
-counts against their own addresses.
+The two counter journeys and the two counter overview journeys each sign the
+two counter assistants in once, so each assistant four times in a run, and the
+damage journey signs the owner in once in each browser project, which counts
+against their own addresses.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all seven skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all eight skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

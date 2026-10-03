@@ -111,10 +111,9 @@ function ReturnView({
 }) {
   const out = itemsOut(rental)
   const back = rental.items.filter((item) => item.returnedAt !== null)
-  // The server moves a hire to overdue when it lists hires, not when it reads
-  // one, so a hire opened by its reference can still say open. The days late
-  // of each unit still out are worked out on every read, so they decide it too.
-  const overdue = rental.status === 'OVERDUE' || out.some((item) => item.daysLateToday > 0)
+  // The read of one hire moves it to overdue before it answers, so the status
+  // the server sends is the whole answer.
+  const overdue = rental.status === 'OVERDUE'
   return (
     <div className="flex flex-col gap-lg">
       <div className="grid gap-md sm:grid-cols-3">
@@ -158,7 +157,12 @@ function ReturnView({
           <ul className="flex flex-col gap-md">
             {back.map((item) => (
               <li key={item.id}>
-                <ReturnedItem item={item} charges={rental.charges} />
+                <ReturnedItem
+                  item={item}
+                  charges={rental.charges}
+                  rentalId={rental.id}
+                  offerReport={rental.settlementWaitingOn !== 'DAMAGE_ASSESSMENT'}
+                />
               </li>
             ))}
           </ul>

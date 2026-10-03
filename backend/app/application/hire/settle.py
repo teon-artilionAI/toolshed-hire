@@ -2,9 +2,8 @@
 
 The deposit of a hire is settled the moment the last thing it waits on is
 lifted. A return that brings the last unit back is such a moment, and so is a
-loss that closes the last unit. The change after this one adds a third, the
-damage report that completes the last assessment, and it calls the same
-function.
+loss that closes the last unit, and so is the damage report that completes the
+last assessment of a hire whose units are all back. All three call this.
 
 `settle_when_nothing_waits` asks `settlement_wait` of the domain what the
 rental still waits on. Only when the answer is nothing, and the deposit has
@@ -12,15 +11,14 @@ not already been settled, does it settle it, in the same unit of work as the
 change that lifted the last wait, and record the figures it produced.
 
 How many returned units still wait for their damage to be assessed is
-`assessments_due_on`. Damage and quarantine come in the next change, so until
-then no unit ever waits, and that one function is what the change replaces.
+`assessments_due_on` in `app.domain.quarantine`. A unit that came back worse
+or flagged waits until a damage report names it (BR-35).
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Final
 
 from app.application.hire.rental_audit import (
     RENTAL_DEPOSIT_SETTLED_ACTION,
@@ -29,6 +27,7 @@ from app.application.hire.rental_audit import (
 )
 from app.application.unit_of_work import UnitOfWork
 from app.domain.identity import Actor
+from app.domain.quarantine import assessments_due_on
 from app.domain.rental import Rental
 from app.domain.settlement import (
     DepositSettlement,
@@ -38,17 +37,6 @@ from app.domain.settlement import (
 )
 
 logger = logging.getLogger(__name__)
-
-NO_ASSESSMENTS: Final[int] = 0
-
-
-def assessments_due_on(rental: Rental) -> int:
-    """Return how many returned units of a rental still wait for their damage to be assessed.
-
-    Damage and quarantine are the next change. Until it is built no unit is
-    ever flagged, so nothing waits.
-    """
-    return NO_ASSESSMENTS
 
 
 def settle_when_nothing_waits(

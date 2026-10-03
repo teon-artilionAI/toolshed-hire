@@ -6,10 +6,12 @@ reservation it was opened from, then the units coming back. Each unit is
 recorded as back with its condition, its meter and its accessories, the late
 fee policy works out what it owes (BR-30), a late fee is raised when there is
 one, its allocation is let go with the reason RETURNED, and it moves back to
-AVAILABLE so it can be booked from that day. The rental moves on to
-PARTIALLY_RETURNED, or to RETURNED with the reservation when the last unit is
-back (BR-29). When nothing else is waiting the deposit is settled in the same
-unit of work (BR-32). Audit events are written for the rental, for every unit,
+AVAILABLE so it can be booked from that day. A unit flagged or back in a worse
+grade goes to QUARANTINED instead and waits for its damage report (BR-35). The
+rental moves on to PARTIALLY_RETURNED, or to RETURNED with the reservation when
+the last unit is back (BR-29). When nothing else is waiting, no unit still out
+and no assessment still due, the deposit is settled in the same unit of work
+(BR-32). Audit events are written for the rental, for every unit,
 for the reservation and for the settlement (BR-49). Either all of that is
 committed or none of it is.
 
@@ -48,6 +50,7 @@ from app.application.identity.account_rules import refused_field
 from app.application.unit_of_work import UnitOfWork
 from app.application.use_case import UseCase
 from app.domain.audit import StateValue
+from app.domain.enums import AssetStatus
 from app.domain.errors import ValidationFailure
 from app.domain.identity import Actor
 from app.domain.policies.late_fee import LateFeePolicy
@@ -184,6 +187,11 @@ def _returned_figures(outcome: ReturnOutcome) -> dict[str, StateValue]:
     return {
         "returned_count": len(outcome.units),
         "asset_tags": sorted(closed.unit.asset_tag for closed in outcome.units),
+        "quarantined": sorted(
+            closed.unit.asset_tag
+            for closed in outcome.units
+            if closed.unit.status is AssetStatus.QUARANTINED
+        ),
         "days_late": sum(closed.late_fee.days_late for closed in outcome.units),
         "late_fees": [str(closed.late_fee.amount.amount) for closed in outcome.units],
         "closed_the_hire": outcome.closed_the_hire,

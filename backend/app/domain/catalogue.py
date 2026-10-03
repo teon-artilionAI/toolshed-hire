@@ -13,6 +13,7 @@ policy is handed a snapshot of these figures and never the entry itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Final
 from uuid import UUID
@@ -106,6 +107,8 @@ class Asset:
         condition_grade: The grade recorded at the last checkout or return.
         hour_meter_reading: The last meter reading taken, for a unit that has
             a meter and once one has been read.
+        retired_on: The day it was retired. Set when, and only when, the
+            status is RETIRED (BR-38).
 
     """
 
@@ -116,6 +119,7 @@ class Asset:
     status: AssetStatus
     condition_grade: ConditionGrade
     hour_meter_reading: int | None = None
+    retired_on: date | None = None
 
     def is_allocatable(self) -> bool:
         """Return True when the unit may be held for a future hire.

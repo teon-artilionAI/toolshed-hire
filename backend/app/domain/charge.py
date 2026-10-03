@@ -87,6 +87,7 @@ class Charge:
             as a whole.
         settled_at: When it was settled, if it has been.
         payment_reference: The simulated settlement reference, if settled.
+        damage_report_id: The damage report a recovery was raised for, or None.
         id: The charge key, generated here so it is known before the insert.
 
     """
@@ -104,6 +105,7 @@ class Charge:
     rental_item_id: UUID | None = None
     settled_at: datetime | None = None
     payment_reference: str | None = None
+    damage_report_id: UUID | None = None
     id: UUID = field(default_factory=uuid4)
 
     def __post_init__(self) -> None:
@@ -194,6 +196,7 @@ class Charge:
         raised_at: datetime,
         raised_by_user_id: UUID,
         rental_item_id: UUID | None = None,
+        damage_report_id: UUID | None = None,
     ) -> Charge:
         """Build a charge that is owed and not yet paid, rounding it as it is written.
 
@@ -207,6 +210,7 @@ class Charge:
             raised_at: When it was raised, from the clock.
             raised_by_user_id: The account that raised it.
             rental_item_id: The unit it belongs to, or None for the whole hire.
+            damage_report_id: The damage report behind a recovery, or None.
 
         """
         before_vat = amount_ex_vat.rounded()
@@ -223,6 +227,7 @@ class Charge:
             raised_at=raised_at,
             raised_by_user_id=raised_by_user_id,
             rental_item_id=rental_item_id,
+            damage_report_id=damage_report_id,
         )
 
     def is_pending(self) -> bool:

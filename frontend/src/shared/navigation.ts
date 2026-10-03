@@ -79,7 +79,9 @@ export const SCREENS: ScreenDef[] = [
   // The value is the key of a hire or its reference. Every link to it carries
   // the key, and a reference typed from the paperwork works too.
   { id: 'SC-15', path: '/counter/return/:rentalId', name: 'Return and Condition Inspection', role: 'counter', live: true },
-  { id: 'SC-16', path: '/counter/damage/:assetId', name: 'Damage Report Capture', role: 'counter', live: false },
+  // The value is the tag of a unit. A link from a return also carries the hire
+  // it came back on and its unit, as `?rental=` and `?rentalItem=`.
+  { id: 'SC-16', path: '/counter/damage/:assetTag', name: 'Damage Report Capture', role: 'counter', live: true },
   { id: 'SC-17', path: '/counter/locator', name: 'Asset Locator', navLabel: 'Locator', role: 'counter', live: true, inNav: true, icon: 'MapPin' },
   { id: 'SC-18', path: '/counter/overdue', name: 'Overdue and Late Fee Worklist', navLabel: 'Overdue', role: 'counter', live: true, inNav: true, icon: 'AlarmClock' },
 

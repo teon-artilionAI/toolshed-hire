@@ -55,6 +55,10 @@
  * fee grows by the day and the deposit is settled the moment the last unit is
  * in, so a hire read a while ago may no longer be the hire. The customer's own
  * hires sit under the account segment and are never fresh for the same reason.
+ *
+ * So are the damage reports of a unit. The owner can send one for repair or
+ * close it from another screen, and a counter must not offer a unit as
+ * waiting for the workshop once it is back on the shelf.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -103,11 +107,14 @@ export const ASSETS_KEY = 'assets'
 /** The first segment of every query key about the hires the counter reads. */
 export const RENTALS_KEY = 'rentals'
 
+/** The first segment of every query key about damage reports. */
+export const DAMAGE_KEY = 'damage'
+
 /** What never fresh means to the cache. The answer is stale when it arrives,
  *  and it is asked for again whenever a screen mounts, the window regains
  *  focus or the network comes back. Availability, quotes, reservations, the
  *  customer's own profile and hires, the customers the counter looks up, the
- *  counter's day, the locator and the hires all run on it. */
+ *  counter's day, the locator, the hires and the damage reports all run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -159,5 +166,6 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([COUNTER_KEY], NEVER_FRESH)
   client.setQueryDefaults([ASSETS_KEY], NEVER_FRESH)
   client.setQueryDefaults([RENTALS_KEY], NEVER_FRESH)
+  client.setQueryDefaults([DAMAGE_KEY], NEVER_FRESH)
   return client
 }

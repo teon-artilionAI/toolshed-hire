@@ -11,9 +11,10 @@ What the deposit is waiting on comes from `settlement_wait` in the domain,
 which is the same rule the return asks before it settles the deposit (BR-32,
 BR-53). So the screen and the settlement cannot disagree.
 
-Whether a returned unit waits for its damage to be assessed belongs to damage
-and quarantine (BR-35), which is the next change. Until then no unit is ever
-flagged, and `damage_assessment_of` is the one function it replaces.
+Whether a returned unit waits for its damage to be assessed comes from
+`damage_assessment_of` in `app.domain.quarantine` (BR-35), asked with what the
+read found, which is the two grades, the counter's flag and whether a damage
+report names the unit. The settlement asks the same rule of the same facts.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from decimal import Decimal
 from typing import Final
 
 from app.application.hire.read_models import RentalDetail, RentalItemDetail
+from app.domain import quarantine
 from app.domain.money import Money
 from app.domain.policies.late_fee import LateFeePolicy
 from app.domain.rental import NO_DAYS_LATE, DamageAssessment, SettlementWait
@@ -72,12 +74,13 @@ def late_fee_if_returned_today(
 
 
 def damage_assessment_of(item: RentalItemDetail) -> DamageAssessment:
-    """Return whether a unit waits for its damage to be assessed.
-
-    Damage and quarantine come in the next change. Until then no unit is
-    ever flagged.
-    """
-    return DamageAssessment.NOT_NEEDED
+    """Return whether a unit of a rental waits for its damage to be assessed (BR-35)."""
+    return quarantine.damage_assessment_of(
+        condition_out=item.condition_out,
+        condition_in=item.condition_in,
+        flagged=item.flagged_for_damage,
+        reported=item.damage_reported,
+    )
 
 
 def settlement_waiting_on(rental: RentalDetail) -> SettlementWait | None:

@@ -144,7 +144,8 @@ class TestTheCustomerList:
         assert page["total"] == 2
         assert [rental["id"] for rental in page["items"]] == [later["id"], early["id"]]
         tags = [item["assetTag"] for rental in page["items"] for item in rental["items"]]
-        assert tags == [None, None]
+        values = [item["replacementValue"] for rental in page["items"] for item in rental["items"]]
+        assert tags == values == [None, None]
         assert all(rental["canReturn"] is False for rental in page["items"])
 
     def test_another_customer_sees_none_of_them(

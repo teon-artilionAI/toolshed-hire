@@ -15,6 +15,7 @@
  */
 
 import { CheckCircle2, TriangleAlert } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { MAX_ACCESSORIES_LENGTH } from '../../shared/api/checkout'
 import type { RentalCharge, RentalItem } from '../../shared/api/contract'
 import { CONDITION_GRADES } from '../../shared/api/rental-read'
@@ -22,6 +23,7 @@ import { isNegativeMoney, money, unsignedMoney } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Notice, StatusPill } from '../../shared/ui'
 import { CheckRow, SelectInput, TextInput } from './counter-fields'
+import { damageHref } from './counter-links'
 import { CHARGE_TYPE_LABEL, CONDITION_GRADE_LABEL, countOf } from './counter-labels'
 import { isLost, isWorse, itemControlId, itemLabel } from './SC15-return-model'
 import type { ItemDraft, ReturnErrors } from './SC15-return-model'
@@ -199,7 +201,18 @@ function LostItem({ item, charges }: { item: RentalItem; charges: readonly Renta
 
 /** A unit that is already back, with when, how and what it was charged. A unit
  *  recorded as lost is closed too, and says so instead. */
-export function ReturnedItem({ item, charges }: { item: RentalItem; charges: readonly RentalCharge[] }) {
+export function ReturnedItem({
+  item,
+  charges,
+  rentalId,
+  offerReport,
+}: {
+  item: RentalItem
+  charges: readonly RentalCharge[]
+  rentalId: string
+  /** False while the settlement below already lists the units waiting for a report. */
+  offerReport: boolean
+}) {
   if (isLost(item)) return <LostItem item={item} charges={charges} />
   const lateFees = charges.filter((charge) => charge.type === 'LATE_FEE' && charge.rentalItemId === item.id)
   return (
@@ -219,10 +232,23 @@ export function ReturnedItem({ item, charges }: { item: RentalItem; charges: rea
         {lateFees.map((charge) => ` Late fee charged ${money(charge.amountIncVat)}.`).join('')}
       </p>
       {item.damageAssessment === 'REQUIRED' && (
-        <p className="mt-xs flex items-center gap-xs text-sm text-status-overdue">
-          <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Waiting for a damage report.
-        </p>
+        <div className="mt-xs flex flex-col gap-xs">
+          <p className="flex items-center gap-xs text-sm text-status-overdue">
+            <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Waiting for a damage report.
+          </p>
+          {/* I link the report from the unit itself, so it can be filed while
+              other units of the hire are still out. Once every unit is back
+              the settlement lists them instead, so the link is not shown twice. */}
+          {offerReport && item.assetTag !== null && (
+            <Link
+              to={damageHref(item.assetTag, { rentalId, rentalItemId: item.id })}
+              className="btn-secondary self-start px-md"
+            >
+              Record the damage to {itemLabel(item)}
+            </Link>
+          )}
+        </div>
       )}
       {item.damageAssessment === 'DONE' && <p className="mt-xs text-sm text-slate-soft">The damage report is filed.</p>}
     </div>

@@ -9,19 +9,29 @@ draws its buttons from the answer.
 A rental is named by its key or its reference, and a reservation the same way.
 One that does not exist is a `NotFound`, in a sentence the counter can act on.
 
+Nothing wakes up when a due date passes, so the read of one rental makes sure
+of the status of the rental it is about to show (BR-52). A rental with a unit
+out past its due date that is not yet stored as OVERDUE is locked, moved and
+committed through the overdue half of the lazy sweep, and read again, so its
+detail never reads OPEN while the list would read OVERDUE.
+
 Each read takes a bounded number of statements however many units the hire
 has. A rental is three, one for the rental, one for its items and one for its
-charges. A checkout is two, one for the reservation and one for its units.
+charges, and twice that and the move when it has just gone overdue. A checkout
+is two, one for the reservation and one for its units.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import date
 from typing import Final
+from uuid import UUID
 
 from app.application.booking.access import ReservationCommand, reservation_not_found
 from app.application.clock import Clock
+from app.application.hire.overdue import mark_overdue_rental
 from app.application.hire.read_models import RentalDetail, RentalKey
 from app.application.hire.views import (
     CheckoutView,
@@ -102,13 +112,29 @@ class ReadRentals:
                 "rental": str(command.key),
             },
         )
+        today = self._clock.today()
         with self._uow as uow:
             detail = read_rental(uow, command.key)
+            if detail.is_stored_short_of_overdue(today):
+                detail = self._mark_overdue(uow, detail.id, today)
         logger.info(
             "rental.read_finished",
             extra={"reference": detail.reference, "outcome": detail.status.value},
         )
-        return rental_view_for(actor, detail, self._clock.today(), self._policy)
+        return rental_view_for(actor, detail, today, self._policy)
+
+    def _mark_overdue(self, uow: UnitOfWork, rental_id: UUID, today: date) -> RentalDetail:
+        """Move the one rental a read is about to show to OVERDUE, commit that, and read it again.
+
+        The lock is taken and the domain asked again, because a unit can come
+        back between the read and the lock. The move is a change in its own
+        right and is committed at once, the way the lazy sweep commits it.
+        """
+        key = RentalKey.of(rental_id)
+        rental = uow.rentals.find_for_update(key)
+        if rental is not None and mark_overdue_rental(uow, rental, self._clock.now(), today):
+            uow.commit()
+        return read_rental(uow, key)
 
     def checkout(self, command: ReservationCommand) -> CheckoutView:
         """Return a reservation as the counter would check it out, and whether it may now.

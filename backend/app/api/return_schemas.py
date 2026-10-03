@@ -6,9 +6,9 @@ That each unit is listed once, is on the rental and has a meter reading no
 lower than the one it went out with are rules of the domain, and a refusal of
 any of them names its field under `errors.fields` all the same.
 
-`flaggedForDamage` is accepted now so the counter's form does not change when
-damage and quarantine arrive in the next change. Here every unit that comes
-back goes back on the shelf.
+`flaggedForDamage` asks for a damage assessment of a unit whatever grade it
+came back in. A flagged unit goes to quarantine, and the flag is stored on its
+rental item in a column of its own, apart from the notes (BR-35).
 
 A list of rentals is `{"items": [...], "page": 1, "pageSize": 20, "total": 0}`,
 as every list of this API is. A customer's list carries `assetTag` null on

@@ -37,6 +37,11 @@ first pass at the whole application.
    a no show that frees its units and counts a strike. Three strikes in twelve
    months put the customer on hold, and two sweeps at once count each strike
    once.
+11. A unit that comes back a grade worse, or flagged, leaves availability in the
+   transaction of its return and the deposit waits. A damage report records an
+   explicit decision on the charge, recovers at most the replacement value, and
+   settles the deposit when it was the last thing waiting. An administrator
+   repairs, resolves or writes the unit off, and a written off unit keeps its row.
 
 ## Layout
 
@@ -49,7 +54,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `counter_deps.py` wires the dashboard, the diary and the asset locator, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -68,7 +73,7 @@ keeps the same name in every layer it appears in.
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
 | `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
-| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview` |
+| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle`, `DamageReport`, the quarantine rule in `quarantine`, `file_damage_report` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview`, `DamageReportRepository`, `FileDamageReportUseCase`, `SendForRepairUseCase`, `CloseDamageReportUseCase`, `ReadDamageReports` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview`, `SqlDamageReportRepository`, `SqlDamageReportReads` |
 | `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
@@ -902,7 +907,8 @@ coming back, always in that order, and hands the rest to `return_items` in
 not on the rental and a meter reading below the one it went out with (422,
 naming the field), and then a unit already back (409), so a refused return
 changes nothing. For each unit it records the condition, the meter, the
-accessories, the notes and the time, asks the late fee policy for the days
+accessories, the notes, the counter's damage flag and the time, asks the late
+fee policy for the days
 late and the fee, raises a `LATE_FEE` charge when there is one, lets the
 allocation go with the reason `RETURNED` and moves the unit to `AVAILABLE`
 through the asset state model, so it can be booked from that day. The rental
@@ -911,8 +917,8 @@ back it records when and by whom and the reservation is closed through its
 state. The use case writes `rental.items_returned`, an `asset.status_changed`
 for every unit and `reservation.returned`, and commits once. Two returns of
 one unit at once take turns on the lock of the rental, and the second is
-answered 409. `flaggedForDamage` is accepted now and acted on by damage and
-quarantine.
+answered 409. A unit back in a worse grade, or with `flaggedForDamage`, goes
+to `QUARANTINED` instead of `AVAILABLE`, which is the next section.
 
 **Settling the deposit (BR-32, BR-53).** `settle_when_nothing_waits` in
 `app/application/hire/settle.py` asks `settlement_wait` what the rental still
@@ -927,16 +933,17 @@ the deposit covers in full, in the order they were raised, becomes `SETTLED`
 with a simulated reference that numbers it on the rental. With nothing due
 every charge is settled, the rental is `SETTLED` and `settled_at` is stamped.
 With a balance due the rental stays `RETURNED` and `settlementWaitingOn` is
-`BALANCE_PAYMENT`. Damage and quarantine add a wait by making
-`assessments_due_on` answer more than nought, and call the same function when
-the last assessment is done.
+`BALANCE_PAYMENT`. A unit waiting for its damage report makes
+`assessments_due_on` answer more than nought, so the rental waits on
+`DAMAGE_ASSESSMENT`, and the report that completes the last assessment calls
+the same function.
 
 | Charge | Amount | VAT | Status when raised |
 |---|---|---|---|
 | `LATE_FEE` | What the policy says, split by `split_vat_inclusive`. | Included in the amount. | `PENDING` until the deposit or a payment covers it. |
 | `DEPOSIT_RELEASE` | What is left of the deposit, negative. | None (BR-23). | `SETTLED`. |
 | `DEPOSIT_FORFEIT` | The deposit of a lost unit. | None. | `SETTLED`, from the deposit held. |
-| `DAMAGE_RECOVERY` | The replacement value of a lost unit less its deposit kept, split for VAT. | Included in the amount. | `PENDING`, like a late fee. |
+| `DAMAGE_RECOVERY` | The replacement value of a lost unit less its deposit kept, or the amount a chargeable damage report recovers, split for VAT. | Included in the amount. | `PENDING`, like a late fee. |
 
 The worked example holds. R1,200.00 held, two days late at R120.00, R240.00
 withheld as R208.70 plus R31.30 VAT, R960.00 released, R0.00 due, `SETTLED`.
@@ -977,7 +984,12 @@ is called.
 `rental.overdue` with no actor. I read BR-52 as the status a rental reads as,
 so a partial return of an overdue hire with a unit still out leaves it
 `OVERDUE`, a partial return before the due date makes it
-`PARTIALLY_RETURNED`, and the last unit back makes it `RETURNED`.
+`PARTIALLY_RETURNED`, and the last unit back makes it `RETURNED`. The batch is
+bounded, so `GET /api/rentals/{id}` makes sure of the one rental it is about to
+show with `mark_overdue_rental`. A rental with a unit out past its due date
+that is not yet stored as `OVERDUE` is locked, moved, recorded and committed,
+and read again, so its detail never reads `OPEN` while the list reads
+`OVERDUE`. A rental already up to date is read with no lock and no write.
 
 **The lists.** `GET /api/rentals` is `ListRentals.for_staff`. It runs the sweep
 first and lists rentals at any branch, the overdue first, the most overdue
@@ -1007,6 +1019,118 @@ one reservation can carry. The overdue part of the sweep clears one batch a
 request, so a backlog of hires gone overdue would read `OPEN` for a while,
 which costs a status on a screen and never a late fee, because the fee is
 worked out from the dates.
+
+## Damage and quarantine
+
+A unit that comes back damaged leaves availability at once, and whether the
+customer is charged for the damage is an explicit decision (FR-20, US-24,
+US-38, BR-35 to BR-40). There is no new table. Revision `0005` adds two
+indexes and revision `0006` adds one column, `rental_item.flagged_for_damage`.
+
+**Quarantine at return (BR-35).** `status_on_return` in
+`app/domain/quarantine.py` decides from the two grades and the counter's flag.
+A unit back in a worse grade than it went out in, or flagged, moves to
+`QUARANTINED` instead of `AVAILABLE` in the transaction of its return, so the
+availability search stops offering it from that moment (BR-10). Its allocation
+is still let go, because the hire is over. Its `damageAssessment` reads
+`REQUIRED`, `settlementWaitingOn` reads `DAMAGE_ASSESSMENT` and the deposit is
+not settled. Once a damage report names the unit the assessment reads `DONE`.
+`damage_assessment_of` is the one rule the read and the settlement both ask.
+The return stores the flag in `rental_item.flagged_for_damage`, and the read
+of a rental, the settlement and the check on a unit's last hire when a report
+is filed all read it from there. The notes are stored as the counter wrote
+them, trimmed of surrounding space, and nothing is ever decided from them. The
+design document lists no column for the flag. I added one on purpose, because
+the only other place the schema offers is the free text of the notes, and the
+deposit should not depend on matching words in free text. Revision `0006` says
+the same.
+
+**Filing a report.** `POST /api/damage-reports` is `FileDamageReportUseCase`,
+for counter staff of the branch that holds the unit and administrators. In one
+unit of work it locks the rental of the named rental item first, the way every
+change to a rental does, and then the unit. `ensure_may_file` in
+`app/domain/damage_filing.py` decides every refusal before anything changes,
+the fields first and the standing of the unit and the hire after, and only
+then is a reference drawn from `damage_report_reference_seq`, in the form
+`TSH-D-26-00031`, so a refused report uses no number. The report is written
+`OPEN`, the unit goes to `QUARANTINED` unless it is already out of service, and
+the audit trail gains `damage_report.filed`, an `asset.status_changed` when the
+unit moved and `rental.damage_assessed` when the report names a hire.
+
+| Refusal | Answer |
+|---|---|
+| No `chargeableToCustomer`, or one that is not a JSON boolean. There is no default (BR-40). | 422 naming it. |
+| An amount to recover missing when the customer is charged on a hire, given when not charged or outside a hire, or not above nothing. | 422 naming `recoveryAmount`. |
+| An amount above the replacement value copied onto the booking, less what was already recovered for that unit on that hire (BR-39). The sentence names the most that may be recovered. | 422 naming `recoveryAmount`. |
+| An unknown tag, or a rental item that is not a hire of that unit. | 422 naming `assetTag` or `rentalItemId`. |
+| A unit out on hire. Its damage is reported once it is back. | 409. |
+| A retired unit, through the asset state model. | 409. |
+| A unit that waits for the report of its own return, and a report that does not name that rental item. The sentence names the rental. | 409. |
+| A chargeable report on a hire whose deposit was already settled. | 409. |
+| Counter staff of another branch. | 403. |
+
+The rule about a unit waiting for the report of its own return is mine. The
+locator links a quarantined unit to the report screen with no rental item, and
+a report filed that way would leave the hire waiting for an assessment that
+never comes.
+
+**Recovery and settlement (BR-39, BR-32).** A chargeable report that names a
+rental item raises a `DAMAGE_RECOVERY` charge for `recoveryAmount`, a VAT
+inclusive amount split by `split_vat_inclusive` the way a late fee is, which
+points back at the report through `damage_report_id`. The cap is
+`ensure_recovery_within_cap` in `app/domain/damage_recovery.py`. It counts the
+recoveries and the deposit kept for the same unit on the same hire, so a lost
+unit, already charged its full value, can recover nothing more. Each item of
+a `Rental` read by staff carries that `replacementValue`, so the counter sees
+the cap before it files. When the
+report completes the last assessment and every unit is back,
+`settle_when_nothing_waits` settles the deposit in the same unit of work, with
+the recovery among what is withheld. A report that is not chargeable raises no
+charge and lets the deposit go just the same.
+
+**A report outside a hire.** It names no rental item, raises no charge, takes
+no amount and still quarantines the unit. Its `replacementValue` is the
+model's own, because there is no booking line, and its `recoveryCharged` is
+null, as it is for any report that raised no charge.
+
+**Repair and closing, an administrator alone (BR-37, BR-38, US-38).**
+`POST /api/damage-reports/{id}/repair` moves an `OPEN` report to
+`UNDER_REPAIR` and its unit with it. `POST /api/damage-reports/{id}/resolution`
+closes it. `RESOLVED` needs `actualRepairCost` and puts the unit back to
+`AVAILABLE` once no other report of it is open. `WRITTEN_OFF` moves the unit to
+`RETIRED`, stamps `retired_on`, keeps the row, and is refused with 409 while a
+booking still holds the unit. Each locks the report and then the unit, and the
+moves of a report are listed once, in `PERMITTED_REPORT_MOVES`. Counter staff
+are answered 403 by both routes.
+
+**The reads.** `GET /api/damage-reports` lists reports at every branch, newest
+first, narrowed by `assetTag`, `status` and `branchCode`, and
+`GET /api/damage-reports/{id}` reads one by its key or its reference. Both are
+query objects in `app/infrastructure/damage_report_query.py`. The recovery
+charged is summed through the rental item, so it stands on
+`ix_charge_rental_item` rather than on a scan of every charge.
+
+| Operation | Statements | Locks |
+|---|---|---|
+| File a report | The tag, the rental and its items and charges when an item is named, the unit, the unit's last hire, the reference, the writes, the settlement when it may, the read of the answer | The rental, then the unit |
+| Repair or close | The report, the unit, one count or one test of the allocations, the writes and the read | The report, then the unit |
+| One report | One | None |
+| A list | The branch when named, the count and the page | None |
+| One rental | Three, plus the move and a second read the first time it is seen overdue | The rental, only then |
+
+Revision `0005` adds `ix_damage_report_rental_item`, a partial btree on
+`damage_report.rental_item_id`, because every read of a rental now asks, for
+each unit, whether a report names it, and `ix_damage_report_asset`, a btree on
+`damage_report.asset_id`, through which a list by tag, the count of a unit's
+open reports and a write off reach the reports of one unit. The question of a
+rental read is a correlated EXISTS inside the statement that reads the items,
+so a rental read is still three statements.
+
+**What degrades first as the data grows.** The list of reports with no tag. It
+is sorted by when a report was filed, which no index holds, so every report
+that matches is sorted to find one page, the way the list of rentals is. A few
+hundred reports a year make that nothing for a long time. At a hundred times
+that it wants an index on `reported_at` and a page keyed on it.
 
 ## The schema
 
@@ -1045,6 +1169,22 @@ through which the locator reaches the units of a model whatever their status.
 `ix_rental_branch_due_back` is a btree on `rental (branch_id, due_back_on)`,
 through which the diary finds the hires due back on a day in the past, which
 the partial index on open hires does not hold.
+
+Revision `0005` adds two indexes and nothing else, both on `damage_report`.
+`ix_damage_report_rental_item` is a partial btree on `rental_item_id`, which
+every read of a rental asks through, and `ix_damage_report_asset` is a btree
+on `asset_id`, which the reports of one unit are reached through. The table is
+empty when the revision first runs, so building them blocks nothing.
+
+Revision `0006` adds one column and nothing else,
+`rental_item.flagged_for_damage`, a `BOOLEAN NOT NULL DEFAULT false` that holds
+the counter's damage flag on a unit that came back. The design document lists
+no such column, and the revision's docstring explains the departure. A column
+with a constant default is added without rewriting the table, so the statement
+holds its lock for a moment however many items there are. The release before
+it never names the column, so its inserts take the default and it keeps working
+against a migrated database. A privilege on a table covers the columns it gains
+later, so there is nothing to grant.
 
 ## The seed and the two database roles
 
@@ -1151,6 +1291,11 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/rentals/{id}/items/{itemId}/loss` | Counter staff of the rental's branch, and administrators. |
 | POST | `/api/rentals/{id}/balance-payment` | Counter staff of the rental's branch, and administrators. |
 | GET | `/api/me/rentals` | A customer. |
+| POST | `/api/damage-reports` | Counter staff of the branch that holds the unit, and administrators. |
+| GET | `/api/damage-reports` | Counter staff and administrators, every branch. |
+| GET | `/api/damage-reports/{id}` | Counter staff and administrators. |
+| POST | `/api/damage-reports/{id}/repair` | An administrator. |
+| POST | `/api/damage-reports/{id}/resolution` | An administrator. |
 | GET | `/api/counter/dashboard` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/counter/diary` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/assets/locator` | Counter staff and administrators, every branch. |
@@ -1255,6 +1400,11 @@ sentence names a business rule. The rule goes to the log.
 | `POST /api/rentals/{id}/items/{itemId}/loss` | none | 200 with the `Rental`. 409 `state-transition` when the unit is back or not yet more than fourteen days late. 403 `branch-scope`. 404 for a rental or a unit that is not there. |
 | `POST /api/rentals/{id}/balance-payment` | `paymentReference`, 1 to 40 characters | 200 with the `Rental`, now `SETTLED`. 409 `state-transition` when nothing is due. 403 `branch-scope`. 404. 422 naming `body.paymentReference`. |
 | `GET /api/me/rentals` | `page`, `pageSize` | 200 with the caller's own rentals, newest first, `assetTag` null on every item. 403 for staff. |
+| `POST /api/damage-reports` | `assetTag`, `rentalItemId`, `severity`, `description`, `repairEstimate`, `chargeableToCustomer`, `recoveryAmount` | 201 with the `DamageReport` and a `Location` header. 422 naming the field. 409 `state-transition` for a unit on hire, retired or waiting for its return's report, and a charge on a settled hire. 403 `branch-scope`. |
+| `GET /api/damage-reports` | `assetTag`, `status`, `branchCode`, `page`, `pageSize` | 200 with `items` of `DamageReport`, `page`, `pageSize` and `total`, newest first. 422 naming `query.branchCode`. |
+| `GET /api/damage-reports/{id}` | none | 200 with the `DamageReport`. 404 when there is no such report. |
+| `POST /api/damage-reports/{id}/repair` | none | 200 with the `DamageReport`, now `UNDER_REPAIR`. 409 `state-transition` when it is not `OPEN`. 403 for counter staff. 404. |
+| `POST /api/damage-reports/{id}/resolution` | `outcome` of `RESOLVED` or `WRITTEN_OFF`, `actualRepairCost`, `resolutionNotes` | 200 with the `DamageReport`. 422 naming `body.actualRepairCost` when a resolution has none. 409 `state-transition` for a closed report, or a write off while a booking holds the unit. 403 for counter staff. 404. |
 | `POST /api/reservations/{id}/no-show` | `reason`, 1 to 200 characters | 200 with the reservation, now `NO_SHOW`. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming `body.reason`. |
 | `GET /api/counter/dashboard` | `branchCode`, which an administrator must send | 200 with `branchCode`, `branchName`, `date`, `counts` and the three lists. 403 `branch-scope` when counter staff name another branch. 422 naming `query.branchCode`. |
 | `GET /api/counter/diary` | `branchCode`, `from` which is today by default, `days` from 1 to 7 and 1 by default | 200 with `branchCode`, `branchName` and one entry of `days` for each day. 403 and 422 as for the dashboard, and 422 naming `query.days` or `query.from`. |
@@ -1266,7 +1416,11 @@ sentence names a business rule. The rule goes to the log.
 `tradeDiscountPercent`, `noShowCount` and `homeBranchCode`. A walk-in has a
 null `email` and `hasLogin` false. A `Rental` carries what the contract gives
 it, with its `items` and its `charges`, and `{id}` of a rental is its key or
-its reference.
+its reference. Each item of a `Rental` also carries `replacementValue`, the
+value copied onto its booking line, which is the most a damage report may
+recover, so the report screen can show the cap before a report exists. It is
+null for a customer, as `assetTag` is. A `DamageReport` carries what the
+contract gives it, and `{id}` of a report is its key or its reference too.
 
 ### The public catalogue, availability and quote routes
 
@@ -1643,6 +1797,26 @@ proves the repository refuses an edit of a settled charge, and
 `test_return_races_and_overdue.py` posts two returns of one unit at once and
 runs the overdue sweep a batch at a time.
 
+Damage and quarantine are tested the same way. `tests/unit` holds the
+quarantine decision for A to A, A to B, A to C, B to A and the flag alone, the
+flag kept on the item apart from the notes, which never decide anything, the
+moves of a report's status on their own, what each move
+does to the unit, the recovery cap below, at and above the replacement value
+and after an earlier recovery, the rules of the chargeable decision, and a
+hire taken back a grade worse whose settlement waits and then resumes with the
+recovery withheld. `tests/api` follows the whole path through HTTP in
+`test_damage_journey.py`, files, reads, repairs and closes reports, and asks
+every route for every refusal in `test_damage_report_refusals.py` and
+`test_damage_close_refusals.py`. `test_rental_detail_status.py` reads a rental
+past its due date as `OVERDUE` with no list read first. On PostgreSQL,
+`test_damage_and_quarantine.py` proves the search never offers a quarantined
+unit and offers it again once its report is resolved, that the report, its
+charge and the settlement are one transaction, that a write off keeps the row
+and its history, and that the two reads of revision `0005` stand on its
+indexes. `test_flagged_return.py` takes a unit back flagged in the grade it
+went out in and reads the committed row, which holds the flag in its column and
+the notes exactly as they were posted.
+
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as
 the owner, and apply the grants through the function revision `0002` calls. The
@@ -1653,7 +1827,8 @@ after the run.
 `tests/integration/test_schema_baseline.py` runs before every other test. It
 reads the PostgreSQL catalogue and asserts that the three extensions, the
 seventeen tables, the seventeen enumerated types, the exclusion constraint with
-its exact definition and the partial indexes all exist. Every other integration
+its exact definition and the partial indexes all exist, and that every column a
+later revision added is NOT NULL with its default. Every other integration
 test assumes that schema, so a broken migration is reported once at the top
 instead of as a page of unrelated failures. The order is set by the collection
 hook in `tests/integration/conftest.py`, which needs no plugin.

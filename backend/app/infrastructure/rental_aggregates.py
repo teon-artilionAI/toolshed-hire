@@ -2,7 +2,8 @@
 
 A rental that is going to change is read with its items and its charges, and
 each item with the figures its booking line carries for it (BR-20), which are
-read through the item's allocation and never stored on the item. However many
+read through the item's allocation and never stored on the item, and with
+whether a damage report names it, which the settlement asks (BR-35). However many
 rentals are read at once, that is two statements after the rentals
 themselves, one for every item and one for every charge.
 
@@ -25,6 +26,7 @@ from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
+from sqlalchemy import select as select_columns
 from sqlmodel import Session, col, select
 
 from app.domain import charge as domain_charge
@@ -39,7 +41,7 @@ from app.infrastructure.models import (
     RentalItem,
     ReservationLine,
 )
-from app.infrastructure.rental_query import charge_order
+from app.infrastructure.rental_query import charge_order, damage_reported
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +137,7 @@ def _write_items(session: Session, rental: domain.Rental) -> None:
         row.returned_at = item.returned_at
         row.days_late = item.days_late
         row.notes = item.notes
+        row.flagged_for_damage = item.flagged_for_damage
         session.add(row)
 
 
@@ -204,6 +207,7 @@ def charge_row(charge: domain_charge.Charge) -> Charge:
         raised_by_user_id=charge.raised_by_user_id,
         settled_at=charge.settled_at,
         payment_reference=charge.payment_reference,
+        damage_report_id=charge.damage_report_id,
     )
 
 
@@ -211,15 +215,15 @@ def _items_by_rental(
     session: Session, rental_ids: list[UUID]
 ) -> dict[UUID, list[domain.RentalItem]]:
     """Return the items of every rental named, each with its terms, in one statement."""
-    rows = session.exec(
-        select(RentalItem, ReservationLine)
+    rows = session.execute(
+        select_columns(RentalItem, ReservationLine, damage_reported())
         .join(AssetAllocation, col(AssetAllocation.id) == col(RentalItem.asset_allocation_id))
         .join(ReservationLine, col(ReservationLine.id) == col(AssetAllocation.reservation_line_id))
         .where(col(RentalItem.rental_id).in_(rental_ids))
         .order_by(col(RentalItem.rental_id), col(ReservationLine.line_position), col(RentalItem.id))
     ).all()
     grouped: dict[UUID, list[domain.RentalItem]] = defaultdict(list)
-    for item, line in rows:
+    for item, line, reported in rows:
         grouped[item.rental_id].append(
             domain.RentalItem(
                 id=item.id,
@@ -241,6 +245,8 @@ def _items_by_rental(
                 returned_at=in_utc(item.returned_at),
                 days_late=item.days_late,
                 notes=item.notes,
+                flagged_for_damage=item.flagged_for_damage,
+                damage_reported=bool(reported),
             )
         )
     return grouped
@@ -273,6 +279,7 @@ def _charges_by_rental(
                 rental_item_id=row.rental_item_id,
                 settled_at=in_utc(row.settled_at),
                 payment_reference=row.payment_reference,
+                damage_report_id=row.damage_report_id,
             )
         )
     return grouped

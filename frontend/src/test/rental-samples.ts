@@ -189,10 +189,11 @@ export const LOST_THE_LAST_UNIT: Rental = {
 /** What the server writes on the late fee for a customer, who is never told a tag. */
 export const CUSTOMER_LATE_FEE_DESCRIPTION = 'Plate compactor back 2 days late'
 
-/** A hire the way a customer is sent it, with no tag on any unit or charge. */
+/** A hire the way a customer is sent it, with no tag or replacement value on
+ *  any unit and no tag on any charge. */
 export const CUSTOMER_HIRE: Rental = {
   ...SETTLED_HIRE,
-  items: SETTLED_HIRE.items.map((item) => ({ ...item, assetTag: null })),
+  items: SETTLED_HIRE.items.map((item) => ({ ...item, assetTag: null, replacementValue: null })),
   charges: SETTLED_HIRE.charges.map((each) =>
     each.type === 'LATE_FEE' ? { ...each, description: CUSTOMER_LATE_FEE_DESCRIPTION } : each,
   ),

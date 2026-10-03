@@ -76,6 +76,7 @@ def an_item(*, returned_at: datetime | None = None) -> RentalItemDetail:
         returned_at=returned_at,
         days_late=0,
         late_fee_per_day=Decimal("120.00"),
+        replacement_value=Decimal("6500.00"),
     )
 
 
@@ -169,6 +170,8 @@ class TestARentalAsACallerSeesIt:
         customer_view = rental_view_for(an_actor(UserRole.CUSTOMER), rental, FIRST_DAY, POLICY)
         assert staff_view.items[0].item.asset_tag == TAG
         assert customer_view.items[0].item.asset_tag is None
+        assert staff_view.items[0].item.replacement_value == Decimal("6500.00")
+        assert customer_view.items[0].item.replacement_value is None
         assert rental.items[0].asset_tag == TAG, "The stored rental was changed."
 
     @pytest.mark.parametrize(

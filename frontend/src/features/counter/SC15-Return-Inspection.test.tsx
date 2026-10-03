@@ -11,6 +11,7 @@
 
 import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Rental } from '../../shared/api/contract'
 import { money } from '../../shared/format'
 import { SAMPLE_DATA_TITLE } from '../../shared/sample-data-notice'
 import { jsonResponse, neverAnswers, problemResponse } from '../../test/api-mock'
@@ -107,13 +108,21 @@ describe('a hire with every unit out', () => {
     expect(screen.getByText('Overdue', { selector: '.pill' })).toBeVisible()
   })
 
-  it('says the hire is overdue from the days late of its units, before the server has swept it to overdue', async () => {
-    await openReturn(showing({ ...OVERDUE_HIRE, status: 'OPEN' }))
+  it('says the hire is overdue when the server says so, and not otherwise', async () => {
+    await openReturn(showing(OVERDUE_HIRE))
+    await findUnitsStillOut()
+
+    expect(screen.getByText('Overdue', { selector: 'p' })).toBeVisible()
+    expect(screen.queryByText(/^Out since /)).not.toBeInTheDocument()
+  })
+
+  it('says since when a hire that is not overdue has been out', async () => {
+    await openReturn(showing(RENTAL))
     await findUnitsStillOut()
 
     expect(screen.getByText('Out with the customer', { selector: '.pill' })).toBeVisible()
-    expect(screen.getByText('Overdue', { selector: 'p' })).toBeVisible()
-    expect(screen.queryByText(/^Out since /)).not.toBeInTheDocument()
+    expect(screen.getByText(/^Out since /)).toBeVisible()
+    expect(screen.queryByText('Overdue', { selector: 'p' })).not.toBeInTheDocument()
   })
 
   it('opens the grade at the one each unit went out at, and the meter at its reading then', async () => {
@@ -141,6 +150,24 @@ describe('a hire partly back', () => {
     const back = screen.getByText('Units already back').closest('section') as HTMLElement
     expect(within(back).getByText(/Back 12 Mar 2026 at 10:15 at B, good working order, 1262 hours on the meter\./)).toBeVisible()
     expect(within(back).getByText(/Late fee charged R 444[,.]44\./)).toBeVisible()
+  })
+})
+
+describe('a hire partly back with a damaged unit', () => {
+  it('links the damaged unit to its report while the other unit is still out', async () => {
+    const damagedFirst: Rental = {
+      ...PARTLY_BACK,
+      items: [{ ...PARTLY_BACK.items[0], conditionIn: 'C', damageAssessment: 'REQUIRED' }, PARTLY_BACK.items[1]],
+    }
+    await openReturn(showing(damagedFirst))
+    await findUnitsStillOut()
+
+    const back = screen.getByText('Units already back').closest('section') as HTMLElement
+    expect(within(back).getByText('Waiting for a damage report.')).toBeVisible()
+    expect(within(back).getByRole('link', { name: 'Record the damage to TSH-PC-0007' })).toHaveAttribute(
+      'href',
+      `/counter/damage/TSH-PC-0007?rental=${RENTAL_ID}&rentalItem=${damagedFirst.items[0].id}`,
+    )
   })
 })
 
@@ -195,7 +222,7 @@ describe('a hire with every unit back', () => {
     expect(await screen.findByText('The deposit is waiting for a damage report', {}, SCREEN_WAIT)).toBeVisible()
     expect(screen.getByRole('link', { name: 'Record the damage to TSH-PC-0007' })).toHaveAttribute(
       'href',
-      `/counter/damage/TSH-PC-0007?rentalItem=${WAITING_FOR_DAMAGE.items[0].id}`,
+      `/counter/damage/TSH-PC-0007?rental=${RENTAL_ID}&rentalItem=${WAITING_FOR_DAMAGE.items[0].id}`,
     )
     expect(screen.queryByRole('link', { name: /TSH-PC-0011/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('form', { name: 'Pay the balance' })).not.toBeInTheDocument()
