@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "api:types": "node scripts/api-types.mjs",
-    "api:types:check": "node scripts/api-types.mjs --check"
+    "api:types:check": "node scripts/api-types.mjs --check",
+    "audit:check": "node scripts/audit-check.mjs"
   },
   "dependencies": {
     "@fontsource/fira-code": "^5.3.0",

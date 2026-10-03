@@ -1,0 +1,12 @@
+{
+  "exceptions": [
+    {
+      "advisory": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "severity": "high",
+      "reason": "braces reaches this project only through Tailwind CSS 3, which uses it at build time to expand the content globs in tailwind.config.js. Those patterns are written by me and are never user input, and braces is not in the bundle the browser receives. Every published braces version is affected and the only fix npm offers is Tailwind 4, a major migration I have planned after this release.",
+      "reviewed": "2026-10-03",
+      "expires": "2026-11-30"
+    }
+  ]
+}
