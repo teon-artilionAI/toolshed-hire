@@ -16,7 +16,8 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-05` Register, `SC-09` My Account and Hire History | The API, through the routes described under Registration and account security |
 | `SC-12` Customer Lookup and Walk-in Registration, `SC-13` New Booking and Asset Allocation, `SC-14` Checkout and Deposit | The API, through the routes described under Booking at the counter |
 | `SC-10` Counter Dashboard, `SC-11` Branch Diary, `SC-17` Asset Locator | The API, through the routes described under The counter's day |
-| `SC-15`, `SC-16` and `SC-18` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-15` Return and Condition Inspection, `SC-18` Overdue and Late Fee Worklist, and the hire history of `SC-09` | The API, through the routes described under Returns and settlement |
+| `SC-16` and `SC-19` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -24,11 +25,6 @@ the shell puts a notice above the screen that says it still shows sample data
 and that nothing changed there is saved. The notice is
 `src/shared/sample-data-notice.tsx`, and the flag is the only thing that
 decides whether it shows. Connecting a screen means changing its flag to true.
-
-One part of a connected screen has no data yet and says so. The hire history
-and charges on `SC-09` wait for a later change, so that card shows no figure
-and no sample. It says that hires and charges appear once equipment has been
-collected.
 
 The privacy notice at `/privacy` is `INFO-01`. It is a supporting page and not
 one of the numbered screens. It is routed and guarded from the same inventory,
@@ -242,6 +238,13 @@ commits as `../backend/openapi.json`.
   and the 200 the API sends with the same hire when the booking is already
   out. `Rental` is built from both and from the rental route, and the reader in
   `api/rental-read.ts` reads both answers the same way.
+- The returns and settlement routes are not in the document yet. Their bodies,
+  queries and pages are in `api/contract-returns.ts`, and they are the one
+  group written by hand, word for word from the contract. Every one of those
+  routes answers with the generated `Rental`, so the hire itself is still
+  checked against the document. When the backend commits the document with
+  these routes, the hand written types become refinements of the generated
+  ones like the rest, and any difference stops the application compiling.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -287,6 +290,11 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   locator, under the `assets` segment, are never fresh. They are left open all
   day, so they are read again whenever the window comes back into focus. A no
   show marks the dashboard and every day of the diary as out of date.
+- A hire and the counter's lists of hires, under the `rentals` segment, are
+  never fresh, and nor are the customer's own hires, under the `account`
+  segment. A return, a loss or a balance payment puts the hire the server
+  answered with into the cache under its key and its reference, and marks the
+  lists, the counter's day, the reservations and the locator as out of date.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -602,9 +610,9 @@ it. The dashboard and the diary take their branch from the same place.
   question that says in words what is about to happen. "Yes, hand it over" is
   the one request. The rules and the body are in `checkout-form.ts`.
 - The answer shows the hire reference, the units, the deposit held and the day
-  it is due back. A 409 or a 403 shows the server's message and offers to read
-  the booking again. A 422 goes back to the form with each message under its
-  control.
+  it is due back, and links to the return of the hire by its key. A 409 or a
+  403 shows the server's message and offers to read the booking again. A 422
+  goes back to the form with each message under its control.
 
 #### Accessibility of these screens
 
@@ -635,8 +643,8 @@ The dashboard on `SC-10` says what is due today at the branch, the diary on
   empty. The counts are true totals and a list holds at most fifty, so a list
   shorter than its count says how many it shows.
 - A collection links to the checkout of its booking. A return and an overdue
-  hire link to the return screen of the hire, `/counter/return/:rentalId`,
-  which is connected in a later change.
+  hire link to the return screen of the hire, `/counter/return/:rentalId`, by
+  the key of the hire.
 - The days overdue and the late fee are shown as the server sends them. The
   browser works out no fee.
 - The quarantined figure is a count. The server sends nothing about bookings
@@ -683,6 +691,88 @@ colour, every target is at least 44 pixels, and all three screens fit a phone
 focus when it opens, gives it back to its button when it closes, and moves it
 to the answer when the server has answered.
 
+### Returns and settlement
+
+The return screen on `SC-15` takes equipment back and shows the deposit
+settled, the worklist on `SC-18` lists what is overdue, and the history half
+of `SC-09` shows a customer their hires. The routes are in `api/rentals.ts`,
+the hire is read by `api/rental-read.ts`, and the cached reads are in
+`api/rental-queries.ts`. Every figure is the server's. The browser never works
+out a late fee, a settlement or a balance, and never adds money up.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-15` | `GET /api/rentals/{id}` | Each unit still out with the late fee if it came back today, each unit already back and when, and the settlement once the last one is back |
+| `SC-15` | `POST /api/rentals/{id}/returns` | The hire as the server now has it, partially returned or with the deposit settled |
+| `SC-15` | `POST /api/rentals/{id}/balance-payment` | The hire, settled |
+| `SC-18` | `GET /api/rentals?branchCode=&overdueOnly=true&page=&pageSize=` | The overdue hires at the branch, most overdue first, twenty to a page |
+| `SC-18` | `POST /api/rentals/{id}/items/{itemId}/loss` | What the loss charged, from the hire the server answered with |
+| `SC-09` | `GET /api/me/rentals?page=&pageSize=` | The customer's own hires, newest first, five to a page |
+
+#### `SC-15` Return and Condition Inspection
+
+- The address is `/counter/return/:rentalId`, and the value is the key of a
+  hire or its reference. The dashboard, the diary and the checkout all link to
+  it by the key. The diary sends no key for a collected booking, so its link
+  goes through the checkout of the booking, which opens the hire.
+- Each unit still out can be ticked to come back now. Ticking it opens its
+  grade, starting at the grade it went out at, its hour meter when it has one,
+  the accessories that came back and a box to flag it for damage. The rules and
+  the body are in `SC15-return-model.ts`.
+- Each unit still out shows `daysLateToday` and `lateFeeToday` from the server,
+  with a sentence that the system worked the fee out, that the counter
+  confirms it and cannot change it, and that only the owner can waive a
+  charge.
+- "Take the ticked units back" asks a question that says in words what will
+  happen, including every late fee, and "Yes, take them back" is the one
+  request. The answer is the hire as the server now has it. While units are
+  still out the screen says the hire is partially returned. Once the last one
+  is back it shows the deposit held, what was withheld and the charges that
+  say why, what was released and the balance due.
+- When the deposit is waiting on a balance, a form takes the reference of the
+  payment and posts it. When it is waiting on a damage report, each unit that
+  needs one links to `/counter/damage/<assetTag>?rentalItem=<id>`.
+- A 409 or a 403 shows the server's message and offers to read the hire again.
+  A 422 goes back to the form with each message under its control. The writes
+  share `use-rental-write.ts`, which sends each one once.
+
+#### `SC-18` Overdue and Late Fee Worklist
+
+- One paged request for the overdue hires at the branch the person works at,
+  with the loading, failed and empty states. The page is in the address.
+- Each hire shows the customer and their phone number, the day it was due
+  back, how many days late it is, and each unit still out with its days late
+  and its late fee so far, and links to its return. The days late of the hire
+  is the most days late of its units, which is the server's figure for one of
+  them and not a sum.
+- A unit more than fourteen days late is in the escalation queue, which is
+  made from the page on the screen. "Record as lost" asks first and says that
+  fourteen days of late fee are charged, the deposit for the unit is
+  forfeited, a recovery charge up to the replacement value is raised and the
+  unit is marked lost. The answer is shown above the lists with the charges the
+  server raised, so it stays when the list is read again.
+- The branch and age filters, the reminder to ring a customer and the list of
+  units out with no hire against them are gone, because the server sends
+  nothing for them.
+
+#### The hire history on `SC-09`
+
+- The history is read once the profile has loaded, so a member of staff, who
+  has no profile, never asks for it. Each hire shows its reference, its
+  branch, its dates, its status in words, the models hired with no tag, every
+  charge, and the deposit held, kept for charges, returned and still due. A
+  deposit given back is written as returned, never with a minus sign.
+- It has the shared loading and failed states, an empty state that points at
+  My Hires, and page controls. The page is in the address.
+
+#### Accessibility of these screens
+
+A write moves focus to a notice that says what it did. The question before
+each write takes focus when it opens. Every status carries words beside its
+colour, every target is at least 44 pixels, money is written with the rand
+sign and two decimals through `money`, and all three screens fit a phone 360
+pixels wide with nothing to scroll sideways.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -715,8 +805,10 @@ throws while rendering shows the error state and the navigation stays up.
 - `money` in `src/shared/format.ts` accepts the strings the API sends, such as
   `"280.00"`, and never passes them through a float. `percent` writes a rate
   the API sends, such as `"15.00"`, as `15%`. `isNoMoney` says whether an
-  amount is zero, so a line that would only say zero can be left out. None of
-  them does a sum.
+  amount is zero, so a line that would only say zero can be left out.
+  `isNegativeMoney` and `unsignedMoney` let a screen write a deposit given back
+  as released or returned instead of with a minus sign. None of them does a
+  sum.
 - `src/shared/pagination.tsx` is the page control for a list the server pages.
 
 ## Commands
@@ -786,16 +878,18 @@ npx playwright install chromium
 backend. With no backend, the catalogue home and the search are scanned in
 their failed state, and the registration form with its branch menu in its
 failed state. The privacy notice is scanned too. The counter's customer
-lookup, new booking, checkout, dashboard, diary and locator are scanned
-loaded, with a signed in assistant, a customer, a booking, a day and units
-whose answers the spec gives itself, from `e2e/counter-answers.ts` and
-`e2e/overview-answers.ts`. The new booking is scanned again with a tool on it,
-the checkout again with every problem of its form on the screen, and the diary
-again with the no show question open.
+lookup, new booking, checkout, dashboard, diary, locator, return screen and
+overdue worklist are scanned loaded, with a signed in assistant, a customer, a
+booking, a day, units and hires whose answers the spec gives itself, from
+`e2e/counter-answers.ts`, `e2e/overview-answers.ts` and
+`e2e/return-answers.ts`. The new booking is scanned again with a tool on it,
+the checkout again with every problem of its form on the screen, the diary
+again with the no show question open, the return again with its question
+open, and the worklist again with the question about a lost unit open.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires, My Account and the six counter screens at 360 pixels wide and
-checks that nothing has to be scrolled sideways. It answers the API itself,
+My Hires, My Account with a hire in its history, and the eight counter screens
+at 360 pixels wide and checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
 database holds.
 
@@ -861,19 +955,23 @@ built from the time, and touches no seeded account. It follows no link from an
 email, because the address is not one this system delivers to. The component
 tests cover where the links land.
 
-`e2e/counter.spec.ts` needs the customer and checkout routes. A seeded counter
-assistant signs in, registers a walk in with a name and a number nobody has
-used, books one unit for them for today at the assistant's own branch, checks
-it out and sees the reference of the hire. The model is the last one on the
+`e2e/counter.spec.ts` needs the customer, checkout and returns routes. A
+seeded counter assistant signs in, registers a walk in with a name and a number
+nobody has used, books one unit for them for today at the assistant's own
+branch, checks it out and sees the reference of the hire. Then they open the
+hire from the checkout, take the unit back in the condition it went out in,
+and see the deposit released in full with nothing due, and the booking listed
+as returned. In a second journey the second seeded customer signs in and finds
+the hire history on My Account. The model is the last one on the
 first page the availability search for that branch lists, so a rerun finds a
 unit the last run did not take. The desktop project signs in as the assistant at Cape Town
 CBD, `elmarie@toolshedhire.co.za`, and the phone project as the one at
 Bellville, `thabo@toolshedhire.co.za`, so the two never compete for a unit.
 The password comes from `E2E_STAFF_PASSWORD` and falls back to the development
-seed password. The spec asks `GET /api/customers` and a checkout with no token
-first. A 404 or a 405 from either means the routes are not there, and the
-journey skips itself. A run leaves the unit it checked out on hire, because a
-return is a later change.
+seed password. The spec asks `GET /api/customers`, a checkout,
+`GET /api/rentals` and `GET /api/me/rentals` with no token first. A 404 or a
+405 from any of them means the routes are not there, and both journeys skip
+themselves. The unit goes back on the shelf at the end of the run.
 
 `e2e/counter-overview.spec.ts` needs the dashboard, the diary and the asset
 locator. A seeded counter assistant signs in, sees the name of their branch and
@@ -893,23 +991,21 @@ run means the strike lands on nobody else. The spec asks the three routes with
 no token first. A 404 or a 405 from any of them means the routes are not
 there, and both journeys skip themselves.
 
-Staff may mark a booking as a no show from the start of its first day, and once
-the branch has closed on that day the server's sweep marks it by itself. So
-the second journey reads the closing time of the branch from
-`GET /api/branches`, and a run after it finds the booking already a no show
-with no button, and checks that instead. The counter journey has no such
-choice. It books for today and checks the booking out, and after closing time
-the sweep has made that booking a no show before the checkout, so it fails. The
-seeded branches close at 17:00 in Cape Town, so run the browser tests before
-then.
+The API refuses a booking that starts today once the branch has closed for the
+day. The pipeline runs the API for the browser tests with a clock pinned
+inside business hours, so the counter journey books for today, checks out and
+takes the unit back on the same day, and the no show journey always finds its
+booking due out. Against a backend on the real clock, run the browser tests
+before the seeded branches close at 17:00 in Cape Town.
 
 The customers, the password rule and the sign in are in `e2e/customer.ts`, the
-counter assistants in `e2e/staff.ts`, and the dates and the time of day are
-counted at the branches by `e2e/hire-dates.ts`.
+counter assistants in `e2e/staff.ts`, and the dates are counted at the
+branches by `e2e/hire-dates.ts`.
 
-One run makes twelve sign ins. `session.spec.ts` signs the first customer in
+One run makes fourteen sign ins. `session.spec.ts` signs the first customer in
 four times, twice in each browser project, and the booking journey twice more.
-The second customer is signed in four times, twice by each reservation spec.
+The second customer is signed in six times, twice by each reservation spec and
+twice by the hire history journey.
 `account.spec.ts` signs in each of the two accounts it registers once, and
 those count against addresses of their own. It also makes two registrations
 and two reset requests, which the API throttles for one client address. The
@@ -924,7 +1020,7 @@ The counter journey and the two counter overview journeys each sign the two
 counter assistants in once, so each assistant three times in a run, which
 counts against their own addresses.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all six skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all seven skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

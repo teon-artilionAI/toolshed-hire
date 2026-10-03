@@ -85,6 +85,27 @@ export function isNoMoney(amount: string): boolean {
   return whole === 0n && Number(cents) === 0
 }
 
+/**
+ * Whether a money string runs the other way, such as a deposit given back,
+ * which the API sends with a minus. Zero is never negative.
+ *
+ * @throws RangeError when the string is not money as the API writes it.
+ */
+export function isNegativeMoney(amount: string): boolean {
+  return parseWireMoney(amount).negative && !isNoMoney(amount)
+}
+
+/**
+ * Format rand without its sign, for a line whose words say which way the money
+ * runs, for example "R 960,00 released". A screen never shows a bare minus.
+ *
+ * @throws RangeError when the string is not money as the API writes it.
+ */
+export function unsignedMoney(amount: string): string {
+  const { whole, cents } = parseWireMoney(amount)
+  return money(`${whole}.${cents}`)
+}
+
 /** A percentage as the API writes it. Digits with up to two decimals. */
 const WIRE_PERCENT = /^\d+(?:\.\d{1,2})?$/
 

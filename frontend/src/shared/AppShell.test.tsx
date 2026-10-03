@@ -178,8 +178,8 @@ describe('the sample data notice in the shell', () => {
   it('is above a screen that is not connected yet', async () => {
     mockApi(signedInAs(COUNTER_STAFF))
 
-    renderApp('/counter/overdue')
-    const title = await findScreenHeading('Overdue and late fees')
+    renderApp('/counter/damage/TSH-DR-0042')
+    const title = await findScreenHeading('Record damage')
 
     const notice = screen.getByText(SAMPLE_DATA_TITLE)
     expect(notice).toBeVisible()

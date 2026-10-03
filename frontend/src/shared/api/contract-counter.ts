@@ -7,8 +7,9 @@
  * compiling until it follows. They live apart from contract.ts only to keep
  * each file a size that can be read in one sitting.
  *
- * Nothing imports this file but contract.ts. The application imports these
- * types from there, like every other wire type.
+ * Nothing imports this file but contract.ts and contract-returns.ts, whose
+ * pages of hires are made of the `Rental` here. The application imports these
+ * types from contract.ts, like every other wire type.
  */
 
 import type {

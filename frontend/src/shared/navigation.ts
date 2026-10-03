@@ -76,10 +76,12 @@ export const SCREENS: ScreenDef[] = [
   // The value is the key of a reservation or its reference, because a checkout
   // hands a confirmed reservation over and makes the hire from it.
   { id: 'SC-14', path: '/counter/checkout/:reservationId', name: 'Checkout and Deposit', role: 'counter', live: true },
-  { id: 'SC-15', path: '/counter/return/:rentalId', name: 'Return and Condition Inspection', role: 'counter', live: false },
+  // The value is the key of a hire or its reference. Every link to it carries
+  // the key, and a reference typed from the paperwork works too.
+  { id: 'SC-15', path: '/counter/return/:rentalId', name: 'Return and Condition Inspection', role: 'counter', live: true },
   { id: 'SC-16', path: '/counter/damage/:assetId', name: 'Damage Report Capture', role: 'counter', live: false },
   { id: 'SC-17', path: '/counter/locator', name: 'Asset Locator', navLabel: 'Locator', role: 'counter', live: true, inNav: true, icon: 'MapPin' },
-  { id: 'SC-18', path: '/counter/overdue', name: 'Overdue and Late Fee Worklist', navLabel: 'Overdue', role: 'counter', live: false, inNav: true, icon: 'AlarmClock' },
+  { id: 'SC-18', path: '/counter/overdue', name: 'Overdue and Late Fee Worklist', navLabel: 'Overdue', role: 'counter', live: true, inNav: true, icon: 'AlarmClock' },
 
   // Admin and owner, SC-19 to SC-24
   { id: 'SC-19', path: '/admin', name: 'Admin Dashboard', navLabel: 'Overview', role: 'admin', live: false, inNav: true, icon: 'LayoutDashboard' },

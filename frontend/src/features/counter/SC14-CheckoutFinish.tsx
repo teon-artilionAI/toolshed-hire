@@ -1,7 +1,9 @@
 /**
  * The end of a handover on SC-14. The deposit and the agreement, the question
  * that comes before the last button, and what is shown once the equipment is
- * out. Also the two answers that mean there is nothing to hand over.
+ * out. Also the two answers that mean there is nothing to hand over. Once the
+ * equipment is out, and when it was out already, the screen links to the
+ * return of the hire on SC-15 by the key of the hire.
  *
  * The deposit is the server's figure and it is simulated. Nothing is
  * authorised on a card, and the screen says so.
@@ -140,6 +142,9 @@ export function HandedOver({ rental, headingRef }: { rental: Rental; headingRef:
         <div className="mt-lg flex flex-wrap gap-sm">
           <Link to={customerHref(rental.customerProfileId)} className="btn-primary px-md">
             Back to {rental.customerName}
+          </Link>
+          <Link to={rentalHref(rental.id)} className="btn-secondary px-md">
+            Open the hire
           </Link>
           <Link to={COUNTER_HOME_PATH} className="btn-secondary px-md">
             Back to today

@@ -15,10 +15,12 @@ import {
   formatDateShort,
   formatDateTime,
   humanise,
+  isNegativeMoney,
   isNoMoney,
   isOverdue,
   money,
   percent,
+  unsignedMoney,
 } from './format'
 
 /** The no-break spaces a locale formatter likes to use between digit groups. */
@@ -112,6 +114,24 @@ describe('isNoMoney', () => {
 
   it('refuses an amount that is not money', () => {
     expect(() => isNoMoney('lots')).toThrow(RangeError)
+  })
+})
+
+describe('isNegativeMoney and unsignedMoney', () => {
+  it('says a deposit given back runs the other way, and writes it with no minus', () => {
+    expect(isNegativeMoney('-960.00')).toBe(true)
+    expect(unsignedMoney('-960.00')).toBe(money('960.00'))
+    expect(unsignedMoney('-960.00')).not.toContain('-')
+  })
+
+  it.each(['0.00', '-0.00', '240.00'])('says "%s" is not negative and writes it as it is', (amount) => {
+    expect(isNegativeMoney(amount)).toBe(false)
+    expect(unsignedMoney(amount)).toBe(money(amount.replace('-', '')))
+  })
+
+  it('refuses an amount that is not money', () => {
+    expect(() => isNegativeMoney('lots')).toThrow(RangeError)
+    expect(() => unsignedMoney('--5.00')).toThrow(RangeError)
   })
 })
 
