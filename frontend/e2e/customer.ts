@@ -8,7 +8,7 @@
  * succeed as well, and allows ten in a fixed window of fifteen minutes. Every
  * spec that calls `signInAsCustomer` spends one of them in each browser
  * project. One run signs the first customer in six times and the second one
- * four times, so each stays inside the ten.
+ * six times, so each stays inside the ten.
  */
 
 import { expect } from '@playwright/test'

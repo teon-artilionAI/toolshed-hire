@@ -5,7 +5,8 @@
  * opens the screen as the signed in customer, and reads it the way a person
  * would. Loading, failed, no profile and loaded, and then the notice an
  * unconfirmed email address gets. Correcting the profile is in
- * SC09-Profile-Edit.test.tsx, and what the files share is in SC09-test-kit.tsx.
+ * SC09-Profile-Edit.test.tsx, the hire history is in SC09-Hire-History.test.tsx,
+ * and what the files share is in SC09-test-kit.tsx.
  */
 
 import { screen, waitFor, within } from '@testing-library/react'
@@ -25,7 +26,8 @@ import { ACCESS_TOKEN, bearerOf } from '../../test/session-samples'
 import { SAMPLE_DATA_TITLE } from '../../shared/sample-data-notice'
 import { DEMONSTRATION_EMAIL_REASON, WITHOUT_THE_LINK } from './email-delivery-note'
 import { EMAIL_UNCONFIRMED_TITLE, LINK_SENT_AGAIN_TITLE } from './email-verification-notice'
-import { NO_HIRES_YET, NO_PROFILE_TITLE } from './SC09-My-Account'
+import { NO_HIRES_TITLE } from './SC09-Hire-History'
+import { NO_PROFILE_TITLE } from './SC09-My-Account'
 import { detail, openAccount, startEditing, withProfile } from './SC09-test-kit'
 
 describe('while the profile is loading', () => {
@@ -128,13 +130,14 @@ describe('the loaded profile', () => {
     expect(detail('Account standing')).toHaveTextContent('On hold')
   })
 
-  it('shows no sample hire or charge, and says when they will appear', async () => {
+  it('shows the hire history beside the profile, with no sample hire or charge', async () => {
     await openAccount(withProfile(PROFILE))
     await screen.findByText('Your details')
 
-    expect(screen.getByText(NO_HIRES_YET)).toBeVisible()
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.queryByText(/TSH-H-|Deposit held|R \d/)).not.toBeInTheDocument()
+    expect(await screen.findByText(NO_HIRES_TITLE)).toBeVisible()
+    expect(screen.getByText('Hire history and charges')).toBeVisible()
+    expect(screen.queryByText(/TSH-H-|R \d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/statement/i)).not.toBeInTheDocument()
   })
 })
 
