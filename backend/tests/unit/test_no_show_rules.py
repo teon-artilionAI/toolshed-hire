@@ -1,4 +1,4 @@
-"""The rules of a booking nobody collected, with no database anywhere (BR-17, BR-18, BR-31).
+"""The rules of a booking nobody collected, with no database anywhere (BR-17, BR-18).
 
 When a confirmed booking becomes a no show is the reservation state's to
 decide. The sweep may call it once the collection branch has closed on the
@@ -9,8 +9,9 @@ the sentence each refusal says.
 The other rules are the domain's too. The strike window is the twelve months
 that end today, counted by the start dates of the reservations. Only an
 account in good standing goes on hold, at the third strike. The diary's button
-reads `no_show_refusal`, the late fee the dashboard shows is capped at fourteen
-days, and a customer on hold is told why.
+reads `no_show_refusal`, and a customer on hold is told why. The late fee the
+dashboard shows is the late fee policy's, pinned in
+tests/unit/test_late_fee_policy.py.
 
 Instants are written in UTC. Cape Town is two hours ahead all year, so 17:00
 there is 15:00 here and midnight there is 22:00 the evening before here.
@@ -19,7 +20,6 @@ there is 15:00 here and midnight there is 22:00 the evening before here.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from decimal import Decimal
 from typing import Final
 from uuid import uuid4
 
@@ -34,7 +34,6 @@ from app.domain.no_show import (
     standing_after_strikes,
     strike_window_opens_after,
 )
-from app.domain.policies.late_fee import LATE_FEE_CAP_DAYS, late_fee_accrued
 from app.domain.states.guards import BRANCH_STILL_OPEN_MESSAGE, FIRST_DAY_NOT_COME_MESSAGE
 from tests.support.reservations import (
     NINTH,
@@ -51,7 +50,6 @@ UNITS: Final[int] = 2
 BRANCH_CLOSED_AT: Final[datetime] = datetime(2026, 3, 9, 15, 0, tzinfo=UTC)
 # Midnight in Cape Town at the start of the ninth.
 FIRST_DAY_BEGINS: Final[datetime] = datetime(2026, 3, 8, 22, 0, tzinfo=UTC)
-LATE_FEE: Final[Decimal] = Decimal("120.00")
 
 
 class TestWhenTheSweepMayCallANoShow:
@@ -188,28 +186,6 @@ class TestTheButtonOfTheDiary:
         assert refusal.endswith("so it cannot be marked as not collected.")
 
 
-class TestTheLateFeeOnTheOverdueList:
-    """The late fee per day of each unit still out, times the whole days, capped at fourteen."""
-
-    def test_two_days_at_one_hundred_and_twenty_rand_is_two_hundred_and_forty(self) -> None:
-        assert late_fee_accrued([LATE_FEE], 2).amount == Decimal("240.00")
-
-    def test_each_unit_still_out_accrues_its_own_fee(self) -> None:
-        assert late_fee_accrued([LATE_FEE, Decimal("80.00")], 3).amount == Decimal("600.00")
-
-    def test_accrual_stops_after_fourteen_days(self) -> None:
-        capped = late_fee_accrued([LATE_FEE], LATE_FEE_CAP_DAYS)
-        assert late_fee_accrued([LATE_FEE], LATE_FEE_CAP_DAYS + 30) == capped
-        assert capped.amount == Decimal("1680.00")
-
-    @pytest.mark.parametrize("days", [0, -3])
-    def test_a_hire_that_is_not_late_has_run_up_nothing(self, days: int) -> None:
-        assert late_fee_accrued([LATE_FEE], days).amount == Decimal("0.00")
-
-    def test_a_hire_with_nothing_out_has_run_up_nothing(self) -> None:
-        assert late_fee_accrued([], 5).amount == Decimal("0.00")
-
-
 class TestACustomerOnHoldIsToldWhy:
     """The refusal of an account on hold says it is three bookings that were not collected."""
 
@@ -229,6 +205,3 @@ class TestACustomerOnHoldIsToldWhy:
         assert "administrator" in refused.value.message
         assert refused.value.detail == {"account_status": "ON_HOLD"}
 
-
-def test_the_late_fee_cap_is_fourteen_days() -> None:
-    assert LATE_FEE_CAP_DAYS == 14

@@ -143,18 +143,32 @@ class Money:
             InvalidMoney: If the rate is not a finite Decimal or an int.
 
         """
-        _refuse_inexact(rate, "a percentage")
-        if not isinstance(rate, Decimal | int):
-            raise InvalidMoney(
-                f"Attempted to take {rate!r} ({type(rate).__name__}) percent of Money. "
-                "A percentage is a Decimal or an int."
-            )
-        percentage = Decimal(rate)
-        if not percentage.is_finite():
-            raise InvalidMoney(
-                f"Attempted to take {rate!r} percent of Money, which is not a finite number."
-            )
+        percentage = _exact_percentage(rate, "take")
         return Money(self.amount * percentage / PERCENT_BASE)
+
+    def before_percent_added(self, rate: Decimal | int) -> Money:
+        """Return what this amount was before `rate` percent was added to it, unrounded.
+
+        An amount quoted with VAT already in it, such as a late fee, is split
+        by working back to the part before the VAT. That part is the amount
+        divided by one hundred percent plus the rate.
+
+        Args:
+            rate: The percentage that was added, for example 15 for fifteen percent.
+
+        Raises:
+            InvalidMoney: If the rate is not a finite Decimal or an int, or is
+                not above minus one hundred percent, which no amount could
+                have had added to it.
+
+        """
+        percentage = _exact_percentage(rate, "work back from")
+        if percentage <= -PERCENT_BASE:
+            raise InvalidMoney(
+                f"Attempted to work back from {rate} percent added to Money. A rate of "
+                f"-{PERCENT_BASE} percent or less leaves nothing to work back to."
+            )
+        return Money(self.amount * PERCENT_BASE / (PERCENT_BASE + percentage))
 
     def rounded(self) -> Money:
         """Return the amount as a charge is written, half up to the cent."""
@@ -179,6 +193,32 @@ class Money:
     def __ge__(self, other: Money) -> bool:
         """Return True when this amount is not smaller than the other."""
         return self.amount >= _amount_of(other, "compare")
+
+
+def _exact_percentage(rate: object, operation: str) -> Decimal:
+    """Return a percentage as a finite Decimal, refusing anything inexact.
+
+    Args:
+        rate: The percentage given.
+        operation: What was being done with it, for the message.
+
+    Raises:
+        InvalidMoney: If the rate is a float, a boolean, any type other than a
+            Decimal or an int, or not a finite number.
+
+    """
+    _refuse_inexact(rate, "a percentage")
+    if not isinstance(rate, Decimal | int):
+        raise InvalidMoney(
+            f"Attempted to {operation} {rate!r} ({type(rate).__name__}) percent of Money. "
+            "A percentage is a Decimal or an int."
+        )
+    percentage = Decimal(rate)
+    if not percentage.is_finite():
+        raise InvalidMoney(
+            f"Attempted to {operation} {rate!r} percent of Money, which is not a finite number."
+        )
+    return percentage
 
 
 def _amount_of(other: object, operation: str) -> Decimal:

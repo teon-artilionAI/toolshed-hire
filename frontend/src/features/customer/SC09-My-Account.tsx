@@ -10,9 +10,9 @@
  * a way to send the link again. An account the branch has put on hold is told
  * that too.
  *
- * The hire history and the charges are a later change, and the API has no
- * route for them yet. The card says that hires and charges appear once
- * equipment has been collected, and shows no figure and no sample.
+ * The hire history and the charges are read from `GET /api/me/rentals`, once
+ * the profile has loaded, in SC09-Hire-History.tsx. A member of staff has no
+ * profile and so never asks for them.
  */
 
 import { Link } from 'react-router-dom'
@@ -22,17 +22,16 @@ import { queryPhase } from '../../shared/api/query-phase'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { formatDate } from '../../shared/format'
 import { CATALOGUE_PATH } from '../../shared/navigation'
-import { Card, EmptyState, Notice, PageHeader } from '../../shared/ui'
+import { EmptyState, Notice, PageHeader } from '../../shared/ui'
 import { AccountProfileCard } from './account-profile-card'
 import { isNotFound } from './booking-refusal'
 import { EmailVerificationNotice } from './email-verification-notice'
+import { HireHistory } from './SC09-Hire-History'
 import { MY_RESERVATIONS_PATH } from './reservation-links'
 
 const TITLE = 'My account'
 
 export const NO_PROFILE_TITLE = 'This account has no customer profile'
-
-export const NO_HIRES_YET = 'Hires and charges appear here once equipment has been collected.'
 
 export default function MyAccount() {
   const queryClient = useQueryClient()
@@ -118,13 +117,7 @@ export default function MyAccount() {
           </div>
 
           <div className="min-w-0">
-            <Card title="Hire history and charges">
-              <p className="text-sm text-slate-soft">{NO_HIRES_YET}</p>
-              <p className="mt-sm text-sm text-slate-soft">
-                Until then, your bookings are under My Hires, with their dates, the branch and
-                what each will cost.
-              </p>
-            </Card>
+            <HireHistory />
           </div>
         </div>
       </div>

@@ -2,8 +2,8 @@
 
 The rows are built by hand, so these pin what `ReadCounterOverview` adds, which
 is the branch each caller reads, the sweep before the read, the overdue
-figures, the days of the diary and its no show button. The clock stands still
-on Monday the second of March 2026.
+figures from the late fee policy it is handed, the days of the diary and its
+no show button. The clock stands still on Monday the second of March 2026.
 """
 
 from __future__ import annotations
@@ -37,12 +37,15 @@ from app.application.refusal import refused_parameter_of
 from app.domain.enums import RentalStatus, ReservationStatus, UserRole
 from app.domain.errors import AuthorisationFailure, BranchScopeError, ValidationFailure
 from app.domain.identity import Actor, Branch
+from app.domain.money import Money
+from app.domain.policies import FixedLateFeePolicy, LateFeePolicy, StandardLateFeePolicy
 from tests.support.clock import FixedClock
+from tests.support.factories import CLOSES_AT
 
 TODAY: Final[date] = date(2026, 3, 2)
 ONE_DAY: Final[timedelta] = timedelta(days=1)
-CBD: Final[Branch] = Branch(id=uuid4(), code="CBD", name="Cape Town CBD")
-BLV: Final[Branch] = Branch(id=uuid4(), code="BLV", name="Bellville")
+CBD: Final[Branch] = Branch(id=uuid4(), code="CBD", name="Cape Town CBD", closes_at=CLOSES_AT)
+BLV: Final[Branch] = Branch(id=uuid4(), code="BLV", name="Bellville", closes_at=CLOSES_AT)
 LATE_FEE: Final[Decimal] = Decimal("120.00")
 HAMMER: Final[str] = "Bosch GBH 2-26"
 MIXER: Final[str] = "Concrete Mixer 140L"
@@ -123,10 +126,16 @@ class FakeBranches:
         return {CBD.code: CBD, BLV.code: BLV}.get(code)
 
 
-def service(overview: FakeOverview) -> ReadCounterOverview:
+def service(
+    overview: FakeOverview, policy: LateFeePolicy | None = None
+) -> ReadCounterOverview:
     """Return the service over the fakes, with a sweep that notes when it ran."""
     return ReadCounterOverview(
-        overview, FakeBranches(), FixedClock(), lambda: overview.calls.append(SWEEP)
+        overview,
+        FakeBranches(),
+        FixedClock(),
+        lambda: overview.calls.append(SWEEP),
+        policy or StandardLateFeePolicy(),
     )
 
 
@@ -218,6 +227,18 @@ class TestTheDashboard:
         (entry,) = service(overview).dashboard(DashboardQuery(assistant())).overdue
         assert entry.days_overdue == 20
         assert entry.late_fee_accrued == Decimal("3360.00")
+
+    def test_the_figure_comes_from_the_policy_the_read_is_handed(self) -> None:
+        overdue = a_rental(TODAY - 3 * ONE_DAY, True, True)
+        overview = FakeOverview(
+            calls=[],
+            dashboard_rows=DashboardRows(
+                counts=COUNTS, collections_due=(), returns_due=(), overdue=(overdue,)
+            ),
+        )
+        fixed = FixedLateFeePolicy(Money.create("50.00"))
+        (entry,) = service(overview, fixed).dashboard(DashboardQuery(assistant())).overdue
+        assert entry.late_fee_accrued == Decimal("100.00")
 
 
 class TestTheDiary:

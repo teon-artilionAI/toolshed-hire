@@ -35,7 +35,19 @@ export function checkoutHref(reservationIdOrReference: string): string {
   return `/counter/checkout/${encodeURIComponent(reservationIdOrReference)}`
 }
 
-/** SC-15, the hire a reservation became, by its key. */
+/** SC-18, the overdue worklist. */
+export const OVERDUE_PATH = '/counter/overdue'
+
+/** The query parameter SC-16 carries the unit of a hire in. */
+export const RENTAL_ITEM_PARAMETER = 'rentalItem'
+
+/** SC-15, the return of one hire, by its key. The screen takes a reference
+ *  too, but every link to it carries the key. */
 export function rentalHref(rentalId: string): string {
   return `/counter/return/${encodeURIComponent(rentalId)}`
+}
+
+/** SC-16, a damage report for one unit that came back on a hire. */
+export function damageHref(assetTag: string, rentalItemId: string): string {
+  return `/counter/damage/${encodeURIComponent(assetTag)}?${RENTAL_ITEM_PARAMETER}=${encodeURIComponent(rentalItemId)}`
 }

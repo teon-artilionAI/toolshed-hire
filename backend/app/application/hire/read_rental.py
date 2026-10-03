@@ -32,6 +32,7 @@ from app.application.hire.views import (
 from app.application.unit_of_work import UnitOfWork
 from app.domain.errors import NotFound
 from app.domain.identity import Actor
+from app.domain.policies.late_fee import LateFeePolicy
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +72,19 @@ def read_rental(uow: UnitOfWork, key: RentalKey) -> RentalDetail:
 class ReadRentals:
     """Return a rental, or a reservation as it would be checked out, to a member of staff."""
 
-    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
-        """Keep the unit of work the reads run in and the clock."""
+    def __init__(self, uow: UnitOfWork, clock: Clock, policy: LateFeePolicy) -> None:
+        """Keep the unit of work the reads run in, the clock and the late fee policy.
+
+        Args:
+            uow: The unit of work the reads run in.
+            clock: Where the current business day comes from.
+            policy: The late fee policy, which says what each unit still out
+                would owe if it came back today.
+
+        """
         self._uow = uow
         self._clock = clock
+        self._policy = policy
 
     def one(self, command: RentalCommand) -> RentalView:
         """Return one rental as the caller sees it.
@@ -98,7 +108,7 @@ class ReadRentals:
             "rental.read_finished",
             extra={"reference": detail.reference, "outcome": detail.status.value},
         )
-        return rental_view_for(actor, detail, self._clock.today())
+        return rental_view_for(actor, detail, self._clock.today(), self._policy)
 
     def checkout(self, command: ReservationCommand) -> CheckoutView:
         """Return a reservation as the counter would check it out, and whether it may now.

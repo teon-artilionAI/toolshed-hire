@@ -8,13 +8,14 @@ itself.
 
 Three things are held.
 
-1. `Money.times` and `Money.percent_of` are called only inside
-   `app/domain/policies` and `app/domain/vat.py`. Those two methods are the
-   only way an amount is multiplied, so nothing outside can scale a rate.
+1. `Money.times`, `Money.percent_of` and `Money.before_percent_added` are
+   called only inside `app/domain/policies` and `app/domain/vat.py`. Those
+   methods are the only way an amount is multiplied or divided, so nothing
+   outside can scale a rate.
 2. A rate is multiplied by a number of days in `StandardPricingPolicy`, and a
-   late fee per day in `app/domain/policies/late_fee.py`, and nowhere else.
-   The late fee is its own rule (BR-30), and the late fee policy of the next
-   change takes that module's place.
+   late fee per day in `StandardLateFeePolicy`, and nowhere else. The late fee
+   is its own rule (BR-30), and tests/unit/test_one_place_for_a_late_fee.py
+   holds the rest of it.
 3. No module multiplies a bare number that is named after a rate, a deposit,
    a fee or VAT. The one `*` on an amount is inside `Money` itself.
 
@@ -31,10 +32,12 @@ from typing import Final
 APP_ROOT: Final[Path] = Path(__file__).resolve().parents[2] / "app"
 POLICIES_PACKAGE: Final[str] = "domain/policies/"
 STANDARD_POLICY_MODULE: Final[str] = "domain/policies/standard_pricing.py"
-LATE_FEE_MODULE: Final[str] = "domain/policies/late_fee.py"
+LATE_FEE_MODULE: Final[str] = "domain/policies/standard_late_fee.py"
 VAT_MODULE: Final[str] = "domain/vat.py"
 MONEY_MODULE: Final[str] = "domain/money.py"
-SCALING_METHODS: Final[frozenset[str]] = frozenset({"times", "percent_of"})
+SCALING_METHODS: Final[frozenset[str]] = frozenset(
+    {"times", "percent_of", "before_percent_added"}
+)
 VAT_FUNCTION: Final[str] = "vat_on"
 # A multiplication whose operands are named with one of these words is pricing
 # arithmetic. A name is split at its underscores, so `daily_rate` is two words.
@@ -81,7 +84,7 @@ def mentions(node: ast.AST, words: frozenset[str]) -> bool:
 
 
 def scaling_calls(tree: ast.Module) -> list[ast.Call]:
-    """Return every call of `.times(...)` or `.percent_of(...)` in a module."""
+    """Return every call of a method of `Money` that scales an amount, in a module."""
     return [
         node
         for node in ast.walk(tree)

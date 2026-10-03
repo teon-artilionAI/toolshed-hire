@@ -12,11 +12,19 @@ the thing that comes back, so a partial return is a return of some items and
 not others. A charge is one money line, and every amount on a hire is one,
 the deposit included (`app.domain.charge`).
 
-This change opens a rental and reads it. Returning the items, the late fee,
-the damage assessment and settling the deposit come in the changes after it,
-so the two words a rental is read with that belong to them,
-`DamageAssessment` and `SettlementWait`, are declared here and worked out by
-the application layer in one replaceable function each.
+An item carries the figures its return is charged by, copied onto its booking
+line when the booking was made (BR-20). They are `UnitTerms`, and they are
+read from the line and never stored on the item a second time.
+
+An item is closed when it came back or when it was recorded as lost. A lost
+unit is closed with the time it was recorded and with no condition, because
+nobody inspected it, and a unit that came back always has one. The rental's
+status follows its items and its due date, and `status_on` is the one place
+that decides it (BR-29, BR-52).
+
+What a rental reads as waiting on before its deposit is settled, and whether
+a returned unit waits for its damage to be assessed, are `SettlementWait` and
+`DamageAssessment`.
 """
 
 from __future__ import annotations
@@ -65,6 +73,22 @@ class SettlementWait(str, Enum):
     BALANCE_PAYMENT = "BALANCE_PAYMENT"
 
 
+@dataclass(frozen=True, slots=True)
+class UnitTerms:
+    """The figures copied onto the booking line of a unit that its return is charged by (BR-20).
+
+    Attributes:
+        late_fee_per_day: The late fee for each day it is late, including VAT.
+        deposit: The deposit held for the unit.
+        replacement_value: The most a customer is charged for the unit (BR-39).
+
+    """
+
+    late_fee_per_day: Decimal
+    deposit: Decimal
+    replacement_value: Decimal
+
+
 @dataclass(slots=True)
 class RentalItem:
     """One physical unit handed over on a rental.
@@ -77,12 +101,14 @@ class RentalItem:
             allocation, through a composite foreign key.
         condition_out: The grade recorded at the counter as it went out.
         checked_out_at: When it was handed over, from the clock.
+        terms: The figures its booking line carries for it.
         hour_meter_out: The meter reading as it went out, for a unit with a meter.
         accessories_out: What went out with it, for example a chuck key.
-        condition_in: The grade recorded as it came back.
+        condition_in: The grade recorded as it came back. None while it is
+            out, and None for a unit recorded as lost.
         hour_meter_in: The meter reading as it came back.
         accessories_in: What came back with it.
-        returned_at: When it came back. None while it is out.
+        returned_at: When it came back or was recorded as lost. None while it is out.
         days_late: The whole days it came back late, worked out at return.
         notes: Anything the counter wrote about it.
         id: The item key, generated here so it is known before the insert.
@@ -94,6 +120,7 @@ class RentalItem:
     asset_id: UUID
     condition_out: ConditionGrade
     checked_out_at: datetime
+    terms: UnitTerms
     hour_meter_out: int | None = None
     accessories_out: str | None = None
     condition_in: ConditionGrade | None = None
@@ -107,6 +134,10 @@ class RentalItem:
     def is_out(self) -> bool:
         """Return True while the unit is still with the customer."""
         return self.returned_at is None
+
+    def is_lost(self) -> bool:
+        """Return True when the unit was recorded as lost rather than brought back (BR-31)."""
+        return self.returned_at is not None and self.condition_in is None
 
 
 @dataclass(slots=True)
@@ -125,7 +156,8 @@ class Rental:
         agreement_signed: Whether the customer signed the hire agreement.
         status: Where the hire stands.
         items: The units handed over.
-        charges: Every money line on the hire, the deposit included.
+        charges: Every money line on the hire, the deposit included, in the
+            order they were raised.
         returned_at: When the last unit came back.
         returned_to_user_id: The member of staff who took it back.
         deposit_refunded: How much of the deposit was given back.
@@ -158,3 +190,49 @@ class Rental:
     def items_out(self) -> list[RentalItem]:
         """Return the units that are still with the customer."""
         return [item for item in self.items if item.is_out()]
+
+    def is_all_back(self) -> bool:
+        """Return True when every unit came back or was recorded as lost."""
+        return bool(self.items) and not self.items_out()
+
+    def item_with_id(self, item_id: UUID) -> RentalItem | None:
+        """Return the item with this key, or None when it is not on this rental."""
+        return next((item for item in self.items if item.id == item_id), None)
+
+    def status_on(self, today: date) -> RentalStatus:
+        """Return the status the rental reads as on a day, from its items and its due date.
+
+        A rental with every unit back is RETURNED, and one with a unit still
+        out after the day it was due back is OVERDUE (BR-52). Otherwise it is
+        PARTIALLY_RETURNED once a unit is back and OPEN before then (BR-29). A
+        settled rental stays SETTLED, because nothing about it changes again.
+
+        Args:
+            today: The current business day, from the clock.
+
+        """
+        if self.status is RentalStatus.SETTLED:
+            return RentalStatus.SETTLED
+        if self.is_all_back():
+            return RentalStatus.RETURNED
+        if today > self.due_back_on:
+            return RentalStatus.OVERDUE
+        if len(self.items_out()) < len(self.items):
+            return RentalStatus.PARTIALLY_RETURNED
+        return RentalStatus.OPEN
+
+    def charge_position(self, charge: Charge) -> int:
+        """Return where a charge stands among the charges of the rental, counted from one.
+
+        Raises:
+            ValueError: If the charge is not on this rental, which means the
+                calling code is settling a charge it did not read from it.
+
+        """
+        for position, candidate in enumerate(self.charges, start=1):
+            if candidate.id == charge.id:
+                return position
+        raise ValueError(
+            f"Attempted to number charge {charge.id} on rental {self.reference}, which does "
+            "not carry it."
+        )

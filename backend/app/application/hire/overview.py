@@ -19,9 +19,9 @@ that names `branchCode`.
 Two figures depend on the day and on who is asking, and they are worked out
 here. Whether staff may mark a collection as not collected comes from the rule
 the route enforces, `no_show_refusal`, so the button and the route agree. What
-an overdue hire has run up comes from `late_fee_accrued` in
-`app.domain.policies.late_fee`, which the late fee policy of the next change
-replaces.
+an overdue hire has run up comes from the late fee policy the read is handed,
+asked for each unit still out exactly as a return today would ask it, so the
+dashboard shows what the counter would charge.
 """
 
 from __future__ import annotations
@@ -50,8 +50,9 @@ from app.application.refusal import refused
 from app.domain.enums import UserRole
 from app.domain.errors import AuthorisationFailure, BranchScopeError
 from app.domain.identity import BRANCH_SCOPE_RULE, Actor, Branch, within_branch_scope
+from app.domain.money import Money
 from app.domain.no_show import no_show_refusal
-from app.domain.policies.late_fee import late_fee_accrued
+from app.domain.policies.late_fee import LateFeePolicy
 
 logger = logging.getLogger(__name__)
 
@@ -119,20 +120,24 @@ class ReadCounterOverview:
         branches: BranchRepository,
         clock: Clock,
         lapse_due_bookings: Callable[[], object],
+        policy: LateFeePolicy,
     ) -> None:
-        """Keep the ports the reads go through, the clock and the sweep.
+        """Keep the ports the reads go through, the clock, the sweep and the late fee policy.
 
         Args:
             overview: Reads the bookings and hires of a branch.
             branches: Finds the branch named or the one staff belong to.
             clock: Where the current business day comes from.
             lapse_due_bookings: Runs the sweep, before every answer.
+            policy: The late fee policy, which says what an overdue hire has
+                run up so far.
 
         """
         self._overview = overview
         self._branches = branches
         self._clock = clock
         self._lapse_due_bookings = lapse_due_bookings
+        self._policy = policy
 
     def dashboard(self, query: DashboardQuery) -> BranchDashboard:
         """Return what is due today at the branch the caller may read.
@@ -156,7 +161,9 @@ class ReadCounterOverview:
             counts=rows.counts,
             collections_due=rows.collections_due,
             returns_due=rows.returns_due,
-            overdue=tuple(_overdue_entry(rental, today) for rental in rows.overdue),
+            overdue=tuple(
+                _overdue_entry(rental, today, self._policy) for rental in rows.overdue
+            ),
         )
         logger.info(
             "counter.dashboard_finished",
@@ -254,15 +261,19 @@ def _log_request(event: str, actor: Actor, branch_code: str | None) -> None:
     )
 
 
-def _overdue_entry(rental: ReturnEntry, today: date) -> OverdueEntry:
-    """Return an overdue rental with how late it is and what it has run up."""
+def _overdue_entry(rental: ReturnEntry, today: date, policy: LateFeePolicy) -> OverdueEntry:
+    """Return an overdue rental with how late it is and what its units still out have run up."""
+    accrued = Money.zero()
     days_overdue = (today - rental.due_back_on).days
+    for fee_per_day in rental.fees_per_day_of_units_out():
+        late = policy.late_fee(
+            due_back_on=rental.due_back_on,
+            returned_on=today,
+            fee_per_day=Money.create(fee_per_day),
+        )
+        accrued = accrued.add(late.amount)
     return OverdueEntry(
-        rental=rental,
-        days_overdue=days_overdue,
-        late_fee_accrued=late_fee_accrued(
-            rental.fees_per_day_of_units_out(), days_overdue
-        ).amount,
+        rental=rental, days_overdue=days_overdue, late_fee_accrued=accrued.rounded().amount
     )
 
 

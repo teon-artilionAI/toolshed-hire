@@ -13,9 +13,10 @@
  * type tools used below. Its names follow the backend's class and function
  * names, and a screen should not have to know those. The reservation types
  * are in contract-booking.ts, the registration and account types are in
- * contract-account.ts, the counter types are in contract-counter.ts and the
- * counter overview types are in contract-overview.ts. All four are passed on
- * from here.
+ * contract-account.ts, the counter types are in contract-counter.ts, the
+ * counter overview types are in contract-overview.ts, and the returns and
+ * settlement types are in contract-returns.ts. All five are passed on from
+ * here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -90,6 +91,14 @@ export type {
   LocatorQuery,
   NoShowRequest,
 } from './contract-overview'
+export type {
+  BalancePaymentRequest,
+  MyRentalsQuery,
+  RentalListQuery,
+  RentalPage,
+  ReturnItemRequest,
+  ReturnRequest,
+} from './contract-returns'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.

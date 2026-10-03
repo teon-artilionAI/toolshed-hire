@@ -1,281 +1,193 @@
 /**
  * SC-18 Overdue and Late Fee Worklist.
  *
- * The morning job. Every hire that is past its due date, what it has cost the
- * customer so far, and how long is left before it has to be escalated.
+ * The morning job. Every hire at the branch the person works at with a unit
+ * out past its due date, read from `GET /api/rentals?overdueOnly=true`, most
+ * overdue first and twenty to a page. Each hire says who has it and how to
+ * reach them, the day it was due back, and each unit still out with its days
+ * late and its late fee so far, and links to its return. Every figure is the
+ * server's, and the browser adds nothing up.
  *
- * Fees are shown as the sum that produced them, days late times the daily
- * rate for that model, because a counter assistant reads that figure out over
- * the phone and has to be able to defend it. Escalation happens at fourteen
- * days and every row carries its countdown, so the rule is visible even when
- * nothing has reached it yet.
+ * Under the list is the escalation queue, the units more than fourteen days
+ * late, each of which can be recorded as lost. What a loss did is said above
+ * the lists in a notice that takes focus, so it stays on the screen when the
+ * list is read again and the hire moves on it.
+ *
+ * The page lives in the address, so a reload keeps it. A page that is not a
+ * whole number from one falls back to the first.
  */
 
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { PhoneCall, PhoneOff } from 'lucide-react'
-import { branches } from '../../shared/fixtures'
-import type { BranchCode } from '../../shared/types'
-import { formatDate, money } from '../../shared/format'
-import {
-  Card,
-  DataTable,
-  EmptyState,
-  PageHeader,
-  StatTile,
-  StatusPill,
-} from '../../shared/ui'
-import { UnlinkedUnits } from './SC18-UnlinkedUnits'
-import type { AgeFilter } from './SC18-overdue-data'
-import { ESCALATION_DAYS, OVERDUE_ROWS, matchesAge } from './SC18-overdue-data'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import type { Rental, RentalPage } from '../../shared/api/contract'
+import { queryPhase } from '../../shared/api/query-phase'
+import type { QueryPhase } from '../../shared/api/query-phase'
+import { rentalQueries } from '../../shared/api/rental-queries'
+import { RENTAL_PAGE_SIZE } from '../../shared/api/rentals'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import { isNegativeMoney, money, unsignedMoney } from '../../shared/format'
+import Pagination from '../../shared/pagination'
+import { Card, EmptyState, Notice, PageHeader } from '../../shared/ui'
+import { CHARGE_TYPE_LABEL, RENTAL_STATUS_LABEL, countOf } from './counter-labels'
+import { EscalationQueue, OverdueHire } from './SC18-Overdue-Hire'
+import type { LossOutcome } from './SC18-Loss-Action'
+import { WorkBranchGate } from './work-branch-gate'
+import type { CounterBranch } from './work-branch-gate'
 
-type BranchFilter = 'ALL' | BranchCode
+const FIRST_PAGE = 1
+const PAGE_PARAMETER = 'page'
 
-const AGE_FILTERS: { value: AgeFilter; label: string }[] = [
-  { value: 'ALL', label: 'Any age' },
-  { value: 'FRESH', label: 'One to three days late' },
-  { value: 'CHASING', label: 'Four to thirteen days late' },
-  { value: 'ESCALATED', label: 'Fourteen days or more' },
-]
+/** Skeleton blocks to draw while the list loads. */
+const LIST_SKELETON_COUNT = 3
 
-const BRANCH_OPTIONS: { code: BranchFilter; name: string }[] = [
-  { code: 'ALL', name: 'All three branches' },
-  ...branches.map((branch) => ({ code: branch.code as BranchFilter, name: branch.name })),
-]
+function readPage(value: string | null): number {
+  const page = Number.parseInt(value ?? '', 10)
+  return Number.isInteger(page) && page >= FIRST_PAGE ? page : FIRST_PAGE
+}
+
+function statusLine(phase: QueryPhase, data: RentalPage | undefined, branch: CounterBranch): string {
+  if (phase === 'loading') return `Reading the overdue hires at ${branch.name}.`
+  if (phase !== 'ready' || !data) return 'The overdue hires did not load.'
+  if (data.total === 0) return `Nothing is overdue at ${branch.name}.`
+  return `${countOf(data.total, 'hire is', 'hires are')} overdue at ${branch.name}, most overdue first.`
+}
+
+/**
+ * Where the money stands after a loss. The server works the balance out when
+ * it settles the deposit, which waits for the last unit, so while any unit is
+ * still out its balance due is nought and says nothing yet.
+ */
+function balanceAfterLoss(rental: Rental): string {
+  if (rental.settlementWaitingOn === 'ITEMS_OUT') {
+    return 'The deposit is settled, and any balance worked out, once the last unit is back.'
+  }
+  return `Balance due ${money(rental.balanceDue)}.`
+}
+
+/** What a loss did, from the hire the server answered with. */
+function LossRecorded({ outcome }: { outcome: LossOutcome }) {
+  const { rental, label, itemId } = outcome
+  const charges = rental.charges.filter((charge) => charge.rentalItemId === itemId)
+  return (
+    <Notice tone="success" title={`${label} on ${rental.reference} is recorded as lost`}>
+      <p>
+        The hire is now {RENTAL_STATUS_LABEL[rental.status].toLowerCase()}. {balanceAfterLoss(rental)}
+      </p>
+      {charges.length > 0 && (
+        <ul className="mt-xs flex flex-col gap-xs">
+          {charges.map((charge) => (
+            <li key={charge.id} className="tabular break-words">
+              {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}{' '}
+              {isNegativeMoney(charge.amountIncVat)
+                ? `${unsignedMoney(charge.amountIncVat)} back to the customer`
+                : money(charge.amountIncVat)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Notice>
+  )
+}
+
+function OverdueAt({ branch }: { branch: CounterBranch }) {
+  const [params, setParams] = useSearchParams()
+  const page = readPage(params.get(PAGE_PARAMETER))
+  const list = useQuery(
+    rentalQueries.list({ branchCode: branch.code, overdueOnly: true, page, pageSize: RENTAL_PAGE_SIZE }),
+  )
+  const phase = queryPhase(list)
+  const data = list.data
+  const [recorded, setRecorded] = useState<LossOutcome | null>(null)
+  const regionRef = useRef<HTMLElement>(null)
+  const recordedRef = useRef<HTMLDivElement>(null)
+
+  // A loss takes its question away, so focus goes to what it did.
+  useEffect(() => {
+    if (recorded !== null) recordedRef.current?.focus()
+  }, [recorded])
+
+  function goToPage(next: number) {
+    const written = new URLSearchParams()
+    if (next > FIRST_PAGE) written.set(PAGE_PARAMETER, String(next))
+    setParams(written, { replace: true })
+    // The new page replaces the list, so focus goes to the top of it.
+    regionRef.current?.focus()
+  }
+
+  return (
+    <div className="flex flex-col gap-lg">
+      <div ref={recordedRef} tabIndex={-1} className="empty:hidden">
+        {recorded !== null && <LossRecorded outcome={recorded} />}
+      </div>
+
+      <section ref={regionRef} tabIndex={-1} aria-label="Overdue hires">
+        <p className="mb-md text-sm text-slate-soft" role="status">
+          {statusLine(phase, data, branch)}
+        </p>
+
+        {phase === 'loading' && <LoadingState shape="rows" count={LIST_SKELETON_COUNT} />}
+
+        {phase === 'failed' && (
+          <ErrorState what="the overdue hires" error={list.error} onRetry={() => void list.refetch()} />
+        )}
+
+        {phase === 'ready' && data && data.items.length === 0 && (
+          <div className="card">
+            <EmptyState
+              title={data.total > 0 ? 'That page is past the end of the list' : `Nothing is overdue at ${branch.name}`}
+              body={
+                data.total > 0
+                  ? 'Go back to the first page of the overdue hires.'
+                  : 'Every hire at this branch is back or still in date. Hires due back today are on the dashboard.'
+              }
+              action={
+                data.total > 0 ? (
+                  <button type="button" className="btn-secondary px-md" onClick={() => goToPage(FIRST_PAGE)}>
+                    Go to the first page
+                  </button>
+                ) : undefined
+              }
+            />
+          </div>
+        )}
+
+        {phase === 'ready' && data && data.items.length > 0 && (
+          <div aria-busy={list.isFetching}>
+            <Card>
+              <ul aria-label={`Overdue hires at ${branch.name}`}>
+                {data.items.map((rental) => (
+                  <OverdueHire key={rental.id} rental={rental} />
+                ))}
+              </ul>
+            </Card>
+            <Pagination
+              label="Overdue hire pages"
+              page={data.page}
+              pageSize={data.pageSize}
+              total={data.total}
+              onPageChange={goToPage}
+            />
+          </div>
+        )}
+      </section>
+
+      {phase === 'ready' && data && data.items.length > 0 && (
+        <EscalationQueue hires={data.items} onRecorded={setRecorded} />
+      )}
+    </div>
+  )
+}
 
 export default function OverdueAndLateFeeWorklist() {
-  const [branchFilter, setBranchFilter] = useState<BranchFilter>('ALL')
-  const [ageFilter, setAgeFilter] = useState<AgeFilter>('ALL')
-  const [chased, setChased] = useState<Record<string, boolean>>({})
-
-  const rows = useMemo(
-    () =>
-      OVERDUE_ROWS.filter(
-        (row) =>
-          (branchFilter === 'ALL' || row.branchCode === branchFilter) &&
-          matchesAge(row, ageFilter),
-      ),
-    [branchFilter, ageFilter],
-  )
-
-  const escalated = OVERDUE_ROWS.filter((row) => row.daysLate >= ESCALATION_DAYS)
-  const unitsOut = rows.reduce((sum, row) => sum + row.units.length, 0)
-  const feesToDate = rows.reduce((sum, row) => sum + row.feeToDate, 0)
-  const accruingDaily = rows.reduce((sum, row) => sum + row.feePerDay, 0)
-
   return (
     <>
       <PageHeader
         screenId="SC-18"
         title="Overdue and late fees"
-        subtitle="Everything past its due date, what it has cost so far, and how long before it goes to the owner for recovery."
+        subtitle="Every hire at your branch with a unit out past its due date, what each unit's late fee is today, and the units out long enough to record as lost."
       />
-
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile
-          label="Hires overdue"
-          value={rows.length}
-          tone={rows.length > 0 ? 'bad' : 'good'}
-        />
-        <StatTile label="Units still out" value={unitsOut} hint="Not back on a shelf" />
-        <StatTile
-          label="Fees accrued"
-          value={money(feesToDate)}
-          tone={feesToDate > 0 ? 'warn' : 'default'}
-          hint={`Growing by ${money(accruingDaily)} a day`}
-        />
-        <StatTile
-          label="At escalation"
-          value={escalated.length}
-          tone={escalated.length > 0 ? 'bad' : 'good'}
-          hint={`${ESCALATION_DAYS} days late or more`}
-        />
-      </div>
-
-      <Card className="mb-lg">
-        <div className="flex flex-col gap-md">
-          <fieldset className="min-w-0">
-            <legend className="field-label">Branch</legend>
-            <div className="mt-xs flex flex-wrap gap-sm">
-              {BRANCH_OPTIONS.map((option) => {
-                const active = branchFilter === option.code
-                return (
-                  <button
-                    key={option.code}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setBranchFilter(option.code)}
-                    className={`btn px-md ${
-                      active
-                        ? 'bg-accent font-semibold text-accent-ink'
-                        : 'border border-line bg-surface text-ink hover:bg-muted'
-                    }`}
-                  >
-                    {option.name}
-                  </button>
-                )
-              })}
-            </div>
-          </fieldset>
-          <div className="max-w-sm">
-            <label className="field-label" htmlFor="overdue-age">
-              How late
-            </label>
-            <select
-              id="overdue-age"
-              className="field-input cursor-pointer"
-              value={ageFilter}
-              onChange={(e) => setAgeFilter(e.target.value as AgeFilter)}
-            >
-              {AGE_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </Card>
-
-      <p aria-live="polite" className="sr-only">
-        {rows.length} overdue {rows.length === 1 ? 'hire' : 'hires'} listed
-      </p>
-
-      <div className="mb-lg">
-        {rows.length === 0 ? (
-          <div className="card">
-            <EmptyState
-              title="Nothing is overdue here"
-              body="No hire at this branch matches that age. Widen the filters to see the rest of the fleet, or come back after the morning collections."
-            />
-          </div>
-        ) : (
-          <DataTable
-            caption="Overdue hires with the late fee accrued against each"
-            columns={[
-              'Hire',
-              'Customer',
-              'Units out',
-              'Due back',
-              'Late fee to date',
-              'Escalation',
-              'Next step',
-            ]}
-          >
-            {rows.map((row) => (
-              <tr key={row.rentalId} className="transition-colors duration-200 hover:bg-muted">
-                <th scope="row" className="td whitespace-nowrap font-mono font-medium text-ink">
-                  {row.reference}
-                  <span className="mt-xs block font-sans text-xs font-normal text-slate-soft">
-                    {row.branchName}
-                  </span>
-                </th>
-                <td className="td text-ink">
-                  {row.customerName}
-                  <span className="tabular mt-xs block text-xs text-slate-soft">
-                    {row.customerPhone}
-                  </span>
-                </td>
-                <td className="td">
-                  <ul className="flex flex-col gap-xs">
-                    {row.units.map((unit) => (
-                      <li key={unit.tag} className="font-mono text-xs text-ink">
-                        {unit.tag}
-                      </li>
-                    ))}
-                  </ul>
-                </td>
-                <td className="td whitespace-nowrap">
-                  <span className="text-ink">{formatDate(row.dueBackOn)}</span>
-                  <span className="mt-xs block">
-                    <StatusPill
-                      status="OVERDUE"
-                      label={`${row.daysLate} ${row.daysLate === 1 ? 'day' : 'days'} late`}
-                    />
-                  </span>
-                </td>
-                <td className="td whitespace-nowrap">
-                  <span className="tabular block font-mono text-xs text-slate-soft">
-                    {row.daysLate} × {money(row.feePerDay)}
-                  </span>
-                  <span className="tabular block font-semibold text-ink">
-                    {money(row.feeToDate)}
-                  </span>
-                </td>
-                <td className="td whitespace-nowrap text-slate-soft">
-                  {row.daysToEscalation > 0
-                    ? `In ${row.daysToEscalation} days`
-                    : 'Escalated to the owner'}
-                </td>
-                <td className="td">
-                  <div className="flex flex-wrap gap-sm">
-                    <button
-                      type="button"
-                      className={`btn whitespace-nowrap px-md ${
-                        chased[row.rentalId]
-                          ? 'border border-line bg-muted text-slate-soft'
-                          : 'border border-line bg-surface text-ink hover:bg-muted'
-                      }`}
-                      onClick={() =>
-                        setChased((current) => ({
-                          ...current,
-                          [row.rentalId]: !current[row.rentalId],
-                        }))
-                      }
-                    >
-                      {chased[row.rentalId] ? (
-                        <PhoneOff className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      ) : (
-                        <PhoneCall className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      )}
-                      {chased[row.rentalId] ? 'Rung today' : 'Ring the customer'}
-                    </button>
-                    <Link
-                      to={`/counter/return/${row.rentalId}`}
-                      className="btn-primary whitespace-nowrap px-md"
-                    >
-                      Take the return
-                    </Link>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
-      </div>
-
-      <div className="mb-lg">
-        <Card title={`Escalation queue, ${ESCALATION_DAYS} days and over`}>
-          {escalated.length === 0 ? (
-            <EmptyState
-              title="Nothing has reached escalation"
-              body={`A hire goes to the owner for formal recovery once it is ${ESCALATION_DAYS} days late. The longest running hire is ${OVERDUE_ROWS[0]?.daysLate ?? 0} days late, so nothing qualifies yet. Keep ringing the hires above and it stays that way.`}
-            />
-          ) : (
-            <ul className="flex flex-col gap-sm">
-              {escalated.map((row) => (
-                <li
-                  key={row.rentalId}
-                  className="flex flex-wrap items-center justify-between gap-sm rounded border border-line p-md"
-                >
-                  <div className="min-w-0">
-                    <p className="font-mono text-sm font-medium text-ink">{row.reference}</p>
-                    <p className="text-sm text-slate-soft">
-                      {row.customerName}, {row.daysLate} days late,{' '}
-                      {money(row.feeToDate)} accrued
-                    </p>
-                  </div>
-                  <Link to={`/counter/return/${row.rentalId}`} className="btn-secondary px-md">
-                    Open the hire
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      <UnlinkedUnits branchFilter={branchFilter} />
+      <WorkBranchGate>{(branch) => <OverdueAt branch={branch} />}</WorkBranchGate>
     </>
   )
 }

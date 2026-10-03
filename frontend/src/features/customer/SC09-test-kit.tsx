@@ -1,8 +1,9 @@
 /**
  * What the SC-09 test files share.
  *
- * Opening My Account as the signed in customer, the route that answers with a
- * profile, and reading one value out of the lists of details.
+ * Opening My Account as the signed in customer, the routes that answer with a
+ * profile and with no hires yet, and reading one value out of the lists of
+ * details.
  */
 
 import { screen } from '@testing-library/react'
@@ -12,6 +13,7 @@ import { PROFILE_ROUTE } from '../../test/account-samples'
 import { jsonResponse, mockApi } from '../../test/api-mock'
 import type { ApiMock, RouteTable } from '../../test/api-mock'
 import { findScreenHeading, renderApp } from '../../test/render-app'
+import { MY_RENTALS_ROUTE, rentalPage } from '../../test/rental-samples'
 import { CUSTOMER, signedInAs } from '../../test/session-samples'
 import type { MyProfile } from '../../shared/api/contract'
 
@@ -26,9 +28,14 @@ export async function openAccount(routes: RouteTable): Promise<{ user: UserEvent
   return { user: userEvent.setup(), network }
 }
 
-/** Routes in which the profile route answers with this profile. */
+/** Routes in which the profile route answers with this profile, and the
+ *  customer has no hires yet unless the routes given say otherwise. */
 export function withProfile(profile: MyProfile, routes: RouteTable = {}): RouteTable {
-  return { [PROFILE_ROUTE]: () => jsonResponse(profile), ...routes }
+  return {
+    [PROFILE_ROUTE]: () => jsonResponse(profile),
+    [MY_RENTALS_ROUTE]: () => jsonResponse(rentalPage([], { pageSize: 5 })),
+    ...routes,
+  }
 }
 
 /** The value shown against one term in the lists of details. */

@@ -1,221 +1,223 @@
 /**
  * SC-15 Return and Condition Inspection.
  *
- * This is where the money is settled, so every figure on it is shown as the
- * sum that produced it rather than as a total the customer has to take on
- * trust. The worked example carried through the Task 1 document is the
- * default: hire TSH-H-26-000098, asset TSH-DR-0042 back two days late at
- * R120.00 a day, R240.00 withheld from a R1,200.00 deposit and R960.00
- * released.
+ * The counter side of taking equipment back, for one hire. The address carries
+ * the hire's key or its reference, and the screen reads the hire from
+ * `GET /api/rentals/{id}`. Every figure on it is the server's. The late fee of
+ * each unit still out is what the server says it would be if the unit came back
+ * today, and the screen says the system worked it out and the counter cannot
+ * change it.
  *
- * The deposit cannot be released while a unit is still out, and the screen
- * says which unit and why rather than simply disabling a button.
+ * The assistant ticks the units that are back on the counter and records how
+ * each came back. One button asks the question, which says in words what is
+ * about to happen, and one button answers it and posts the ticked units. The
+ * answer is the hire as the server now has it, and the screen shows that.
+ * While units are still out it says the hire is partially returned. Once the
+ * last unit is back it shows the settlement from the server's figures, and
+ * whatever the deposit is still waiting on.
+ *
+ * What a write did is said at the top in a notice that takes focus, so a
+ * keyboard or screen reader user hears it without looking for it.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { assets, customers, productModels, rentals, TODAY } from '../../shared/fixtures'
-import { daysOverdue, formatDate, formatDateTime, money } from '../../shared/format'
+import { useQuery } from '@tanstack/react-query'
+import type { Rental } from '../../shared/api/contract'
+import { queryPhase } from '../../shared/api/query-phase'
+import { rentalQueries } from '../../shared/api/rental-queries'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import { formatDate, money } from '../../shared/format'
 import { Card, Notice, PageHeader, StatTile, StatusPill } from '../../shared/ui'
-import { CONDITION_LABEL } from './SC14-checkout-model'
+import { RENTAL_STATUS_LABEL, countOf } from './counter-labels'
+import { OVERDUE_PATH } from './counter-links'
+import { isNotFound } from './counter-refusal'
+import { ReturnedItem } from './SC15-ItemInspection'
+import { ReturnForm } from './SC15-Return-Form'
+import { isLost, itemsOut } from './SC15-return-model'
 import { SettlementSummary } from './SC15-SettlementSummary'
-import { ItemInspection } from './SC15-ItemInspection'
-import type { ReturnDraft, ReturnRow } from './SC15-return-model'
 
-export default function ReturnAndConditionInspection() {
-  const { rentalId } = useParams()
-  const rental = rentals.find((r) => r.id === rentalId || r.reference === rentalId)
+const TITLE = 'Return and condition inspection'
 
-  if (!rental) {
-    return (
-      <>
-        <PageHeader
-          screenId="SC-15"
-          title="Return and condition inspection"
-          subtitle="We could not find that hire."
-        />
-        <Notice tone="error" title={`No hire matches "${rentalId ?? ''}"`}>
-          Check the reference on the customer's paperwork, or open the overdue
-          worklist and start the return from there.
-        </Notice>
-        <Link to="/counter/overdue" className="btn-primary mt-md px-md">
-          Open the overdue worklist
-        </Link>
-      </>
-    )
-  }
-
-  return <Inspection key={rental.id} rentalKey={rental.id} />
+/** What the last write did, with the hire it answered with. */
+interface Outcome {
+  kind: 'returned' | 'paid'
+  rental: Rental
 }
 
-function Inspection({ rentalKey }: { rentalKey: string }) {
-  const rental = rentals.find((r) => r.id === rentalKey)!
-  const customerName =
-    customers.find((c) => c.id === rental.customerId)?.name ?? 'the customer'
-  const daysLate = daysOverdue(rental.dueBackOn)
-
-  const rows = useMemo<ReturnRow[]>(
-    () =>
-      rental.items.map((item) => {
-        const asset = assets.find((a) => a.id === item.assetId)
-        const model = productModels.find((m) => m.id === asset?.productModelId)
-        return {
-          itemId: item.id,
-          assetId: item.assetId,
-          tag: asset?.tag ?? 'Tag missing',
-          modelName: model?.name ?? 'Unknown model',
-          manufacturer: model?.manufacturer ?? '',
-          lateFeePerDay: model?.lateFeePerDay ?? 0,
-          conditionOut: item.conditionOut,
-          meterOut: item.meterOut,
-          hasMeter: item.meterOut !== undefined,
-          returnedAt: item.returnedAt,
-          conditionIn: item.conditionIn,
-        }
-      }),
-    [rental],
-  )
-
-  const outstanding = rows.filter((row) => !row.returnedAt)
-  const [settled, setSettled] = useState(false)
-  const [draft, setDraft] = useState<Record<string, ReturnDraft>>(() =>
-    Object.fromEntries(
-      outstanding.map((row) => [
-        row.itemId,
-        {
-          received: false,
-          conditionIn: row.conditionOut,
-          meterIn: row.meterOut === undefined ? '' : String(row.meterOut),
-          chargeDamage: false,
-          damageCharge: '',
-        },
-      ]),
-    ),
-  )
-
-  function patch(itemId: string, next: Partial<ReturnDraft>) {
-    setDraft((current) => ({ ...current, [itemId]: { ...current[itemId], ...next } }))
+/** What a write did, in words, from the hire the server answered with. */
+function outcomeWords({ kind, rental }: Outcome): { title: string; body: string } {
+  const out = itemsOut(rental).length
+  if (kind === 'paid') {
+    return { title: `${rental.reference} is settled`, body: 'The payment of the balance is recorded.' }
   }
+  if (out > 0) {
+    return {
+      title: `${rental.reference} is partially returned`,
+      body: `${countOf(out, 'unit is', 'units are')} still out, so the deposit stays held.`,
+    }
+  }
+  const after =
+    rental.settlementWaitingOn === 'BALANCE_PAYMENT'
+      ? 'The deposit did not cover the charges, so a balance is due.'
+      : rental.settlementWaitingOn === 'DAMAGE_ASSESSMENT'
+        ? 'The deposit is waiting for a damage report.'
+        : 'The deposit is settled below.'
+  return { title: `Every unit on ${rental.reference} is back`, body: after }
+}
 
-  const lateFeeLines = outstanding.map((row) => ({
-    tag: row.tag,
-    perDay: row.lateFeePerDay,
-    total: daysLate * row.lateFeePerDay,
-  }))
-  const lateFeeTotal = lateFeeLines.reduce((sum, line) => sum + line.total, 0)
-  const damageTotal = outstanding.reduce((sum, row) => {
-    const entry = draft[row.itemId]
-    if (!entry.chargeDamage) return sum
-    const amount = Number.parseFloat(entry.damageCharge)
-    return sum + (Number.isFinite(amount) && amount > 0 ? amount : 0)
-  }, 0)
-  const stillOut = outstanding.filter((row) => !draft[row.itemId].received)
-
+function NotFound({ rentalKey }: { rentalKey: string }) {
   return (
     <>
-      <PageHeader
-        screenId="SC-15"
-        title="Return and condition inspection"
-        subtitle={`${rental.reference} for ${customerName}, collected ${formatDate(rental.collectedAt)}.`}
-        actions={<StatusPill status={rental.status} />}
-      />
-
-      {daysLate > 0 && !settled && (
-        <div className="mb-lg">
-          <Notice
-            tone="warn"
-            title={`Back ${daysLate} ${daysLate === 1 ? 'day' : 'days'} late`}
-          >
-            Due back {formatDate(rental.dueBackOn)}, today is {formatDate(TODAY)}.
-            Late fees have accrued and come off the deposit below.
-          </Notice>
-        </div>
-      )}
-
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Due back" value={formatDate(rental.dueBackOn)} />
-        <StatTile
-          label="Days late"
-          value={daysLate}
-          tone={daysLate > 0 ? 'bad' : 'good'}
-          hint={daysLate > 0 ? `Counted to ${formatDate(TODAY)}` : 'Back on time'}
-        />
-        <StatTile label="Deposit held" value={money(rental.depositHeld)} />
-        <StatTile
-          label="Units still out"
-          value={stillOut.length}
-          tone={stillOut.length > 0 ? 'warn' : 'good'}
-          hint={`${rows.length} on this hire`}
-        />
-      </div>
-
-      <Card title="Units coming back" className="mb-lg">
-        <div className="flex flex-col gap-lg">
-          {rows.map((row) =>
-            row.returnedAt ? (
-              <div key={row.itemId} className="rounded border border-line bg-muted p-md">
-                <div className="flex flex-wrap items-center justify-between gap-sm">
-                  <p className="font-mono text-sm font-medium text-ink">{row.tag}</p>
-                  <StatusPill status="RETURNED" label="Already back" />
-                </div>
-                <p className="mt-xs text-sm text-slate-soft">
-                  {row.manufacturer} {row.modelName}, in {formatDateTime(row.returnedAt)}
-                  {row.conditionIn && ` at ${CONDITION_LABEL[row.conditionIn]}`}.
-                </p>
-              </div>
-            ) : (
-              <ItemInspection
-                key={row.itemId}
-                row={row}
-                draft={draft[row.itemId]}
-                onChange={(next) => patch(row.itemId, next)}
-              />
-            ),
-          )}
-        </div>
-      </Card>
-
-      <div className="grid items-start gap-lg lg:grid-cols-2">
-        <Card title="How the late fee was worked out">
-          {lateFeeTotal === 0 ? (
-            <p className="text-sm text-slate-soft">
-              Nothing is late on this hire, so there is no fee to explain.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-sm text-sm">
-              <p className="text-slate-soft">
-                Due back {formatDate(rental.dueBackOn)}. Today is {formatDate(TODAY)}.
-                That is {daysLate} {daysLate === 1 ? 'day' : 'days'} late.
-              </p>
-              <ul className="flex flex-col gap-sm">
-                {lateFeeLines.map((line) => (
-                  <li
-                    key={line.tag}
-                    className="tabular rounded bg-muted p-sm font-mono text-sm text-ink"
-                  >
-                    {line.tag}: {daysLate} × {money(line.perDay)} = {money(line.total)}
-                  </li>
-                ))}
-              </ul>
-              <p className="tabular font-semibold text-ink">
-                Late fee to withhold: {money(lateFeeTotal)}
-              </p>
-            </div>
-          )}
-        </Card>
-
-        <SettlementSummary
-          deposit={rental.depositHeld}
-          lateFee={lateFeeTotal}
-          damage={damageTotal}
-          blockedBy={stillOut.map((row) => row.tag)}
-          settled={settled}
-          onSettle={() => setSettled(true)}
-          customerName={customerName}
-          reference={rental.reference}
-        />
-      </div>
+      <PageHeader screenId="SC-15" title="We cannot find that hire" />
+      <Notice tone="error" title={`No hire matches "${rentalKey}"`}>
+        <p>Check the reference on the customer's paperwork, or open the overdue worklist and start the return from there.</p>
+        <Link to={OVERDUE_PATH} className="btn-secondary mt-sm px-md">
+          Open the overdue worklist
+        </Link>
+      </Notice>
     </>
   )
 }
 
+/** Where the hire stands while units are still out. */
+function StillOut({ rental }: { rental: Rental }) {
+  const out = itemsOut(rental).length
+  if (out === rental.items.length) {
+    return (
+      <Notice tone="info" title={`Every unit on ${rental.reference} is still out`}>
+        <p>The deposit of {money(rental.depositHeld)} stays held until the last unit is back.</p>
+      </Notice>
+    )
+  }
+  return (
+    <Notice tone="warn" title={`${rental.reference} is partially returned`}>
+      <p>
+        {out} of {countOf(rental.items.length, 'unit is', 'units are')} still out. The deposit of{' '}
+        {money(rental.depositHeld)} stays held until the last one is back.
+      </p>
+    </Notice>
+  )
+}
+
+function ReturnView({
+  rental,
+  onWritten,
+  onReload,
+}: {
+  rental: Rental
+  onWritten: (outcome: Outcome) => void
+  onReload: () => void
+}) {
+  const out = itemsOut(rental)
+  const back = rental.items.filter((item) => item.returnedAt !== null)
+  // The server moves a hire to overdue when it lists hires, not when it reads
+  // one, so a hire opened by its reference can still say open. The days late
+  // of each unit still out are worked out on every read, so they decide it too.
+  const overdue = rental.status === 'OVERDUE' || out.some((item) => item.daysLateToday > 0)
+  return (
+    <div className="flex flex-col gap-lg">
+      <div className="grid gap-md sm:grid-cols-3">
+        <StatTile
+          label="Due back"
+          value={formatDate(rental.dueBackOn)}
+          tone={overdue ? 'bad' : 'default'}
+          hint={overdue ? 'Overdue' : `Out since ${formatDate(rental.from)}`}
+        />
+        <StatTile
+          label="Units still out"
+          value={out.length}
+          tone={out.length > 0 ? 'warn' : 'good'}
+          hint={`${countOf(rental.items.length, 'unit', 'units')} on this hire`}
+        />
+        <StatTile label="Deposit held" value={money(rental.depositHeld)} hint="Taken at collection" />
+      </div>
+
+      {out.length > 0 && <StillOut rental={rental} />}
+
+      {out.length > 0 && !rental.canReturn && (
+        <Notice tone="warn" title="These units cannot be taken back here">
+          <p>
+            The server does not offer a return on this hire to this account. A hire is taken back at{' '}
+            {rental.branchName}, the branch it went out from.
+          </p>
+        </Notice>
+      )}
+
+      {out.length > 0 && rental.canReturn && (
+        <ReturnForm
+          key={rental.id}
+          rental={rental}
+          onReturned={(answered) => onWritten({ kind: 'returned', rental: answered })}
+          onReload={onReload}
+        />
+      )}
+
+      {back.length > 0 && (
+        <Card title={back.some(isLost) ? 'Units back or recorded as lost' : 'Units already back'}>
+          <ul className="flex flex-col gap-md">
+            {back.map((item) => (
+              <li key={item.id}>
+                <ReturnedItem item={item} charges={rental.charges} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {out.length === 0 && (
+        <SettlementSummary rental={rental} onPaid={(answered) => onWritten({ kind: 'paid', rental: answered })} />
+      )}
+    </div>
+  )
+}
+
+export default function ReturnAndConditionInspection() {
+  const { rentalId = '' } = useParams()
+  const hire = useQuery({ ...rentalQueries.detail(rentalId), enabled: rentalId !== '' })
+  const phase = queryPhase(hire)
+  const data = hire.data
+  const [outcome, setOutcome] = useState<Outcome | null>(null)
+
+  // A write replaces part of the screen, so focus goes to what it did.
+  const outcomeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (outcome !== null) outcomeRef.current?.focus()
+  }, [outcome])
+
+  if (phase === 'failed' && isNotFound(hire.error)) return <NotFound rentalKey={rentalId} />
+
+  const words = outcome === null ? null : outcomeWords(outcome)
+  return (
+    <>
+      <PageHeader
+        screenId="SC-15"
+        title={TITLE}
+        subtitle={
+          data
+            ? `${data.reference} for ${data.customerName}, ${data.customerPhone}. Out from ${data.branchName} on ${formatDate(data.from)}, due back ${formatDate(data.dueBackOn)}.`
+            : undefined
+        }
+        actions={data ? <StatusPill status={data.status} label={RENTAL_STATUS_LABEL[data.status]} /> : undefined}
+      />
+
+      <div ref={outcomeRef} tabIndex={-1} className="mb-lg empty:hidden">
+        {words !== null && (
+          <Notice tone="success" title={words.title}>
+            <p>{words.body}</p>
+          </Notice>
+        )}
+      </div>
+
+      {phase === 'failed' ? (
+        <ErrorState what="this hire" error={hire.error} onRetry={() => void hire.refetch()} />
+      ) : data === undefined ? (
+        <LoadingState label="Loading the hire" shape="detail" count={2} />
+      ) : (
+        <div aria-busy={hire.isFetching}>
+          <ReturnView rental={data} onWritten={setOutcome} onReload={() => void hire.refetch()} />
+        </div>
+      )}
+    </>
+  )
+}

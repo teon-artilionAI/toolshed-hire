@@ -38,8 +38,14 @@ from app.application.booking.access import (
     state_of,
 )
 from app.application.booking.read_models import ReservationKey
+from app.application.clock import Clock
 from app.application.hire.read_models import RentalKey
 from app.application.hire.read_rental import read_rental
+from app.application.hire.rental_audit import (
+    ASSET_ENTITY_TYPE,
+    ASSET_STATUS_CHANGED_ACTION,
+    RENTAL_ENTITY_TYPE,
+)
 from app.application.hire.views import RentalView, rental_view_for
 from app.application.identity.account_rules import refused_field
 from app.application.unit_of_work import UnitOfWork
@@ -50,13 +56,21 @@ from app.domain.catalogue import Asset
 from app.domain.checkout import Checkout, HandOver, check_out, ensure_collectable
 from app.domain.errors import ValidationFailure
 from app.domain.identity import Actor
+from app.domain.policies.late_fee import LateFeePolicy
 
 logger = logging.getLogger(__name__)
 
-RENTAL_ENTITY_TYPE: Final[str] = "rental"
 RENTAL_CHECKED_OUT_ACTION: Final[str] = "rental.checked_out"
-ASSET_ENTITY_TYPE: Final[str] = "asset"
-ASSET_STATUS_CHANGED_ACTION: Final[str] = "asset.status_changed"
+
+__all__ = [
+    "ASSET_ENTITY_TYPE",
+    "ASSET_STATUS_CHANGED_ACTION",
+    "RENTAL_CHECKED_OUT_ACTION",
+    "RENTAL_ENTITY_TYPE",
+    "CheckoutCommand",
+    "CheckoutOutcome",
+    "CheckoutRentalUseCase",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +109,19 @@ class CheckoutOutcome:
 class CheckoutRentalUseCase(UseCase[CheckoutCommand, CheckoutOutcome]):
     """Open the rental of a confirmed reservation, in one transaction."""
 
+    def __init__(self, uow: UnitOfWork, clock: Clock, policy: LateFeePolicy) -> None:
+        """Keep the unit of work, the clock and the late fee policy the rental is shown with.
+
+        Args:
+            uow: The unit of work that owns the transaction.
+            clock: Where the current instant and business day come from.
+            policy: The late fee policy, which says what a unit still out would
+                owe today when a checkout asked again finds an older rental.
+
+        """
+        super().__init__(uow, clock)
+        self._policy = policy
+
     def execute(self, command: CheckoutCommand) -> CheckoutOutcome:
         """Check the reservation out, or answer with the rental an earlier checkout opened.
 
@@ -129,7 +156,9 @@ class CheckoutRentalUseCase(UseCase[CheckoutCommand, CheckoutOutcome]):
                     "rental.checkout_repeated",
                     extra={"reference": detail.reference, "rental_id": str(existing)},
                 )
-                return CheckoutOutcome(rental=rental_view_for(actor, detail, today), created=False)
+                return CheckoutOutcome(
+                    rental=rental_view_for(actor, detail, today, self._policy), created=False
+                )
             ensure_collectable(reservation, today)
             before = state_of(reservation)
             units = {unit.id: unit for unit in uow.assets.lock_units(_held_asset_ids(reservation))}
@@ -162,7 +191,9 @@ class CheckoutRentalUseCase(UseCase[CheckoutCommand, CheckoutOutcome]):
                 "deposit_held": str(detail.deposit_held),
             },
         )
-        return CheckoutOutcome(rental=rental_view_for(actor, detail, today), created=True)
+        return CheckoutOutcome(
+            rental=rental_view_for(actor, detail, today, self._policy), created=True
+        )
 
 
 def _held_asset_ids(reservation: Reservation) -> list[UUID]:

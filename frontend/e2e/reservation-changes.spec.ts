@@ -20,10 +20,15 @@
  * with, so it does not matter what earlier runs left in the database. It
  * releases the hold it took and cancels the draft it left, so every unit is
  * free again for the next run.
+ *
+ * The hold counts down with the browser's clock to an instant on the API's, so
+ * when the API runs on a pinned clock the browser's is started at the same
+ * time. api-clock.ts says how.
  */
 
 import { expect, test } from '@playwright/test'
 import type { APIRequestContext } from '@playwright/test'
+import { startBrowserClockWithTheApi } from './api-clock.ts'
 import { blockingViolations } from './axe.ts'
 import { RESERVATION_ROUTES_NEEDED, reservationRoutesArePresent } from './backend.ts'
 import {
@@ -79,8 +84,10 @@ async function branchCanSupply(
 }
 
 test.describe('a basket that changes, against the real backend', () => {
-  test.beforeEach(async ({ request }) => {
+  test.beforeEach(async ({ page, request }) => {
     test.skip(!(await reservationRoutesArePresent(request)), RESERVATION_ROUTES_NEEDED)
+    // The hold counts down to an instant on the API's clock.
+    await startBrowserClockWithTheApi(page)
   })
 
   test('two models are one reservation, a hold is refused and tried again, and nothing unfinished is left in the way', async ({

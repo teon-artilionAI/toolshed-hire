@@ -4,8 +4,9 @@ This is the counter's part of the composition root. The three are reads, so
 each query object is handed the request scoped session and the request closes
 it, the way the catalogue's read side is wired in `app/api/catalogue_deps.py`.
 The dashboard and the diary are also handed the sweep from
-`app/api/sweep_deps.py` and run it before they answer (BR-13, BR-17), and the
-branch repository, through which they find the branch they are asked about.
+`app/api/sweep_deps.py` and run it before they answer (BR-13, BR-17, BR-52),
+the branch repository, through which they find the branch they are asked
+about, and the late fee policy, which says what an overdue hire has run up.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.api.deps import ClockDependency, SessionDependency
+from app.api.late_fee_deps import LateFeePolicyDependency
 from app.api.sweep_deps import ExpiredHoldSweeper
 from app.application.catalogue.locator import AssetLocatorQuery, LocateAssets
 from app.application.hire.overview import ReadCounterOverview
@@ -39,9 +41,12 @@ def get_read_counter_overview(
     session: SessionDependency,
     clock: ClockDependency,
     lapse_due_bookings: ExpiredHoldSweeper,
+    policy: LateFeePolicyDependency,
 ) -> ReadCounterOverview:
     """Return the dashboard and the diary, wired to their query object, the clock and the sweep."""
-    return ReadCounterOverview(overview, SqlBranchRepository(session), clock, lapse_due_bookings)
+    return ReadCounterOverview(
+        overview, SqlBranchRepository(session), clock, lapse_due_bookings, policy
+    )
 
 
 ReadCounterOverviewDependency = Annotated[

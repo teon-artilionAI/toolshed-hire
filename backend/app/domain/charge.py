@@ -15,17 +15,25 @@ a supply (BR-23).
 Settlement is simulated (BR-33). A charge settled at the counter carries a
 reference of the form `SIM-TSH-H-26-000099-01`, which names the rental and the
 place of the charge on it, and no payment gateway is ever called.
+
+A charge that is raised and not yet paid, a late fee for example, is PENDING.
+`settled` is the one way it moves on, and it refuses a charge that is no longer
+pending. That is the guard of BR-24. A settled, waived or reversed charge is
+final, and nothing in the domain hands back a changed copy of one.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Final
 from uuid import UUID, uuid4
 
 from app.domain.enums import ChargeStatus, ChargeType
+from app.domain.errors import StateTransitionError
 from app.domain.money import Money
 
 DEPOSIT_CHARGE_TYPES: Final[frozenset[ChargeType]] = frozenset(
@@ -35,6 +43,17 @@ NO_VAT_PERCENT: Final[Decimal] = Decimal("0.00")
 # The width of the column a description is stored in.
 DESCRIPTION_MAX_LENGTH: Final[int] = 200
 PAYMENT_REFERENCE_PREFIX: Final[str] = "SIM"
+# The width of the column a payment reference is stored in.
+PAYMENT_REFERENCE_MAX_LENGTH: Final[int] = 40
+SETTLED_CHARGE_RULE: Final[str] = "BR-24"
+# Where a charge that can no longer change stands, as a member of staff reads it.
+FINAL_STANDING_IN_WORDS: Final[Mapping[ChargeStatus, str]] = MappingProxyType(
+    {
+        ChargeStatus.SETTLED: "settled",
+        ChargeStatus.WAIVED: "waived",
+        ChargeStatus.REVERSED: "reversed",
+    }
+)
 
 
 def payment_reference(rental_reference: str, position: int) -> str:
@@ -160,4 +179,102 @@ class Charge:
             rental_item_id=rental_item_id,
             settled_at=raised_at,
             payment_reference=reference,
+        )
+
+    @classmethod
+    def owed(
+        cls,
+        *,
+        rental_id: UUID,
+        charge_type: ChargeType,
+        description: str,
+        amount_ex_vat: Money,
+        vat_rate: Decimal,
+        vat_amount: Money,
+        raised_at: datetime,
+        raised_by_user_id: UUID,
+        rental_item_id: UUID | None = None,
+    ) -> Charge:
+        """Build a charge that is owed and not yet paid, rounding it as it is written.
+
+        Args:
+            rental_id: The rental the charge is on.
+            charge_type: What the charge is for.
+            description: What the customer reads beside the amount.
+            amount_ex_vat: The amount before VAT.
+            vat_rate: The rate the VAT was worked out at.
+            vat_amount: The VAT.
+            raised_at: When it was raised, from the clock.
+            raised_by_user_id: The account that raised it.
+            rental_item_id: The unit it belongs to, or None for the whole hire.
+
+        """
+        before_vat = amount_ex_vat.rounded()
+        vat = vat_amount.rounded()
+        return cls(
+            rental_id=rental_id,
+            charge_type=charge_type,
+            description=description,
+            amount_ex_vat=before_vat.amount,
+            vat_rate=vat_rate,
+            vat_amount=vat.amount,
+            amount_inc_vat=before_vat.add(vat).amount,
+            status=ChargeStatus.PENDING,
+            raised_at=raised_at,
+            raised_by_user_id=raised_by_user_id,
+            rental_item_id=rental_item_id,
+        )
+
+    def is_pending(self) -> bool:
+        """Return True while the charge is owed and may still be settled."""
+        return self.status is ChargeStatus.PENDING
+
+    def total(self) -> Money:
+        """Return the amount of the charge with its VAT, as Money."""
+        return Money.create(self.amount_inc_vat)
+
+    def settled(self, *, settled_at: datetime, payment_reference: str) -> Charge:
+        """Return this charge settled, with the time and the simulated reference (BR-33).
+
+        Args:
+            settled_at: When it was settled, from the clock.
+            payment_reference: The settlement reference, at most forty characters.
+
+        Raises:
+            StateTransitionError: If the charge is already settled, waived or
+                reversed. A charge that is no longer pending is never edited
+                (BR-24). A correction is a new charge that points back at it.
+            ValueError: If the reference is blank or wider than its column,
+                which means the calling code built it wrongly.
+
+        """
+        self.ensure_may_change()
+        if not payment_reference.strip() or len(payment_reference) > PAYMENT_REFERENCE_MAX_LENGTH:
+            raise ValueError(
+                f"Attempted to settle a {self.charge_type.value} charge with the reference "
+                f"{payment_reference!r}. A reference is between one and "
+                f"{PAYMENT_REFERENCE_MAX_LENGTH} characters."
+            )
+        return replace(
+            self,
+            status=ChargeStatus.SETTLED,
+            settled_at=settled_at,
+            payment_reference=payment_reference,
+        )
+
+    def ensure_may_change(self) -> None:
+        """Refuse any change to a charge that is no longer pending (BR-24).
+
+        Raises:
+            StateTransitionError: If the charge is settled, waived or reversed.
+
+        """
+        if self.is_pending():
+            return
+        raise StateTransitionError(
+            f"This charge is {FINAL_STANDING_IN_WORDS[self.status]}, so it cannot be changed. "
+            "A correction is a new charge.",
+            from_status=self.status.value,
+            to_status=ChargeStatus.SETTLED.value,
+            rule=SETTLED_CHARGE_RULE,
         )

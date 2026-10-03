@@ -15,7 +15,9 @@ Faults are switched on through the store, so a test can make the audit log or
 the outbox fail at the moment it wants to and then look at what was kept.
 
 The reservation repository is in `memory_booking`, with the read models it
-builds, and the repositories of the reference data are in `memory_reference`.
+builds, the part of the rental repository the sweep needs is in
+`memory_hire`, and the repositories of the reference data are in
+`memory_reference`.
 """
 
 from __future__ import annotations
@@ -38,7 +40,9 @@ from app.domain.errors import AllocationConflictError
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.notification import Notification
 from app.domain.period import BookingPeriod
+from app.domain.rental import Rental
 from tests.support.memory_booking import MemoryReservations
+from tests.support.memory_hire import MemoryRentals
 from tests.support.memory_reference import (
     MemoryBranches,
     MemoryCustomers,
@@ -66,6 +70,7 @@ class Records:
     late_cancellations: dict[UUID, int] = field(default_factory=dict)
     no_shows: dict[UUID, int] = field(default_factory=dict)
     account_statuses: dict[UUID, AccountStatus] = field(default_factory=dict)
+    rentals: list[Rental] = field(default_factory=list)
 
 
 @dataclass
@@ -83,6 +88,7 @@ class MemoryStore:
         closed_branch_codes: The codes of branches that have stopped trading.
         closing_times: When a branch closes, by its key. 17:00 for any not named.
         stale_no_show_query: True to make the no show query return everything.
+        stale_overdue_query: True to make the overdue query return everything.
         journal: `commit` and `rollback`, in the order they happened.
         fail_audit: When True, recording an audit event raises.
         fail_outbox_read: When True, reading the queued notifications raises.
@@ -100,6 +106,7 @@ class MemoryStore:
     closed_branch_codes: set[str] = field(default_factory=set)
     closing_times: dict[UUID, time] = field(default_factory=dict)
     stale_no_show_query: bool = False
+    stale_overdue_query: bool = False
     journal: list[str] = field(default_factory=list)
     fail_audit: bool = False
     fail_outbox_read: bool = False
@@ -232,6 +239,7 @@ class InMemoryUnitOfWork:
     """A unit of work that keeps its records in memory."""
 
     reservations: MemoryReservations
+    rentals: MemoryRentals
     assets: _Assets
     branches: MemoryBranches
     product_models: MemoryProductModels
@@ -287,6 +295,7 @@ class InMemoryUnitOfWork:
         """Point every repository at one working copy."""
         self._working = working
         self.reservations = MemoryReservations(self.store, working)
+        self.rentals = MemoryRentals(self.store, working)
         self.assets = _Assets(self.store, working)
         self.branches = MemoryBranches(self.store)
         self.product_models = MemoryProductModels(self.store)

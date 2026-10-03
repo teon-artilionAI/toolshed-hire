@@ -142,6 +142,7 @@ describe('the handover form', () => {
     expect(within(out).getByText('TSH-PC-0007')).toBeVisible()
     expect(within(out).getByText(/^R 5.555[,.]55$/)).toBeVisible()
     expect(within(out).getByText('13 Mar 2026')).toBeVisible()
+    expect(within(out).getByRole('link', { name: 'Open the hire' })).toHaveAttribute('href', `/counter/return/${RENTAL_ID}`)
   })
 
   it('keeps the hire on the screen when the booking is read again as collected', async () => {

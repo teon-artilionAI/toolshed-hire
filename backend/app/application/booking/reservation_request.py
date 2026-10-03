@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Final
 from uuid import UUID
 
-from app.application.availability.hire_request import TO_PARAMETER
+from app.application.availability.hire_request import FROM_PARAMETER, TO_PARAMETER
 from app.application.availability.search import UNKNOWN_BRANCH_MESSAGE
 from app.application.booking.access import is_staff
 from app.application.catalogue.browse import MODEL_NOT_FOUND_MESSAGE
@@ -34,7 +34,7 @@ from app.domain.booking import (
 from app.domain.catalogue import ProductModel
 from app.domain.errors import AuthorisationFailure, ValidationFailure
 from app.domain.identity import Actor, Branch, CustomerProfile
-from app.domain.period import BookingPeriod
+from app.domain.period import BookingPeriod, ensure_branch_open_for_start
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,25 @@ def ensure_lines_are_well_formed(lines: tuple[RequestedLine, ...]) -> None:
                 {"slug": line.model_slug},
             )
         seen.add(line.model_slug)
+
+
+def ensure_start_while_branch_open(period: BookingPeriod, branch: Branch, now: datetime) -> None:
+    """Refuse a hire for today at a branch that has closed for the day, naming `from` (BR-04).
+
+    Raises:
+        ValidationFailure: Naming `from`, the start date, when the hire starts
+            today and the collection branch has already closed.
+
+    """
+    try:
+        ensure_branch_open_for_start(period, now=now, closes_at=branch.closes_at)
+    except ValidationFailure as failure:
+        raise refused(
+            FROM_PARAMETER,
+            failure.message,
+            {**failure.detail, "branch": branch.code},
+            rule=failure.rule,
+        ) from failure
 
 
 def branch_of(uow: UnitOfWork, branch_code: str) -> Branch:

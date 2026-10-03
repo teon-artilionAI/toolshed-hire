@@ -8,13 +8,15 @@
  * are shaped the way the contract for the counter describes them, with long
  * names, which are what break a layout. The dashboard, the diary and the
  * locator, SC-10, SC-11 and SC-17, are scanned the same way, and their answers
- * are in overview-answers.ts.
+ * are in overview-answers.ts. So are the return screen and the overdue
+ * worklist, SC-15 and SC-18, whose answers are in return-answers.ts.
  */
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
 import { dateFromToday } from './hire-dates.ts'
 import { OVERVIEW_ANSWERS } from './overview-answers.ts'
+import { RETURN_ANSWERS, RETURN_RENTAL_ID } from './return-answers.ts'
 
 /** What the session leaves in web storage once somebody has signed in. Without
  *  it the application does not ask whether there is a session. */
@@ -153,6 +155,7 @@ const ANSWERS: Record<string, unknown> = {
   [`GET /api/catalogue/models/${MODEL_SLUG}/availability`]: { from: TODAY, to: TOMORROW, hireDays: 1, quantity: 1, branches: ANSWERS_FROM },
   [`GET /api/reservations/${REFERENCE}/checkout`]: CHECKOUT,
   ...OVERVIEW_ANSWERS,
+  ...RETURN_ANSWERS,
 }
 
 async function answerTheApi(route: Route): Promise<void> {
@@ -181,6 +184,8 @@ export const COUNTER_SCREENS: readonly CounterScreen[] = [
   { path: '/counter', heading: 'Today at the counter', loaded: 'Late fee so far' },
   { path: '/counter/diary', heading: 'Branch diary', loaded: 'Booked, not collected yet' },
   { path: '/counter/locator?q=TSH', heading: 'Where is it', loaded: 'Quarantined until inspected' },
+  { path: `/counter/return/${RETURN_RENTAL_ID}`, heading: 'Return and condition inspection', loaded: 'Units still out' },
+  { path: '/counter/overdue', heading: 'Overdue and late fees', loaded: 'Escalation queue, more than 14 days late' },
 ]
 
 /** Open a counter screen as a signed in assistant, with the API answered here. */

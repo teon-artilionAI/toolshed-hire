@@ -472,6 +472,68 @@
         }
       }
     },
+    "/api/me/rentals": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "List the signed in customer's own rentals, newest first",
+        "description": "Return one page of the caller's own rentals, with no asset tag on any item.",
+        "operationId": "list_my_rentals_api_me_rentals_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "How many rentals a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many rentals a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalPageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/customers": {
       "get": {
         "tags": [
@@ -1404,6 +1466,135 @@
         }
       }
     },
+    "/api/rentals": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "List rentals at any branch, the overdue first",
+        "description": "Return one page of rentals, the most overdue first and then the newest.\n\nRaises:\n    ValidationFailure: If the branch code is not the code of a trading\n        branch. HTTP 422, naming `branchCode`.",
+        "operationId": "list_rentals_api_rentals_get",
+        "parameters": [
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A branch code. Only rentals that went out there.",
+              "title": "Branchcode"
+            },
+            "description": "A branch code. Only rentals that went out there."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RentalStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rentals in this status.",
+              "title": "Status"
+            },
+            "description": "Only rentals in this status."
+          },
+          {
+            "name": "overdueOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only rentals with a unit out past its due date.",
+              "default": false,
+              "title": "Overdueonly"
+            },
+            "description": "Only rentals with a unit out past its due date."
+          },
+          {
+            "name": "customerProfileId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this customer's.",
+              "title": "Customerprofileid"
+            },
+            "description": "Only this customer's."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "How many rentals a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many rentals a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalPageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/rentals/{id}": {
       "get": {
         "tags": [
@@ -1454,6 +1645,269 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rentals/{id}/returns": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Take units of a rental back, and settle the deposit when the last is back",
+        "description": "Record the return of the named units in one transaction.\n\nRaises:\n    NotFound: If there is no such rental. HTTP 404.\n    BranchScopeError: If counter staff take units back at another branch. HTTP 403.\n    StateTransitionError: If a unit is already back. HTTP 409.\n    ValidationFailure: If a unit is listed twice, is not on the rental or\n        has a meter reading below the one it went out with. HTTP 422,\n        naming the field.",
+        "operationId": "post_return_api_rentals__id__returns_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the rental, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the rental, or its reference."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such rental.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A unit named is already back, so nothing was returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rentals/{id}/items/{itemId}/loss": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Record a unit more than fourteen days late as lost",
+        "description": "Record the loss of one unit in one transaction.\n\nRaises:\n    NotFound: If there is no such rental, or the unit is not on it. HTTP 404.\n    BranchScopeError: If counter staff record a loss at another branch. HTTP 403.\n    StateTransitionError: If the unit is already back or not yet late\n        enough. HTTP 409.",
+        "operationId": "post_loss_api_rentals__id__items__itemId__loss_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the rental, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the rental, or its reference."
+          },
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the rental item.",
+              "title": "Itemid"
+            },
+            "description": "The key of the rental item."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such rental, or the unit is not on it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The unit is already back, or it is not yet more than fourteen days past its due date, and `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rentals/{id}/balance-payment": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Record the simulated payment of a rental's balance",
+        "description": "Record the payment and settle the rental in one transaction.\n\nRaises:\n    NotFound: If there is no such rental. HTTP 404.\n    BranchScopeError: If counter staff record a payment at another branch. HTTP 403.\n    StateTransitionError: If nothing is owed. HTTP 409.",
+        "operationId": "post_balance_payment_api_rentals__id__balance_payment_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the rental, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the rental, or its reference."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BalancePaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such rental.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nothing is owed on the rental, so there is no balance to pay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -2417,6 +2871,23 @@
         ],
         "title": "AvailabilityPageResponse",
         "description": "One page of an availability search.\n\n`to` is the day the equipment comes back. It is exclusive, so a unit is\nfree again on that day."
+      },
+      "BalancePaymentRequest": {
+        "properties": {
+          "paymentReference": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Paymentreference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "paymentReference"
+        ],
+        "title": "BalancePaymentRequest",
+        "description": "The simulated payment of a balance, by the reference the customer was given."
       },
       "BranchAvailabilityResponse": {
         "properties": {
@@ -4569,6 +5040,38 @@
         "title": "RentalItemResponse",
         "description": "One unit on a rental.\n\n`daysLateToday` and `lateFeeToday` are what the late fee would be if the\nunit came back today, worked out on the server."
       },
+      "RentalPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RentalResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "RentalPageResponse",
+        "description": "One page of rentals."
+      },
       "RentalResponse": {
         "properties": {
           "id": {
@@ -5074,6 +5577,88 @@
         ],
         "title": "ReturnDueResponse",
         "description": "A rental due back today with a unit still out."
+      },
+      "ReturnItemRequest": {
+        "properties": {
+          "rentalItemId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rentalitemid"
+          },
+          "conditionIn": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "hourMeterIn": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterin"
+          },
+          "accessoriesIn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessoriesin"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "flaggedForDamage": {
+            "type": "boolean",
+            "title": "Flaggedfordamage",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rentalItemId",
+          "conditionIn"
+        ],
+        "title": "ReturnItemRequest",
+        "description": "What the counter records about one unit as it comes back."
+      },
+      "ReturnRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnItemRequest"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ReturnRequest",
+        "description": "One or more units of a rental that came back."
       },
       "SettlementWait": {
         "type": "string",

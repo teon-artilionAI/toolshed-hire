@@ -7,8 +7,9 @@
  * the status and the total out of sight, and the account screen pushed the
  * whole page wider than the window. Only a real browser can measure that, so
  * the check is here and not among the component tests. The counter's customer
- * lookup, new booking, checkout, dashboard, diary and locator are checked the
- * same way, because an assistant may hold a phone at the counter.
+ * lookup, new booking, checkout, dashboard, diary, locator, return screen and
+ * overdue worklist are checked the same way, because an assistant may hold a
+ * phone at the counter. My Account is checked with a hire in its history.
  *
  * This spec does not use the real backend. The screens need a signed in person
  * with bookings and a profile, and a layout check should not depend on what a
@@ -24,6 +25,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
+import { MY_RENTALS } from './return-answers.ts'
 
 /** The narrowest phone the screens are built for. */
 const NARROW_PHONE = { width: 360, height: 780 }
@@ -136,6 +138,7 @@ const ANSWERS: Record<string, unknown> = {
   'GET /api/branches': BRANCHES,
   'GET /api/reservations': RESERVATIONS,
   'GET /api/me/profile': PROFILE,
+  'GET /api/me/rentals': MY_RENTALS,
 }
 
 /** What the list answers when it is only asked how many bookings were left
@@ -182,6 +185,7 @@ test('My Account fits 360 pixels with long details, reading and editing', async 
   await openAsCustomer(page, '/account', 'My account')
   await expect(page.getByText('Your email address has not been confirmed')).toBeVisible()
   await expect(page.getByText(PROFILE.companyName)).toBeVisible()
+  await expect(page.getByRole('article', { name: 'TSH-H-26-000099' })).toBeVisible()
 
   expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
 

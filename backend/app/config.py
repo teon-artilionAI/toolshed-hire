@@ -21,6 +21,7 @@ from app.config_checks import (
     force_psycopg_driver,
     resolve_frontend_origin,
 )
+from app.config_clock import ClockSettings, check_test_business_time
 from app.config_environment import ConfigurationError as ConfigurationError
 from app.config_environment import Environment as Environment
 from app.config_limits import AttemptLimitSettings
@@ -46,10 +47,11 @@ RESEND_API_KEY_PLACEHOLDER = "not-configured-yet"
 DEFAULT_EMAIL_FROM = "Toolshed Hire <onboarding@resend.dev>"
 
 
-class Settings(AttemptLimitSettings):
+class Settings(AttemptLimitSettings, ClockSettings):
     """Validated configuration values, one field per environment variable.
 
-    The attempt limits are declared in `AttemptLimitSettings`.
+    The attempt limits are declared in `AttemptLimitSettings`, and the test
+    clock in `ClockSettings`.
     """
 
     model_config = SettingsConfigDict(
@@ -208,6 +210,16 @@ class Settings(AttemptLimitSettings):
         return self
 
     @model_validator(mode="after")
+    def honour_the_test_clock_in_test_only(self) -> Settings:
+        """Refuse to start any environment but test with its clock moved."""
+        check_test_business_time(
+            self.test_business_time,
+            environment=self.environment.value,
+            is_test=self.environment is Environment.TEST,
+        )
+        return self
+
+    @model_validator(mode="after")
     def know_where_the_account_links_point(self) -> Settings:
         """Refuse to start when the origin of the account links cannot be worked out."""
         _ = self.frontend_origin
@@ -264,6 +276,7 @@ class Settings(AttemptLimitSettings):
             "email_delivery": "configured" if self.email_configured else "not-configured",
             "email_sender": self.email_from,
             "email_recipient_restriction": "on" if self.email_allowed_recipient else "off",
+            "test_business_time": str(self.test_business_time or "off"),
             **self.attempt_limit_values(),
         }
 

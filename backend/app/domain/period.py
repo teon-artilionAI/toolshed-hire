@@ -18,8 +18,9 @@ the dates that were attempted.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
+from app.domain.business_time import business_instant, in_business_time
 from app.domain.errors import ValidationFailure
 
 # The PostgreSQL bound specifier that matches this class. Written here so the
@@ -42,6 +43,9 @@ RETURN_NOT_AFTER_START_MESSAGE = "The return date has to be after the start date
 HIRE_TOO_LONG_MESSAGE = f"A hire can be at most {MAXIMUM_HIRE_DAYS} days."
 START_IN_THE_PAST_MESSAGE = "The hire has to start today or later."
 START_BEYOND_HORIZON_MESSAGE = f"A hire can start at most {MAXIMUM_DAYS_AHEAD} days from today."
+BRANCH_CLOSED_FOR_TODAY_MESSAGE = (
+    "The branch has closed for today. The earliest a hire can start is tomorrow."
+)
 
 
 class InvalidBookingPeriod(ValueError):
@@ -195,3 +199,33 @@ def ensure_within_booking_window(period: BookingPeriod, today: date) -> None:
             {"days_ahead": days_ahead, "maximum_days_ahead": MAXIMUM_DAYS_AHEAD},
             rule=BOOKING_HORIZON_RULE,
         )
+
+
+def ensure_branch_open_for_start(period: BookingPeriod, *, now: datetime, closes_at: time) -> None:
+    """Refuse a hire that starts today once its collection branch has closed for the day (BR-04).
+
+    Today stops being a day a hire can start on the moment the branch closes,
+    by the clock in Cape Town, because nobody can collect after that and the
+    sweep would call the booking a no show (BR-17). The branch is still open
+    at the very instant it closes, the same moment the sweep counts from, so
+    the two rules meet without a gap and without an overlap.
+
+    Args:
+        period: The hire period being booked.
+        now: The current instant, from the clock.
+        closes_at: When the collection branch closes, on a clock in Cape Town.
+
+    Raises:
+        ValidationFailure: If the hire starts today and the branch has closed.
+            The failure names its rule and carries the start date and the
+            closing time in its detail, and the message holds neither.
+
+    """
+    today = in_business_time(now).date()
+    if period.start != today or now <= business_instant(today, closes_at):
+        return
+    raise ValidationFailure(
+        BRANCH_CLOSED_FOR_TODAY_MESSAGE,
+        {"start_date": period.start.isoformat(), "closes_at": closes_at.isoformat()},
+        rule=NO_PAST_START_RULE,
+    )

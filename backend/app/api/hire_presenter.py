@@ -21,7 +21,8 @@ from app.api.hire_schemas import (
     RentalItemResponse,
     RentalResponse,
 )
-from app.application.hire.views import CheckoutView, RentalView
+from app.api.return_schemas import RentalPageResponse
+from app.application.hire.views import CheckoutView, RentalView, RentalViewPage
 
 RENTALS_PREFIX: Final[str] = "/rentals"
 # The tag of both routers, which is the module they belong to.
@@ -105,6 +106,16 @@ def rental_response(view: RentalView) -> RentalResponse:
         agreement_signed=detail.agreement_signed,
         can_return=view.can_return,
         settlement_waiting_on=view.settlement_waiting_on,
+    )
+
+
+def rental_page_response(page: RentalViewPage) -> RentalPageResponse:
+    """Write one page of rentals in the shape the contract gives a list."""
+    return RentalPageResponse(
+        items=[rental_response(view) for view in page.items],
+        page=page.page,
+        page_size=page.page_size,
+        total=page.total,
     )
 
 

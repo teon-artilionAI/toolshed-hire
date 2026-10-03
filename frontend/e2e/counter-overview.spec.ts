@@ -17,10 +17,11 @@
  * A second journey books one unit for today for a new walk in, finds it due
  * out on the dashboard and in the diary, and marks it as a no show from the
  * diary. That is the one thing these screens change, sent to the real API and
- * read back from it. Staff may mark a booking from the start of its first day,
- * and once the branch has closed on that day the server's sweep marks it by
- * itself. So a run after closing time finds the booking already a no show, with
- * nothing to press, and checks that instead.
+ * read back from it. The API refuses a booking that starts today once the
+ * branch has closed for the day, and in the browser tests it runs with a clock
+ * pinned inside business hours, so the booking is always made and always still
+ * due out when the assistant marks it. The sweep that marks a booking by itself
+ * after closing never reaches it.
  *
  * It needs the dashboard, the diary and the locator, which a healthy backend
  * may not have yet, so `e2e/backend.ts` asks for each of them by name. When
@@ -28,12 +29,12 @@
  */
 
 import { expect, test } from '@playwright/test'
-import type { APIRequestContext, Locator, Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { OVERVIEW_ROUTES_NEEDED, overviewRoutesArePresent } from './backend.ts'
 import { bookForTodayAtTheCounter } from './counter-booking.ts'
 import type { CounterBooking } from './counter-booking.ts'
-import { clockTimeAtTheBranches, dateFromToday, dayInWords, mondayOf } from './hire-dates.ts'
+import { dateFromToday, dayInWords, mondayOf } from './hire-dates.ts'
 import { BLV_COUNTER_EMAIL, CBD_COUNTER_EMAIL, signInAsStaff, staffFor } from './staff.ts'
 
 /** The branch each seeded assistant works at, by the name the API gives it. */
@@ -80,21 +81,7 @@ function goingOutToday(page: Page, reference: string): Locator {
     .filter({ hasText: reference })
 }
 
-/**
- * Whether the branch has closed for today, by the clock in Cape Town and the
- * hours the API gives the branch. From the minute it closes the sweep may
- * already have marked today's bookings as no shows.
- */
-async function hasClosedForToday(request: APIRequestContext, branch: string): Promise<boolean> {
-  const answer = await request.get('/api/branches')
-  expect(answer.ok(), `the branch route answered ${answer.status()}`).toBe(true)
-  const { items } = (await answer.json()) as { items: { name: string; closesAt: string }[] }
-  const closesAt = items.find((item) => item.name === branch)?.closesAt
-  expect(closesAt, `the API lists no branch called ${branch}`).toBeDefined()
-  return clockTimeAtTheBranches() >= (closesAt ?? '')
-}
-
-/** Before closing. The booking is due out, and the assistant marks it. */
+/** The booking is due out, and the assistant marks it. */
 async function markAsNoShow(page: Page, { customerName, reference }: CounterBooking, branch: string) {
   // SC-10. Due out today, with the way to check it out.
   await page.goto('/counter')
@@ -130,18 +117,6 @@ async function markAsNoShow(page: Page, { customerName, reference }: CounterBook
   await page.goto('/counter')
   await expect(dashboardReadLine(page, branch)).toBeVisible()
   await expect(dueOutToday(page, reference)).toHaveCount(0)
-}
-
-/** After closing. The sweep has marked the booking, and nothing is offered. */
-async function findSweptAlready(page: Page, { reference }: CounterBooking, branch: string) {
-  await page.goto('/counter')
-  await expect(dashboardReadLine(page, branch)).toBeVisible()
-  await expect(dueOutToday(page, reference)).toHaveCount(0)
-
-  await page.goto('/counter/diary')
-  const booking = goingOutToday(page, reference)
-  await expect(booking.getByText(NO_SHOW, { exact: true })).toBeVisible()
-  await expect(booking.getByRole('button', { name: /^Mark as no show/ })).toHaveCount(0)
 }
 
 test.describe('the counter overview against the real backend', () => {
@@ -202,14 +177,12 @@ test.describe('the counter overview against the real backend', () => {
 
   test('an assistant books for today, sees it due out, and marks it as a no show from the diary', async ({
     page,
-    request,
   }, testInfo) => {
     const email = staffFor(testInfo.project.name)
     const branch = BRANCH_OF[email]
     await signInAsStaff(page, email)
     const booking = await bookForTodayAtTheCounter(page, testInfo.project.name)
 
-    if (await hasClosedForToday(request, branch)) await findSweptAlready(page, booking, branch)
-    else await markAsNoShow(page, booking, branch)
+    await markAsNoShow(page, booking, branch)
   })
 })

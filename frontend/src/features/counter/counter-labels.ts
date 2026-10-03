@@ -10,6 +10,8 @@
 import type {
   AccountStatus,
   AssetStatus,
+  ChargeStatus,
+  ChargeType,
   ConditionGrade,
   CustomerType,
   DiaryCollectionStatus,
@@ -69,6 +71,26 @@ export const RENTAL_STATUS_LABEL: Record<RentalStatus, string> = {
   PARTIALLY_RETURNED: 'Partly back',
   RETURNED: 'Back',
   SETTLED: 'Back and settled',
+}
+
+/** What a charge on a hire is for. */
+export const CHARGE_TYPE_LABEL: Record<ChargeType, string> = {
+  HIRE: 'Hire',
+  DEPOSIT_HOLD: 'Deposit held',
+  DEPOSIT_RELEASE: 'Deposit released',
+  DEPOSIT_FORFEIT: 'Deposit forfeited',
+  LATE_FEE: 'Late fee',
+  DAMAGE_RECOVERY: 'Recovery charge',
+  CLEANING: 'Cleaning',
+  ADJUSTMENT: 'Adjustment',
+}
+
+/** Where a charge stands. Only the owner waives one. */
+export const CHARGE_STATUS_LABEL: Record<ChargeStatus, string> = {
+  PENDING: 'Not settled yet',
+  SETTLED: 'Settled',
+  WAIVED: 'Waived by the owner',
+  REVERSED: 'Reversed',
 }
 
 /** Where a unit stands, in words that can be read down the phone. */

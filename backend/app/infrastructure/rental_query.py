@@ -1,9 +1,11 @@
-"""The read of one rental, with its items and its charges, as a read model.
+"""The read of rentals, with their items and their charges, as read models.
 
-Three statements however many units the hire has. One finds the rental with
-its reservation, its branch and its customer. One finds every item with its
-unit, its model and the late fee copied onto its reservation line. One finds
-every charge. Nothing loops over the database.
+One rental is three statements however many units the hire has. One finds the
+rental with its reservation, its branch and its customer. One finds every item
+with its unit, its model and the late fee copied onto its reservation line.
+One finds every charge. A page of rentals is the same three statements for
+every rental on the page at once, with a count before them, so nothing loops
+over the database. The list itself is in `app.infrastructure.rental_list_query`.
 
 The items come in line order and then tag order, which is the order the
 counter's checkout sheet lists them in. The charges come in the order they
@@ -16,10 +18,15 @@ every call.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
+from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import Final
+from uuid import UUID
 
-from sqlalchemy import ColumnElement
+from sqlalchemy import ColumnElement, UnaryExpression
+from sqlalchemy.orm import Mapped
 from sqlmodel import Session, col, select
 
 from app.application.hire.read_models import (
@@ -48,12 +55,24 @@ logger = logging.getLogger(__name__)
 CHECKED_OUT_AT_COLUMN: Final[str] = "rental.checked_out_at"
 RAISED_AT_COLUMN: Final[str] = "charge.raised_at"
 
+# One rental found, with the reservation, the branch and the customer it is read with.
+type RentalRow = tuple[Rental, Reservation, Branch, CustomerProfile]
+
 
 def rental_key_condition(key: RentalKey) -> ColumnElement[bool]:
     """Return the condition that picks one rental by its key or its reference."""
     if key.rental_id is not None:
         return col(Rental.id) == key.rental_id
     return col(Rental.reference) == key.reference
+
+
+def charge_order() -> tuple[Mapped[datetime], UnaryExpression[str | None], Mapped[UUID]]:
+    """Return the order charges are read in, which is the order they were raised."""
+    return (
+        col(Charge.raised_at),
+        col(Charge.payment_reference).nulls_last(),
+        col(Charge.id),
+    )
 
 
 class SqlRentalReads:
@@ -77,35 +96,22 @@ class SqlRentalReads:
             outcome.row_count = 0 if found is None else 1
         if found is None:
             return None
-        rental, reservation, branch, customer = found
-        return RentalDetail(
-            id=rental.id,
-            reference=rental.reference,
-            status=rental.status,
-            reservation_id=rental.reservation_id,
-            reservation_reference=reservation.reference,
-            branch_id=branch.id,
-            branch_code=branch.code,
-            branch_name=branch.name,
-            customer_profile_id=customer.id,
-            customer_name=customer.display_name,
-            customer_phone=customer.contact_phone,
-            start_date=reservation.start_date,
-            due_back_on=rental.due_back_on,
-            checked_out_at=required_utc(rental.checked_out_at, CHECKED_OUT_AT_COLUMN),
-            returned_at=in_utc(rental.returned_at),
-            items=self._items_of(rental),
-            charges=self._charges_of(rental),
-            deposit_held=Decimal(rental.deposit_held),
-            deposit_withheld=Decimal(rental.deposit_withheld),
-            deposit_refunded=Decimal(rental.deposit_refunded),
-            balance_due=Decimal(rental.balance_due),
-            settled_at=in_utc(rental.settled_at),
-            agreement_signed=rental.agreement_signed,
-        )
+        (detail,) = self.details_of([found])
+        return detail
 
-    def _items_of(self, rental: Rental) -> tuple[RentalItemDetail, ...]:
-        """Return every item of a rental with its unit and its model, in one statement."""
+    def details_of(self, rows: Sequence[RentalRow]) -> list[RentalDetail]:
+        """Return the rentals found as read models, reading all their items and charges at once."""
+        if not rows:
+            return []
+        rental_ids = [rental.id for rental, _reservation, _branch, _customer in rows]
+        items = self._items_by_rental(rental_ids)
+        charges = self._charges_by_rental(rental_ids)
+        return [
+            _detail_of(row, tuple(items[row[0].id]), tuple(charges[row[0].id])) for row in rows
+        ]
+
+    def _items_by_rental(self, rental_ids: list[UUID]) -> dict[UUID, list[RentalItemDetail]]:
+        """Return the items of every rental named, with their units and models, in one statement."""
         line_of_allocation = col(ReservationLine.id) == col(AssetAllocation.reservation_line_id)
         rows = self._session.exec(
             select(RentalItem, Asset, ProductModel, ReservationLine)
@@ -113,51 +119,87 @@ class SqlRentalReads:
             .join(ReservationLine, line_of_allocation)
             .join(ProductModel, col(ProductModel.id) == col(ReservationLine.product_model_id))
             .join(Asset, col(Asset.id) == col(RentalItem.asset_id))
-            .where(col(RentalItem.rental_id) == rental.id)
-            .order_by(col(ReservationLine.line_position), col(Asset.asset_tag))
-        ).all()
-        return tuple(
-            RentalItemDetail(
-                id=item.id,
-                asset_tag=asset.asset_tag,
-                model_name=model.name,
-                model_slug=model.slug,
-                condition_out=item.condition_out,
-                condition_in=item.condition_in,
-                hour_meter_out=item.hour_meter_out,
-                hour_meter_in=item.hour_meter_in,
-                accessories_out=item.accessories_out,
-                accessories_in=item.accessories_in,
-                returned_at=in_utc(item.returned_at),
-                days_late=item.days_late,
-                late_fee_per_day=Decimal(line.late_fee_per_day_snapshot),
+            .where(col(RentalItem.rental_id).in_(rental_ids))
+            .order_by(
+                col(RentalItem.rental_id),
+                col(ReservationLine.line_position),
+                col(Asset.asset_tag),
             )
-            for item, asset, model, line in rows
-        )
+        ).all()
+        grouped: dict[UUID, list[RentalItemDetail]] = defaultdict(list)
+        for item, asset, model, line in rows:
+            grouped[item.rental_id].append(
+                RentalItemDetail(
+                    id=item.id,
+                    asset_tag=asset.asset_tag,
+                    model_name=model.name,
+                    model_slug=model.slug,
+                    condition_out=item.condition_out,
+                    condition_in=item.condition_in,
+                    hour_meter_out=item.hour_meter_out,
+                    hour_meter_in=item.hour_meter_in,
+                    accessories_out=item.accessories_out,
+                    accessories_in=item.accessories_in,
+                    returned_at=in_utc(item.returned_at),
+                    days_late=item.days_late,
+                    late_fee_per_day=Decimal(line.late_fee_per_day_snapshot),
+                )
+            )
+        return grouped
 
-    def _charges_of(self, rental: Rental) -> tuple[ChargeDetail, ...]:
-        """Return every charge of a rental, in the order they were raised, in one statement."""
+    def _charges_by_rental(self, rental_ids: list[UUID]) -> dict[UUID, list[ChargeDetail]]:
+        """Return the charges of every rental named, in the order they were raised."""
         rows = self._session.exec(
             select(Charge)
-            .where(col(Charge.rental_id) == rental.id)
-            .order_by(
-                col(Charge.raised_at),
-                col(Charge.payment_reference).nulls_last(),
-                col(Charge.id),
-            )
+            .where(col(Charge.rental_id).in_(rental_ids))
+            .order_by(col(Charge.rental_id), *charge_order())
         ).all()
-        return tuple(
-            ChargeDetail(
-                id=charge.id,
-                charge_type=charge.charge_type,
-                description=charge.description,
-                amount_ex_vat=Decimal(charge.amount_ex_vat),
-                vat_rate=Decimal(charge.vat_rate),
-                vat_amount=Decimal(charge.vat_amount),
-                amount_inc_vat=Decimal(charge.amount_inc_vat),
-                status=charge.status,
-                raised_at=required_utc(charge.raised_at, RAISED_AT_COLUMN),
-                rental_item_id=charge.rental_item_id,
+        grouped: dict[UUID, list[ChargeDetail]] = defaultdict(list)
+        for charge in rows:
+            grouped[charge.rental_id].append(
+                ChargeDetail(
+                    id=charge.id,
+                    charge_type=charge.charge_type,
+                    description=charge.description,
+                    amount_ex_vat=Decimal(charge.amount_ex_vat),
+                    vat_rate=Decimal(charge.vat_rate),
+                    vat_amount=Decimal(charge.vat_amount),
+                    amount_inc_vat=Decimal(charge.amount_inc_vat),
+                    status=charge.status,
+                    raised_at=required_utc(charge.raised_at, RAISED_AT_COLUMN),
+                    rental_item_id=charge.rental_item_id,
+                )
             )
-            for charge in rows
-        )
+        return grouped
+
+
+def _detail_of(
+    row: RentalRow, items: tuple[RentalItemDetail, ...], charges: tuple[ChargeDetail, ...]
+) -> RentalDetail:
+    """Return one rental as a read model, from its row and what was read with it."""
+    rental, reservation, branch, customer = row
+    return RentalDetail(
+        id=rental.id,
+        reference=rental.reference,
+        status=rental.status,
+        reservation_id=rental.reservation_id,
+        reservation_reference=reservation.reference,
+        branch_id=branch.id,
+        branch_code=branch.code,
+        branch_name=branch.name,
+        customer_profile_id=customer.id,
+        customer_name=customer.display_name,
+        customer_phone=customer.contact_phone,
+        start_date=reservation.start_date,
+        due_back_on=rental.due_back_on,
+        checked_out_at=required_utc(rental.checked_out_at, CHECKED_OUT_AT_COLUMN),
+        returned_at=in_utc(rental.returned_at),
+        items=items,
+        charges=charges,
+        deposit_held=Decimal(rental.deposit_held),
+        deposit_withheld=Decimal(rental.deposit_withheld),
+        deposit_refunded=Decimal(rental.deposit_refunded),
+        balance_due=Decimal(rental.balance_due),
+        settled_at=in_utc(rental.settled_at),
+        agreement_signed=rental.agreement_signed,
+    )

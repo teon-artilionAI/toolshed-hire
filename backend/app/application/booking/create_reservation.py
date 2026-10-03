@@ -16,6 +16,13 @@ books for their own profile. Counter staff and administrators name the profile
 they are booking for, which is how a walk-in with no login gets a booking, and
 counter staff may only book at their own branch (BR-43).
 
+A hire may start today only while the collection branch is still open. Once it
+has closed for the day nobody can collect, and the sweep would call the
+booking a no show the moment it was confirmed, so the start date is refused
+and the earliest start is tomorrow (BR-04). Putting a draft on hold and
+confirming it ask the same question again, because a draft made before closing
+time can be acted on after it.
+
 The reservation, its lines and its audit event are written in one unit of
 work, so either all of it exists or none of it does (BR-49).
 
@@ -40,6 +47,7 @@ from app.application.booking.reservation_request import (
     customer_named_in,
     ensure_customer_names_nobody,
     ensure_lines_are_well_formed,
+    ensure_start_while_branch_open,
     models_of,
 )
 from app.application.booking.views import ReservationView, view_for
@@ -99,6 +107,7 @@ class CreateReservationUseCase(UseCase[CreateReservationCommand, ReservationView
             ensure_branch_scope(actor, branch.id)
             customer = customer_named_in(uow, command)
             customer.ensure_may_book()
+            ensure_start_while_branch_open(period, branch, now)
             models = models_of(uow, command.lines, period)
 
             reservation = Reservation.draft(

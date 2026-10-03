@@ -13,12 +13,15 @@
  * reads nothing and is the same either way.
  *
  * The counter's customer lookup, new booking and checkout need a signed in
- * assistant and a customer with a booking, and the counter's dashboard, diary
- * and locator need a day with something on it and units to find. The spec
- * answers the API for those itself, through counter-answers.ts, so all six are
- * scanned loaded every time. The new booking is scanned again with a tool on
- * it, the checkout again with every problem of its form on the screen, and the
- * diary again with the no show question open and its problem showing.
+ * assistant and a customer with a booking, the counter's dashboard, diary and
+ * locator need a day with something on it and units to find, and the return
+ * screen and the overdue worklist need a hire partly back and units long
+ * overdue. The spec answers the API for those itself, through
+ * counter-answers.ts, so all eight are scanned loaded every time. The new
+ * booking is scanned again with a tool on it, the checkout again with every
+ * problem of its form on the screen, the diary again with the no show question
+ * open and its problem showing, the return again with its question open, and
+ * the worklist again with the question about a lost unit open.
  */
 
 import { expect, test } from '@playwright/test'
@@ -82,6 +85,34 @@ test('the diary with the no show question open has no serious or critical access
   await page.getByRole('button', { name: /^Mark as no show / }).click()
   await page.getByRole('button', { name: 'Yes, mark as no show' }).click()
   await expect(page.getByText(/Say why in a few words/)).toBeVisible()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+/** A counter screen from the list the scans share, by its heading. */
+function counterScreen(heading: string) {
+  const found = COUNTER_SCREENS.find((screen) => screen.heading === heading)
+  if (found === undefined) throw new Error(`COUNTER_SCREENS has no screen headed ${heading} to open.`)
+  return found
+}
+
+test('a return with its question open has no serious or critical accessibility violations', async ({ page }) => {
+  await openCounterScreen(page, counterScreen('Return and condition inspection'))
+
+  await page.getByRole('checkbox', { name: /^TSH-PC-0012 is back on the counter/ }).check()
+  await page.getByRole('button', { name: 'Take the ticked units back' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: /^Take these units back from / })).toBeFocused()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+test('the overdue worklist with a loss question open has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  await openCounterScreen(page, counterScreen('Overdue and late fees'))
+
+  await page.getByRole('button', { name: /^Record as lost / }).first().click()
+  await expect(page.getByRole('button', { name: 'Yes, record it as lost' })).toBeVisible()
 
   expect(await blockingViolations(page)).toEqual([])
 })

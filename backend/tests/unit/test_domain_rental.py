@@ -19,7 +19,7 @@ import pytest
 from app.domain.charge import Charge, payment_reference
 from app.domain.enums import ChargeStatus, ChargeType, ConditionGrade, RentalStatus
 from app.domain.money import Money
-from app.domain.rental import Rental, RentalItem, format_rental_reference
+from app.domain.rental import Rental, RentalItem, UnitTerms, format_rental_reference
 
 NOW: Final[datetime] = datetime(2026, 3, 9, 6, 30, tzinfo=UTC)
 LATER: Final[datetime] = datetime(2026, 3, 12, 7, 40, tzinfo=UTC)
@@ -54,6 +54,11 @@ def an_item(rental: Rental, returned_at: datetime | None = None) -> RentalItem:
         asset_id=uuid4(),
         condition_out=ConditionGrade.A,
         checked_out_at=NOW,
+        terms=UnitTerms(
+            late_fee_per_day=Decimal("120.00"),
+            deposit=Decimal("1200.00"),
+            replacement_value=Decimal("4200.00"),
+        ),
         returned_at=returned_at,
     )
 

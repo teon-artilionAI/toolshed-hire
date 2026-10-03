@@ -11,8 +11,8 @@
  * walks them without stopping, and leaves that checking to it.
  *
  * Both journeys run in the same browser project, so both work at the same
- * branch. That one takes the last model free on the first page and keeps the
- * unit out on hire, so this one takes the model before it.
+ * branch. That one takes the last model free on the first page and has its
+ * unit out on hire while it runs, so this one takes the model before it.
  */
 
 import { expect } from '@playwright/test'

@@ -24,6 +24,10 @@
  *
  * The counter overview spec needs the dashboard, the diary and the asset
  * locator, and asks a sixth question about those.
+ *
+ * The counter spec takes the unit it checked out back again and a customer
+ * reads their hire history, so it also needs the returns and settlement
+ * routes, and asks a seventh question about those.
  */
 
 import type { APIRequestContext } from '@playwright/test'
@@ -252,6 +256,39 @@ export async function overviewRoutesArePresent(request: APIRequestContext): Prom
     if (BACKEND_IS_REQUIRED) {
       throw new Error(
         `${REQUIRE_BACKEND_VARIABLE} is set, so the counter overview routes have to be there, and ` +
+          `GET ${path} answered ${status}. A skipped spec would hide that.`,
+      )
+    }
+    return false
+  }
+  return true
+}
+
+/** The overdue list and the customer's own hires, the two reads of returns and
+ *  settlement. A route that is there refuses a request with no token first. */
+const RETURN_PROBE_PATHS: readonly string[] = ['/api/rentals?overdueOnly=true', '/api/me/rentals']
+
+/** The reason shown beside a skipped returns journey in the report. */
+export const RETURN_ROUTES_NEEDED =
+  `This needs the returns and settlement routes on the real backend, and one of ${RETURN_PROBE_PATHS.join(' and ')} ` +
+  'answered as a route that is not there. Run the browser tests again against a backend that can take a hire ' +
+  'back, settle its deposit and list the hires of a customer.'
+
+/**
+ * Ask whether the backend has the returns and settlement routes, on top of the
+ * counter routes the journey checks a unit out through.
+ *
+ * @returns True only when the counter routes are there and both of these
+ *   answered for themselves. An absent backend is a false and not a throw.
+ */
+export async function returnRoutesArePresent(request: APIRequestContext): Promise<boolean> {
+  if (!(await counterRoutesArePresent(request))) return false
+  for (const path of RETURN_PROBE_PATHS) {
+    const status = (await request.get(path, { timeout: HEALTH_TIMEOUT_MS })).status()
+    if (!ROUTE_ABSENT_STATUSES.includes(status) && status < SERVER_FAILURE_FROM) continue
+    if (BACKEND_IS_REQUIRED) {
+      throw new Error(
+        `${REQUIRE_BACKEND_VARIABLE} is set, so the returns and settlement routes have to be there, and ` +
           `GET ${path} answered ${status}. A skipped spec would hide that.`,
       )
     }

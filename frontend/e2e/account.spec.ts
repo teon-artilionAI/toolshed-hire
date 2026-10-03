@@ -106,7 +106,8 @@ test.describe('registration and the account screen against the real backend', ()
     await expect(detail(page, 'Email address')).toHaveText(email)
     await expect(detail(page, 'South African ID')).toHaveText('Ending 5083')
     await expect(detail(page, 'Account standing')).toHaveText('Good standing')
-    await expect(page.getByText('Hires and charges appear here once equipment has been collected.')).toBeVisible()
+    // A new account has collected nothing, so its hire history is empty.
+    await expect(page.getByRole('region', { name: 'Your hires' }).getByText('You have no hires yet.')).toBeVisible()
     expect(await blockingViolations(page)).toEqual([])
 
     // The phone number is corrected, and the screen shows what the server kept.
