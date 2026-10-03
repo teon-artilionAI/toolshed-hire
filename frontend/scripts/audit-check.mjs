@@ -36,9 +36,36 @@ const ADVISORY_ID_PATTERN = /GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}/i
 /** npm is a .cmd file on Windows, which needs a shell to start. */
 const RUN_THROUGH_SHELL = process.platform === 'win32'
 
+/**
+ * One reviewed exception, as written in audit-exceptions.json.
+ * @typedef {{ advisory: string, package: string, severity: string, reason: string, reviewed: string, expires: string }} AuditException
+ */
+
+/**
+ * One cause npm gives for a vulnerable package. A string names another
+ * vulnerable package. An object is the advisory itself.
+ * @typedef {string | { source?: number, title?: string, url?: string, severity?: string }} AuditCause
+ */
+
+/**
+ * The part of the `npm audit --json` report this check reads.
+ * @typedef {{ vulnerabilities?: Record<string, { via: AuditCause[] }> }} AuditReport
+ */
+
+/**
+ * One advisory found in the report.
+ * @typedef {{ id: string, packageName: string, severity: string, title: string, url: string }} FoundAdvisory
+ */
+
+/**
+ * Reads the exceptions that have not expired, keyed by advisory.
+ * @returns {Map<string, AuditException>}
+ */
 function readExceptions() {
+  /** @type {{ exceptions: AuditException[] }} */
   const parsed = JSON.parse(readFileSync(EXCEPTIONS_FILE, 'utf8'))
   const today = new Date().toISOString().slice(0, 10)
+  /** @type {Map<string, AuditException>} */
   const live = new Map()
   for (const exception of parsed.exceptions) {
     if (!exception.advisory || !exception.reason || !exception.expires) {
@@ -58,6 +85,11 @@ function readExceptions() {
   return live
 }
 
+/**
+ * Runs npm audit and returns its report. npm exits non zero when it finds
+ * anything, so the exit code is not read. The report is.
+ * @returns {AuditReport}
+ */
 function runAudit() {
   const result = spawnSync('npm', ['audit', '--json'], {
     cwd: FRONTEND_ROOT,
@@ -70,14 +102,25 @@ function runAudit() {
   return JSON.parse(result.stdout)
 }
 
-/** Every advisory npm reported, once each, with the package it was raised on. */
+/**
+ * Every advisory npm reported, once each, with the package it was raised on.
+ * @param {AuditReport} report
+ * @returns {FoundAdvisory[]}
+ */
 function advisoriesIn(report) {
+  /** @type {Map<string, FoundAdvisory>} */
   const found = new Map()
   for (const [packageName, vulnerability] of Object.entries(report.vulnerabilities ?? {})) {
     for (const cause of vulnerability.via) {
       if (typeof cause === 'string') continue
       const id = (cause.url ?? '').match(ADVISORY_ID_PATTERN)?.[0]?.toUpperCase() ?? String(cause.source)
-      found.set(id, { id, packageName, severity: cause.severity, title: cause.title, url: cause.url })
+      found.set(id, {
+        id,
+        packageName,
+        severity: cause.severity ?? 'unknown',
+        title: cause.title ?? '',
+        url: cause.url ?? '',
+      })
     }
   }
   return [...found.values()]
@@ -86,12 +129,13 @@ function advisoriesIn(report) {
 function main() {
   const exceptions = readExceptions()
   const advisories = advisoriesIn(runAudit())
+  /** @type {FoundAdvisory[]} */
   const blocking = []
   for (const advisory of advisories) {
     if (!BLOCKING_SEVERITIES.has(advisory.severity)) {
       console.log(`Reported, not blocking: ${advisory.severity} ${advisory.id} in ${advisory.packageName}. ${advisory.title}`)
     } else if (exceptions.has(advisory.id)) {
-      const exception = exceptions.get(advisory.id)
+      const exception = /** @type {AuditException} */ (exceptions.get(advisory.id))
       console.log(`Accepted until ${exception.expires}: ${advisory.severity} ${advisory.id} in ${advisory.packageName}. ${exception.reason}`)
     } else {
       blocking.push(advisory)
@@ -104,7 +148,7 @@ function main() {
   }
   if (blocking.length > 0) {
     for (const advisory of blocking) {
-      console.error(`Blocking: ${advisory.severity} ${advisory.id} in ${advisory.packageName}. ${advisory.title} ${advisory.url ?? ''}`)
+      console.error(`Blocking: ${advisory.severity} ${advisory.id} in ${advisory.packageName}. ${advisory.title} ${advisory.url}`)
     }
     console.error(`${blocking.length} high or critical advisory without a reviewed exception. Fix it, or add a reasoned exception with an expiry date.`)
     process.exit(1)
