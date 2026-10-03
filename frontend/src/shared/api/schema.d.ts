@@ -441,6 +441,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reservations/{id}/no-show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a confirmed reservation as not collected, releasing its units
+         * @description Mark the reservation as a no show and count the strike on the customer.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         *         BranchScopeError: If counter staff act at another branch. HTTP 403.
+         *         StateTransitionError: If it is not confirmed or its hire has not
+         *             started. HTTP 409.
+         */
+        post: operations["post_no_show_api_reservations__id__no_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations/{id}": {
         parameters: {
             query?: never;
@@ -515,6 +541,77 @@ export interface paths {
          *         NotFound: If there is no such rental. HTTP 404.
          */
         get: operations["read_rental_api_rentals__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/counter/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return what is due today at a branch
+         * @description Return the collections, returns and overdue hires of today, after running the sweep.
+         *
+         *     Raises:
+         *         BranchScopeError: If counter staff name another branch. HTTP 403.
+         *         ValidationFailure: If an administrator names no branch, or one that is
+         *             not trading. HTTP 422, naming `branchCode`.
+         */
+        get: operations["read_dashboard_api_counter_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/counter/diary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the collections and returns of a branch for one to seven days
+         * @description Return the diary of the branch, one entry for each day, after running the sweep.
+         *
+         *     Raises:
+         *         BranchScopeError: If counter staff name another branch. HTTP 403.
+         *         ValidationFailure: If an administrator names no branch, or one that is
+         *             not trading, or the run ends past the last date there is. HTTP 422,
+         *             naming the parameter.
+         */
+        get: operations["read_diary_api_counter_diary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/locator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find units at every branch by tag or model name
+         * @description Return one page of the units the text matches, at every branch.
+         */
+        get: operations["locate_assets_api_assets_locator_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -696,6 +793,54 @@ export interface components {
          * @enum {string}
          */
         AccountStatus: "ACTIVE" | "ON_HOLD" | "BLACKLISTED";
+        /**
+         * AssetLocationPageResponse
+         * @description One page of the units a search found, in tag order.
+         */
+        AssetLocationPageResponse: {
+            /** Items */
+            items: components["schemas"]["AssetLocationResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AssetLocationResponse
+         * @description Where one unit is. `dueBackOn` and `rentalReference` are set only while it is on hire.
+         */
+        AssetLocationResponse: {
+            /** Assettag */
+            assetTag: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            status: components["schemas"]["AssetStatus"];
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /** Duebackon */
+            dueBackOn: string | null;
+            /** Rentalreference */
+            rentalReference: string | null;
+        };
+        /**
+         * AssetStatus
+         * @description Asset lifecycle status. There is deliberately no RESERVED member.
+         *
+         *     Future occupancy is derived from AssetAllocation rows. A RESERVED status
+         *     would be a second source of truth able to disagree with the exclusion
+         *     constraint.
+         * @enum {string}
+         */
+        AssetStatus: "INTAKE" | "AVAILABLE" | "ON_HIRE" | "QUARANTINED" | "UNDER_REPAIR" | "LOST" | "RETIRED";
         /**
          * AvailabilityPageResponse
          * @description One page of an availability search.
@@ -954,6 +1099,37 @@ export interface components {
             depositPerUnit: string;
         };
         /**
+         * CollectionDueResponse
+         * @description A confirmed reservation due for collection.
+         */
+        CollectionDueResponse: {
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reference */
+            reference: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Unitcount */
+            unitCount: number;
+            /** Summary */
+            summary: string;
+        };
+        /**
          * ConditionGrade
          * @description Condition grade recorded at checkout and return. A is best.
          * @enum {string}
@@ -1053,6 +1229,134 @@ export interface components {
          * @enum {string}
          */
         DamageAssessment: "NOT_NEEDED" | "REQUIRED" | "DONE";
+        /**
+         * DashboardCountsResponse
+         * @description The true totals behind the dashboard, however long each list is.
+         */
+        DashboardCountsResponse: {
+            /** Collectionsdue */
+            collectionsDue: number;
+            /** Returnsdue */
+            returnsDue: number;
+            /** Overdue */
+            overdue: number;
+            /** Onhire */
+            onHire: number;
+            /** Quarantined */
+            quarantined: number;
+        };
+        /**
+         * DashboardResponse
+         * @description What is due today at one branch. Each list holds at most fifty rows.
+         */
+        DashboardResponse: {
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            counts: components["schemas"]["DashboardCountsResponse"];
+            /** Collectionsdue */
+            collectionsDue: components["schemas"]["CollectionDueResponse"][];
+            /** Returnsdue */
+            returnsDue: components["schemas"]["ReturnDueResponse"][];
+            /** Overdue */
+            overdue: components["schemas"]["OverdueRentalResponse"][];
+        };
+        /**
+         * DiaryCollectionResponse
+         * @description A reservation starting on a day of the diary.
+         */
+        DiaryCollectionResponse: {
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["ReservationStatus"];
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Unitcount */
+            unitCount: number;
+            /** Summary */
+            summary: string;
+            /** Canmarknoshow */
+            canMarkNoShow: boolean;
+        };
+        /**
+         * DiaryDayResponse
+         * @description One day of the diary.
+         */
+        DiaryDayResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Collections */
+            collections: components["schemas"]["DiaryCollectionResponse"][];
+            /** Returns */
+            returns: components["schemas"]["DiaryReturnResponse"][];
+        };
+        /**
+         * DiaryResponse
+         * @description The diary of one branch, one entry for each day asked for.
+         */
+        DiaryResponse: {
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /** Days */
+            days: components["schemas"]["DiaryDayResponse"][];
+        };
+        /**
+         * DiaryReturnResponse
+         * @description A rental due back on a day of the diary.
+         */
+        DiaryReturnResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            status: components["schemas"]["RentalStatus"];
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Itemsout */
+            itemsOut: number;
+            /** Itemcount */
+            itemCount: number;
+            /** Summary */
+            summary: string;
+        };
         /**
          * EmailDeliverableResponse
          * @description Whether a message for the address would be delivered in this environment.
@@ -1240,6 +1544,42 @@ export interface components {
             maxHireDays: number;
             /** Imagepath */
             imagePath: string | null;
+        };
+        /**
+         * NoShowRequest
+         * @description Why nobody collected the reservation, which staff always say.
+         */
+        NoShowRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * OverdueRentalResponse
+         * @description A rental past its due date with a unit still out, and the late fee it has run up.
+         */
+        OverdueRentalResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Daysoverdue */
+            daysOverdue: number;
+            /** Itemsout */
+            itemsOut: number;
+            /** Latefeeaccrued */
+            lateFeeAccrued: string;
         };
         /**
          * PasswordResetCompletionRequest
@@ -1673,6 +2013,34 @@ export interface components {
          * @enum {string}
          */
         ReservationStatus: "DRAFT" | "HELD" | "CONFIRMED" | "COLLECTED" | "RETURNED" | "CANCELLED" | "NO_SHOW" | "EXPIRED";
+        /**
+         * ReturnDueResponse
+         * @description A rental due back today with a unit still out.
+         */
+        ReturnDueResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /** Itemsout */
+            itemsOut: number;
+            /** Itemcount */
+            itemCount: number;
+            /** Summary */
+            summary: string;
+        };
         /**
          * SettlementWait
          * @description What a rental is waiting on before its deposit can be settled.
@@ -2638,6 +3006,69 @@ export interface operations {
             };
         };
     };
+    post_no_show_api_reservations__id__no_show_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoShowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_reservation_api_reservations__id__get: {
         parameters: {
             query?: never;
@@ -2741,7 +3172,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
             };
             /** @description Successful Response */
             201: {
@@ -2827,6 +3260,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_dashboard_api_counter_dashboard_get: {
+        parameters: {
+            query?: {
+                /** @description The branch. Counter staff may leave it out and get their own. An administrator names one. */
+                branchCode?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_diary_api_counter_diary_get: {
+        parameters: {
+            query?: {
+                /** @description The branch. Counter staff may leave it out and get their own. An administrator names one. */
+                branchCode?: string | null;
+                /** @description The first day. Today when left out. */
+                from?: string | null;
+                /** @description How many days to show, from one to seven. */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiaryResponse"];
+                };
+            };
+            /** @description The caller is not staff, or counter staff named another branch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    locate_assets_api_assets_locator_get: {
+        parameters: {
+            query: {
+                /** @description Part of an asset tag or of a model name. */
+                q: string;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many units a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetLocationPageResponse"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

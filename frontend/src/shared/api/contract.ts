@@ -13,10 +13,9 @@
  * type tools used below. Its names follow the backend's class and function
  * names, and a screen should not have to know those. The reservation types
  * are in contract-booking.ts, the registration and account types are in
- * contract-account.ts and the counter types are in contract-counter.ts. All
- * three are passed on from here. The counter overview types in
- * contract-overview.ts are the one exception to the rule above. Their routes
- * are not in the document yet, so they are written by hand until they are.
+ * contract-account.ts, the counter types are in contract-counter.ts and the
+ * counter overview types are in contract-overview.ts. All four are passed on
+ * from here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member

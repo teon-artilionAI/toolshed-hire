@@ -231,16 +231,16 @@ commits as `../backend/openapi.json`.
   and the hire, are in the document as well. Their types are in
   `api/contract-counter.ts`, built from the generated file the same way.
 - The counter overview routes, which are the dashboard, the diary, the no show
-  and the asset locator, are the one exception. The backend adds them in the
-  same change, so the document does not describe them yet. Their types are
-  written by hand from the agreed contract in `api/contract-overview.ts`, and
-  the readers beside each route check every member. They are built from the
-  generated file once the document has the routes. The states of a unit are
-  the backend's own list, `INTAKE`, `AVAILABLE`, `ON_HIRE`, `QUARANTINED`,
-  `UNDER_REPAIR`, `LOST` and `RETIRED`, because the contract names none.
-- The document describes the 201 answer of a checkout and not the 200 one,
-  which the API sends with the same hire when the booking is already out. So
-  `Rental` is built from the 201 body and the rental route, and the reader in
+  and the asset locator, are in the document too. Their types are in
+  `api/contract-overview.ts`, built from the generated file the same way. The
+  generated status of a booking in the diary is any status a reservation has,
+  and the diary only lists four, so `contract-overview.ts` narrows it to those
+  and the reader checks it. The states of a unit are the backend's own list,
+  `INTAKE`, `AVAILABLE`, `ON_HIRE`, `QUARANTINED`, `UNDER_REPAIR`, `LOST` and
+  `RETIRED`.
+- The document describes both answers of a checkout, the 201 with the new hire
+  and the 200 the API sends with the same hire when the booking is already
+  out. `Rental` is built from both and from the rental route, and the reader in
   `api/rental-read.ts` reads both answers the same way.
 
 ```bash
@@ -864,9 +864,9 @@ tests cover where the links land.
 `e2e/counter.spec.ts` needs the customer and checkout routes. A seeded counter
 assistant signs in, registers a walk in with a name and a number nobody has
 used, books one unit for them for today at the assistant's own branch, checks
-it out and sees the reference of the hire. The model is the first one the
-availability search for that branch lists, so a rerun finds a unit the last
-run did not take. The desktop project signs in as the assistant at Cape Town
+it out and sees the reference of the hire. The model is the last one on the
+first page the availability search for that branch lists, so a rerun finds a
+unit the last run did not take. The desktop project signs in as the assistant at Cape Town
 CBD, `elmarie@toolshedhire.co.za`, and the phone project as the one at
 Bellville, `thabo@toolshedhire.co.za`, so the two never compete for a unit.
 The password comes from `E2E_STAFF_PASSWORD` and falls back to the development
@@ -881,13 +881,31 @@ the five figures on the dashboard, opens the diary for today and then the
 whole of next week, and finds `TSH-DR-0042`, which the seed always makes at
 Cape Town CBD, by its tag in the locator. The figures are checked to be whole
 numbers and not particular ones, because the other journeys book at the same
-branches during the run. The spec asks the three routes with no token first. A
-404 or a 405 from any of them means the routes are not there, and the journey
-skips itself.
+branches during the run. In its second journey the assistant registers a new
+walk in, books one unit for them for today, sees the booking due out on the
+dashboard and not collected in the diary, and marks it as a no show from the
+diary with a reason. The answer replaces the question, the diary is read again
+and after a reload shows the booking as a no show with nothing left to press,
+and the dashboard no longer has it due out. The booking is made through SC-12
+and SC-13 by `e2e/counter-booking.ts`, which takes the second last model free
+at the branch, because the counter journey takes the last. A new walk in each
+run means the strike lands on nobody else. The spec asks the three routes with
+no token first. A 404 or a 405 from any of them means the routes are not
+there, and both journeys skip themselves.
+
+Staff may mark a booking as a no show from the start of its first day, and once
+the branch has closed on that day the server's sweep marks it by itself. So
+the second journey reads the closing time of the branch from
+`GET /api/branches`, and a run after it finds the booking already a no show
+with no button, and checks that instead. The counter journey has no such
+choice. It books for today and checks the booking out, and after closing time
+the sweep has made that booking a no show before the checkout, so it fails. The
+seeded branches close at 17:00 in Cape Town, so run the browser tests before
+then.
 
 The customers, the password rule and the sign in are in `e2e/customer.ts`, the
-counter assistants in `e2e/staff.ts`, and the dates are counted from today at
-the branches by `e2e/hire-dates.ts`.
+counter assistants in `e2e/staff.ts`, and the dates and the time of day are
+counted at the branches by `e2e/hire-dates.ts`.
 
 One run makes twelve sign ins. `session.spec.ts` signs the first customer in
 four times, twice in each browser project, and the booking journey twice more.
@@ -902,9 +920,9 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-The counter journey and the counter overview journey each sign the two
-counter assistants in once, so each assistant twice in a run, which counts
-against their own addresses.
+The counter journey and the two counter overview journeys each sign the two
+counter assistants in once, so each assistant three times in a run, which
+counts against their own addresses.
 
 Set `E2E_REQUIRE_BACKEND=1` to turn all six skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
