@@ -233,7 +233,9 @@ export const RENTAL: Rental = {
   settledAt: null,
   agreementSigned: true,
   canReturn: true,
-  settlementWaitingOn: null,
+  // Both units are out, so the deposit waits on them, as the server says of
+  // every hire that has just opened.
+  settlementWaitingOn: 'ITEMS_OUT',
 }
 
 /** What the tool finder lists at Bellville. Both models are free there. */

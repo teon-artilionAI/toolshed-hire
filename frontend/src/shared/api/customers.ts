@@ -32,8 +32,15 @@ import {
 
 const CUSTOMERS_ENDPOINT = '/customers'
 
-/** The shortest search the API accepts. */
-export const MIN_CUSTOMER_SEARCH_LENGTH = 2
+/**
+ * The shortest search the counter sends.
+ *
+ * The API accepts two characters. It finds a name through a trigram index,
+ * and that index cannot narrow a pattern shorter than three characters, so a
+ * two character name search reads every customer on file. I start at three so
+ * the lookup stays quick as the customers grow, and the screen says so.
+ */
+export const MIN_CUSTOMER_SEARCH_LENGTH = 3
 
 /** The longest search the API accepts. */
 export const MAX_CUSTOMER_SEARCH_LENGTH = 80
@@ -75,7 +82,8 @@ function readCustomerPage(value: unknown, path: string): CustomerPage {
  *
  * @throws ApiError with status 422 when the search is shorter than two
  *   characters or longer than eighty, and 403 for a customer, whose role the
- *   route does not admit.
+ *   route does not admit. The screen never sends fewer than
+ *   `MIN_CUSTOMER_SEARCH_LENGTH`.
  */
 export function searchCustomers(query: CustomerSearchQuery, signal?: AbortSignal): Promise<CustomerPage> {
   return api.get(CUSTOMERS_ENDPOINT, readCustomerPage, { query, signal })

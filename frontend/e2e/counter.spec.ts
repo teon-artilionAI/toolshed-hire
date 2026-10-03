@@ -12,7 +12,9 @@
  *
  * Nothing here names a tool. The model is picked through the availability
  * search for the assistant's branch, which lists only what is free there for
- * the dates, so a second run finds a unit the first did not take. Each browser
+ * the dates, so a second run finds a unit the first did not take. It is the
+ * last model on the first page, because the customer journeys take the first
+ * ones at Bellville and a unit out on hire is taken for every date. Each browser
  * project signs in as the assistant of a different branch, so the two never
  * compete for a unit. A run leaves the unit it checked out on hire, because a
  * return is a later change. The seeded fleet has hundreds of units, so that
@@ -79,15 +81,30 @@ test.describe('a booking at the counter against the real backend', () => {
     await expect(stepHeading(page, name)).toBeFocused()
     await expect(page.getByText(`${name} is on file`)).toBeVisible()
     await expect(page.getByText('No login', { exact: true })).toBeVisible()
-    await page.getByRole('link', { name: `New booking for ${name}` }).click()
+    const bookings = page.getByRole('region', { name: `Bookings for ${name}` })
+    await expect(bookings.getByText(/^No bookings at .+ yet\.$/)).toBeVisible()
+    const customerAddress = page.url()
+
+    // The lookup finds the new customer by name, through the server's search.
+    await page.getByLabel('Search customers').fill(name)
+    const found = page.getByRole('region', { name: 'Customers found' })
+    await expect(found.getByRole('status').first()).toHaveText(`1 customer matches "${name}". The best match is first.`)
+    await page.getByRole('link', { name: `New booking for ${name}` }).first().click()
 
     // SC-13. One unit of the first model free at this branch, for today.
     await expect(page.getByRole('heading', { level: 1, name: 'New booking' })).toBeVisible()
     await expect(stepHeading(page, LINES_STEP)).toBeVisible()
     await expect(page.getByText(new RegExp(`Booking for ${name}`))).toBeVisible()
+    // The seeded catalogue fills more than one page, so the page controls have
+    // a status of their own. The one that counts the models is the one read here.
     const finder = page.getByRole('region', { name: 'Tools free at this branch' })
-    await expect(finder.getByRole('status')).toHaveText(/\d+ models? (is|are) free at .+ for these dates\./)
-    await finder.getByRole('button', { name: /^Add / }).first().click()
+    const freeModels = /^\d+ models? (is|are) free at .+ for these dates\.$/
+    await expect(finder.getByRole('status').filter({ hasText: freeModels })).toBeVisible()
+    // The customer journeys run at the same time and book the first two free
+    // models at Bellville for later dates. The API counts a unit that is out
+    // on hire as taken for every date, so this journey takes the last model on
+    // the page and never the unit a customer journey has just found free.
+    await finder.getByRole('button', { name: /^Add / }).last().click()
     await expect(page.getByText(/^1 unit free at .+ for these dates$/)).toBeVisible()
     expect(await blockingViolations(page)).toEqual([])
 
@@ -127,5 +144,13 @@ test.describe('a booking at the counter against the real backend', () => {
     expect(await out.innerText()).toMatch(RENTAL_REFERENCE)
     await expect(page.getByText(/^Hire TSH-H-\d{2}-\d{6} is open$/)).toBeVisible()
     expect(await blockingViolations(page)).toEqual([])
+
+    // Back on SC-12 the booking is listed at this branch, collected, and
+    // offers no second checkout.
+    await page.goto(customerAddress)
+    await expect(bookings.getByText(reference, { exact: true })).toBeVisible()
+    await expect(bookings.getByRole('button', { name: /^At / }).first()).toHaveAttribute('aria-pressed', 'true')
+    await expect(bookings.getByText('Collected', { exact: true })).toBeVisible()
+    await expect(bookings.getByRole('link', { name: /Check out/ })).toHaveCount(0)
   })
 })

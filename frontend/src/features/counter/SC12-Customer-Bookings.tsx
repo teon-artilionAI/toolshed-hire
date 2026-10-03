@@ -3,7 +3,10 @@
  *
  * The customer is read by their key, from the address, so a reload keeps them
  * on the screen. Their bookings come from the reservation list for that
- * customer, at every branch, newest first.
+ * customer, newest first. The list starts at the branch the assistant works
+ * at, and the server does that filtering, so a page holds as many bookings as
+ * it says. One press widens it to every branch, for a customer who booked
+ * somewhere else and came here.
  *
  * A booking that is confirmed, starts today or earlier and is collected at the
  * branch the assistant works at is ready to go out, and has "Check out" beside
@@ -18,7 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarPlus, PackageCheck } from 'lucide-react'
-import type { CustomerSummary, Reservation } from '../../shared/api/contract'
+import type { CustomerSummary, Reservation, ReservationListQuery } from '../../shared/api/contract'
 import { customerQueries } from '../../shared/api/counter-queries'
 import { queryPhase } from '../../shared/api/query-phase'
 import { reservationQueries } from '../../shared/api/reservation-queries'
@@ -41,6 +44,31 @@ import type { CounterBranch } from './work-branch-gate'
 
 /** How many bookings a page of one customer's list holds. */
 const BOOKING_PAGE_SIZE = 10
+
+/** Which bookings the list holds. Those collected at this branch, or all of them. */
+type BookingScope = 'here' | 'everywhere'
+
+const BOOKING_SCOPES: readonly BookingScope[] = ['here', 'everywhere']
+
+function scopeLabel(scope: BookingScope, branch: CounterBranch): string {
+  return scope === 'here' ? `At ${branch.name}` : 'At every branch'
+}
+
+/** The query for one page of the customer's bookings. Only this branch's list
+ *  names the branch, and the server leaves the rest out. */
+function bookingQuery(
+  customerId: string,
+  scope: BookingScope,
+  branch: CounterBranch,
+  page: number,
+): ReservationListQuery {
+  return {
+    customerProfileId: customerId,
+    ...(scope === 'here' ? { branchCode: branch.code } : {}),
+    page,
+    pageSize: BOOKING_PAGE_SIZE,
+  }
+}
 
 /** Whether a booking is ready to go out over this counter today. */
 function readyToCheckOut(reservation: Reservation, branchCode: string, today: string): boolean {
@@ -81,23 +109,44 @@ function BookingRow({ reservation, branch, today }: { reservation: Reservation; 
 }
 
 function CustomerBookings({ customer, branch }: { customer: CustomerSummary; branch: CounterBranch }) {
+  const [scope, setScope] = useState<BookingScope>('here')
   const [page, setPage] = useState(FIRST_PAGE)
   const [today] = useState(() => todayInBranchTime())
-  const bookings = useQuery(
-    reservationQueries.list({ customerProfileId: customer.id, page, pageSize: BOOKING_PAGE_SIZE }),
-  )
+  const bookings = useQuery(reservationQueries.list(bookingQuery(customer.id, scope, branch, page)))
   const phase = queryPhase(bookings)
   const data = bookings.data
 
+  function showScope(next: BookingScope) {
+    setScope(next)
+    setPage(FIRST_PAGE)
+  }
+
   return (
     <section aria-label={`Bookings for ${customer.displayName}`} className="mt-lg">
-      <h3 className="mb-sm text-sm font-semibold uppercase tracking-wide text-slate-soft">Their bookings</h3>
+      <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-soft">Their bookings</h3>
+        <div role="group" aria-label="Which bookings to show" className="flex flex-wrap gap-xs">
+          {BOOKING_SCOPES.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={scope === option}
+              onClick={() => showScope(option)}
+              className={scope === option ? 'btn bg-accent px-md font-semibold text-accent-ink' : 'btn-secondary px-md'}
+            >
+              {scopeLabel(option, branch)}
+            </button>
+          ))}
+        </div>
+      </div>
       {phase === 'loading' && <LoadingState label="Loading their bookings" shape="rows" count={2} />}
       {phase === 'failed' && (
         <ErrorState what="their bookings" error={bookings.error} onRetry={() => void bookings.refetch()} />
       )}
       {phase === 'ready' && data && data.items.length === 0 && (
-        <p className="text-sm text-slate-soft">No bookings yet.</p>
+        <p className="text-sm text-slate-soft">
+          {scope === 'here' ? `No bookings at ${branch.name} yet.` : 'No bookings yet.'}
+        </p>
       )}
       {phase === 'ready' && data && data.items.length > 0 && (
         <>

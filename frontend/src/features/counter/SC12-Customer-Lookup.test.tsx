@@ -49,16 +49,18 @@ beforeEach(() => {
 })
 
 describe('before anything is typed', () => {
-  it('is connected, asks for two characters, and searches for nothing', async () => {
+  it('is connected, asks for three characters, and searches for nothing shorter', async () => {
     const { user, network } = await openLookup({ [CUSTOMERS_ROUTE]: () => jsonResponse(customerPage([THANDI])) })
 
     expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
-    expect(within(results()).getByRole('status')).toHaveTextContent('Type 2 characters or more to search.')
+    expect(within(results()).getByRole('status')).toHaveTextContent('Type 3 characters or more to search.')
+    expect(screen.getByText(/3 characters or more\.$/)).toBeVisible()
 
-    await user.type(screen.getByLabelText(SEARCH_BOX), 't')
+    await user.type(screen.getByLabelText(SEARCH_BOX), 'th')
 
     await new Promise((resolve) => setTimeout(resolve, 400))
     expect(network.requestsTo(CUSTOMERS_ROUTE)).toHaveLength(0)
+    expect(within(results()).getByRole('status')).toHaveTextContent('Type 3 characters or more to search.')
   })
 })
 
@@ -159,7 +161,7 @@ describe('paging', () => {
   }
 
   it('shows the page controls from what the server says, and asks for the next page', async () => {
-    const { user, network } = await openLookup({ [CUSTOMERS_ROUTE]: pages }, undefined, '/counter/customers?q=th')
+    const { user, network } = await openLookup({ [CUSTOMERS_ROUTE]: pages }, undefined, '/counter/customers?q=tha')
     await within(results()).findByText(THANDI.displayName, {}, SCREEN_WAIT)
     const controls = screen.getByRole('navigation', { name: 'Customer result pages' })
     expect(within(controls).getByRole('status')).toHaveTextContent('Page 1 of 3')
@@ -167,22 +169,27 @@ describe('paging', () => {
     await user.click(within(controls).getByRole('button', { name: 'Next' }))
 
     expect(await within(results()).findByText(WESLEY.displayName)).toBeVisible()
-    expect(lastSearch(network.requestsTo(CUSTOMERS_ROUTE))).toBe('q=th&page=2&pageSize=10')
-    expect(currentAddress()).toBe('/counter/customers?q=th&page=2')
+    expect(lastSearch(network.requestsTo(CUSTOMERS_ROUTE))).toBe('q=tha&page=2&pageSize=10')
+    expect(currentAddress()).toBe('/counter/customers?q=tha&page=2')
     expect(results()).toHaveFocus()
   })
 })
 
 describe('choosing a customer', () => {
-  it('shows them with their bookings, and offers the checkout only for one due here today', async () => {
-    const elsewhere = { ...COUNTER_CONFIRMED, id: 'r-2', reference: SECOND_REFERENCE, branchCode: 'CBD', branchName: 'Cape Town CBD' }
-    const later = { ...COUNTER_CONFIRMED, id: 'r-3', reference: 'TSH-R-26-000126', from: '2026-03-20', to: '2026-03-21' }
+  const elsewhere = { ...COUNTER_CONFIRMED, id: 'r-2', reference: SECOND_REFERENCE, branchCode: 'CBD', branchName: 'Cape Town CBD' }
+  const later = { ...COUNTER_CONFIRMED, id: 'r-3', reference: 'TSH-R-26-000126', from: '2026-03-20', to: '2026-03-21' }
+
+  /** The list the way the server answers it. A branch named in the query
+   *  leaves out the bookings collected anywhere else. */
+  const bookingsByBranch: RouteHandler = (request) => {
+    const everyBooking = [COUNTER_CONFIRMED, elsewhere, later]
+    const branchCode = request.query.get('branchCode')
+    return jsonResponse(pageOf(branchCode ? everyBooking.filter((booking) => booking.branchCode === branchCode) : everyBooking))
+  }
+
+  it('shows them with their bookings at this branch, and offers the checkout only for one due here today', async () => {
     const { user, network } = await openLookup(
-      {
-        [CUSTOMERS_ROUTE]: () => jsonResponse(customerPage([THANDI])),
-        ...CHOSEN_READS,
-        [LIST_ROUTE]: () => jsonResponse(pageOf([COUNTER_CONFIRMED, elsewhere, later])),
-      },
+      { [CUSTOMERS_ROUTE]: () => jsonResponse(customerPage([THANDI])), ...CHOSEN_READS, [LIST_ROUTE]: bookingsByBranch },
       undefined,
       '/counter/customers?q=thandi',
     )
@@ -193,13 +200,36 @@ describe('choosing a customer', () => {
     expect(currentAddress()).toBe(`/counter/customers?q=thandi&customer=${CUSTOMER_ID}`)
     const bookings = screen.getByRole('region', { name: `Bookings for ${THANDI.displayName}` })
     expect(await within(bookings).findByText(REFERENCE, { selector: '.font-mono' })).toBeVisible()
-    expect(network.requestsTo(LIST_ROUTE)[0].query.get('customerProfileId')).toBe(CUSTOMER_ID)
+    const asked = network.requestsTo(LIST_ROUTE)[0].query
+    expect(asked.get('customerProfileId')).toBe(CUSTOMER_ID)
+    expect(asked.get('branchCode')).toBe('BLV')
+    expect(asked.has('branch')).toBe(false)
+    expect(within(bookings).getByRole('button', { name: 'At Bellville' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(bookings).getByRole('link', { name: `Check out ${REFERENCE}` })).toHaveAttribute(
       'href',
       `/counter/checkout/${REFERENCE}`,
     )
     expect(within(bookings).getAllByRole('link')).toHaveLength(1)
+    expect(within(bookings).queryByText(SECOND_REFERENCE)).not.toBeInTheDocument()
+  })
+
+  it('widens the list to every branch on one press, and says where another branch collects', async () => {
+    const { user, network } = await openLookup(
+      { ...CHOSEN_READS, [LIST_ROUTE]: bookingsByBranch },
+      undefined,
+      `/counter/customers?customer=${CUSTOMER_ID}`,
+    )
+    const bookings = await screen.findByRole('region', { name: `Bookings for ${THANDI.displayName}` }, SCREEN_WAIT)
+    await within(bookings).findByText(REFERENCE, { selector: '.font-mono' })
+
+    await user.click(within(bookings).getByRole('button', { name: 'At every branch' }))
+
+    expect(await within(bookings).findByText(SECOND_REFERENCE)).toBeVisible()
+    const asked = network.requestsTo(LIST_ROUTE).at(-1)?.query
+    expect(asked?.get('customerProfileId')).toBe(CUSTOMER_ID)
+    expect(asked?.has('branchCode')).toBe(false)
     expect(within(bookings).getByText('Collected at Cape Town CBD, not at this counter.')).toBeVisible()
+    expect(within(bookings).getAllByRole('link')).toHaveLength(1)
   })
 
   it('keeps the customer from the address on a reload, without taking focus', async () => {
@@ -208,7 +238,7 @@ describe('choosing a customer', () => {
     const heading = await screen.findByRole('heading', { level: 2, name: THANDI.displayName }, SCREEN_WAIT)
     expect(heading).not.toHaveFocus()
     expect(screen.getByRole('link', { name: `New booking for ${THANDI.displayName}` })).toBeVisible()
-    expect(await screen.findByText('No bookings yet.')).toBeVisible()
+    expect(await screen.findByText('No bookings at Bellville yet.')).toBeVisible()
   })
 
   it('says so when the customer in the address is not on file', async () => {

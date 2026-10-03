@@ -12,10 +12,9 @@
  * The generated file is read through contract-kit.ts, which also holds the
  * type tools used below. Its names follow the backend's class and function
  * names, and a screen should not have to know those. The reservation types
- * are in contract-booking.ts and the registration and account types are in
- * contract-account.ts. Both are passed on from here. The counter types are in
- * contract-counter.ts, written by hand until their routes are in the
- * generated file, and are passed on from here too.
+ * are in contract-booking.ts, the registration and account types are in
+ * contract-account.ts and the counter types are in contract-counter.ts. All
+ * three are passed on from here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member

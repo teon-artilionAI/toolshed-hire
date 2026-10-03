@@ -222,12 +222,13 @@ commits as `../backend/openapi.json`.
 - The registration and account routes are in the document too. Their types
   are in `api/contract-account.ts`, built from the generated file the same way.
 - The counter routes, which are the customer lookup, the walk in, the checkout
-  and the hire, are agreed and are not in the document yet. Their types are in
-  `api/contract-counter.ts`, and they are the only wire types written by hand.
-  Every name in them is the one the agreed contract uses, and the words a
-  charge, a hire or an item can be in are the backend's own enumerations. Once
-  the routes are in the document, run `npm run api:types` and rebuild those
-  types from the generated file, the way `contract-booking.ts` does.
+  and the hire, are in the document as well. Their types are in
+  `api/contract-counter.ts`, built from the generated file the same way. No
+  wire type is written by hand any more.
+- The document describes the 201 answer of a checkout and not the 200 one,
+  which the API sends with the same hire when the booking is already out. So
+  `Rental` is built from the 201 body and the rental route, and the reader in
+  `api/rental-read.ts` reads both answers the same way.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -509,7 +510,7 @@ on `SC-13` and hands the equipment over on `SC-14`. The calls are in
 | Screen | Request | What the screen shows |
 |---|---|---|
 | `SC-12` | `GET /api/customers?q=&page=&pageSize=` | The customers who match, best match first, ten to a page |
-| `SC-12` | `GET /api/customers/{id}` and `GET /api/reservations?customerProfileId=` | The chosen customer and their bookings |
+| `SC-12` | `GET /api/customers/{id}` and `GET /api/reservations?customerProfileId=&branchCode=` | The chosen customer and their bookings at this branch, or at every branch without `branchCode` |
 | `SC-12` | `POST /api/customers` | The new walk in, chosen |
 | `SC-13` | `GET /api/catalogue/availability` with `branch`, and `GET /api/catalogue/models/{slug}/availability` | What is free at the branch for the dates, and whether each line is free for its quantity |
 | `SC-13` | `POST /api/reservations`, then `/hold`, then `/confirm` | The server's figures, then the units it set aside, then the reference |
@@ -530,15 +531,20 @@ branch from the same place through `home-branch.ts`.
 #### `SC-12` Customer Lookup and Walk-in Registration
 
 - One search box matches a name, a phone number or an email address. It
-  searches from two characters, a moment after the last key, and has the
+  searches from three characters, a moment after the last key, and has the
   loading, failed and empty states and page controls. The search, the page
-  and the chosen customer live in the address.
+  and the chosen customer live in the address. The API accepts two
+  characters, but it finds a name through a trigram index that cannot narrow
+  anything shorter than three, so a shorter search would read every customer.
+  The box and the line above the results both say three.
 - Each customer says who it is, how the account stands, whether there is a
   login, and offers "New booking". An account on hold or blacklisted says so
   and offers no booking.
-- Choosing a customer shows their bookings at every branch. One that is
-  confirmed, starts today or earlier and is collected at this branch has
-  "Check out" beside it.
+- Choosing a customer shows their bookings at this branch, and the server
+  does that filtering through `branchCode`, so the page controls count what
+  is listed. "At every branch" widens the list, and a confirmed booking
+  elsewhere says where it is collected. One that is confirmed, starts today
+  or earlier and is collected at this branch has "Check out" beside it.
 - The walk in form asks for the last four characters of the identity document
   and never the whole number. It is checked before it is sent, a 422 puts
   each message under its field, and once the server answers the new customer

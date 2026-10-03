@@ -4,8 +4,10 @@
  * Almost every counter conversation starts here, and it starts with a phone
  * number read out over a counter. So there is one search box, and the API
  * matches what is typed against the name, the phone number and the email
- * address at once. It searches from two characters, a moment after the last
- * key, so it never runs on every keystroke.
+ * address at once. It searches from three characters, a moment after the
+ * last key, so it never runs on every keystroke. The box says it needs three,
+ * because the server finds a name through an index that needs three to
+ * narrow anything.
  *
  * The search, the page and the chosen customer live in the address, so a
  * reload brings the same screen back and the next screen can send a person

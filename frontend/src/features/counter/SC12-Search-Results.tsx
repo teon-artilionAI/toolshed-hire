@@ -3,7 +3,8 @@
  *
  * The list is the server's. It matches the name, the phone number and the
  * email address at once, puts the best match first, and decides what a page
- * holds. Nothing is asked until two characters have been typed.
+ * holds. Nothing is asked until three characters have been typed, which is
+ * the shortest search the server can answer from its index.
  *
  * Each customer is drawn as a block of their own, not a row of columns, so a
  * phone held at the counter never has to scroll sideways. Each says who it is,
