@@ -11,11 +11,13 @@ from fastapi import APIRouter
 
 from app.api.routers import (
     account,
+    assets,
     auth,
     availability,
     branches,
     catalogue,
     checkout,
+    counter,
     customers,
     health,
     me,
@@ -39,6 +41,8 @@ api_router.include_router(reservations.router)
 api_router.include_router(reservation_reads.router)
 api_router.include_router(checkout.router)
 api_router.include_router(rentals.router)
+api_router.include_router(counter.router)
+api_router.include_router(assets.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)

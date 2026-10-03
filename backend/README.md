@@ -32,6 +32,11 @@ first pass at the whole application.
    one transaction the rental is opened, every unit becomes an item and goes
    on hire, the hire and the deposit are charged, and the reservation is
    collected. Two checkouts at once open one rental.
+10. The counter sees what is due today at its branch and the diary of any date,
+   finds a unit at any branch, and a confirmed booking nobody collected becomes
+   a no show that frees its units and counts a strike. Three strikes in twelve
+   months put the customer on hold, and two sweeps at once count each strike
+   once.
 
 ## Layout
 
@@ -44,7 +49,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, and `sweep_deps.py` wires the sweep that lapses expired holds. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `counter_deps.py` wires the dashboard, the diary and the asset locator, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -63,10 +68,10 @@ keeps the same name in every layer it appears in.
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
 | `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
-| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads` |
-| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue` | `SqlProductModelRepository`, `SqlCatalogueQuery` |
+| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview` |
+| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
-| `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
+| `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
 | `money` | `Money`, `PricingPolicy`, `StandardPricingPolicy`, `FixedRatePricingPolicy`, `LineSnapshot`, `HireQuote`, `HireTotals` | `QuoteHire` | none yet, a quote writes nothing |
 
@@ -582,7 +587,7 @@ looks at their reservations and cancels one (FR-05 to FR-11).
 | HELD | EXPIRED | `expire` | The hold has run out. The units are released with the reason `EXPIRED`. |
 | CONFIRMED | COLLECTED | `collect` | On or after the first day of the hire, by staff at the collection branch. `CheckoutRentalUseCase` makes the move in the transaction that opens the rental. |
 | CONFIRMED | CANCELLED | `cancel` | The caller owns it or is staff, and no rental exists. The units are released. After 17:00 on the day before collection it is counted as a late cancellation. |
-| CONFIRMED | NO_SHOW | `mark_no_show` | Built in the states. The use case comes with the no-show half of the sweep. |
+| CONFIRMED | NO_SHOW | `mark_no_show` | The sweep, once the collection branch has closed on the first day of the hire, or staff at the counter from the start of that day. The units are released with the reason `NO_SHOW` and the strike is counted. |
 | COLLECTED | RETURNED | `close` | Built in the states. The use case comes with returns. |
 
 Any other move is a `StateTransitionError`, which is a 409.
@@ -609,8 +614,9 @@ It locks the due rows, checks each again and lapses it, so two sweeps at once
 take turns and the second finds nothing left to do. Its query reads through the
 partial index `ix_reservation_hold_expiry`. Every use case that is about to
 decide something about one reservation also lapses that one itself, so the
-bound on the batch never lets an expired hold be confirmed. The no-show half of
-the sweep is not built, and its place in the use case is marked.
+bound on the batch never lets an expired hold be confirmed. The other half of
+the same sweep marks the bookings nobody collected, which is described under
+the counter overview below. Each half runs in a transaction of its own.
 
 **A confirmation is where the customer is told.** `ConfirmReservationUseCase`
 queues the booking confirmation in its own transaction and sends it after the
@@ -623,12 +629,16 @@ profile by one. There is no route that deletes anything (BR-51).
 
 **A customer on hold cannot book.** A profile whose `account_status` is not
 `ACTIVE` is refused when a draft is created and again when it is put on hold,
-with `AccountOnHoldError`, which is a 403 (BR-18).
+with `AccountOnHoldError`, which is a 403 (BR-18). For an account on hold the
+`detail` says why, which is three bookings in the last twelve months that were
+not collected, and that an administrator lifts the hold.
 
 Every change of status writes one audit event in the same transaction (BR-49),
 `reservation.created`, `reservation.held`, `reservation.confirmed`,
-`reservation.cancelled`, `reservation.expired` or `reservation.collected`.
-`reservation.expired` has no actor, because nobody asks for a sweep.
+`reservation.cancelled`, `reservation.expired`, `reservation.collected` or
+`reservation.no_show`. A lapse and a no show the sweep marked have no actor,
+because nobody asks for a sweep. Putting a customer on hold writes
+`customer.put_on_hold` as well.
 
 **A customer's list leaves out abandoned baskets.** A draft that was replaced
 by a changed basket, or thrown away, is cancelled without ever holding a unit.
@@ -739,6 +749,92 @@ assistants checking out the same booking wait for each other. Two different
 bookings never wait on one another, unless they share a unit, which the
 exclusion constraint already rules out.
 
+## The counter overview
+
+Counter staff see what is due today at their branch, open the diary of any
+date, find a unit at any branch, and a confirmed booking nobody collected
+becomes a no show that frees its units (FR-12, FR-15, FR-16, US-10, US-18,
+US-19, US-37, BR-17, BR-18, BR-43).
+
+**The no show half of the sweep.** `ExpireHoldsAndNoShowsUseCase` now has both
+halves, each in a transaction of its own. The second takes at most 25
+confirmed reservations whose collection branch has closed on the first day of
+the hire, by the clock in Cape Town, earliest first day first. Its query joins
+the branch for its closing time, writes the status as the literal the partial
+index `ix_reservation_confirmed_start` is filtered on, and locks the
+reservations with `FOR UPDATE`, waiting and never skipping. Each one is checked
+again under the lock and then goes through `mark_as_no_show` in
+`app/application/booking/no_show.py`. That moves it through its state, releases
+every unit with the reason `NO_SHOW`, writes `reservation.no_show` with no
+actor, locks the customer profile, raises `no_show_count` by one in the
+database and counts the strike. Two sweeps at once take turns on the rows, and
+the second finds them already marked.
+
+**Three strikes.** The strike is counted from the reservations, as the no
+shows of the customer whose hire started after the same day a year ago, through
+`ix_reservation_customer_start`, and not from `no_show_count`, which only ever
+goes up. At the third an account in good standing goes `ON_HOLD` in the same
+transaction and `customer.put_on_hold` is written. An account already on hold
+or blacklisted keeps its standing. The profile is locked before the count, so
+two no shows of one customer at once take turns and the second counts the
+first. The rules are in `app/domain/no_show.py`.
+
+**A no show by hand.** `POST /api/reservations/{id}/no-show` with a `reason` is
+`MarkNoShowUseCase`. It is the same move and the same strike, for counter staff
+of the collection branch and administrators, from the start of the first day
+of the hire. Staff can see that nobody came, so they need not wait for closing
+time. The reason is kept in the audit event, which names the member of staff.
+There is no column for it, and a no show is not a cancellation, so it is not
+written to `cancellation_reason`. A booking that is not confirmed or whose
+hire has not started is a 409 whose sentence says which.
+
+**The dashboard and the diary.** `ReadCounterOverview` checks the branch, runs
+the sweep and reads through `SqlCounterOverview`. Counter staff read their own
+branch and naming another is a 403. An administrator names one, and leaving it
+out is a 422 naming `branchCode`. The dashboard lists the confirmed bookings
+whose hire has started, the hires due back today with a unit still out and the
+hires due back before today with a unit still out, fifty rows each at most,
+with the true totals and the units on hire and in quarantine at the branch. The
+diary lists, for one to seven days from any date, the bookings starting each
+day in `CONFIRMED`, `COLLECTED`, `RETURNED` or `NO_SHOW`, and the hires due
+back each day. `canMarkNoShow` comes from `no_show_refusal`, the rule the route
+enforces. `lateFeeAccrued` comes from `late_fee_accrued` in
+`app/domain/policies/late_fee.py`, which is the late fee per day copied onto
+the booking, times the whole days overdue up to fourteen, for each unit still
+out. The late fee policy of the next change replaces that function.
+
+**The asset locator.** `GET /api/assets/locator` is `LocateAssets` over
+`SqlAssetLocator`, for staff at every branch. It matches part of the tag or of
+the model name, two to eighty characters, a page of at most fifty in tag
+order, and a unit on hire carries the day it is due back and its rental.
+
+| Read | Statements | Indexes |
+|---|---|---|
+| Dashboard | 6, and the route adds the account, the branch and the sweep for 10 | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, the unique key on a line's reservation and model, `ix_rental_item_rental` |
+| Diary | 4, and 8 through the route | `ix_reservation_branch_start`, `ix_rental_branch_due_back`, and the same two for lines and units |
+| Locator | 2, the count and the page | `ix_asset_tag_trgm`, `ix_asset_product_model`, `ix_rental_item_asset` |
+
+`tests/integration/test_counter_reads.py` counts the statements with few rows
+and with many, and `tests/integration/test_counter_read_indexes.py` asks the
+planner to prove each index is used.
+
+**What the sweep costs a request.** Two statements when nothing is due, one
+for each half, each read through a partial index that holds only rows that
+could be due. When something is due, each reservation of a batch is loaded
+with its lines and allocations and written by its own statements, and a no
+show adds the lock, the count and the update of its customer. Twenty five of
+each is the most a request ever pays for.
+
+**What degrades first as the data grows.** The backlog of the sweep. It clears
+one batch of each half a request, so if bookings were missed faster than
+requests arrived to sweep them, their units would look taken for longer, and
+at a hundred times the volume the sweep belongs in a scheduled job. After that
+comes the diary of a busy branch, whose lists are not capped because the
+contract shows every booking of a day, so seven days of a branch with
+hundreds of hires a day are a few thousand rows held at once. The locator on a
+two character text is the third, because a trigram index cannot narrow a
+pattern that short, so the counter screen should ask for three.
+
 ## The schema
 
 Migration `0001` is the baseline. It creates seventeen tables with singular
@@ -768,6 +864,14 @@ Revision `0003` adds one index and nothing else,
 It is built inside the migration's transaction, which blocks writes to the
 profiles for the moments it takes. A table a hundred times larger would want
 `CREATE INDEX CONCURRENTLY` outside a transaction instead.
+
+Revision `0004` adds three indexes and nothing else. `ix_asset_tag_trgm` is a
+trigram index on `asset.asset_tag`, which the asset locator matches part of a
+tag through. `ix_asset_product_model` is a btree on `asset.product_model_id`,
+through which the locator reaches the units of a model whatever their status.
+`ix_rental_branch_due_back` is a btree on `rental (branch_id, due_back_on)`,
+through which the diary finds the hires due back on a day in the past, which
+the partial index on open hires does not hold.
 
 ## The seed and the two database roles
 
@@ -863,11 +967,15 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/reservations/{id}/hold` | Any active account. The owner, an administrator, or counter staff of the branch. |
 | POST | `/api/reservations/{id}/confirm` | Any active account, as above. |
 | POST | `/api/reservations/{id}/cancellation` | Any active account, as above. |
+| POST | `/api/reservations/{id}/no-show` | Counter staff of the collection branch, and administrators. |
 | GET | `/api/reservations` | Any active account. A customer sees their own. |
 | GET | `/api/reservations/{id}` | Any active account. Somebody else's is a 404 for a customer. |
 | GET | `/api/reservations/{id}/checkout` | Counter staff and administrators. |
 | POST | `/api/reservations/{id}/checkout` | Counter staff of the collection branch, and administrators. |
 | GET | `/api/rentals/{id}` | Counter staff and administrators. |
+| GET | `/api/counter/dashboard` | Counter staff for their own branch, and administrators for the branch they name. |
+| GET | `/api/counter/diary` | Counter staff for their own branch, and administrators for the branch they name. |
+| GET | `/api/assets/locator` | Counter staff and administrators, every branch. |
 | GET | `/api/customers` | Counter staff and administrators. |
 | POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
 | GET | `/api/customers/{id}` | Counter staff and administrators. |
@@ -964,6 +1072,10 @@ sentence names a business rule. The rule goes to the log.
 | `GET /api/reservations/{id}/checkout` | none | 200 with the reservation, its customer, its units, `hireTotalIncVat`, `depositTotal`, `canCheckOut`, `refusal` and `rentalId`. 404. |
 | `POST /api/reservations/{id}/checkout` | `items` of `allocationId`, `conditionOut`, `accessoriesOut` and `hourMeterOut`, and `agreementSigned` | 201 with the `Rental` and a `Location` header. 200 with the existing rental when it was already checked out. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming the field. |
 | `GET /api/rentals/{id}` | none | 200 with the `Rental`. 404 when there is no such rental. |
+| `POST /api/reservations/{id}/no-show` | `reason`, 1 to 200 characters | 200 with the reservation, now `NO_SHOW`. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming `body.reason`. |
+| `GET /api/counter/dashboard` | `branchCode`, which an administrator must send | 200 with `branchCode`, `branchName`, `date`, `counts` and the three lists. 403 `branch-scope` when counter staff name another branch. 422 naming `query.branchCode`. |
+| `GET /api/counter/diary` | `branchCode`, `from` which is today by default, `days` from 1 to 7 and 1 by default | 200 with `branchCode`, `branchName` and one entry of `days` for each day. 403 and 422 as for the dashboard, and 422 naming `query.days` or `query.from`. |
+| `GET /api/assets/locator` | `q` of 2 to 80 characters, `page`, `pageSize` | 200 with `items`, `page`, `pageSize` and `total`, in tag order. 422 naming `query.q`. |
 
 `CustomerSummary` carries `id`, `displayName`, `email`, `phone`, `hasLogin`,
 `emailVerified`, `customerType`, `companyName`, `idDocumentType`,
@@ -1307,6 +1419,20 @@ threads and finds one rental, `test_rental_schema_keys.py` proves the keys
 behind them, `test_abandoned_baskets.py` reads the customer's list, and
 `test_rental_reads_like_the_worked_example.py` compares a rental opened at the
 counter with the seeded worked example.
+
+The counter overview is tested the same way. `tests/unit` holds the moment a
+booking becomes a no show, before, at and after closing time and for staff
+from the start of the first day, the strike window and the hold, the late fee
+of the overdue list, the no show half of the sweep and the manual move against
+the in memory stores, and the dashboard and the diary against fakes of their
+ports. `tests/api` pins the shapes of the dashboard, the diary and the locator,
+the branch rule for both roles, the limits of the diary and of a search, and
+every refusal of the no show route in `reservation_no_show_refusals.py`. On
+PostgreSQL, `test_no_show_sweep.py` shows what the sweep keeps and the index it
+reads, `test_no_show_races.py` runs two sweeps at once, staged and unstaged,
+and two no shows of one customer at once, and `test_counter_reads.py` and
+`test_counter_read_indexes.py` read rows built by `tests/support/hire_factories.py`
+and count the statements and the indexes.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

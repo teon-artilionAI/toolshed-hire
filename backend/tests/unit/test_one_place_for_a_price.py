@@ -11,8 +11,10 @@ Three things are held.
 1. `Money.times` and `Money.percent_of` are called only inside
    `app/domain/policies` and `app/domain/vat.py`. Those two methods are the
    only way an amount is multiplied, so nothing outside can scale a rate.
-2. A rate is multiplied by a number of days in `StandardPricingPolicy` and
-   nowhere else.
+2. A rate is multiplied by a number of days in `StandardPricingPolicy`, and a
+   late fee per day in `app/domain/policies/late_fee.py`, and nowhere else.
+   The late fee is its own rule (BR-30), and the late fee policy of the next
+   change takes that module's place.
 3. No module multiplies a bare number that is named after a rate, a deposit,
    a fee or VAT. The one `*` on an amount is inside `Money` itself.
 
@@ -29,6 +31,7 @@ from typing import Final
 APP_ROOT: Final[Path] = Path(__file__).resolve().parents[2] / "app"
 POLICIES_PACKAGE: Final[str] = "domain/policies/"
 STANDARD_POLICY_MODULE: Final[str] = "domain/policies/standard_pricing.py"
+LATE_FEE_MODULE: Final[str] = "domain/policies/late_fee.py"
 VAT_MODULE: Final[str] = "domain/vat.py"
 MONEY_MODULE: Final[str] = "domain/money.py"
 SCALING_METHODS: Final[frozenset[str]] = frozenset({"times", "percent_of"})
@@ -107,14 +110,14 @@ def test_an_amount_is_scaled_only_inside_the_policies_and_the_vat_module() -> No
     )
 
 
-def test_a_rate_is_multiplied_by_days_in_the_standard_policy_and_nowhere_else() -> None:
+def test_a_rate_is_multiplied_by_days_in_the_two_policies_and_nowhere_else() -> None:
     by_days = {
         name
         for name, tree in MODULES.items()
         for call in scaling_calls(tree)
         if any(mentions(argument, DAY_WORDS) for argument in call.args)
     }
-    assert by_days == {STANDARD_POLICY_MODULE}
+    assert by_days == {STANDARD_POLICY_MODULE, LATE_FEE_MODULE}
 
 
 def test_vat_is_worked_out_only_by_the_policies() -> None:

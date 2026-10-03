@@ -1108,6 +1108,93 @@
         }
       }
     },
+    "/api/reservations/{id}/no-show": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Mark a confirmed reservation as not collected, releasing its units",
+        "description": "Mark the reservation as a no show and count the strike on the customer.\n\nRaises:\n    NotFound: If there is no such reservation. HTTP 404.\n    BranchScopeError: If counter staff act at another branch. HTTP 403.\n    StateTransitionError: If it is not confirmed or its hire has not\n        started. HTTP 409.",
+        "operationId": "post_no_show_api_reservations__id__no_show_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoShowRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move is not permitted from the status the reservation is in, or a unit could not be held for the period.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reservations/{id}": {
       "get": {
         "tags": [
@@ -1265,7 +1352,14 @@
             }
           },
           "200": {
-            "description": "The reservation was already checked out. The rental it opened, unchanged."
+            "description": "The reservation was already checked out. The rental it opened, unchanged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
           },
           "403": {
             "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
@@ -1360,6 +1454,240 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/counter/dashboard": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return what is due today at a branch",
+        "description": "Return the collections, returns and overdue hires of today, after running the sweep.\n\nRaises:\n    BranchScopeError: If counter staff name another branch. HTTP 403.\n    ValidationFailure: If an administrator names no branch, or one that is\n        not trading. HTTP 422, naming `branchCode`.",
+        "operationId": "read_dashboard_api_counter_dashboard_get",
+        "parameters": [
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The branch. Counter staff may leave it out and get their own. An administrator names one.",
+              "title": "Branchcode"
+            },
+            "description": "The branch. Counter staff may leave it out and get their own. An administrator names one."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not staff, or counter staff named another branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/counter/diary": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return the collections and returns of a branch for one to seven days",
+        "description": "Return the diary of the branch, one entry for each day, after running the sweep.\n\nRaises:\n    BranchScopeError: If counter staff name another branch. HTTP 403.\n    ValidationFailure: If an administrator names no branch, or one that is\n        not trading, or the run ends past the last date there is. HTTP 422,\n        naming the parameter.",
+        "operationId": "read_diary_api_counter_diary_get",
+        "parameters": [
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The branch. Counter staff may leave it out and get their own. An administrator names one.",
+              "title": "Branchcode"
+            },
+            "description": "The branch. Counter staff may leave it out and get their own. An administrator names one."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The first day. Today when left out.",
+              "title": "From"
+            },
+            "description": "The first day. Today when left out."
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 7,
+              "minimum": 1,
+              "description": "How many days to show, from one to seven.",
+              "default": 1,
+              "title": "Days"
+            },
+            "description": "How many days to show, from one to seven."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiaryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not staff, or counter staff named another branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/locator": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Find units at every branch by tag or model name",
+        "description": "Return one page of the units the text matches, at every branch.",
+        "operationId": "locate_assets_api_assets_locator_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 80,
+              "description": "Part of an asset tag or of a model name.",
+              "title": "Q"
+            },
+            "description": "Part of an asset tag or of a model name."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "How many units a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many units a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetLocationPageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1922,6 +2250,124 @@
         ],
         "title": "AccountStatus",
         "description": "Customer account standing. ON_HOLD is set by the no-show rule (BR-18)."
+      },
+      "AssetLocationPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssetLocationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AssetLocationPageResponse",
+        "description": "One page of the units a search found, in tag order."
+      },
+      "AssetLocationResponse": {
+        "properties": {
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "dueBackOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duebackon"
+          },
+          "rentalReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalreference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assetTag",
+          "modelName",
+          "modelSlug",
+          "categoryName",
+          "branchCode",
+          "branchName",
+          "status",
+          "conditionGrade",
+          "dueBackOn",
+          "rentalReference"
+        ],
+        "title": "AssetLocationResponse",
+        "description": "Where one unit is. `dueBackOn` and `rentalReference` are set only while it is on hire."
+      },
+      "AssetStatus": {
+        "type": "string",
+        "enum": [
+          "INTAKE",
+          "AVAILABLE",
+          "ON_HIRE",
+          "QUARANTINED",
+          "UNDER_REPAIR",
+          "LOST",
+          "RETIRED"
+        ],
+        "title": "AssetStatus",
+        "description": "Asset lifecycle status. There is deliberately no RESERVED member.\n\nFuture occupancy is derived from AssetAllocation rows. A RESERVED status\nwould be a second source of truth able to disagree with the exclusion\nconstraint."
       },
       "AvailabilityPageResponse": {
         "properties": {
@@ -2498,6 +2944,58 @@
         "title": "CheckoutUnitResponse",
         "description": "One unit the reservation holds, as the counter hands it over."
       },
+      "CollectionDueResponse": {
+        "properties": {
+          "reservationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reservationid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerPhone": {
+            "type": "string",
+            "title": "Customerphone"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "unitCount": {
+            "type": "integer",
+            "title": "Unitcount"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reservationId",
+          "reference",
+          "customerName",
+          "customerPhone",
+          "from",
+          "to",
+          "unitCount",
+          "summary"
+        ],
+        "title": "CollectionDueResponse",
+        "description": "A confirmed reservation due for collection."
+      },
       "ConditionGrade": {
         "type": "string",
         "enum": [
@@ -2721,6 +3219,267 @@
         ],
         "title": "DamageAssessment",
         "description": "Whether a unit that came back still waits for its damage to be assessed."
+      },
+      "DashboardCountsResponse": {
+        "properties": {
+          "collectionsDue": {
+            "type": "integer",
+            "title": "Collectionsdue"
+          },
+          "returnsDue": {
+            "type": "integer",
+            "title": "Returnsdue"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          },
+          "onHire": {
+            "type": "integer",
+            "title": "Onhire"
+          },
+          "quarantined": {
+            "type": "integer",
+            "title": "Quarantined"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collectionsDue",
+          "returnsDue",
+          "overdue",
+          "onHire",
+          "quarantined"
+        ],
+        "title": "DashboardCountsResponse",
+        "description": "The true totals behind the dashboard, however long each list is."
+      },
+      "DashboardResponse": {
+        "properties": {
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/DashboardCountsResponse"
+          },
+          "collectionsDue": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionDueResponse"
+            },
+            "type": "array",
+            "title": "Collectionsdue"
+          },
+          "returnsDue": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnDueResponse"
+            },
+            "type": "array",
+            "title": "Returnsdue"
+          },
+          "overdue": {
+            "items": {
+              "$ref": "#/components/schemas/OverdueRentalResponse"
+            },
+            "type": "array",
+            "title": "Overdue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "branchCode",
+          "branchName",
+          "date",
+          "counts",
+          "collectionsDue",
+          "returnsDue",
+          "overdue"
+        ],
+        "title": "DashboardResponse",
+        "description": "What is due today at one branch. Each list holds at most fifty rows."
+      },
+      "DiaryCollectionResponse": {
+        "properties": {
+          "reservationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reservationid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReservationStatus"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerPhone": {
+            "type": "string",
+            "title": "Customerphone"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "unitCount": {
+            "type": "integer",
+            "title": "Unitcount"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "canMarkNoShow": {
+            "type": "boolean",
+            "title": "Canmarknoshow"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reservationId",
+          "reference",
+          "status",
+          "customerName",
+          "customerPhone",
+          "from",
+          "to",
+          "unitCount",
+          "summary",
+          "canMarkNoShow"
+        ],
+        "title": "DiaryCollectionResponse",
+        "description": "A reservation starting on a day of the diary."
+      },
+      "DiaryDayResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryCollectionResponse"
+            },
+            "type": "array",
+            "title": "Collections"
+          },
+          "returns": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryReturnResponse"
+            },
+            "type": "array",
+            "title": "Returns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "collections",
+          "returns"
+        ],
+        "title": "DiaryDayResponse",
+        "description": "One day of the diary."
+      },
+      "DiaryResponse": {
+        "properties": {
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryDayResponse"
+            },
+            "type": "array",
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "branchCode",
+          "branchName",
+          "days"
+        ],
+        "title": "DiaryResponse",
+        "description": "The diary of one branch, one entry for each day asked for."
+      },
+      "DiaryReturnResponse": {
+        "properties": {
+          "rentalId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rentalid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RentalStatus"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerPhone": {
+            "type": "string",
+            "title": "Customerphone"
+          },
+          "dueBackOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Duebackon"
+          },
+          "itemsOut": {
+            "type": "integer",
+            "title": "Itemsout"
+          },
+          "itemCount": {
+            "type": "integer",
+            "title": "Itemcount"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rentalId",
+          "reference",
+          "status",
+          "customerName",
+          "customerPhone",
+          "dueBackOn",
+          "itemsOut",
+          "itemCount",
+          "summary"
+        ],
+        "title": "DiaryReturnResponse",
+        "description": "A rental due back on a day of the diary."
       },
       "EmailDeliverableResponse": {
         "properties": {
@@ -3105,6 +3864,74 @@
         ],
         "title": "ModelSummaryResponse",
         "description": "A published catalogue entry as it appears in a list."
+      },
+      "NoShowRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "NoShowRequest",
+        "description": "Why nobody collected the reservation, which staff always say."
+      },
+      "OverdueRentalResponse": {
+        "properties": {
+          "rentalId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rentalid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerPhone": {
+            "type": "string",
+            "title": "Customerphone"
+          },
+          "dueBackOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Duebackon"
+          },
+          "daysOverdue": {
+            "type": "integer",
+            "title": "Daysoverdue"
+          },
+          "itemsOut": {
+            "type": "integer",
+            "title": "Itemsout"
+          },
+          "lateFeeAccrued": {
+            "type": "string",
+            "title": "Latefeeaccrued"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rentalId",
+          "reference",
+          "customerName",
+          "customerPhone",
+          "dueBackOn",
+          "daysOverdue",
+          "itemsOut",
+          "lateFeeAccrued"
+        ],
+        "title": "OverdueRentalResponse",
+        "description": "A rental past its due date with a unit still out, and the late fee it has run up."
       },
       "PasswordResetCompletionRequest": {
         "properties": {
@@ -4196,6 +5023,57 @@
         ],
         "title": "ReservationStatus",
         "description": "Reservation lifecycle status, governed by the State pattern in the domain."
+      },
+      "ReturnDueResponse": {
+        "properties": {
+          "rentalId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rentalid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerPhone": {
+            "type": "string",
+            "title": "Customerphone"
+          },
+          "dueBackOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Duebackon"
+          },
+          "itemsOut": {
+            "type": "integer",
+            "title": "Itemsout"
+          },
+          "itemCount": {
+            "type": "integer",
+            "title": "Itemcount"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rentalId",
+          "reference",
+          "customerName",
+          "customerPhone",
+          "dueBackOn",
+          "itemsOut",
+          "itemCount",
+          "summary"
+        ],
+        "title": "ReturnDueResponse",
+        "description": "A rental due back today with a unit still out."
       },
       "SettlementWait": {
         "type": "string",
