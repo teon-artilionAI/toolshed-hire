@@ -56,6 +56,14 @@ class Actor:
     branch_id: UUID | None = None
 
 
+def within_branch_scope(actor: Actor, branch_id: UUID) -> bool:
+    """Return True when the actor may write at a branch (BR-43).
+
+    Only counter staff are scoped, and only to the branch they are assigned to.
+    """
+    return actor.role is not UserRole.COUNTER_STAFF or actor.branch_id == branch_id
+
+
 def ensure_branch_scope(actor: Actor, branch_id: UUID) -> None:
     """Refuse a write by counter staff to a branch that is not their own (BR-43).
 
@@ -74,7 +82,7 @@ def ensure_branch_scope(actor: Actor, branch_id: UUID) -> None:
             the one they are assigned to.
 
     """
-    if actor.role is not UserRole.COUNTER_STAFF or actor.branch_id == branch_id:
+    if within_branch_scope(actor, branch_id):
         return
     raise BranchScopeError(
         BRANCH_SCOPE_MESSAGE, {"branch_id": str(branch_id)}, rule=BRANCH_SCOPE_RULE
