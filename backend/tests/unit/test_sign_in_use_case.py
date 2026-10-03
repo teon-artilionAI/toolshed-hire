@@ -27,6 +27,7 @@ from app.domain.account import LOCKOUT_DURATION, Account
 from app.domain.enums import UserRole
 from app.domain.identity import Branch
 from app.domain.session import hash_refresh_token
+from tests.support.factories import CLOSES_AT
 from tests.support.identity_desk import CLIENT, UNKNOWN_EMAIL, WRONG_PASSWORD, Desk
 from tests.support.memory_identity import KNOWN_EMAIL, KNOWN_PASSWORD, fake_hash
 
@@ -80,7 +81,7 @@ class TestASuccessfulSignIn:
         assert desk.sign_in(email=f"  {KNOWN_EMAIL.upper()} ").account.id == account.id
 
     def test_counter_staff_are_told_the_code_of_their_branch(self, desk: Desk) -> None:
-        branch = Branch(id=uuid4(), code="CBD", name="Cape Town CBD")
+        branch = Branch(id=uuid4(), code="CBD", name="Cape Town CBD", closes_at=CLOSES_AT)
         desk.store.branches[branch.id] = branch
         desk.identity.add_account(
             email="assistant@example.co.za", role=UserRole.COUNTER_STAFF, branch_id=branch.id

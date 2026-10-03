@@ -35,6 +35,7 @@ from app.application.booking.access import (
     RESERVATION_HELD_ACTION,
     ReservationCommand,
     customer_of,
+    ensure_collection_branch_open,
     load_for_change,
     read_detail,
     record_change,
@@ -54,6 +55,7 @@ from app.domain.availability import AssetAllocation
 from app.domain.booking import Reservation, ReservationLine
 from app.domain.catalogue import ProductModel
 from app.domain.errors import AllocationConflictError
+from app.domain.states.base import HOLD_MOVE
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +180,8 @@ class HoldReservationUseCase(UseCase[ReservationCommand, ReservationView]):
             reservation = load_for_change(uow, actor, command.key)
             settle_overdue_hold(uow, reservation, now)
             customer_of(uow, reservation).ensure_may_book()
+            if reservation.state.permits(HOLD_MOVE):
+                ensure_collection_branch_open(uow, reservation, now)
             before = state_of(reservation)
             models = _models_of(uow, reservation)
             allocator = _RepositoryAllocator(

@@ -15,6 +15,7 @@ sign in account and its lockout rule are in `app.domain.account`.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import time
 from decimal import Decimal
 from typing import Final
 from uuid import UUID
@@ -103,12 +104,15 @@ class Branch:
         id: The branch key.
         code: The short code staff use, for example CBD.
         name: The display name.
+        closes_at: When the counter closes, on a clock in Cape Town. A hire
+            can no longer start on a day once it has passed (BR-04).
 
     """
 
     id: UUID
     code: str
     name: str
+    closes_at: time
 
 
 @dataclass(frozen=True, slots=True)

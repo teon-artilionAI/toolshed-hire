@@ -38,7 +38,7 @@ class SqlBranchRepository:
         )
         if row is None:
             return None
-        return domain.Branch(id=row.id, code=row.code, name=row.name)
+        return _branch_of(row)
 
     def find_active_by_code(self, code: str) -> domain.Branch | None:
         """Return the trading branch with this code, or None when there is none."""
@@ -50,4 +50,9 @@ class SqlBranchRepository:
         )
         if row is None:
             return None
-        return domain.Branch(id=row.id, code=row.code, name=row.name)
+        return _branch_of(row)
+
+
+def _branch_of(row: Branch) -> domain.Branch:
+    """Return a branch row as the domain knows a branch."""
+    return domain.Branch(id=row.id, code=row.code, name=row.name, closes_at=row.closes_at)

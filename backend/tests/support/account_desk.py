@@ -47,6 +47,7 @@ from app.domain.enums import IdDocType, UserRole
 from app.domain.identity import Actor, Branch
 from app.domain.notification import EmailMessage
 from app.infrastructure.notification import FakeEmailGateway
+from tests.support.factories import CLOSES_AT
 from tests.support.identity_desk import CLIENT, Desk
 from tests.support.memory_crypto import CountingPasswordHasher
 from tests.support.memory_identity import KNOWN_EMAIL
@@ -103,7 +104,9 @@ class AccountDesk(Desk):
     hasher: CountingPasswordHasher = field(default_factory=CountingPasswordHasher)
     account_rules: AccountThrottleRules = DEFAULT_ACCOUNT_RULES
     branch: Branch = field(
-        default_factory=lambda: Branch(id=uuid4(), code=HOME_BRANCH_CODE, name="Cape Town CBD")
+        default_factory=lambda: Branch(
+            id=uuid4(), code=HOME_BRANCH_CODE, name="Cape Town CBD", closes_at=CLOSES_AT
+        )
     )
 
     def __post_init__(self) -> None:
