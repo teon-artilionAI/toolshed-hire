@@ -54,9 +54,6 @@ CHECKOUT_REFUSED_RESPONSE: Final[dict[str, object]] = {
         "which, or a unit cannot go out on hire."
     ),
 }
-ALREADY_CHECKED_OUT_RESPONSE: Final[dict[str, object]] = {
-    "description": "The reservation was already checked out. The rental it opened, unchanged.",
-}
 UNKNOWN_RENTAL_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": "There is no such rental.",
@@ -207,3 +204,10 @@ class RentalResponse(CamelModel):
     settlement_waiting_on: SettlementWait | None = Field(
         serialization_alias="settlementWaitingOn"
     )
+
+
+# Declared after the rental, because the repeated checkout answers with one.
+ALREADY_CHECKED_OUT_RESPONSE: Final[dict[str, object]] = {
+    "model": RentalResponse,
+    "description": "The reservation was already checked out. The rental it opened, unchanged.",
+}
