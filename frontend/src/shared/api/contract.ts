@@ -16,9 +16,11 @@
  * contract-booking.ts, the registration and account types are in
  * contract-account.ts, the counter types are in contract-counter.ts, the
  * counter overview types are in contract-overview.ts, the returns and
- * settlement types are in contract-returns.ts, and the damage and quarantine
- * types are in contract-damage.ts. All seven are passed on from here, and the
- * session types below stay here.
+ * settlement types are in contract-returns.ts, the damage and quarantine
+ * types are in contract-damage.ts, and the reporting types are in
+ * contract-reporting.ts. All eight are passed on from here, and the session
+ * types below stay here. The reporting types are written by hand until the
+ * OpenAPI document describes those routes, and that module says so.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -132,6 +134,20 @@ export type {
   ReturnItemRequest,
   ReturnRequest,
 } from './contract-returns'
+export type {
+  AdminDashboard,
+  DashboardBranch,
+  FleetCounts,
+  MonthToDate,
+  Percent,
+  ReportDefinitions,
+  ReportFigures,
+  ReportGrouping,
+  ReportRow,
+  UtilisationCsvQuery,
+  UtilisationReport,
+  UtilisationReportQuery,
+} from './contract-reporting'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.

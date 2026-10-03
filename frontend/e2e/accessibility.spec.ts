@@ -24,9 +24,15 @@
  * return again with its question open, the worklist again with the question
  * about a lost unit open, and the damage screen again with every problem of
  * its form showing, then with the amount to recover and its question open.
+ *
+ * The owner's dashboard and report need a signed in owner, three branches and
+ * rows. Their answers are in admin-answers.ts, so both are scanned loaded every
+ * time, the report once by model and once by unit, and again with a refusal of
+ * its period under the field.
  */
 
 import { expect, test } from '@playwright/test'
+import { ADMIN_SCREENS, openAdminScreen } from './admin-answers.ts'
 import { blockingViolations } from './axe.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { CATALOGUE_HOME, PRIVACY, REGISTER, SEARCH, SIGN_IN } from './routes.ts'
@@ -54,6 +60,41 @@ for (const screen of COUNTER_SCREENS) {
     expect(await blockingViolations(page)).toEqual([])
   })
 }
+
+for (const screen of ADMIN_SCREENS) {
+  test(`${screen.path} has no serious or critical accessibility violations`, async ({ page }) => {
+    await openAdminScreen(page, screen)
+    await expect(page.locator(BUSY_REGION)).toHaveCount(0)
+
+    expect(await blockingViolations(page)).toEqual([])
+  })
+}
+
+test('the report with a refusal under its period has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  const [, report] = ADMIN_SCREENS
+  await openAdminScreen(page, report)
+
+  // A route added later is asked first, so from here the report is refused.
+  await page.route('**/api/admin/reports/utilisation?*', (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        type: 'https://toolshedhire.co.za/problems/validation',
+        title: 'Unprocessable Content',
+        status: 422,
+        detail: 'The period was refused.',
+        errors: { fields: { 'query.to': 'The period may be 366 days at most.' } },
+      }),
+    }),
+  )
+  await page.getByLabel('Break the figures down by').selectOption('category')
+  await expect(page.getByText('The period may be 366 days at most.')).toBeVisible()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
 
 test('a new booking with a tool on it has no serious or critical accessibility violations', async ({ page }) => {
   const [, booking] = COUNTER_SCREENS

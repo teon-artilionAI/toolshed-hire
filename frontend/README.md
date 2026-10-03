@@ -18,12 +18,15 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-10` Counter Dashboard, `SC-11` Branch Diary, `SC-17` Asset Locator | The API, through the routes described under The counter's day |
 | `SC-15` Return and Condition Inspection, `SC-18` Overdue and Late Fee Worklist, and the hire history of `SC-09` | The API, through the routes described under Returns and settlement |
 | `SC-16` Damage Report Capture | The API, through the routes described under Damage and quarantine |
-| `SC-19` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-19` Admin Dashboard, `SC-22` Utilisation and Gross Contribution Report | The API, through the routes described under Reporting |
+| `SC-20`, `SC-21`, `SC-23` and `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
 
-No customer or counter screen reads `src/shared/fixtures.ts` any more. The
-modules that still do are the administration screens and their helpers in
-`src/features/admin/`, and `src/shared/format.ts`, whose two overdue helpers
-take the fixture date as their default and are used only by those screens.
+No customer or counter screen reads `src/shared/fixtures.ts` any more, and
+neither do `SC-19` and `SC-22`. The modules that still do are the four other
+administration screens and their helpers in `src/features/admin/`. The
+`reservations`, `rentals` and `charges` exports of the fixture file are now
+imported by nothing. They go with the file once the last of those screens is
+connected.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -60,7 +63,9 @@ session routes are `POST /api/auth/login`, `POST /api/auth/refresh` and
   The basket is described under Hire basket below. It holds dates, a branch
   code, model slugs, quantities and the id of a booking that is under way, and
   no name, address or token. The chosen branch is one branch code and nothing
-  else, and counter staff never write it. `src/shared/basket-storage.ts` and
+  else, and counter staff never write it. An administrator chooses it at the
+  counter, or by opening a branch's diary from the owner's dashboard.
+  `src/shared/basket-storage.ts` and
   `src/features/counter/work-branch-storage.ts` are the only files that touch
   `sessionStorage`, one key each.
 - `src/shared/web-storage.test.ts` runs every path that handles a token with a
@@ -176,9 +181,11 @@ live in `src/shared/api/`, with the error model beside them in
 
 ### The client
 
-`api/client.ts` is the only file that calls `fetch`. It offers `api.get`,
-`api.post`, `api.put` and `api.patch`. There is no delete, because this system
-never deletes a record.
+`api/client.ts` is where every call is made. It offers `api.get`, `api.post`,
+`api.put` and `api.patch`, and `api.getFile` for a GET whose answer is a file.
+There is no delete, because this system never deletes a record. The request
+itself goes out in `api/transport.ts`, which is the only file that calls
+`fetch`.
 
 - The base path stays relative as `/api`. An absolute API origin would recreate
   the cross-origin session problem this setup avoids, and the Content Security
@@ -188,6 +195,12 @@ never deletes a record.
 - `buildQueryString` in `api/query-string.ts` writes a typed query object as a
   query string and leaves out anything undefined, null or empty.
 - A request is abandoned after eight seconds, and cookies are always sent.
+- `api.getFile` sends the same token and renews the session the same way, and
+  answers with the bytes exactly as they came and the name the server gave the
+  file in `Content-Disposition`. `api/content-disposition.ts` reads that name
+  and refuses one that would be a path. An answer that names no file is a
+  malformed answer. A plain link could not fetch such a file, because a link
+  goes out with no token.
 - The bearer token comes from the session through `api/session-seam.ts`. A
   request refused for want of a good token is repeated once after one refresh.
   The Session section above has the rule.
@@ -261,6 +274,12 @@ commits as `../backend/openapi.json`.
   `MINOR`, `MAJOR` and `WRITE_OFF`, and a severity retires nothing on its own.
   Each unit of a hire also carries `replacementValue` for staff, which is null
   for a customer, as its tag is.
+- The reporting routes, which are the owner's dashboard, the utilisation and
+  gross contribution report and its CSV, are not in the document yet. Their
+  types are in `api/contract-reporting.ts`, written by hand from the agreed
+  contract, and `contract.ts` passes them on like the others. Once the backend
+  commits a document that describes those routes, each type there is replaced
+  by one built from the generated file, and the readers stay as they are.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -317,6 +336,14 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   date. Filing a report against a hire drops that hire from the cache
   altogether, so the return screen reads it afresh and never shows the deposit
   still waiting while it does.
+- The owner's dashboard, under the `admin` segment, is never fresh. It is left
+  open like the counter's and is read again whenever the window comes back into
+  focus.
+- The report, under the `admin` segment as well, is fresh for a minute. It
+  covers a period, most often a month that has ended, and the server works it
+  out over the whole fleet, so asking again on every return to the window
+  would cost that whole sum each time for figures that have not moved. The CSV
+  is not cached at all. Each press of its button is one request.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -880,6 +907,95 @@ focus. Every status carries words beside its colour, every target is at least
 44 pixels, and the screen fits a phone 360 pixels wide with nothing to scroll
 sideways.
 
+### Reporting
+
+The owner's dashboard on `SC-19` says where the whole business stands today,
+and the report on `SC-22` says which equipment earns its keep over a period.
+The reads are in `api/admin-dashboard.ts` and `api/reporting.ts`, the cached
+queries in `api/admin-queries.ts`, and the CSV goes through `api.getFile`.
+Every figure is the server's. The browser adds up, divides and rounds nothing,
+and keeps the rows in the order the server sent them.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-19` | `GET /api/admin/dashboard` | Today across every branch, the month so far, what waits on the owner, and a card for each branch |
+| `SC-22` | `GET /api/admin/reports/utilisation?from=&to=&groupBy=&branchCode=&categorySlug=&page=&pageSize=` | The totals, the two definitions, one page of rows and a chart of them |
+| `SC-22` | `GET /api/admin/reports/utilisation.csv?from=&to=&groupBy=&branchCode=&categorySlug=` | Every row as a file, saved under the name the server gave it |
+
+#### The two definitions
+
+The server sends both with every answer of the report, and the screen shows
+them in full beside the figures. They are these.
+
+- **Utilisation, per asset, for a period.** The days the asset was on an
+  active allocation within the period, divided by the days it was in the fleet
+  and serviceable within the period. Days quarantined, under repair, lost or
+  retired are left out of the denominator. Days are half open, `[from, to)`.
+- **Gross contribution, per asset, for a period.** Hire revenue excluding VAT
+  attributed to that asset, plus late fees and damage recovery charged on it
+  (excluding VAT), less the actual repair costs recorded against it. It
+  excludes acquisition cost, depreciation, finance, staff and premises costs
+  and all overheads. It is labelled gross contribution everywhere, never
+  profit.
+
+#### `SC-19` Admin Dashboard
+
+- One request. The totals are the server's totals and not a sum of the
+  branches, and the month's utilisation and gross contribution are the
+  server's too. A utilisation the server sends as null reads as "No
+  serviceable days", and a gross contribution below zero says so in words.
+- The figures link to where the owner goes next. The month opens the report
+  for the same period, from the dates the server sent. The open damage reports
+  open the asset register, the customers on hold open the customer holds on
+  `SC-23`, and the failed notifications open the log on `SC-24`. What is due at
+  a branch opens the diary on `SC-11` at that branch. The link chooses the
+  branch for the tab through `chooseWorkBranch` in
+  `src/features/counter/work-branch.ts` first, so the diary does not ask. The
+  three screens it links to that still show sample data say so above
+  themselves.
+- It is read again when the window comes back into focus and on the refresh
+  button, and the line above the figures says when they were read. It has the
+  loading and failed states, and says so when the server lists no branch.
+
+#### `SC-22` Utilisation and Gross Contribution Report
+
+- The period, the grouping, the branch and category filters and the page live
+  in the address under the names the API takes, so a reload or a shared link
+  shows the same figures. The period starts at the last full calendar month at
+  the branches, and the grouping at the model. An address that does not name a
+  period is written out with that month in place of itself, so a link copied
+  from it names the period too. A period in the address that is not two days
+  on the calendar falls back to that month as a whole. The rules are in
+  `report-address.ts`.
+- The second date is not counted, the way the server counts it, and the field
+  says so. Whether a period is the right way round or too long is the
+  server's rule. Its 422 lands under the field it names, and a message about a
+  value with no control is listed above the figures.
+- The branches and categories come from the catalogue routes, each with its
+  own loading and failed state. A failed list offers to be read again, and
+  until then the filter offers every branch or every category.
+- The totals come first and are over every row of the report, then the two
+  definitions, then one page of twenty rows. Below the `lg` width each row is
+  drawn as a block with every figure beside its name, so nothing is scrolled
+  sideways. A row for one unit says its state in words.
+- The chart under the table draws the utilisation of the rows on the page,
+  one SVG bar each, from the server's percentages. It needs no charting
+  library. It is hidden from assistive technology, and a sentence that reads
+  every row with its utilisation stands in for it.
+- "Download CSV" fetches every row for the period and filters on the screen
+  through `api.getFile`, with the token, and hands the bytes to the browser
+  through `src/shared/save-file.ts` under the server's name. It is disabled
+  while it runs, says what it did in a polite status, and shows the shared
+  error state with the reference and a way to try again when it fails.
+
+#### Accessibility of these screens
+
+Every section has a real heading, the report is one table with headers at
+every width, and every control has its label. Moving to another page of the
+report moves focus to the top of the figures. Every status carries words
+beside its colour, every target is at least 44 pixels, and both screens fit a
+phone 360 pixels wide with nothing to scroll sideways.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -917,6 +1033,9 @@ throws while rendering shows the error state and the navigation stays up.
   as released or returned instead of with a minus sign. None of them does a
   sum.
 - `src/shared/pagination.tsx` is the page control for a list the server pages.
+- `src/shared/save-file.ts` hands the browser a file to save under a given
+  name, through a temporary address it releases a while later. It is the one
+  file that does, and the report's CSV goes through it.
 
 ## Commands
 
@@ -995,13 +1114,23 @@ the checkout again with every problem of its form on the screen, the diary
 again with the no show question open, the return again with its question
 open, the worklist again with the question about a lost unit open, and the
 damage screen again with every problem of its form showing, then with the
-amount to recover and its question open.
+amount to recover and its question open. The owner's dashboard and report are
+scanned loaded too, with a signed in owner, three branches and rows from
+`e2e/admin-answers.ts`. The report is scanned by model, by unit, and with a
+refusal of its period under the field.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires, My Account with a hire in its history, and the nine counter screens
-at 360 pixels wide and checks that nothing has to be scrolled sideways. It answers the API itself,
+My Hires, My Account with a hire in its history, the nine counter screens, the
+owner's dashboard and the report by model and by unit at 360 pixels wide and
+checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
 database holds.
+
+`e2e/report-download.spec.ts` runs with or without the backend too. It presses
+"Download CSV" on the report with the API answered from
+`e2e/admin-answers.ts`, and checks that the browser saved the file under the
+name the server gave it, byte for byte, that the request carried the token,
+and that the Content Security Policy did not stop it.
 
 `e2e/catalogue.spec.ts` needs the real backend with seeded data on port 8000.
 It follows a visitor from picking dates on the home screen, through the search
@@ -1115,6 +1244,21 @@ run means the strike lands on nobody else. The spec asks the three routes with
 no token first. A 404 or a 405 from any of them means the routes are not
 there, and both journeys skip themselves.
 
+`e2e/reporting.spec.ts` needs the reporting routes. The seeded owner,
+`marius@toolshedhire.co.za`, signs in and lands on the dashboard, which shows
+the three branches. They open the report, which starts at the last full month
+by model with the period in the address, and see rows, the gross contribution
+figure and the definitions. They break it down by branch, which gives one row
+for each branch, and download the CSV. The spec checks the name the browser
+saved the file under, that its first line says the figures are gross
+contribution and not profit, and that it has a header row naming utilisation
+and gross contribution. The figures are checked for their shape and not for
+particular values, because the other journeys book and return units during the
+run. The password comes from `E2E_STAFF_PASSWORD`, like the assistants'. The
+spec asks the dashboard, the report and the CSV with no token first, through
+`e2e/reporting-backend.ts`. A 404 or a 405 from any of them means the routes
+are not there, and the spec skips itself.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1141,11 +1285,12 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 pipeline does.
 
 The two counter journeys and the two counter overview journeys each sign the
-two counter assistants in once, so each assistant four times in a run, and the
-damage journey signs the owner in once in each browser project, which counts
-against their own addresses.
+two counter assistants in once, so each assistant four times in a run. The
+damage journey and the reporting spec each sign the owner in once in each
+browser project, so the owner four times in a run, which counts against their
+own address.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all eight skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all nine skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

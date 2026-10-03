@@ -59,6 +59,16 @@
  * So are the damage reports of a unit. The owner can send one for repair or
  * close it from another screen, and a counter must not offer a unit as
  * waiting for the workshop once it is back on the shelf.
+ *
+ * The owner's dashboard is never fresh either. It is the business today, left
+ * open like the counter's, so it is read again whenever the window comes back
+ * into focus.
+ *
+ * The report is the one admin read that is not. It covers a period, most
+ * often a month that has ended, and the server works it out over every unit
+ * of the fleet. Asking again on every return to the window would cost the
+ * server that whole sum each time for figures that have not moved. So a report
+ * is fresh for a minute, and the owner can reload for the latest.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -110,11 +120,24 @@ export const RENTALS_KEY = 'rentals'
 /** The first segment of every query key about damage reports. */
 export const DAMAGE_KEY = 'damage'
 
+/** The first segment of every query key the owner's screens read. */
+export const ADMIN_KEY = 'admin'
+
+/** The second segment of the owner's dashboard. */
+export const ADMIN_DASHBOARD_SEGMENT = 'dashboard'
+
+/** The second segment of the utilisation and gross contribution report. */
+export const ADMIN_REPORT_SEGMENT = 'report'
+
+/** How long a report counts as fresh. */
+export const REPORT_FRESH_MS = 60_000
+
 /** What never fresh means to the cache. The answer is stale when it arrives,
  *  and it is asked for again whenever a screen mounts, the window regains
  *  focus or the network comes back. Availability, quotes, reservations, the
  *  customer's own profile and hires, the customers the counter looks up, the
- *  counter's day, the locator, the hires and the damage reports all run on it. */
+ *  counter's day, the locator, the hires, the damage reports and the owner's
+ *  dashboard all run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -167,5 +190,7 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([ASSETS_KEY], NEVER_FRESH)
   client.setQueryDefaults([RENTALS_KEY], NEVER_FRESH)
   client.setQueryDefaults([DAMAGE_KEY], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_DASHBOARD_SEGMENT], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_REPORT_SEGMENT], { staleTime: REPORT_FRESH_MS })
   return client
 }

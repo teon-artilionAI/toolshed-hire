@@ -10,6 +10,8 @@
  * lookup, new booking, checkout, dashboard, diary, locator, return screen,
  * overdue worklist and damage screen are checked the same way, because an
  * assistant may hold a phone at the counter. My Account is checked with a hire in its history.
+ * The owner's dashboard and report, by model and by unit, are checked too, with
+ * the answers in admin-answers.ts.
  *
  * This spec does not use the real backend. The screens need a signed in person
  * with bookings and a profile, and a layout check should not depend on what a
@@ -24,6 +26,7 @@
 
 import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { ADMIN_SCREENS, openAdminScreen } from './admin-answers.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { MY_RENTALS } from './return-answers.ts'
 
@@ -194,6 +197,16 @@ test('My Account fits 360 pixels with long details, reading and editing', async 
 
   expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
 })
+
+for (const adminScreen of ADMIN_SCREENS) {
+  test(`${adminScreen.path} fits 360 pixels with long names and large figures, with nothing to scroll sideways`, async ({
+    page,
+  }) => {
+    await openAdminScreen(page, adminScreen)
+
+    expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
+  })
+}
 
 for (const counterScreen of COUNTER_SCREENS) {
   test(`${counterScreen.heading} fits 360 pixels with long names, with nothing to scroll sideways`, async ({
