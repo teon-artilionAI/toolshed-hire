@@ -52,9 +52,10 @@ HIRE: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 9), date(2026, 3, 12))
 PERIOD: Final[dict[str, object]] = {"from": "2026-03-09", "to": "2026-03-12"}
 AVAILABLE_UNIT_INDEX: Final[str] = "ix_asset_available"
 SEARCH_FINISHED: Final[str] = "availability.search_finished"
-# The three parts of the sweep, which lapse expired holds, mark no shows and
-# mark hires overdue, the count and the page (BR-13, BR-17, BR-52).
-STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 5
+# The four parts of the sweep, which lapse expired holds, mark no shows, mark
+# hires overdue and prune old throttle counters, then the count and the page
+# (BR-13, BR-17, BR-52, C-17).
+STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 6
 # A category and a branch each add one lookup.
 MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = STATEMENTS_OF_A_PLAIN_SEARCH + 2
 LARGEST_PAGE: Final[int] = 50
@@ -255,7 +256,7 @@ class TestAPageCostsAFixedNumberOfStatements:
     """One statement answers the page, however many models are on it.
 
     A search also runs the sweep before it answers, which is one statement
-    for each of its three parts when nothing is due and does not grow with the
+    for each of its four parts when nothing is due and does not grow with the
     page either.
     """
 

@@ -243,6 +243,11 @@ export type HealthReport = JsonOf<Paths['/api/health']['get']>
  * about the role and not missing data. The generated type also lets the member
  * be left out. The reader in auth.ts turns a missing one into null, so here it
  * is always present.
+ *
+ * `emailDeliverable` says whether this environment can deliver email to the
+ * account's own address. A demonstration delivers to one address only, so a
+ * screen promises an email only when it is true. The generated type requires
+ * it, so the reader in auth.ts refuses an account that leaves it out.
  */
 export type SessionUser = Refine<
   JsonOf<Paths['/api/me']['get']>,

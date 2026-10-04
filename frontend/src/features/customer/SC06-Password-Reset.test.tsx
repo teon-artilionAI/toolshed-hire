@@ -26,7 +26,7 @@ import type { ApiMock, RouteHandler } from '../../test/api-mock'
 import { findScreenHeading, renderApp } from '../../test/render-app'
 import { SIGNED_OUT } from '../../test/session-samples'
 import { DEMONSTRATION_EMAIL_REASON } from './email-delivery-note'
-import { RESET_SENT_MESSAGE } from './password-reset-panels'
+import { RESET_HELD_MESSAGE, RESET_SENT_MESSAGE } from './password-reset-panels'
 
 const SIGN_IN_HEADING = 'Sign in to Toolshed Hire'
 const REQUEST_HEADING = 'Reset your password'
@@ -82,7 +82,8 @@ describe('asking for a reset link', () => {
     await user.type(screen.getByLabelText('Email address'), EMAIL)
     await user.click(screen.getByRole('button', { name: 'Send me a reset link' }))
 
-    expect(await screen.findByText(RESET_SENT_MESSAGE)).toBeVisible()
+    expect(await screen.findByText(RESET_HELD_MESSAGE)).toBeVisible()
+    expect(screen.queryByText(RESET_SENT_MESSAGE)).not.toBeInTheDocument()
     expect(screen.getByText(DEMONSTRATION_EMAIL_REASON)).toBeVisible()
     expect(screen.getByText('Your password has not changed.')).toBeVisible()
   })

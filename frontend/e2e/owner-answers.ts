@@ -24,6 +24,7 @@ const OWNER = {
   role: 'admin',
   branchCode: null,
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 const OWNER_SESSION = {

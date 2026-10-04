@@ -5,7 +5,9 @@
  * the phone, the role and, for counter staff, the branch. It never shows or
  * asks for a password. Nothing is sent until the question below the fields has
  * been answered, and it says that the person chooses their own password from a
- * link sent to the address given.
+ * link sent to the address given. A demonstration delivers email to one
+ * address only, so the question promises no more than that, and the answer
+ * says whether the link could be delivered.
  *
  * A refusal from the server comes back as a 422, and the form goes back to
  * the fields with each message under the field it names, listed above the form
@@ -45,8 +47,9 @@ function Question({ body }: { body: NewStaffAccountRequest }) {
         They will work as {STAFF_ROLE_LABEL[body.role].toLowerCase()} {where}.
       </p>
       <p>
-        Nobody chooses a password for them here. A link goes to <span className="break-all">{body.email}</span>, and they
-        choose their own password from it.
+        Nobody chooses a password for them here. A link to choose their own password is sent to{' '}
+        <span className="break-all">{body.email}</span>. This demonstration delivers email to one address only, so
+        the answer says whether the link can reach them.
       </p>
     </>
   )

@@ -374,7 +374,7 @@
           "identity"
         ],
         "summary": "Return the signed in account",
-        "description": "Return the account behind the presented access token.\n\nArgs:\n    user: The active account, resolved by the layered auth dependencies.\n    session: The request scoped session, used to resolve the branch code.\n\nReturns:\n    The account, in the shape every session response carries it in.",
+        "description": "Return the account behind the presented access token.\n\nArgs:\n    user: The active account, resolved by the layered auth dependencies.\n    session: The request scoped session, used to resolve the branch code.\n    gateway: The email gateway, asked whether mail to the address would go.\n\nReturns:\n    The account, in the shape every session response carries it in.",
         "operationId": "read_me_api_me_get",
         "responses": {
           "200": {
@@ -11466,6 +11466,10 @@
           "emailVerified": {
             "type": "boolean",
             "title": "Emailverified"
+          },
+          "emailDeliverable": {
+            "type": "boolean",
+            "title": "Emaildeliverable"
           }
         },
         "type": "object",
@@ -11474,10 +11478,11 @@
           "email",
           "fullName",
           "role",
-          "emailVerified"
+          "emailVerified",
+          "emailDeliverable"
         ],
         "title": "UserResponse",
-        "description": "The signed in account, as every session response and `/api/me` return it.\n\n`branchCode` is null unless the account is counter staff."
+        "description": "The signed in account, as every session response and `/api/me` return it.\n\n`branchCode` is null unless the account is counter staff.\n\n`emailDeliverable` is false when this environment would not hand a message\nfor the account's address to the email provider, because email is off or\nbecause mail goes to one approved address and this is not it. It is the\nsame rule the account routes answer with, and it depends on the\nconfiguration and the address alone. A screen reads it so that it never\npromises a confirmation email that cannot arrive."
       },
       "UserRole": {
         "type": "string",

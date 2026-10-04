@@ -24,7 +24,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import public_access
+from app.api.deps import NotificationGatewayDependency, public_access
 from app.api.identity_deps import (
     ClientDetailsDependency,
     PresentedRefreshToken,
@@ -35,11 +35,13 @@ from app.api.identity_deps import (
     never_store,
     refresh_cookie_access,
 )
-from app.api.schemas import LoginRequest, TokenResponse, UserResponse, wire_role
+from app.api.schemas import LoginRequest, TokenResponse
+from app.api.user_presenter import user_response
 from app.application.identity.refresh_session import RefreshSessionCommand
 from app.application.identity.sessions import SessionGrant
 from app.application.identity.sign_in import SignInCommand
 from app.application.identity.sign_out import SignOutCommand
+from app.application.notification.ports import NotificationGateway
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,7 @@ def post_login(
     use_case: SignIn,
     client: ClientDetailsDependency,
     cookie: RefreshCookieDependency,
+    gateway: NotificationGatewayDependency,
 ) -> TokenResponse:
     """Verify credentials, open a session and issue both tokens.
 
@@ -88,7 +91,7 @@ def post_login(
         SignInCommand(email=payload.email, password=payload.password, client=client)
     )
     cookie.set_on(response, grant.refresh_token, grant.refresh_max_age_seconds)
-    return _token_response(grant)
+    return _token_response(grant, gateway)
 
 
 @router.post(
@@ -108,6 +111,7 @@ def post_refresh(
     presented_token: PresentedRefreshToken,
     client: ClientDetailsDependency,
     cookie: RefreshCookieDependency,
+    gateway: NotificationGatewayDependency,
 ) -> TokenResponse:
     """Rotate the refresh token and issue a new access token.
 
@@ -120,7 +124,7 @@ def post_refresh(
         RefreshSessionCommand(presented_token=presented_token, client=client)
     )
     cookie.set_on(response, grant.refresh_token, grant.refresh_max_age_seconds)
-    return _token_response(grant)
+    return _token_response(grant, gateway)
 
 
 @router.post(
@@ -145,18 +149,10 @@ def post_logout(
     cookie.clear_on(response)
 
 
-def _token_response(grant: SessionGrant) -> TokenResponse:
+def _token_response(grant: SessionGrant, gateway: NotificationGateway) -> TokenResponse:
     """Shape a session grant as the body of a sign in or a refresh."""
-    account = grant.account
     return TokenResponse(
         access_token=grant.access_token,
         expires_in=grant.expires_in,
-        user=UserResponse(
-            id=account.id,
-            email=account.email,
-            full_name=account.full_name,
-            role=wire_role(account.role),
-            branch_code=account.branch_code,
-            email_verified=account.email_verified,
-        ),
+        user=user_response(grant.account, gateway),
     )

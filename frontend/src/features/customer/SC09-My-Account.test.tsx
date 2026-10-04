@@ -22,7 +22,7 @@ import {
   throttled,
 } from '../../test/account-samples'
 import { acceptedResponse, jsonResponse, neverAnswers, problemResponse } from '../../test/api-mock'
-import { ACCESS_TOKEN, bearerOf } from '../../test/session-samples'
+import { ACCESS_TOKEN, CUSTOMER, bearerOf } from '../../test/session-samples'
 import { SAMPLE_DATA_TITLE } from '../../shared/sample-data-notice'
 import { DEMONSTRATION_EMAIL_REASON, WITHOUT_THE_LINK } from './email-delivery-note'
 import { EMAIL_UNCONFIRMED_TITLE, LINK_SENT_AGAIN_TITLE } from './email-verification-notice'
@@ -176,6 +176,15 @@ describe('an email address that is not confirmed', () => {
     expect(await screen.findByText(DEMONSTRATION_EMAIL_REASON)).toBeVisible()
     expect(screen.getByText(WITHOUT_THE_LINK)).toBeVisible()
     expect(screen.queryByText(LINK_SENT_AGAIN_TITLE)).not.toBeInTheDocument()
+  })
+
+  it('does not ask for a link to be opened when the session says email cannot reach the address', async () => {
+    await openAccount(withProfile(UNVERIFIED_PROFILE), { ...CUSTOMER, emailDeliverable: false })
+
+    const notice = (await screen.findByText(EMAIL_UNCONFIRMED_TITLE)).closest('[role="status"]')
+    expect(notice).toHaveTextContent(DEMONSTRATION_EMAIL_REASON)
+    expect(notice).toHaveTextContent(WITHOUT_THE_LINK)
+    expect(notice).not.toHaveTextContent('Open the link we sent')
   })
 
   it('says how long to wait when the link has been asked for too often', async () => {

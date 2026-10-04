@@ -15,14 +15,22 @@ import type { ApiMock, RouteTable } from '../../test/api-mock'
 import { findScreenHeading, renderApp } from '../../test/render-app'
 import { MY_RENTALS_ROUTE, rentalPage } from '../../test/rental-samples'
 import { CUSTOMER, signedInAs } from '../../test/session-samples'
-import type { MyProfile } from '../../shared/api/contract'
+import type { MyProfile, SessionUser } from '../../shared/api/contract'
 
 export const HEADING = 'My account'
 export const SAVED_TITLE = 'Your details have been updated'
 
-/** Open My Account as the signed in customer, with these routes answering. */
-export async function openAccount(routes: RouteTable): Promise<{ user: UserEvent; network: ApiMock }> {
-  const network = mockApi({ ...signedInAs(CUSTOMER), ...routes })
+/**
+ * Open My Account as the signed in customer, with these routes answering.
+ *
+ * @param account The signed in account, the seeded customer unless a test
+ *   needs another, such as one whose address email cannot reach.
+ */
+export async function openAccount(
+  routes: RouteTable,
+  account: SessionUser = CUSTOMER,
+): Promise<{ user: UserEvent; network: ApiMock }> {
+  const network = mockApi({ ...signedInAs(account), ...routes })
   renderApp('/account')
   await findScreenHeading(HEADING)
   return { user: userEvent.setup(), network }

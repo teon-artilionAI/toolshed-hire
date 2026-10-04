@@ -31,6 +31,17 @@ export const REVIEW_STEP = 'Step 1 of 3. Review the cost'
 export const HOLD_STEP = 'Step 2 of 3. Hold the equipment'
 export const CONFIRMED_STEP = 'Step 3 of 3. Your hire is confirmed'
 
+/**
+ * What the confirmation says about its email.
+ *
+ * @param deliverable Whether the session says email can reach the customer.
+ */
+export function confirmationEmailSentence(deliverable: boolean): RegExp {
+  return deliverable
+    ? /A confirmation email is on its way to you\./
+    : /This demonstration delivers email to one address only, so the confirmation email will not arrive\. The reference TSH-R-\d{2}-\d{6} on this screen is your booking\./
+}
+
 /** The one key the page keeps the basket under, in the storage of the tab. */
 export const BASKET_KEY = 'toolshed.basket'
 

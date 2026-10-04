@@ -4,6 +4,10 @@
  * The seeded owner signs in and opens user management. They open a counter
  * staff account with an address no run has used at a branch, which first says
  * the person chooses their own password from a link, and find it in the list.
+ * What the screen says once the account is open depends on whether the answer
+ * said the link can reach the address, so the spec reads that flag and expects
+ * the matching words. The address is at `example.com`, which a demonstration
+ * never delivers to.
  * Then they deactivate it with a reason, which first says the person is signed
  * out everywhere at once, reactivate it, and open the customer holds. That is
  * SC-23 end to end, under the same Content Security Policy a visitor gets.
@@ -25,6 +29,9 @@ import { blockingViolations } from './axe.ts'
 import { signInAsOwner } from './staff.ts'
 
 const USERS_HEADING = 'Users, roles and account holds'
+
+/** Where the screen opens a staff account. */
+const USERS_PATH = '/api/admin/users'
 
 /** The branch each browser project opens its account at, by its code. */
 const BRANCH_FOR_PROJECT: Record<string, string> = {
@@ -56,11 +63,35 @@ async function openAnAccount(page: Page, person: { fullName: string; email: stri
   await expect(form.getByLabel(/password/i)).toHaveCount(0)
   await form.getByRole('button', { name: 'Create the account' }).click()
 
+  // The question promises no more than that a link is sent, because only the
+  // answer says whether it can reach the person.
   await expect(page.getByRole('heading', { level: 4, name: `Create an account for ${person.fullName}?` })).toBeFocused()
-  await expect(page.getByText(/they choose their own password from it\./)).toBeVisible()
+  await expect(page.getByText(/A link to choose their own password is sent to/)).toContainText(
+    `${person.email}. This demonstration delivers email to one address only, so the answer says whether the link can reach them.`,
+  )
   expect(await blockingViolations(page)).toEqual([])
+  const created = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && new URL(response.url()).pathname === USERS_PATH,
+  )
   await page.getByRole('button', { name: 'Yes, create it' }).click()
-  await expect(page.getByText(new RegExp(`^${person.fullName} has a staff account`))).toBeVisible()
+  const answer = await created
+  expect(answer.status()).toBe(201)
+  const { emailDeliverable } = (await answer.json()) as { emailDeliverable?: unknown }
+  expect(typeof emailDeliverable, `${USERS_PATH} answered without an emailDeliverable flag`).toBe('boolean')
+
+  // The outcome promises the link only when the answer said it can arrive,
+  // which it cannot where the API runs without an email provider.
+  const title = `${person.fullName} has a staff account`
+  if (emailDeliverable === true) {
+    await expect(page.getByText(title, { exact: true })).toBeVisible()
+    await expect(page.getByText(`a link sent to ${person.email}`)).toBeVisible()
+  } else {
+    await expect(page.getByText(`${title}, but the link could not be sent`, { exact: true })).toBeVisible()
+    await expect(
+      page.getByText(`This demonstration delivers email to one address only, and ${person.email} is not it`),
+    ).toBeVisible()
+    await expect(page.getByText(`a link sent to ${person.email}`)).toHaveCount(0)
+  }
 }
 
 test.describe('the owner manages staff accounts against the real backend', () => {

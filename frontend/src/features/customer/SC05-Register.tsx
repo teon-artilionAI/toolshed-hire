@@ -37,6 +37,10 @@ export const CHECK_YOUR_EMAIL_HEADING = 'Check your email'
 /** The one thing the screen says about the address, whoever it belongs to. */
 export const REGISTRATION_SENT_MESSAGE = 'If that address is new, we have sent it a link.'
 
+/** The same, where this environment cannot deliver mail to the address given. */
+export const REGISTRATION_HELD_MESSAGE =
+  'If that address is new, its account is open, but this demonstration cannot email it a link.'
+
 interface RegistrationSent {
   email: string
   delivery: EmailDelivery
@@ -47,7 +51,8 @@ function CheckYourEmail({ email, delivery }: RegistrationSent) {
     <Card>
       <StateHeading>{CHECK_YOUR_EMAIL_HEADING}</StateHeading>
       <p className="mt-sm text-sm text-ink">
-        {REGISTRATION_SENT_MESSAGE} The address you gave is{' '}
+        {delivery.emailDeliverable ? REGISTRATION_SENT_MESSAGE : REGISTRATION_HELD_MESSAGE} The
+        address you gave is{' '}
         <span className="break-all font-medium">{email}</span>.
         {delivery.emailDeliverable &&
           ` Open the link within ${VERIFICATION_LINK_HOURS} hours to confirm it.`}

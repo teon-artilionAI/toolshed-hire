@@ -23,7 +23,11 @@ import { acceptedResponse, mockApi, problemResponse } from '../../test/api-mock'
 import { currentAddress, findScreenHeading, renderApp } from '../../test/render-app'
 import { BRANCHES_ROUTE, SIGNED_OUT } from '../../test/session-samples'
 import { DEMONSTRATION_EMAIL_REASON, WITHOUT_THE_LINK } from './email-delivery-note'
-import { CHECK_YOUR_EMAIL_HEADING, REGISTRATION_SENT_MESSAGE } from './SC05-Register'
+import {
+  CHECK_YOUR_EMAIL_HEADING,
+  REGISTRATION_HELD_MESSAGE,
+  REGISTRATION_SENT_MESSAGE,
+} from './SC05-Register'
 import { EMAIL, HEADING, SUBMIT, fillInEverything, openRegister } from './SC05-test-kit'
 
 describe('after a 202', () => {
@@ -53,6 +57,8 @@ describe('after a 202', () => {
     await user.click(screen.getByRole('button', { name: SUBMIT }))
 
     await screen.findByRole('heading', { name: CHECK_YOUR_EMAIL_HEADING })
+    expect(screen.getByText(new RegExp(REGISTRATION_HELD_MESSAGE.replace('.', '\\.')))).toBeVisible()
+    expect(screen.queryByText(new RegExp(REGISTRATION_SENT_MESSAGE.replace('.', '\\.')))).not.toBeInTheDocument()
     expect(screen.getByText(DEMONSTRATION_EMAIL_REASON)).toBeVisible()
     expect(screen.getByText(WITHOUT_THE_LINK)).toBeVisible()
     expect(screen.getByText(/A counter assistant can confirm a booking for you at a branch/)).toBeVisible()

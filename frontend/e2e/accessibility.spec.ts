@@ -1,89 +1,53 @@
 /**
- * Automated accessibility checks for the public screens and the counter's
- * booking screens.
+ * Automated accessibility checks for every numbered screen and the privacy
+ * notice, and for the questions, forms and refusals that open on top of them.
  *
- * These run with or without the backend. The catalogue home and the search
- * read from the API, so with no backend this scans them in their failed state,
- * and with one it scans them loaded. Both have to be clean. The model screen
- * needs a real model to open, so its scan is in catalogue.spec.ts with the
- * other specs that need the backend.
+ * Each screen is opened as the role it belongs to, from the one list in
+ * screens.ts, with the API answered by the spec itself. The customer's answers
+ * are in customer-answers.ts and public-answers.ts, the counter's in
+ * counter-answers.ts and the files it names, and the owner's in
+ * admin-answers.ts and the files it names. So every screen is scanned loaded,
+ * with long names and large figures, whether or not a backend is running, and
+ * never depends on what a database holds.
  *
- * The registration form reads the branches for its menu, so with no backend
- * it is scanned with that one menu in its failed state. The privacy notice
- * reads nothing and is the same either way.
- *
- * The counter's customer lookup, new booking and checkout need a signed in
- * assistant and a customer with a booking, the counter's dashboard, diary and
- * locator need a day with something on it and units to find, the return
- * screen and the overdue worklist need a hire partly back and units long
- * overdue, and the damage screen needs a unit with reports on it. The spec
- * answers the API for those itself, through counter-answers.ts, so all nine
- * are scanned loaded every time. The new booking is scanned again with a tool
- * on it, the checkout again with every problem of its form on the screen, the
- * diary again with the no show question open and its problem showing, the
- * return again with its question open, the worklist again with the question
- * about a lost unit open, and the damage screen again with every problem of
- * its form showing, then with the amount to recover and its question open.
- *
- * The owner's dashboard and report need a signed in owner, three branches and
- * rows. Their answers are in admin-answers.ts, so both are scanned loaded every
- * time, the report once by model and once by unit, and again with a refusal of
- * its period under the field. The audit trail and the notification log are
- * scanned loaded the same way, from audit-answers.ts, and the log again with
- * the question before a failed email is sent again. The catalogue is scanned
- * loaded from catalogue-answers.ts, with its form closed and open, then again
- * with the question before a new figure is saved, and with the question
- * before a model is hidden and the category form open. The asset register
- * is scanned loaded from asset-answers.ts, with no unit open and with one
- * open, then again with the question before a unit is retired and its reason
- * refused, and with the registration form showing every problem it holds
- * back. The staff accounts and the customer holds are scanned loaded from
- * user-answers.ts, and again with their forms and questions open in
+ * On top of the screens this scans the report with a refusal under its
+ * period, the notification log with its question before sending again, the
+ * catalogue with its questions and the category form, the asset register with
+ * a unit being retired and the registration form holding back its problems,
+ * the owner's corrections on the return and the checkout, the new booking
+ * with a tool on it, the checkout with every problem showing, the diary with
+ * the no show question, the return with its question, the overdue worklist
+ * with the loss question, and the damage report with its problems, its amount
+ * and its question. The sign in, registration, empty and error states are in
+ * accessibility-states.spec.ts, and the forms of SC-23 in
  * user-management.spec.ts.
  *
- * The owner's corrections only show for an administrator, so the return
- * screen is scanned again as the owner with a reversal asked, and the checkout
- * as the owner on a booking short of a unit with a release asked. Those
- * answers are in owner-answers.ts.
+ * Every scan writes how many findings of each impact it had to the output of
+ * the run, through axe.ts, and fails on any that is serious or critical.
  */
 
 import { expect, test } from '@playwright/test'
 import { ADMIN_SCREENS, ASSET_REGISTER_HEADING, AUDIT_LOG_HEADING, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
-import { blockingViolations } from './axe.ts'
+import { reportedViolations } from './axe.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
-import { CATALOGUE_HOME, PRIVACY, REGISTER, SEARCH, SIGN_IN } from './routes.ts'
+import { ALL_SCREENS, screensNotVisited } from './screens.ts'
 
 /** A region that is still waiting on the API. */
 const BUSY_REGION = '[aria-busy="true"]'
 
-for (const route of [CATALOGUE_HOME, SEARCH, SIGN_IN, REGISTER, PRIVACY]) {
-  test(`${route.path} has no serious or critical accessibility violations`, async ({ page }) => {
-    await page.goto(route.path)
-    await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible()
+test('every numbered screen and the privacy notice is scanned', () => {
+  expect(screensNotVisited()).toEqual([])
+})
+
+for (const visit of ALL_SCREENS) {
+  test(`${visit.label} has no serious or critical accessibility violations`, async ({ page }) => {
+    await visit.open(page)
     // I wait for every loading region to settle, so the scan sees real content
-    // or the error state and never a skeleton, which is hidden from it anyway.
+    // and never a skeleton, which is hidden from it anyway.
     await expect(page.locator(BUSY_REGION)).toHaveCount(0)
 
-    expect(await blockingViolations(page)).toEqual([])
-  })
-}
-
-for (const screen of COUNTER_SCREENS) {
-  test(`${screen.path} has no serious or critical accessibility violations`, async ({ page }) => {
-    await openCounterScreen(page, screen)
-    await expect(page.locator(BUSY_REGION)).toHaveCount(0)
-
-    expect(await blockingViolations(page)).toEqual([])
-  })
-}
-
-for (const screen of ADMIN_SCREENS) {
-  test(`${screen.path} has no serious or critical accessibility violations`, async ({ page }) => {
-    await openAdminScreen(page, screen)
-    await expect(page.locator(BUSY_REGION)).toHaveCount(0)
-
-    expect(await blockingViolations(page)).toEqual([])
+    expect(await reportedViolations(page, visit.label)).toEqual([])
   })
 }
 
@@ -110,7 +74,7 @@ test('the report with a refusal under its period has no serious or critical acce
   await page.getByLabel('Break the figures down by').selectOption('category')
   await expect(page.getByText('The period may be 366 days at most.')).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-22 with a refusal under its period')).toEqual([])
 })
 
 test('the notification log with the question before sending again has no serious or critical accessibility violations', async ({
@@ -123,7 +87,7 @@ test('the notification log with the question before sending again has no serious
   await page.getByRole('button', { name: /^Send again / }).click()
   await expect(page.getByRole('heading', { level: 4, name: /^Send the booking confirmation for .+ again\?$/ })).toBeFocused()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-24 with the question before sending again')).toEqual([])
 })
 
 /** The catalogue from the list the scans share, with its form open or closed. */
@@ -143,7 +107,7 @@ test('the catalogue with the question before a new figure is saved has no seriou
   await form.getByRole('button', { name: 'Save the changes' }).click()
   await expect(page.getByRole('heading', { level: 3, name: /^Save the changes to .+\?$/ })).toBeFocused()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-20 with the question before a new figure is saved')).toEqual([])
 })
 
 test('the catalogue with a model being hidden and a category being added has no serious or critical accessibility violations', async ({
@@ -153,11 +117,11 @@ test('the catalogue with a model being hidden and a category being added has no 
 
   await page.getByRole('button', { name: /^Hide / }).first().click()
   await expect(page.getByRole('heading', { level: 3, name: /^Hide .+ from customers\?$/ })).toBeFocused()
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-20 with a model being hidden')).toEqual([])
 
   await page.getByRole('region', { name: 'Categories' }).getByRole('button', { name: 'Add a category' }).click()
   await expect(page.getByRole('heading', { level: 3, name: 'Add a category' })).toBeFocused()
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-20 with a category being added')).toEqual([])
 })
 
 /** The asset register from the list the scans share, with a unit open or not. */
@@ -180,7 +144,7 @@ test('a unit with the question before it is retired and its reason refused has n
   await page.getByRole('button', { name: 'Yes, retire it' }).click()
   await expect(page.getByText('Write the reason, so whoever reads the history of this unit later knows why.')).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-21 with a unit being retired and its reason refused')).toEqual([])
 })
 
 test('the registration of a unit with every problem it holds back has no serious or critical accessibility violations', async ({
@@ -193,17 +157,17 @@ test('the registration of a unit with every problem it holds back has no serious
   await form.getByRole('button', { name: 'Register the unit' }).click()
   await expect(page.getByText(/Nothing has been saved yet\. 3 answers need fixing\./)).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-21 with the registration holding back its problems')).toEqual([])
 })
 
 for (const owner of OWNER_COUNTER_SCREENS) {
   test(`${owner.name} has no serious or critical accessibility violations`, async ({ page }) => {
     await openCounterScreen(page, owner.screen, owner.instead)
     await expect(page.locator(BUSY_REGION)).toHaveCount(0)
-    expect(await blockingViolations(page)).toEqual([])
+    expect(await reportedViolations(page, `${owner.screen.id} ${owner.name}`)).toEqual([])
 
     await owner.ask(page)
-    expect(await blockingViolations(page)).toEqual([])
+    expect(await reportedViolations(page, `${owner.screen.id} ${owner.name}, with the question open`)).toEqual([])
   })
 }
 
@@ -214,7 +178,7 @@ test('a new booking with a tool on it has no serious or critical accessibility v
   await page.getByRole('region', { name: 'Tools free at this branch' }).getByRole('button', { name: /^Add / }).click()
   await expect(page.getByText(/^1 unit free at Cape Town CBD for these dates$/)).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-13 with a tool on it')).toEqual([])
 })
 
 test('a checkout with every problem on the screen has no serious or critical accessibility violations', async ({
@@ -226,7 +190,7 @@ test('a checkout with every problem on the screen has no serious or critical acc
   await page.getByRole('button', { name: 'Check out the equipment' }).click()
   await expect(page.getByText(/Nothing has gone out yet\. 3 answers need fixing\./)).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-14 with every problem showing')).toEqual([])
 })
 
 test('the diary with the no show question open has no serious or critical accessibility violations', async ({
@@ -240,7 +204,7 @@ test('the diary with the no show question open has no serious or critical access
   await page.getByRole('button', { name: 'Yes, mark as no show' }).click()
   await expect(page.getByText(/Say why in a few words/)).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-11 with the no show question and its problem')).toEqual([])
 })
 
 /** A counter screen from the list the scans share, by its heading. */
@@ -257,7 +221,7 @@ test('a return with its question open has no serious or critical accessibility v
   await page.getByRole('button', { name: 'Take the ticked units back' }).click()
   await expect(page.getByRole('heading', { level: 2, name: /^Take these units back from / })).toBeFocused()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-15 with its question open')).toEqual([])
 })
 
 test('the overdue worklist with a loss question open has no serious or critical accessibility violations', async ({
@@ -268,7 +232,7 @@ test('the overdue worklist with a loss question open has no serious or critical 
   await page.getByRole('button', { name: /^Record as lost / }).first().click()
   await expect(page.getByRole('button', { name: 'Yes, record it as lost' })).toBeVisible()
 
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-18 with the loss question open')).toEqual([])
 })
 
 test('a damage report with its problems, its amount and its question has no serious or critical accessibility violations', async ({
@@ -279,16 +243,16 @@ test('a damage report with its problems, its amount and its question has no seri
 
   await form.getByRole('button', { name: 'Record the damage and quarantine the unit' }).click()
   await expect(page.getByText(/Nothing has been filed yet\. 4 answers need fixing\./)).toBeVisible()
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-16 with every problem showing')).toEqual([])
 
   await form.getByRole('radio', { name: /^Major/ }).check()
   await form.getByLabel('Describe the damage').fill('Base plate cracked across the weld.')
   await form.getByLabel('Estimated repair cost, in rand').fill('1450.00')
   await form.getByRole('radio', { name: /^Charge the customer/ }).check()
   await form.getByLabel('Amount to recover from the customer, in rand, including VAT').fill('1150.00')
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-16 with the amount to recover filled in')).toEqual([])
 
   await form.getByRole('button', { name: 'Record the damage and quarantine the unit' }).click()
   await expect(page.getByRole('heading', { level: 2, name: /^File this damage report for / })).toBeFocused()
-  expect(await blockingViolations(page)).toEqual([])
+  expect(await reportedViolations(page, 'SC-16 with its question open')).toEqual([])
 })

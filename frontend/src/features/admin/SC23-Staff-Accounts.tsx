@@ -46,15 +46,22 @@ interface OpenAccount {
   heardAt: number
 }
 
+/** What the outcome says once the account is open. The link is promised only
+ *  when the server says it could be delivered. */
 function createdOutcome({ user, emailDeliverable }: StaffAccountCreated): Outcome {
-  const link = `${user.fullName} sets their own password from a link sent to ${user.email}. Nobody else sees or chooses it.`
-  if (emailDeliverable) return { tone: 'success', title: `${user.fullName} has a staff account`, lines: [link] }
+  if (emailDeliverable) {
+    return {
+      tone: 'success',
+      title: `${user.fullName} has a staff account`,
+      lines: [`${user.fullName} sets their own password from a link sent to ${user.email}. Nobody else sees or chooses it.`],
+    }
+  }
   return {
     tone: 'warn',
     title: `${user.fullName} has a staff account, but the link could not be sent`,
     lines: [
-      link,
-      'This demonstration cannot deliver the link, so the account can only be used once email is set up. Until then they cannot sign in.',
+      `This demonstration delivers email to one address only, and ${user.email} is not it, so the link to choose a password will not arrive.`,
+      `The account is saved. ${user.fullName} cannot sign in until a link reaches them, and nobody else sees or chooses the password.`,
     ],
   }
 }

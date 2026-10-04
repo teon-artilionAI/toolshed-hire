@@ -17,7 +17,8 @@ the outbox fail at the moment it wants to and then look at what was kept.
 The reservation repository is in `memory_booking`, with the read models it
 builds, the part of the rental repository the sweep needs is in
 `memory_hire`, the asset repository is in `memory_assets`, the outbox is in
-`memory_outbox`, and the repositories of the reference data are in
+`memory_outbox`, the throttle counters the sweep prunes are in
+`memory_counters`, and the repositories of the reference data are in
 `memory_reference`.
 """
 
@@ -41,6 +42,7 @@ from app.domain.notification import Notification
 from app.domain.rental import Rental
 from tests.support.memory_assets import MemoryAssets
 from tests.support.memory_booking import MemoryReservations
+from tests.support.memory_counters import CounterKey, MemoryRateLimits
 from tests.support.memory_hire import MemoryRentals
 from tests.support.memory_outbox import MemoryOutbox, StoreFault
 from tests.support.memory_reference import (
@@ -67,6 +69,7 @@ class Records:
     no_shows: dict[UUID, int] = field(default_factory=dict)
     account_statuses: dict[UUID, AccountStatus] = field(default_factory=dict)
     rentals: list[Rental] = field(default_factory=list)
+    counters: dict[CounterKey, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -159,6 +162,7 @@ class InMemoryUnitOfWork:
     branches: MemoryBranches
     product_models: MemoryProductModels
     customers: MemoryCustomers
+    rate_limits: MemoryRateLimits
     notifications: MemoryOutbox
     audit: _AuditLog
 
@@ -215,6 +219,7 @@ class InMemoryUnitOfWork:
         self.branches = MemoryBranches(self.store)
         self.product_models = MemoryProductModels(self.store)
         self.customers = MemoryCustomers(self.store, working)
+        self.rate_limits = MemoryRateLimits(working.counters)
         self.notifications = MemoryOutbox(self.store, working)
         self.audit = _AuditLog(self.store, working)
 

@@ -12,6 +12,12 @@
  * A visitor asks for a password reset and is shown the one message the screen
  * has for that, which is the same whoever the address belongs to.
  *
+ * Each screen promises an email only when the API said it can reach the
+ * address, so each check reads that flag out of the answer the screen acted
+ * on and expects the one sentence it decides. Where the API runs without an
+ * email provider, as it does for these tests, that is the demonstration
+ * wording every time.
+ *
  * Both need the registration and account routes. `e2e/backend.ts` asks one of
  * those routes by name, because a healthy backend is not proof that it has
  * them. When they are not there, both journeys skip themselves and the run
@@ -29,7 +35,7 @@
  */
 
 import { expect, test } from '@playwright/test'
-import type { Locator, Page } from '@playwright/test'
+import type { Locator, Page, Response } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { ACCOUNT_ROUTES_NEEDED, accountRoutesArePresent } from './backend.ts'
 import { REGISTER, SIGN_IN } from './routes.ts'
@@ -39,7 +45,45 @@ import { REGISTER, SIGN_IN } from './routes.ts'
 const NEW_ACCOUNT_PASSWORD = 'browser-test-password'
 
 const PROFILE_PATH = '/api/me/profile'
+const REGISTER_PATH = '/api/auth/register'
+const LOGIN_PATH = '/api/auth/login'
+const RESET_REQUEST_PATH = '/api/auth/password-reset/request'
 const NEW_PHONE = '083 555 0199'
+
+/** What SC-05 says once the form is sent, by whether the API can deliver to
+ *  the address. Neither says whether the address already had an account. */
+const REGISTRATION_SENT = 'If that address is new, we have sent it a link.'
+const REGISTRATION_HELD = 'If that address is new, its account is open, but this demonstration cannot email it a link.'
+
+/** What the reset request says once it is sent, by the same rule. */
+const RESET_SENT = 'If that address has an account, we have sent it a link to choose a new password.'
+const RESET_HELD = 'If that address has an account, this demonstration cannot email it the link to choose a new password.'
+
+/** What SC-09 asks of an unconfirmed address, by whether the session says
+ *  email can reach it. */
+const OPEN_THE_LINK = 'Open the link we sent to'
+const LINK_CANNOT_REACH = 'This demonstration only delivers email to one address, and this is not it, so the link cannot reach you.'
+
+/** Wait for the answer to one POST the page sends. Start it before the click. */
+function answerTo(page: Page, path: string): Promise<Response> {
+  return page.waitForResponse(
+    (response) => response.request().method() === 'POST' && new URL(response.url()).pathname === path,
+  )
+}
+
+/**
+ * Read whether the API said email can reach the address, out of a register or
+ * reset answer, or out of the account in a sign in answer.
+ *
+ * @throws Error through `expect` when the flag is not true or false, because a
+ *   screen that has to guess what to promise is the defect this checks for.
+ */
+async function emailDeliverableIn(answer: Response): Promise<boolean> {
+  const body = (await answer.json()) as { emailDeliverable?: unknown; user?: { emailDeliverable?: unknown } }
+  const flag = body.user === undefined ? body.emailDeliverable : body.user.emailDeliverable
+  expect(typeof flag, `${new URL(answer.url()).pathname} answered without an emailDeliverable flag`).toBe('boolean')
+  return flag === true
+}
 
 /** An address nobody has used. The time keeps one run apart from the next,
  *  and the project keeps the two browsers of one run apart. */
@@ -79,11 +123,18 @@ test.describe('registration and the account screen against the real backend', ()
     await page.getByRole('checkbox', { name: /I have read the privacy notice/ }).check()
     expect(await blockingViolations(page)).toEqual([])
 
+    const registered = answerTo(page, REGISTER_PATH)
     await page.getByRole('button', { name: 'Create my account' }).click()
+    const registrationAnswer = await registered
+    expect(registrationAnswer.status()).toBe(202)
+    const linkCanArrive = await emailDeliverableIn(registrationAnswer)
 
     // The same words whoever the address belongs to, and focus on the heading.
+    // The link is promised only when the API said it can reach the address,
+    // which it cannot where the API runs without an email provider.
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused()
-    await expect(page.getByText('If that address is new, we have sent it a link.')).toBeVisible()
+    await expect(page.getByText(linkCanArrive ? REGISTRATION_SENT : REGISTRATION_HELD)).toBeVisible()
+    await expect(page.getByText(linkCanArrive ? REGISTRATION_HELD : REGISTRATION_SENT)).toHaveCount(0)
     await expect(page.getByText(email)).toBeVisible()
     await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0)
     expect(await blockingViolations(page)).toEqual([])
@@ -93,14 +144,22 @@ test.describe('registration and the account screen against the real backend', ()
     await expect(page.getByRole('heading', { level: 1, name: SIGN_IN.heading })).toBeVisible()
     await page.getByLabel('Email address').fill(email)
     await page.getByLabel('Password', { exact: true }).fill(NEW_ACCOUNT_PASSWORD)
+    const signedIn = answerTo(page, LOGIN_PATH)
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    const signInAnswer = await signedIn
+    expect(signInAnswer.status()).toBe(200)
+    const sessionCanBeEmailed = await emailDeliverableIn(signInAnswer)
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
     // SC-09. The profile is the one that was registered, and it says the
-    // address is not confirmed yet.
+    // address is not confirmed yet. It asks for the link to be opened only
+    // when the session says the link could have reached the address.
     await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Account' }).click()
     await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible()
-    await expect(page.getByText('Your email address has not been confirmed')).toBeVisible()
+    const unconfirmed = page.getByRole('status').filter({ hasText: 'Your email address has not been confirmed' })
+    await expect(unconfirmed).toBeVisible()
+    await expect(unconfirmed).toContainText(sessionCanBeEmailed ? OPEN_THE_LINK : LINK_CANNOT_REACH)
+    await expect(unconfirmed).not.toContainText(sessionCanBeEmailed ? LINK_CANNOT_REACH : OPEN_THE_LINK)
     await expect(page.getByRole('button', { name: 'Send the link again' })).toBeVisible()
     await expect(detail(page, 'Name')).toHaveText('Browser Test')
     await expect(detail(page, 'Email address')).toHaveText(email)
@@ -140,12 +199,15 @@ test.describe('registration and the account screen against the real backend', ()
     await expect(page.getByRole('heading', { level: 1, name: 'Reset your password' })).toBeVisible()
 
     await page.getByLabel('Email address').fill(email)
+    const requested = answerTo(page, RESET_REQUEST_PATH)
     await page.getByRole('button', { name: 'Send me a reset link' }).click()
+    const resetAnswer = await requested
+    expect(resetAnswer.status()).toBe(202)
+    const linkCanArrive = await emailDeliverableIn(resetAnswer)
 
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused()
-    await expect(
-      page.getByText('If that address has an account, we have sent it a link to choose a new password.'),
-    ).toBeVisible()
+    await expect(page.getByText(linkCanArrive ? RESET_SENT : RESET_HELD)).toBeVisible()
+    await expect(page.getByText(linkCanArrive ? RESET_HELD : RESET_SENT)).toHaveCount(0)
     // Nothing on the screen says whether the address has an account.
     await expect(page.getByRole('main')).not.toContainText(/no account|not registered|does not exist/i)
     expect(await blockingViolations(page)).toEqual([])
