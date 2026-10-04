@@ -7,3 +7,8 @@
 # instead of being switched off for the file.
 33ce109ef37101ea05f9c709ba588b1a262e48b1:backend/tests/unit/test_log_redaction.py:jwt:36
 33ce109ef37101ea05f9c709ba588b1a262e48b1:backend/tests/unit/test_log_redaction.py:stripe-access-token:42
+#
+# The report rows carry a field called key, which holds a model's slug. The
+# generic API key rule reads key: 'gbh-2-26-dre-rotary-hammer' in the test
+# samples as a credential. It is the slug of a seeded model.
+f3b7c85319ad765120fe45ade5b796323e2720cc:frontend/src/test/report-samples.ts:generic-api-key:38
