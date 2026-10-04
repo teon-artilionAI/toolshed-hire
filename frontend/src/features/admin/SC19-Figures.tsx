@@ -17,7 +17,7 @@ import { isNegativeMoney, money } from '../../shared/format'
 import { StatTile } from '../../shared/ui'
 import {
   ASSET_REGISTER_PATH,
-  CUSTOMER_HOLDS_PATH,
+  CUSTOMER_HOLDS_HREF,
   FAILED_NOTIFICATIONS_HREF,
   reportHref,
 } from './admin-links'
@@ -143,10 +143,10 @@ export function NeedsAttention({ dashboard }: { dashboard: AdminDashboard }) {
           action="Open the asset register"
         />
         <FigureLink
-          to={CUSTOMER_HOLDS_PATH}
+          to={CUSTOMER_HOLDS_HREF}
           label="Customers on hold"
           value={customersOnHold}
-          hint={customersOnHold > 0 ? 'Cannot book until the hold is lifted' : 'Nobody is on hold'}
+          hint={customersOnHold > 0 ? 'Cannot book until the hold is released' : 'Nobody is on hold'}
           action="Open the customer holds"
         />
         <FigureLink

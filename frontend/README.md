@@ -22,25 +22,23 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-24` Audit and Notification Log, and the owner's corrections on `SC-14` and `SC-15` | The API, through the routes described under Admin operations |
 | `SC-20` Catalogue and Pricing Management | The API, through the routes described under Admin catalogue |
 | `SC-21` Asset Register and Lifecycle | The API, through the routes described under Asset register |
-| `SC-23` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-23` User and Role Management | The API, through the routes described under User management |
 
-No customer or counter screen reads `src/shared/fixtures.ts` any more, and
-neither do `SC-19`, `SC-20`, `SC-21`, `SC-22` and `SC-24`. The only modules
-that still do are `SC-23` and its helpers in `src/features/admin/`, which read
-the `branches`, `customers` and `users` exports. The `TODAY`, `categories`,
-`productModels`, `assets`, `reservations`, `rentals`, `charges`,
-`damageReports`, `auditEvents` and `notifications` exports of the fixture file
-are now imported by nothing, and outside the fixture file nor are the
-`Category`, `ProductModel`, `Asset`, `ConditionGrade`, `DamageReport`,
-`AuditEvent` and `NotificationRecord` types in `src/shared/types.ts`. They all
-go with the file once `SC-23` is connected.
+Every numbered screen reads from the API now. The sample data file
+`src/shared/fixtures.ts` went with the last screen that read it, `SC-23`, and
+so did that screen's old helpers, `StaffAccountForm.tsx`,
+`StaffAccountsTable.tsx` and `CustomerHolds.tsx`, and every entity type in
+`src/shared/types.ts` that only described the sample data. What is left in
+`types.ts` is the `Role` the inventory, the guards and the session speak of,
+and the four status unions the status pill accepts.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
 the shell puts a notice above the screen that says it still shows sample data
 and that nothing changed there is saved. The notice is
 `src/shared/sample-data-notice.tsx`, and the flag is the only thing that
-decides whether it shows. Connecting a screen means changing its flag to true.
+decides whether it shows. Every flag is true now, so the notice shows nowhere.
+It stays for a screen added later, which must say so until it is connected.
 
 The privacy notice at `/privacy` is `INFO-01`. It is a supporting page and not
 one of the numbered screens. It is routed and guarded from the same inventory,
@@ -317,6 +315,15 @@ commits as `../backend/openapi.json`.
   refuses it, so the type does not. A registration, a change of paperwork and
   a move each answer with the unit and its history, the way the unit's own
   read does, and the screen reads them that way.
+- The user management routes, which are the owner's staff accounts and the
+  customer holds, are not in the document yet, because their backend half is
+  being built at the same time. Their types are in
+  `api/contract-admin-users.ts`, written by hand from the contract, and the
+  readers in `api/admin-users.ts` and `api/admin-customers.ts` check every
+  member of every body. The two values other routes already use, the stored
+  roles and a customer's standing, come from the generated file. Once the
+  routes are in the document, each type there is replaced by one built from
+  the generated shapes the way the others are.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -405,6 +412,15 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   server answered with under its tag, and marks everything under the `admin`
   segment and the locator as out of date, because the dashboard, the report,
   the count of units on each model and the trail all move with it.
+- The staff accounts and the customer holds, under the `admin` segment, are
+  never fresh. A lock after failed sign ins and the last sign in change by
+  themselves, another administrator can change a role at another desk, and
+  the counter's no show rule puts a customer on hold the moment a third
+  booking is missed. Each read is one page of twenty. A write to an account
+  marks the staff accounts and the trail as out of date. A move of a
+  customer's standing marks the holds, the dashboard, which counts the
+  customers on hold, the trail and the customers the counter looks up as out
+  of date.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -1016,12 +1032,11 @@ them in full beside the figures. They are these.
 - The figures link to where the owner goes next. The month opens the report
   for the same period, from the dates the server sent. The open damage reports
   open the asset register, the customers on hold open the customer holds on
-  `SC-23`, and the failed notifications open the notification log on `SC-24`
-  showing only the emails that failed. What is due at a branch opens the
-  diary on `SC-11` at that branch. The link chooses the branch for the tab
-  through `chooseWorkBranch` in `src/features/counter/work-branch.ts` first,
-  so the diary does not ask. The two screens it links to that still show
-  sample data say so above themselves.
+  `SC-23` showing only the customers on hold, and the failed notifications
+  open the notification log on `SC-24` showing only the emails that failed.
+  What is due at a branch opens the diary on `SC-11` at that branch. The link
+  chooses the branch for the tab through `chooseWorkBranch` in
+  `src/features/counter/work-branch.ts` first, so the diary does not ask.
 - It is read again when the window comes back into focus and on the refresh
   button, and the line above the figures says when they were read. It has the
   loading and failed states, and says so when the server lists no branch.
@@ -1372,6 +1387,101 @@ beside its colour, every target is at least 44 pixels, and the screen fits a
 phone 360 pixels wide with nothing to scroll sideways, a unit, its question,
 its form and the registration open.
 
+### User management
+
+The owner manages the staff accounts and the customer holds on `SC-23`. The
+staff routes are in `api/admin-users.ts`, the customer routes in
+`api/admin-customers.ts`, and the cached reads in `api/admin-queries.ts`.
+Every route is for an administrator, and the API answers anyone else with a
+403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-23` | `GET /api/admin/users?q=&role=&active=&page=&pageSize=` | One page of twenty staff and admin accounts |
+| `SC-23` | `POST /api/admin/users` | A notice that the account is open and how the person chooses a password, and the list read again |
+| `SC-23` | `PATCH /api/admin/users/{id}` | The account the server answered with, and the list read again |
+| `SC-23` | `POST /api/admin/users/{id}/deactivation` and `/reactivation` | The account the server answered with, and the list read again |
+| `SC-23` | `GET /api/admin/customers?status=&q=&page=&pageSize=` | One page of twenty customers, by standing |
+| `SC-23` | `POST /api/admin/customers/{id}/status` | A notice of the new standing, and the holds read again |
+| `SC-23` | `GET /api/branches` | The branches, to name each account's branch and for the form |
+
+#### The rules are the server's
+
+No route reads or sets a password, and the screen never shows or asks for
+one. A new member of staff gets a link through the reset flow the customers
+already use and chooses their own. The server will not deactivate or demote
+the last active administrator, and will not let an administrator deactivate
+their own account. The browser does not guess at either. It sends the request
+and shows the server's sentence from the 409. An address another account has
+and every other refused field come back as a 422 that the form puts under the
+field. The forms only check what they need to write a body at all, which is a
+branch for counter staff. An administrator has no branch, so the form hides
+the menu and sends null. A reason for a deactivation or a move of a customer's
+standing is held to the five to two hundred characters every reason of the
+owner's takes. The bodies are in `staff-form.ts` and the words in
+`staff-words.ts`.
+
+The contract does not say what a change, a deactivation or a reactivation
+answers with, so I read each as the account as it now stands, the way every
+other write of the owner's answers, and the list is read again after each
+write either way. The contract has no route that reads one account, so an
+account opened above the list is the one the list or the last write sent,
+whichever came last, and it is not kept in the address. A customer carries no
+list of the moves it may make, and the contract lets the owner move a customer
+between any two standings, so each customer offers the two standings they are
+not in, and the server's 409 is shown if it refuses one.
+
+#### `SC-23` User and Role Management
+
+- Two views, the staff accounts and the customer holds, are two links, and the
+  one on the screen is in the address as `view`. The search, the role, whether
+  an account can sign in, the standing and the page live in the address under
+  the names the API takes. The customer holds open on the customers who are on
+  hold, and so does the dashboard's link to them. The rules are in
+  `users-address.ts`.
+- Each staff account shows the name and the address, the role in words, the
+  branch, whether it can sign in beside its colour, whether the address is
+  confirmed, whether a lock after failed sign ins still holds, and when the
+  person last signed in. The owner's own row says "(you)". Below the `lg`
+  width each account is drawn as a block with every value beside the name of
+  its column, and it is the same table either way.
+- "Add a staff account" opens a form with exactly the fields of the route. It
+  asks first, saying the person chooses their own password from a link sent
+  to the address. Once the server has answered, a notice says so, and when
+  `emailDeliverable` is false it says plainly that this demonstration cannot
+  deliver the link, so the account can only be used once email is set up.
+- "Open" shows the account above the list with every field. "Change the name,
+  phone, role or branch" opens a form with the address read only, sends only
+  what changed and asks first, saying what changes. "Deactivate the account"
+  asks why and says the person is signed out everywhere at once.
+  "Reactivate the account" asks first too.
+- Each customer shows where they stand in words beside its colour, how many
+  bookings they did not collect, their type, how to reach them and their home
+  branch. "Release the hold", "Put on hold", "Blacklist" and, for a
+  blacklisted customer, "Lift the blacklisting" each ask why and say what the
+  move does to the customer's bookings. Releasing a hold says the count of
+  bookings not collected is kept, with the server's count.
+- Every write sends one request for each press, disables its answer while it
+  is in flight, shows the server's sentence on a 409 or a 403, puts each 422
+  under its field, and says what it did in a notice that takes focus. What it
+  changed is read again. The writes share `use-user-write.ts`.
+- Both lists have the shared loading, failed and empty states, and the server
+  pages them.
+
+#### Accessibility of this screen
+
+Every view, form, account, customer and question has a real heading, the
+staff accounts are a table with headers at every width, the customers are an
+ordered list of articles, and every control has its label with its help and
+its error tied to it. A change of view moves focus to the heading of the new
+view. The form, an account and a question take focus when they open. Closing
+an account gives focus back to its button in the list, closing the form gives
+it back to the button that opened it, and putting a question away gives it
+back to its button. Moving to another page moves focus to the top of the
+list. Every status carries words beside its colour, every target is at least
+44 pixels, and the screen fits a phone 360 pixels wide with nothing to scroll
+sideways, an account, its form, its question and the new account form open.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -1502,7 +1612,8 @@ model is hidden and then with the category form open. The asset register is
 scanned loaded from `e2e/asset-answers.ts` with no unit open and with one
 open, again with the question before a unit is retired and its reason held
 back, and again with the registration form showing every problem it holds
-back. The owner's corrections
+back. The staff accounts and the customer holds are scanned loaded from
+`e2e/user-answers.ts`. The owner's corrections
 only show for an administrator, so the return screen is scanned again as the
 owner with a reversal asked, and the checkout as the owner on a booking short
 of a unit with a release asked, from `e2e/owner-answers.ts`.
@@ -1513,11 +1624,22 @@ owner's dashboard, the report by model and by unit, the audit trail, the
 notification log, the catalogue with its form closed and open and then with
 every question it asks and the category form open, the asset register with no
 unit open and with one open and then with a unit's question, its paperwork
-form and the registration form open, and the return and the
+form and the registration form open, the staff accounts and the customer
+holds, and the return and the
 checkout as the owner sees them with a question open, at 360 pixels wide and
 checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
-database holds.
+database holds. The measure is in `e2e/overflow.ts`.
+
+`e2e/user-management.spec.ts` runs with or without the backend too. It opens
+the staff accounts and the customer holds with the answers from
+`e2e/user-answers.ts`, scans them with the new account form holding back its
+problem, an account open with its deactivation asking why, and the question
+before a customer's hold is released, and measures them at 360 pixels wide
+with an account, its form, its question, the new account form and the
+question before a customer is blacklisted open. It is a file of its own so
+the accessibility and narrow screen specs stay a size that can be read in one
+sitting.
 
 `e2e/report-download.spec.ts` runs with or without the backend too. It presses
 "Download CSV" on the report with the API answered from
@@ -1694,6 +1816,21 @@ the models with no token first, through `e2e/admin-assets-backend.ts`, after
 the session routes. A 404 or a 405 from either means the routes are not there,
 and the spec skips itself.
 
+`e2e/admin-users.spec.ts` needs the user management routes. The owner signs in
+and opens user management, opens a counter staff account with a name and an
+address built from the time, which no run has used, after the question says
+the person chooses their own password from a link, and finds it in the list
+by its address. Then they open it, deactivate it with a reason after the
+question says the person is signed out everywhere at once, see it listed as
+deactivated, reactivate it, and open the customer holds. The desktop project
+opens its account at Cape Town CBD and the phone project at Bellville. The
+address is at `example.com`, so the link goes nowhere. The account is left on
+file and active, because nothing is ever deleted, and nobody signs in with it.
+The spec asks for the staff accounts and the customer holds with no token
+first, through `e2e/admin-users-backend.ts`, after the session routes. A 404
+or a 405 from either means the routes are not there, and the spec skips
+itself.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1722,13 +1859,14 @@ pipeline does.
 The two counter journeys, the two counter overview journeys and the admin
 operations journey each sign the two counter assistants in once, so each
 assistant five times in a run. The damage journey, the reporting spec, the
-admin operations spec, the admin catalogue spec and the asset register spec
-each sign the owner in once in each browser project, so the owner ten times in
-a run. That is the whole allowance for one email address. A second run inside
-the same window is refused at the owner's first sign in, the way it is for the
-first customer.
+admin operations spec, the admin catalogue spec, the asset register spec and
+the user management spec each sign the owner in once in each browser project,
+so the owner twelve times in a run. That is more than the allowance for one
+email address, so against a local backend the owner's eleventh sign in is
+refused unless `LOGIN_ATTEMPTS_PER_EMAIL` is raised the way the pipeline
+raises it.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all twelve skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all thirteen skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

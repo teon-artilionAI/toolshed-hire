@@ -20,9 +20,11 @@
  * types are in contract-damage.ts, the reporting types are in
  * contract-reporting.ts, the admin operations types are in
  * contract-operations.ts, the admin catalogue types are in
- * contract-admin-catalogue.ts, and the asset register types are in
- * contract-admin-assets.ts. All eleven are passed on from here, and the
- * session types below stay here.
+ * contract-admin-catalogue.ts, the asset register types are in
+ * contract-admin-assets.ts, and the staff account and customer hold types are
+ * in contract-admin-users.ts. All twelve are passed on from here, and the
+ * session types below stay here. The last of them is written by hand until
+ * the generated schema describes its routes, and its header says why.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -188,6 +190,18 @@ export type {
   AssetTransitionRequest,
   NewAssetRequest,
 } from './contract-admin-assets'
+export type {
+  AdminCustomerQuery,
+  AdminUser,
+  AdminUserPage,
+  AdminUserQuery,
+  CustomerStandingRequest,
+  DeactivationRequest,
+  NewStaffAccountRequest,
+  StaffAccountChangesRequest,
+  StaffAccountCreated,
+  StaffRole,
+} from './contract-admin-users'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.

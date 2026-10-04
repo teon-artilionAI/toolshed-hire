@@ -1,15 +1,14 @@
 /**
  * Where the owner's screens send a person, written in one place.
  *
- * The dashboard links each figure to the screen the owner would open next.
- * Some of those screens still show sample data until a later change connects
- * them, and the shell says so above them, so a link to one is still the right
- * way to go.
+ * The dashboard links each figure to the screen the owner would open next,
+ * with the filters that show what the figure counts.
  */
 
 import type { IsoDate, ReportGrouping } from '../../shared/api/contract'
 import { writeNotificationFilters } from './audit-address'
 import { FIRST_PAGE, writeReportFilters } from './report-address'
+import { holdsHref } from './users-address'
 
 /** SC-22, the utilisation and gross contribution report. */
 export const REPORT_PATH = '/admin/reports'
@@ -18,8 +17,12 @@ export const REPORT_PATH = '/admin/reports'
  *  listed with a link to the damage screen that resolves them. */
 export const ASSET_REGISTER_PATH = '/admin/assets'
 
-/** SC-23, where the customer holds are lifted. */
-export const CUSTOMER_HOLDS_PATH = '/admin/users'
+/** SC-23, the staff accounts and the customer holds. */
+export const USERS_PATH = '/admin/users'
+
+/** SC-23 on the customer holds, showing the customers who are on hold, which
+ *  are the ones the owner can release. */
+export const CUSTOMER_HOLDS_HREF = holdsHref(USERS_PATH, 'ON_HOLD')
 
 /** SC-24, where the audit trail and the notification log are. */
 export const AUDIT_LOG_PATH = '/admin/audit'

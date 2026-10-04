@@ -9,6 +9,7 @@
 
 import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { screenById } from './navigation'
 import { NO_ACCESS_HEADING } from './no-access'
 import { SAMPLE_DATA_TITLE } from './sample-data-notice'
 import { mockApi, problemResponse } from '../test/api-mock'
@@ -176,16 +177,25 @@ describe('the current page in the menu', () => {
 
 describe('the sample data notice in the shell', () => {
   it('is above a screen that is not connected yet', async () => {
-    mockApi(signedInAs(ADMIN))
+    // Every screen is connected now, so the test marks one as not connected
+    // for its own length and puts the flag back after.
+    const users = screenById('SC-23')
+    if (users === undefined) throw new Error('The inventory has no SC-23.')
+    users.live = false
+    try {
+      mockApi(signedInAs(ADMIN))
 
-    renderApp('/admin/users')
-    const title = await findScreenHeading('Users, roles and account holds')
+      renderApp('/admin/users')
+      const title = await findScreenHeading('Users, roles and account holds')
 
-    const notice = screen.getByText(SAMPLE_DATA_TITLE)
-    expect(notice).toBeVisible()
-    // Above the screen in the document, so it is read first and covers nothing.
-    expect(notice.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(screen.getByRole('main')).getByText(SAMPLE_DATA_TITLE)).toBe(notice)
+      const notice = screen.getByText(SAMPLE_DATA_TITLE)
+      expect(notice).toBeVisible()
+      // Above the screen in the document, so it is read first and covers nothing.
+      expect(notice.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(within(screen.getByRole('main')).getByText(SAMPLE_DATA_TITLE)).toBe(notice)
+    } finally {
+      users.live = true
+    }
   })
 
   it.each([
@@ -211,6 +221,15 @@ describe('the sample data notice in the shell', () => {
 
     renderApp(opened)
     await findScreenHeading(heading)
+
+    expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
+  })
+
+  it('is not on the user management screen, the last one to be connected', async () => {
+    mockApi(signedInAs(ADMIN))
+
+    renderApp('/admin/users')
+    await findScreenHeading('Users, roles and account holds')
 
     expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
   })

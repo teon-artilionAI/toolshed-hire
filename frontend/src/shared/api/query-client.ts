@@ -87,6 +87,13 @@
  * the owner is offered depend on where it stands now. Each read is one page of
  * twenty units or one unit with its history, so asking again on focus costs
  * one small indexed query and not the whole fleet.
+ *
+ * The staff accounts and the customer holds are never fresh either. Whether an
+ * account is locked and when somebody last signed in change by themselves,
+ * another administrator can change a role at another desk, and the counter's
+ * no show rule puts a customer on hold the moment a third booking is missed.
+ * Each read is one page of twenty, so asking again on focus stays small however
+ * many people the business holds.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -159,6 +166,12 @@ export const ADMIN_CATALOGUE_SEGMENT = 'catalogue'
 /** The second segment of the asset register, its pages and its units. */
 export const ADMIN_ASSETS_SEGMENT = 'assets'
 
+/** The second segment of the staff accounts. */
+export const ADMIN_USERS_SEGMENT = 'users'
+
+/** The second segment of the customer holds. */
+export const ADMIN_CUSTOMERS_SEGMENT = 'customers'
+
 /** How long a report counts as fresh. */
 export const REPORT_FRESH_MS = 60_000
 
@@ -167,8 +180,8 @@ export const REPORT_FRESH_MS = 60_000
  *  focus or the network comes back. Availability, quotes, reservations, the
  *  customer's own profile and hires, the customers the counter looks up, the
  *  counter's day, the locator, the hires, the damage reports, the owner's
- *  dashboard, the audit trail, the notification log and the asset register
- *  all run on it. */
+ *  dashboard, the audit trail, the notification log, the asset register, the
+ *  staff accounts and the customer holds all run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -227,5 +240,7 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([ADMIN_KEY, ADMIN_NOTIFICATIONS_SEGMENT], NEVER_FRESH)
   client.setQueryDefaults([ADMIN_KEY, ADMIN_CATALOGUE_SEGMENT], { staleTime: CATALOGUE_FRESH_MS })
   client.setQueryDefaults([ADMIN_KEY, ADMIN_ASSETS_SEGMENT], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_USERS_SEGMENT], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_CUSTOMERS_SEGMENT], NEVER_FRESH)
   return client
 }

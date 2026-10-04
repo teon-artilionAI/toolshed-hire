@@ -15,9 +15,11 @@
  * checked too, with the answers in admin-answers.ts. The catalogue is checked
  * again with every question it asks open. The asset register is checked
  * with no unit open and with one open, and again with the unit's question,
- * its paperwork form and the registration form open. So are the return
- * screen and the checkout as the owner sees them, each with the owner's
- * question open, from owner-answers.ts.
+ * its paperwork form and the registration form open. The staff accounts and
+ * the customer holds are checked loaded, and again with their forms and
+ * questions open in user-management.spec.ts, which measures with the same
+ * rule from overflow.ts. So are the return screen and the checkout as the
+ * owner sees them, each with the owner's question open, from owner-answers.ts.
  *
  * This spec does not use the real backend. The screens need a signed in person
  * with bookings and a profile, and a layout check should not depend on what a
@@ -34,33 +36,13 @@ import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
 import { ADMIN_SCREENS, ASSET_REGISTER_HEADING, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
+import { NARROW_PHONE, ROUNDING_PIXELS, SIDEWAYS_OVERFLOW } from './overflow.ts'
 import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
 import { MY_RENTALS } from './return-answers.ts'
-
-/** The narrowest phone the screens are built for. */
-const NARROW_PHONE = { width: 360, height: 780 }
 
 /** What the session leaves in web storage once somebody has signed in. Without
  *  it the application does not ask whether there is a session. */
 const SESSION_HINT = "window.localStorage.setItem('toolshed.session-hint', 'yes')"
-
-/**
- * How far anything runs past its box sideways, in pixels. The page itself,
- * and every box inside the screen that is allowed to scroll sideways. Written
- * as text because the browser runs it, and this file is compiled without the
- * browser types.
- */
-const SIDEWAYS_OVERFLOW = `Math.max(
-  document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  ...Array.from(document.querySelectorAll('main *'), (element) =>
-    ['auto', 'scroll'].includes(getComputedStyle(element).overflowX)
-      ? element.scrollWidth - element.clientWidth
-      : 0,
-  ),
-)`
-
-/** A pixel of rounding is not a scroll bar. */
-const ROUNDING_PIXELS = 1
 
 const CUSTOMER = {
   id: '0b0f6f3e-1111-4a2b-9c3d-000000000001',
