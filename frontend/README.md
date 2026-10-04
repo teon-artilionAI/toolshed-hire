@@ -157,13 +157,11 @@ there, because the OpenAPI document types both as a plain `string`.
 
 The account also carries `emailDeliverable`, which says whether this
 environment can deliver email to the account's own address. A demonstration
-delivers to one address only. The generated file does not have the member
-yet, so I add it to `SessionUser` by hand until `npm run api:types` brings it
-in. The reader in `api/auth.ts` reads a missing one as false and logs
-`session.email_deliverable_missing`, so a screen never promises an email the
-backend has not said can arrive, and a backend without the member yet does not
-lock everyone out. A member that is there and is not true or false is a broken
-contract and is refused like any other.
+delivers to one address only. The generated file requires the member, so
+`SessionUser` takes it from there like the rest, and the reader in
+`api/auth.ts` refuses an account that leaves it out or sends anything but true
+or false, like any other broken contract. A screen promises an email only when
+it is true.
 
 Refresh and logout are authenticated by the cookie alone, so the API checks
 the `Origin` of those two requests against its `CORS_ORIGINS` setting and
@@ -1745,7 +1743,11 @@ there means the routes are not there, and both journeys skip themselves. Each
 run registers an account of its own in each browser project, with an address
 built from the time, and touches no seeded account. It follows no link from an
 email, because the address is not one this system delivers to. The component
-tests cover where the links land.
+tests cover where the links land. Each screen promises an email only when the
+API said it can reach the address, so the spec reads `emailDeliverable` out of
+the register, sign in and reset answers and expects the one sentence each
+decides. An API with no email provider, as in these tests, says false every
+time, and the screens use the demonstration wording.
 
 `e2e/counter.spec.ts` needs the customer, checkout and returns routes. A
 seeded counter assistant signs in, registers a walk in with a name and a number
@@ -1862,7 +1864,10 @@ by its address. Then they open it, deactivate it with a reason after the
 question says the person is signed out everywhere at once, see it listed as
 deactivated, reactivate it, and open the customer holds. The desktop project
 opens its account at Cape Town CBD and the phone project at Bellville. The
-address is at `example.com`, so the link goes nowhere. The account is left on
+address is at `example.com`, so the link goes nowhere. The spec reads
+`emailDeliverable` out of the answer that opened the account and expects the
+outcome it decides, which here says the link could not be sent and will not
+arrive. The account is left on
 file and active, because nothing is ever deleted, and nobody signs in with it.
 The spec asks for the staff accounts and the customer holds with no token
 first, through `e2e/admin-users-backend.ts`, after the session routes. A 404

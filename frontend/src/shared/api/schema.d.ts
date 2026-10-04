@@ -233,6 +233,7 @@ export interface paths {
          *     Args:
          *         user: The active account, resolved by the layered auth dependencies.
          *         session: The request scoped session, used to resolve the branch code.
+         *         gateway: The email gateway, asked whether mail to the address would go.
          *
          *     Returns:
          *         The account, in the shape every session response carries it in.
@@ -3987,6 +3988,13 @@ export interface components {
          * @description The signed in account, as every session response and `/api/me` return it.
          *
          *     `branchCode` is null unless the account is counter staff.
+         *
+         *     `emailDeliverable` is false when this environment would not hand a message
+         *     for the account's address to the email provider, because email is off or
+         *     because mail goes to one approved address and this is not it. It is the
+         *     same rule the account routes answer with, and it depends on the
+         *     configuration and the address alone. A screen reads it so that it never
+         *     promises a confirmation email that cannot arrive.
          */
         UserResponse: {
             /**
@@ -4004,6 +4012,8 @@ export interface components {
             branchCode?: string | null;
             /** Emailverified */
             emailVerified: boolean;
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
         };
         /**
          * UserRole

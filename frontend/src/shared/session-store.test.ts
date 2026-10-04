@@ -214,18 +214,14 @@ describe('signing in', () => {
     expect(sessionSnapshot().user?.emailDeliverable).toBe(false)
   })
 
-  it('reads a delivery flag that was left out as false, and says so in the log', async () => {
+  it('refuses an account that leaves the delivery flag out', async () => {
     const { emailDeliverable: _omitted, ...withoutFlag } = CUSTOMER
     mockApi({ [LOGIN_ROUTE]: () => jsonResponse({ ...grantFor(CUSTOMER), user: withoutFlag }) })
-    const warn = vi.spyOn(console, 'warn')
 
-    const user = await signIn(CUSTOMER.email, PASSWORD)
+    const error = await failureOf(signIn(CUSTOMER.email, PASSWORD))
 
-    expect(user.emailDeliverable).toBe(false)
-    expect(warn).toHaveBeenCalledWith(
-      'session.email_deliverable_missing',
-      expect.objectContaining({ path: '/api/auth/login', assumed: false }),
-    )
+    expect(error.kind).toBe('malformed')
+    expect(sessionSnapshot().user).toBeNull()
   })
 
   it('refuses a delivery flag that is not true or false', async () => {

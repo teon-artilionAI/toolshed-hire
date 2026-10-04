@@ -18,7 +18,6 @@
 import { malformedResponse } from '../api-problem'
 import { api } from './client'
 import type { LoginRequest, SessionGrant, SessionUser, UserRole } from './contract'
-import { logEvent } from './log'
 import { readFlag, readObject, readText } from './read'
 
 const LOGIN_ENDPOINT = '/auth/login'
@@ -67,25 +66,6 @@ function readBranchCode(record: Record<string, unknown>, requestPath: string): s
 }
 
 /**
- * Read whether this environment can deliver email to the account's address.
- *
- * The backend adds the member in the same release as this reader. A page that
- * meets a backend without it yet reads it as false and logs a warning, so a
- * screen says an email may not arrive instead of promising one. Refusing every
- * sign in over a sentence about email would change nothing for the better. A
- * member that is there and is not true or false is still a broken contract.
- */
-function readEmailDeliverable(record: Record<string, unknown>, requestPath: string): boolean {
-  if (record.emailDeliverable !== undefined) return readFlag(record, 'emailDeliverable', requestPath)
-  logEvent('warn', 'session.email_deliverable_missing', {
-    path: requestPath,
-    assumed: false,
-    reason: 'The account in the answer has no emailDeliverable member, so no screen will promise an email.',
-  })
-  return false
-}
-
-/**
  * Read an account out of a response body.
  *
  * @throws ApiError of kind `malformed` when a field is missing or the role is
@@ -109,7 +89,7 @@ function readSessionUser(value: unknown, requestPath: string): SessionUser {
     role,
     branchCode: readBranchCode(record, requestPath),
     emailVerified: readFlag(record, 'emailVerified', requestPath),
-    emailDeliverable: readEmailDeliverable(record, requestPath),
+    emailDeliverable: readFlag(record, 'emailDeliverable', requestPath),
   }
 }
 

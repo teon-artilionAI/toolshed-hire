@@ -246,15 +246,13 @@ export type HealthReport = JsonOf<Paths['/api/health']['get']>
  *
  * `emailDeliverable` says whether this environment can deliver email to the
  * account's own address. A demonstration delivers to one address only, so a
- * screen promises an email only when it is true. The generated type does not
- * carry it yet, so I add it by hand here, and the reader in auth.ts reads a
- * missing one as false. Once `npm run api:types` brings it in, the hand
- * written member goes.
+ * screen promises an email only when it is true. The generated type requires
+ * it, so the reader in auth.ts refuses an account that leaves it out.
  */
 export type SessionUser = Refine<
   JsonOf<Paths['/api/me']['get']>,
   { role: UserRole; branchCode: string | null }
-> & { emailDeliverable: boolean }
+>
 
 /** The body `POST /api/auth/login` accepts. */
 export type LoginRequest = BodyOf<Paths['/api/auth/login']['post']>

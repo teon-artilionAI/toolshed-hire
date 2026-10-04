@@ -48,14 +48,19 @@ export async function submitCustomerSignIn(page: Page, email: string = CUSTOMER_
 /** What the sign in said about the account that a journey goes on to need. */
 export interface SignedInCustomer {
   /** Whether this environment can deliver email to the customer's address.
-   *  A backend that does not send the flag yet counts as false, the way the
-   *  screens read it. */
+   *  The API always sends it, and the screens refuse an account without it. */
   emailDeliverable: boolean
 }
 
 const LOGIN_PATH = '/api/auth/login'
 
-/** Open the sign in screen and sign a seeded customer in. */
+/**
+ * Open the sign in screen and sign a seeded customer in.
+ *
+ * @throws Error through `expect` when the sign in is refused or the account
+ *   in the answer has no `emailDeliverable` flag, so a journey never goes on
+ *   with a guess about what the screens will say.
+ */
 export async function signInAsCustomer(page: Page, email: string = CUSTOMER_EMAIL): Promise<SignedInCustomer> {
   await page.goto(SIGN_IN.path)
   await expect(page.getByRole('heading', { level: 1, name: SIGN_IN.heading })).toBeVisible()
@@ -64,7 +69,9 @@ export async function signInAsCustomer(page: Page, email: string = CUSTOMER_EMAI
   )
   await submitCustomerSignIn(page, email)
   const answer = await answered
-  if (!answer.ok()) return { emailDeliverable: false }
+  expect(answer.ok(), `signing ${email} in answered ${answer.status()}`).toBe(true)
   const body = (await answer.json()) as { user?: { emailDeliverable?: unknown } }
-  return { emailDeliverable: body.user?.emailDeliverable === true }
+  const emailDeliverable = body.user?.emailDeliverable
+  expect(typeof emailDeliverable, `the account in the sign in answer for ${email} has no emailDeliverable flag`).toBe('boolean')
+  return { emailDeliverable: emailDeliverable === true }
 }
