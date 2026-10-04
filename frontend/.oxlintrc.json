@@ -4,6 +4,7 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/no-danger": "error",
+    "typescript/no-explicit-any": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
   }
 }
