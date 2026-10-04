@@ -44,7 +44,9 @@ from tests.support.tokens import authorization_header
 
 ONE_SECOND: Final[timedelta] = timedelta(seconds=1)
 ACCESS_LIFETIME_SECONDS: Final[int] = 900
-USER_FIELDS: Final[set[str]] = {"id", "email", "fullName", "role", "branchCode", "emailVerified"}
+USER_FIELDS: Final[set[str]] = {
+    "id", "email", "fullName", "role", "branchCode", "emailVerified", "emailDeliverable"
+}  # fmt: skip
 BODY_FIELDS: Final[set[str]] = {"accessToken", "tokenType", "expiresIn", "user"}
 
 
@@ -89,6 +91,7 @@ class TestAGoodSignIn:
             "role": "customer",
             "branchCode": None,
             "emailVerified": False,
+            "emailDeliverable": True,
         }
 
     def test_counter_staff_are_told_their_branch_code_and_nobody_else_is(
