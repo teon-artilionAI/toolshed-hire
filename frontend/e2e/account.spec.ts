@@ -83,7 +83,11 @@ test.describe('registration and the account screen against the real backend', ()
 
     // The same words whoever the address belongs to, and focus on the heading.
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused()
-    await expect(page.getByText('If that address is new, we have sent it a link.')).toBeVisible()
+    // Which of the two sentences shows depends on whether this environment can
+    // deliver mail to the address, and both say nothing about who owns it.
+    await expect(
+      page.getByText(/If that address is new, (we have sent it a link|its account is open, but this demonstration cannot email it a link)\./),
+    ).toBeVisible()
     await expect(page.getByText(email)).toBeVisible()
     await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0)
     expect(await blockingViolations(page)).toEqual([])
@@ -144,7 +148,9 @@ test.describe('registration and the account screen against the real backend', ()
 
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused()
     await expect(
-      page.getByText('If that address has an account, we have sent it a link to choose a new password.'),
+      page.getByText(
+        /If that address has an account, (we have sent it a link to choose a new password|this demonstration cannot email it the link to choose a new password)\./,
+      ),
     ).toBeVisible()
     // Nothing on the screen says whether the address has an account.
     await expect(page.getByRole('main')).not.toContainText(/no account|not registered|does not exist/i)

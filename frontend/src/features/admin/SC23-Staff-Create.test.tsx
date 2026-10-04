@@ -106,7 +106,9 @@ describe('opening the account', () => {
     await user.click(within(form).getByRole('button', { name: 'Create the account' }))
     expect(screen.getByRole('heading', { level: 4, name: `Create an account for ${LINDIWE.fullName}?` })).toHaveFocus()
     expect(screen.getByText(/They will work as counter staff at Somerset West\./)).toBeVisible()
-    expect(screen.getByText(/A link goes to/)).toHaveTextContent(`${LINDIWE.email}, and they choose their own password from it.`)
+    expect(screen.getByText(/A link to choose their own password is sent to/)).toHaveTextContent(
+      `${LINDIWE.email}. This demonstration delivers email to one address only, so the answer says whether the link can reach them.`,
+    )
     expect(network.requestsTo(OPEN_ACCOUNT_ROUTE)).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Yes, create it' }))
 
@@ -156,8 +158,11 @@ describe('opening the account', () => {
 
     expect(await screen.findByText(`${LINDIWE.fullName} has a staff account, but the link could not be sent`, {}, SCREEN_WAIT)).toBeVisible()
     expect(
-      screen.getByText('This demonstration cannot deliver the link, so the account can only be used once email is set up. Until then they cannot sign in.'),
+      screen.getByText(
+        `This demonstration delivers email to one address only, and ${LINDIWE.email} is not it, so the link to choose a password will not arrive.`,
+      ),
     ).toBeVisible()
+    expect(screen.queryByText(/a link sent to/)).not.toBeInTheDocument()
   })
 
   it('puts an address another account has under the email box, and goes back to the form', async () => {

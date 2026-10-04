@@ -243,11 +243,18 @@ export type HealthReport = JsonOf<Paths['/api/health']['get']>
  * about the role and not missing data. The generated type also lets the member
  * be left out. The reader in auth.ts turns a missing one into null, so here it
  * is always present.
+ *
+ * `emailDeliverable` says whether this environment can deliver email to the
+ * account's own address. A demonstration delivers to one address only, so a
+ * screen promises an email only when it is true. The generated type does not
+ * carry it yet, so I add it by hand here, and the reader in auth.ts reads a
+ * missing one as false. Once `npm run api:types` brings it in, the hand
+ * written member goes.
  */
 export type SessionUser = Refine<
   JsonOf<Paths['/api/me']['get']>,
   { role: UserRole; branchCode: string | null }
->
+> & { emailDeliverable: boolean }
 
 /** The body `POST /api/auth/login` accepts. */
 export type LoginRequest = BodyOf<Paths['/api/auth/login']['post']>

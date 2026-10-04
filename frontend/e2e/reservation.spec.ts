@@ -48,6 +48,7 @@ import {
   STORED_BASKET,
   addFreeModel,
   bookingRow,
+  confirmationEmailSentence,
   figure,
   firstBranch,
   periodStarting,
@@ -136,7 +137,7 @@ test.describe('a booking against the real backend', () => {
     const period = periodFor(testInfo.project.name)
     const branch = await firstBranch(request)
 
-    await signInAsCustomer(page)
+    const { emailDeliverable } = await signInAsCustomer(page)
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
     const { name } = await addFreeModel(page, branch, period)
@@ -171,7 +172,9 @@ test.describe('a booking against the real backend', () => {
     await expect(confirmation).toBeVisible()
     const reference = REFERENCE.exec(await confirmation.innerText())?.[0] ?? ''
     expect(reference).toMatch(REFERENCE)
-    await expect(page.getByText(/A confirmation email is on its way to you/)).toBeVisible()
+    // The email is promised only when it can reach the customer's address.
+    // Otherwise the screen says plainly that it will not arrive.
+    await expect(page.getByText(confirmationEmailSentence(emailDeliverable))).toBeVisible()
     await expect(figure(page, 'Total with VAT')).toHaveText(total)
     // The basket was booked, so it is empty again.
     expect(await page.evaluate<string | null>(STORED_BASKET)).toBeNull()

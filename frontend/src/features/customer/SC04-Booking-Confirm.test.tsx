@@ -85,6 +85,23 @@ describe('confirming the hire', () => {
     expect(screen.getByRole('link', { name: 'Basket, 0 items' })).toBeVisible()
   })
 
+  it('says plainly that the email will not arrive when this environment cannot deliver to the customer', async () => {
+    const user = userEvent.setup()
+    await openBasket(BOOKING_WORKS, { ...CUSTOMER, emailDeliverable: false })
+    await hold(user)
+
+    await user.click(screen.getByRole('button', { name: CONFIRM }))
+
+    expect(await stepHeading(CONFIRMED_STEP)).toHaveFocus()
+    const notice = screen.getByText(`Booking ${REFERENCE} is confirmed`).closest('[role="status"]')
+    expect(notice).not.toHaveTextContent(EMAIL_SENTENCE)
+    expect(notice).toHaveTextContent(
+      'This demonstration delivers email to one address only, so the confirmation email will not arrive.',
+    )
+    expect(notice).toHaveTextContent(`The reference ${REFERENCE} on this screen is your booking.`)
+    expect(notice).toHaveTextContent('Collect from Cape Town CBD on 12 Mar 2026')
+  })
+
   it('does not say the hire is confirmed when the server answers with one that is still held', async () => {
     const user = userEvent.setup()
     await openBasket({ ...BOOKING_WORKS, [confirmRoute()]: () => jsonResponse(HELD) })

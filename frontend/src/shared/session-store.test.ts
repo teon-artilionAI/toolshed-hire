@@ -204,4 +204,38 @@ describe('signing in', () => {
 
     expect(user.branchCode).toBeNull()
   })
+
+  it('carries whether email can reach the address of the account', async () => {
+    mockApi({ [LOGIN_ROUTE]: () => jsonResponse(grantFor({ ...CUSTOMER, emailDeliverable: false })) })
+
+    const user = await signIn(CUSTOMER.email, PASSWORD)
+
+    expect(user.emailDeliverable).toBe(false)
+    expect(sessionSnapshot().user?.emailDeliverable).toBe(false)
+  })
+
+  it('reads a delivery flag that was left out as false, and says so in the log', async () => {
+    const { emailDeliverable: _omitted, ...withoutFlag } = CUSTOMER
+    mockApi({ [LOGIN_ROUTE]: () => jsonResponse({ ...grantFor(CUSTOMER), user: withoutFlag }) })
+    const warn = vi.spyOn(console, 'warn')
+
+    const user = await signIn(CUSTOMER.email, PASSWORD)
+
+    expect(user.emailDeliverable).toBe(false)
+    expect(warn).toHaveBeenCalledWith(
+      'session.email_deliverable_missing',
+      expect.objectContaining({ path: '/api/auth/login', assumed: false }),
+    )
+  })
+
+  it('refuses a delivery flag that is not true or false', async () => {
+    mockApi({
+      [LOGIN_ROUTE]: () => jsonResponse({ ...grantFor(CUSTOMER), user: { ...CUSTOMER, emailDeliverable: 'yes' } }),
+    })
+
+    const error = await failureOf(signIn(CUSTOMER.email, PASSWORD))
+
+    expect(error.kind).toBe('malformed')
+    expect(sessionSnapshot().user).toBeNull()
+  })
 })
