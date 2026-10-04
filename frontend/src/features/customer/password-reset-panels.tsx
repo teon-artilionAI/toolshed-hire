@@ -40,6 +40,10 @@ import { StateHeading } from './state-heading'
 /** The one thing the screen says after a reset is asked for, whoever asked. */
 export const RESET_SENT_MESSAGE = `If that address has an account, we have sent it a link to choose a new password. The link works once, for ${RESET_LINK_MINUTES} minutes.`
 
+/** The same, where this environment cannot deliver mail to the address given. */
+export const RESET_HELD_MESSAGE =
+  'If that address has an account, this demonstration cannot email it the link to choose a new password.'
+
 export const RESET_DONE_HEADING = 'Your password has changed'
 export const RESET_LINK_INVALID_HEADING = 'That reset link no longer works'
 
@@ -92,7 +96,9 @@ export function PasswordResetRequest({ onBackToSignIn }: { onBackToSignIn: () =>
     return (
       <Card>
         <StateHeading>Check your email</StateHeading>
-        <p className="mt-sm text-sm text-ink">{RESET_SENT_MESSAGE}</p>
+        <p className="mt-sm text-sm text-ink">
+          {sent.emailDeliverable ? RESET_SENT_MESSAGE : RESET_HELD_MESSAGE}
+        </p>
         {!sent.emailDeliverable && (
           <div className="mt-md">
             <DemonstrationEmailNote>Your password has not changed.</DemonstrationEmailNote>

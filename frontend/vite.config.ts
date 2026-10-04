@@ -62,11 +62,14 @@ import type { ProxyOptions } from 'vite'
  *
  * WHY THE POLICY HAS NO style-src-attr
  * ====================================
- * One component, the utilisation bar in the admin report, sets a width through
- * the React `style` prop. React applies that through the style object of the
+ * No component sets a style of its own. The bars of the chart on the
+ * utilisation report are drawn as SVG, and an SVG width is an attribute of
+ * its shape and not a style. Should a component ever set one through the
+ * React `style` prop, React applies it through the style object of the
  * element and never writes a style attribute, and the policy governs the
- * attribute only. I loaded every screen under the policy as each role and the
- * browser reported no violation, so the policy stays without the exception.
+ * attribute only. The browser tests load every screen under the policy, and
+ * the report's download is checked there too, so the policy stays without
+ * the exception.
  */
 
 /** Where uvicorn listens locally. See backend/README.md. */

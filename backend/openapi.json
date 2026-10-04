@@ -3,7 +3,7 @@
   "info": {
     "title": "Toolshed Hire API",
     "description": "Rental system for Toolshed Hire. Availability is the allocation of specific tagged assets over half open date periods, enforced by a PostgreSQL GiST exclusion constraint.",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "paths": {
     "/api/health": {
@@ -374,7 +374,7 @@
           "identity"
         ],
         "summary": "Return the signed in account",
-        "description": "Return the account behind the presented access token.\n\nArgs:\n    user: The active account, resolved by the layered auth dependencies.\n    session: The request scoped session, used to resolve the branch code.\n\nReturns:\n    The account, in the shape every session response carries it in.",
+        "description": "Return the account behind the presented access token.\n\nArgs:\n    user: The active account, resolved by the layered auth dependencies.\n    session: The request scoped session, used to resolve the branch code.\n    gateway: The email gateway, asked whether mail to the address would go.\n\nReturns:\n    The account, in the shape every session response carries it in.",
         "operationId": "read_me_api_me_get",
         "responses": {
           "200": {
@@ -1257,6 +1257,83 @@
         }
       }
     },
+    "/api/reservations/{id}/reallocation": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Give a booking on hold or confirmed replacements for the units it is short of",
+        "description": "Top up every short line through the allocation path of a hold, all or nothing.\n\nRaises:\n    NotFound: If there is no such reservation. HTTP 404.\n    BranchScopeError: If counter staff act at another branch. HTTP 403.\n    StateTransitionError: If it is neither on hold nor confirmed. HTTP 409.\n    AllocationConflictError: If no unit is free for a line, naming the\n        model and the dates. HTTP 409.",
+        "operationId": "post_reallocation_api_reservations__id__reallocation_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move is not permitted from the status the reservation is in, or a unit could not be held for the period.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reservations/{id}": {
       "get": {
         "tags": [
@@ -1444,7 +1521,7 @@
             }
           },
           "409": {
-            "description": "The reservation is not confirmed or its hire has not started, and `detail` says which, or a unit cannot go out on hire.",
+            "description": "The reservation is not confirmed, its hire has not started or it is short of a unit, and `detail` says which, or a unit cannot go out on hire.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2547,6 +2624,2614 @@
         }
       }
     },
+    "/api/admin/reports/utilisation": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return one page of the utilisation and gross contribution report",
+        "description": "Return one page of the report, after running the sweep.\n\nRaises:\n    ValidationFailure: If the period ends before it starts or is longer\n        than 366 days, or the branch or the category is unknown. HTTP\n        422, naming the parameter.",
+        "operationId": "read_utilisation_report_api_admin_reports_utilisation_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The first day of the period.",
+              "title": "From"
+            },
+            "description": "The first day of the period."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The day after the last day, so the period is [from, to).",
+              "title": "To"
+            },
+            "description": "The day after the last day, so the period is [from, to)."
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GroupBy",
+              "description": "What each line stands for.",
+              "default": "asset"
+            },
+            "description": "What each line stands for."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units held at this branch.",
+              "title": "Branchcode"
+            },
+            "description": "Only the units held at this branch."
+          },
+          {
+            "name": "categorySlug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units of models in this category and its children.",
+              "title": "Categoryslug"
+            },
+            "description": "Only the units of models in this category and its children."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many lines a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many lines a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UtilisationReportResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/reports/utilisation.csv": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return every line of the report as a CSV file",
+        "description": "Return every line of the report as CSV, worked out first and then streamed a line at a time.\n\nRaises:\n    ValidationFailure: As for the report. HTTP 422, naming the parameter.",
+        "operationId": "export_utilisation_report_api_admin_reports_utilisation_csv_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The first day of the period.",
+              "title": "From"
+            },
+            "description": "The first day of the period."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The day after the last day, so the period is [from, to).",
+              "title": "To"
+            },
+            "description": "The day after the last day, so the period is [from, to)."
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GroupBy",
+              "description": "What each line stands for.",
+              "default": "asset"
+            },
+            "description": "What each line stands for."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units held at this branch.",
+              "title": "Branchcode"
+            },
+            "description": "Only the units held at this branch."
+          },
+          {
+            "name": "categorySlug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units of models in this category and its children.",
+              "title": "Categoryslug"
+            },
+            "description": "Only the units of models in this category and its children."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dashboard": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return the business across every branch today",
+        "description": "Return each branch, the totals, the month so far and what waits, after running the sweep.",
+        "operationId": "read_admin_dashboard_api_admin_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDashboardResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/audit-events": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Return one page of the audit log, newest first",
+        "description": "Return one page of the audit log, newest first.\n\nRaises:\n    ValidationFailure: If `to` is before `from`. HTTP 422, naming `to`.",
+        "operationId": "read_audit_events_api_admin_audit_events_get",
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only events about this kind of record, for example `reservation`.",
+              "title": "Entitytype"
+            },
+            "description": "Only events about this kind of record, for example `reservation`."
+          },
+          {
+            "name": "entityId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only events about this record.",
+              "title": "Entityid"
+            },
+            "description": "Only events about this record."
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only events of this action, for example `charge.waived`.",
+              "title": "Action"
+            },
+            "description": "Only events of this action, for example `charge.waived`."
+          },
+          {
+            "name": "actorUserId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only events this account made.",
+              "title": "Actoruserid"
+            },
+            "description": "Only events this account made."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The first business day, which is included.",
+              "title": "From"
+            },
+            "description": "The first business day, which is included."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The last business day, which is included.",
+              "title": "To"
+            },
+            "description": "The last business day, which is included."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many events a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many events a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/notifications": {
+      "get": {
+        "tags": [
+          "notification"
+        ],
+        "summary": "Return one page of the notification log, newest first",
+        "description": "Return one page of the notification log, newest first.",
+        "operationId": "read_notifications_api_admin_notifications_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/NotificationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only notifications in this status.",
+              "title": "Status"
+            },
+            "description": "Only notifications in this status."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many notifications a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many notifications a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/notifications/{id}/resend": {
+      "post": {
+        "tags": [
+          "notification"
+        ],
+        "summary": "Send a failed notification again, as a new notification",
+        "description": "Queue the notification again, commit, send it and return the new one.\n\nRaises:\n    NotFound: If there is no such notification. HTTP 404.\n    StateTransitionError: If it has not failed. HTTP 409.",
+        "operationId": "post_resend_api_admin_notifications__id__resend_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the notification.",
+              "title": "Id"
+            },
+            "description": "The key of the notification."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such notification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The notification has not failed, so there is nothing to send again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/charges/{id}/waiver": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Waive a charge still owed, with a reason",
+        "description": "Waive the charge and work the rental out again, in one transaction.\n\nRaises:\n    NotFound: If there is no such charge. HTTP 404.\n    StateTransitionError: If the charge is not pending. HTTP 409.",
+        "operationId": "post_waiver_api_admin_charges__id__waiver_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the charge.",
+              "title": "Id"
+            },
+            "description": "The key of the charge."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such charge.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The charge is not pending. A settled charge is reversed instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/charges/{id}/reversal": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Reverse a settled charge with a new negated charge, with a reason",
+        "description": "Reverse the charge and work the rental out again, in one transaction.\n\nRaises:\n    NotFound: If there is no such charge. HTTP 404.\n    StateTransitionError: If the charge is not settled, is a deposit\n        movement, is itself a reversal or was reversed already. HTTP 409.",
+        "operationId": "post_reversal_api_admin_charges__id__reversal_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the charge.",
+              "title": "Id"
+            },
+            "description": "The key of the charge."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such charge.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The charge is not settled, is a deposit movement, is itself a reversal or has been reversed already, and `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/rentals/{id}/adjustments": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Adjust a hire by an amount that includes VAT, with a reason",
+        "description": "Add the adjustment and work the rental out again, in one transaction.\n\nRaises:\n    NotFound: If there is no such rental. HTTP 404.\n    ValidationFailure: If the amount is nothing. HTTP 422, naming\n        `body.amountIncVat`.\n    StateTransitionError: If the amount is owed and the hire is\n        SETTLED. HTTP 409.",
+        "operationId": "post_adjustment_api_admin_rentals__id__adjustments_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the rental, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the rental, or its reference."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such rental.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The hire is settled, so only a correction that gives money back can be made to it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/allocations/{id}/release": {
+      "post": {
+        "tags": [
+          "availability"
+        ],
+        "summary": "Release one active allocation by hand, with a reason",
+        "description": "Release the allocation with the reason REALLOCATED, in one transaction.\n\nRaises:\n    NotFound: If there is no such allocation. HTTP 404.\n    StateTransitionError: If it is not active, or its unit is out on hire\n        on its booking. HTTP 409.",
+        "operationId": "post_release_api_admin_allocations__id__release_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the allocation.",
+              "title": "Id"
+            },
+            "description": "The key of the allocation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such allocation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The allocation is no longer active, or its unit is out on hire on the booking, and `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/categories": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return every category, active or not, each parent followed by its children",
+        "description": "Return one page of every category, each parent followed by its children.",
+        "operationId": "read_categories_api_admin_categories_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many categories a page holds. Every category fits the default.",
+              "default": 100,
+              "title": "Pagesize"
+            },
+            "description": "How many categories a page holds. Every category fits the default."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Create a category, active",
+        "description": "Create the category and record it, in one transaction.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the parent is unknown or\n        not at the top, or the code or slug is taken. HTTP 422, naming\n        the field.",
+        "operationId": "post_category_api_admin_categories_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/categories/{id}": {
+      "patch": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Change the fields of a category that are sent, or switch it off",
+        "description": "Change the fields that were sent and record what changed, in one transaction.\n\nRaises:\n    NotFound: If there is no such category. HTTP 404.\n    ValidationFailure: As for a creation, and when the category has\n        children and is to be put under another. HTTP 422, naming the field.",
+        "operationId": "patch_category_api_admin_categories__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the category.",
+              "title": "Id"
+            },
+            "description": "The key of the category."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such category.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/models": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one page of the product models, published or not, by name",
+        "description": "Return one page of the product models that match, by name.",
+        "operationId": "read_models_api_admin_models_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text matched against SKU, name, manufacturer and model number.",
+              "title": "Q"
+            },
+            "description": "Free text matched against SKU, name, manufacturer and model number."
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the models of this category.",
+              "title": "Categoryid"
+            },
+            "description": "Only the models of this category."
+          },
+          {
+            "name": "published",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True for the published models only, false for the hidden ones.",
+              "title": "Published"
+            },
+            "description": "True for the published models only, false for the hidden ones."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many models a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many models a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Create a product model, unpublished",
+        "description": "Create the model and record it, in one transaction.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the category is unknown\n        or switched off, or the SKU or slug is taken. HTTP 422, naming\n        the field.",
+        "operationId": "post_model_api_admin_models_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/models/{id}": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one product model, published or not",
+        "description": "Return the product model.\n\nRaises:\n    NotFound: If there is no such model. HTTP 404.",
+        "operationId": "read_model_api_admin_models__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the product model.",
+              "title": "Id"
+            },
+            "description": "The key of the product model."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such product model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Change the fields of a product model that are sent, never its SKU",
+        "description": "Change the fields that were sent and record the figures before and after.\n\nRaises:\n    NotFound: If there is no such model. HTTP 404.\n    ValidationFailure: As for a creation, and when the SKU is sent. HTTP\n        422, naming the field.",
+        "operationId": "patch_model_api_admin_models__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the product model.",
+              "title": "Id"
+            },
+            "description": "The key of the product model."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such product model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/models/{id}/publication": {
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Publish a product model, or take it out of the public catalogue",
+        "description": "Publish or hide the model and record it, in one transaction.\n\nRaises:\n    NotFound: If there is no such model. HTTP 404.",
+        "operationId": "post_publication_api_admin_models__id__publication_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the product model.",
+              "title": "Id"
+            },
+            "description": "The key of the product model."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such product model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/assets": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one page of the units of the fleet, retired or not, in tag order",
+        "description": "Return one page of the units that match, in tag order.\n\nRaises:\n    ValidationFailure: If no branch has the code. HTTP 422, naming `branchCode`.",
+        "operationId": "read_assets_api_admin_assets_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the tag, the serial number or the model name.",
+              "title": "Q"
+            },
+            "description": "Part of the tag, the serial number or the model name."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A branch code. Only the units it holds.",
+              "title": "Branchcode"
+            },
+            "description": "A branch code. Only the units it holds."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AssetStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units in this status.",
+              "title": "Status"
+            },
+            "description": "Only the units in this status."
+          },
+          {
+            "name": "modelId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units of this product model.",
+              "title": "Modelid"
+            },
+            "description": "Only the units of this product model."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many units a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many units a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Register a unit, at INTAKE",
+        "description": "Register the unit and record it, in one transaction.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the model or the branch\n        is unknown, or another unit carries the tag. HTTP 422, naming the\n        field.",
+        "operationId": "post_asset_api_admin_assets_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/assets/{tag}": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one unit with its history, the newest first",
+        "description": "Return the unit with its history.\n\nRaises:\n    NotFound: If no unit carries the tag. HTTP 404.",
+        "operationId": "read_asset_api_admin_assets__tag__get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag painted on the unit.",
+              "title": "Tag"
+            },
+            "description": "The tag painted on the unit."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No unit carries that tag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Change the paperwork of a unit, never its tag, model or branch",
+        "description": "Change the fields that were sent and record them before and after.\n\nRaises:\n    NotFound: If no unit carries the tag. HTTP 404.\n    ValidationFailure: If a field breaks a rule, or the tag, the model or\n        the branch is sent. HTTP 422, naming the field.",
+        "operationId": "patch_asset_api_admin_assets__tag__patch",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag painted on the unit.",
+              "title": "Tag"
+            },
+            "description": "The tag painted on the unit."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No unit carries that tag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/assets/{tag}/transitions": {
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Move a unit through its lifecycle by hand",
+        "description": "Move the unit and record the move, in one transaction.\n\nRaises:\n    NotFound: If no unit carries the tag. HTTP 404.\n    ValidationFailure: For ON_HIRE or LOST, naming `to`, or a move out of\n        service with no reason, naming `reason`. HTTP 422.\n    StateTransitionError: If the move is not permitted from the unit's\n        status, or a booking or an open damage report holds the unit.\n        HTTP 409.",
+        "operationId": "post_transition_api_admin_assets__tag__transitions_post",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag painted on the unit.",
+              "title": "Tag"
+            },
+            "description": "The tag painted on the unit."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetTransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No unit carries that tag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move is not one the unit may make from the status it is in, which `detail` names, or a booking or an open damage report still holds the unit and `detail` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Return one page of the staff accounts, by name",
+        "description": "Return one page of the staff accounts that match, by name.\n\nRaises:\n    ValidationFailure: If `role` is CUSTOMER. HTTP 422, naming `role`.",
+        "operationId": "read_users_api_admin_users_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the name or the email address.",
+              "title": "Q"
+            },
+            "description": "Part of the name or the email address."
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/UserRole"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "COUNTER_STAFF or ADMIN. Both when left out.",
+              "title": "Role"
+            },
+            "description": "COUNTER_STAFF or ADMIN. Both when left out."
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True for active accounts, false for deactivated ones.",
+              "title": "Active"
+            },
+            "description": "True for active accounts, false for deactivated ones."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many accounts a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many accounts a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Open a staff account and send the person a link to choose their password",
+        "description": "Open the account and record it, in one transaction, then send the link.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the branch is unknown, or\n        another account holds the address. HTTP 422, naming the field.\n    AuthorisationFailure: If the caller stopped being an active\n        administrator. HTTP 403.",
+        "operationId": "post_user_api_admin_users_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffCreatedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator, or stopped being an active one before the change could be made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "patch": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Change the name, the phone, the role or the branch of a staff account",
+        "description": "Change the fields that were sent and record the change.\n\nRaises:\n    NotFound: If no staff account has the key. HTTP 404.\n    ValidationFailure: If a field breaks a rule. HTTP 422, naming the field.\n    StateTransitionError: If the account is the last active administrator\n        and the edit gives it another role. HTTP 409.",
+        "operationId": "patch_user_api_admin_users__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the staff account.",
+              "title": "Id"
+            },
+            "description": "The key of the staff account."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator, or stopped being an active one before the change could be made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No staff account has this key. A customer's account is not one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account is the last active administrator, which can never be deactivated or given another role, or it is the caller's own account, which the caller cannot deactivate. `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/deactivation": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Stop a staff account signing in and revoke every session it holds",
+        "description": "Deactivate the account, revoke its sessions and record why, in one transaction.\n\nRaises:\n    NotFound: If no staff account has the key. HTTP 404.\n    ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.\n    StateTransitionError: If it is the caller's own account or the last\n        active administrator. HTTP 409.",
+        "operationId": "post_deactivation_api_admin_users__id__deactivation_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the staff account.",
+              "title": "Id"
+            },
+            "description": "The key of the staff account."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeactivationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator, or stopped being an active one before the change could be made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No staff account has this key. A customer's account is not one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account is the last active administrator, which can never be deactivated or given another role, or it is the caller's own account, which the caller cannot deactivate. `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/reactivation": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Let a deactivated staff account sign in again with its own password",
+        "description": "Reactivate the account and record it.\n\nRaises:\n    NotFound: If no staff account has the key. HTTP 404.",
+        "operationId": "post_reactivation_api_admin_users__id__reactivation_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the staff account.",
+              "title": "Id"
+            },
+            "description": "The key of the staff account."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator, or stopped being an active one before the change could be made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No staff account has this key. A customer's account is not one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/customers": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Return one page of the customers by name, narrowed by their standing",
+        "description": "Return one page of the customers that match, by name.",
+        "operationId": "read_customers_api_admin_customers_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AccountStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the customers in this standing.",
+              "title": "Status"
+            },
+            "description": "Only the customers in this standing."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of a name, a phone number or an email address.",
+              "title": "Q"
+            },
+            "description": "Part of a name, a phone number or an email address."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many customers a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many customers a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/customers/{id}/status": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Set the standing of a customer, with the reason",
+        "description": "Set the standing and record it with the reason, in one transaction.\n\nRaises:\n    NotFound: If there is no customer with this key. HTTP 404.\n    ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.",
+        "operationId": "post_customer_status_api_admin_customers__id__status_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the customer.",
+              "title": "Id"
+            },
+            "description": "The key of the customer."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummaryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no customer with this key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/branches": {
       "get": {
         "tags": [
@@ -3103,6 +5788,903 @@
         "title": "AccountStatus",
         "description": "Customer account standing. ON_HOLD is set by the no-show rule (BR-18)."
       },
+      "AdjustmentRequest": {
+        "properties": {
+          "amountIncVat": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Amountincvat"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amountIncVat",
+          "reason"
+        ],
+        "title": "AdjustmentRequest",
+        "description": "An adjustment of a hire, VAT included, and the reason for it."
+      },
+      "AdminAssetDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Modelid"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "acquiredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquiredon"
+          },
+          "acquisitionCost": {
+            "type": "string",
+            "title": "Acquisitioncost"
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "retiredOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retiredon"
+          },
+          "activeAllocationCount": {
+            "type": "integer",
+            "title": "Activeallocationcount"
+          },
+          "openDamageReports": {
+            "type": "integer",
+            "title": "Opendamagereports"
+          },
+          "allowedTransitions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetStatus"
+            },
+            "type": "array",
+            "title": "Allowedtransitions"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/AssetHistoryEntryResponse"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "assetTag",
+          "modelId",
+          "modelName",
+          "modelSlug",
+          "categoryName",
+          "branchCode",
+          "branchName",
+          "serialNumber",
+          "status",
+          "conditionGrade",
+          "acquiredOn",
+          "acquisitionCost",
+          "hourMeterReading",
+          "notes",
+          "retiredOn",
+          "activeAllocationCount",
+          "openDamageReports",
+          "allowedTransitions",
+          "history"
+        ],
+        "title": "AdminAssetDetailResponse",
+        "description": "One unit with its history, the newest first, at most fifty entries."
+      },
+      "AdminAssetPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminAssetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminAssetPageResponse",
+        "description": "One page of the units, in tag order."
+      },
+      "AdminAssetResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Modelid"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "acquiredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquiredon"
+          },
+          "acquisitionCost": {
+            "type": "string",
+            "title": "Acquisitioncost"
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "retiredOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retiredon"
+          },
+          "activeAllocationCount": {
+            "type": "integer",
+            "title": "Activeallocationcount"
+          },
+          "openDamageReports": {
+            "type": "integer",
+            "title": "Opendamagereports"
+          },
+          "allowedTransitions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetStatus"
+            },
+            "type": "array",
+            "title": "Allowedtransitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "assetTag",
+          "modelId",
+          "modelName",
+          "modelSlug",
+          "categoryName",
+          "branchCode",
+          "branchName",
+          "serialNumber",
+          "status",
+          "conditionGrade",
+          "acquiredOn",
+          "acquisitionCost",
+          "hourMeterReading",
+          "notes",
+          "retiredOn",
+          "activeAllocationCount",
+          "openDamageReports",
+          "allowedTransitions"
+        ],
+        "title": "AdminAssetResponse",
+        "description": "One unit as the register shows it, retired or not.\n\n`allowedTransitions` lists the statuses an administrator may move it to by\nhand, from the asset state model. `activeAllocationCount` counts the\nbookings that hold it now and `openDamageReports` its reports that are\nopen or under repair."
+      },
+      "AdminCategoryPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCategoryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminCategoryPageResponse",
+        "description": "Every category, active or not, each parent followed by its children."
+      },
+      "AdminCategoryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parentCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentcategoryid"
+          },
+          "parentName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentname"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder"
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive"
+          },
+          "modelCount": {
+            "type": "integer",
+            "title": "Modelcount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "slug",
+          "description",
+          "parentCategoryId",
+          "parentName",
+          "sortOrder",
+          "isActive",
+          "modelCount"
+        ],
+        "title": "AdminCategoryResponse",
+        "description": "One category as the administrator sees it. `modelCount` counts its own models."
+      },
+      "AdminDashboardResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "branches": {
+            "items": {
+              "$ref": "#/components/schemas/BranchPositionResponse"
+            },
+            "type": "array",
+            "title": "Branches"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/BranchCountsResponse"
+          },
+          "monthToDate": {
+            "$ref": "#/components/schemas/MonthToDateResponse"
+          },
+          "openDamageReports": {
+            "type": "integer",
+            "title": "Opendamagereports"
+          },
+          "customersOnHold": {
+            "type": "integer",
+            "title": "Customersonhold"
+          },
+          "failedNotifications": {
+            "type": "integer",
+            "title": "Failednotifications"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "branches",
+          "totals",
+          "monthToDate",
+          "openDamageReports",
+          "customersOnHold",
+          "failedNotifications"
+        ],
+        "title": "AdminDashboardResponse",
+        "description": "The business across every branch today."
+      },
+      "AdminModelPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminModelResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminModelPageResponse",
+        "description": "One page of the product models, by name."
+      },
+      "AdminModelResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoryid"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "manufacturer": {
+            "type": "string",
+            "title": "Manufacturer"
+          },
+          "modelNumber": {
+            "type": "string",
+            "title": "Modelnumber"
+          },
+          "shortDescription": {
+            "type": "string",
+            "title": "Shortdescription"
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longdescription"
+          },
+          "dailyRate": {
+            "type": "string",
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "type": "string",
+            "title": "Weeklyrate"
+          },
+          "depositAmount": {
+            "type": "string",
+            "title": "Depositamount"
+          },
+          "lateFeePerDay": {
+            "type": "string",
+            "title": "Latefeeperday"
+          },
+          "replacementValue": {
+            "type": "string",
+            "title": "Replacementvalue"
+          },
+          "minHireDays": {
+            "type": "integer",
+            "title": "Minhiredays"
+          },
+          "maxHireDays": {
+            "type": "integer",
+            "title": "Maxhiredays"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "title": "Ispublished"
+          },
+          "assetCount": {
+            "type": "integer",
+            "title": "Assetcount"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "slug",
+          "categoryId",
+          "categoryName",
+          "manufacturer",
+          "modelNumber",
+          "shortDescription",
+          "longDescription",
+          "dailyRate",
+          "weeklyRate",
+          "depositAmount",
+          "lateFeePerDay",
+          "replacementValue",
+          "minHireDays",
+          "maxHireDays",
+          "isPublished",
+          "assetCount",
+          "updatedAt"
+        ],
+        "title": "AdminModelResponse",
+        "description": "One product model as the administrator sees it, published or not.\n\n`assetCount` is every unit of the fleet that realises it, whatever its status."
+      },
+      "AdminUserPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminUserResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminUserPageResponse",
+        "description": "One page of the staff accounts, by name."
+      },
+      "AdminUserResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "fullName": {
+            "type": "string",
+            "title": "Fullname"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "branchCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcode"
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "title": "Emailverified"
+          },
+          "lastLoginAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastloginat"
+          },
+          "lockedUntil": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lockeduntil"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "fullName",
+          "phone",
+          "role",
+          "branchCode",
+          "isActive",
+          "emailVerified",
+          "lastLoginAt",
+          "lockedUntil",
+          "createdAt"
+        ],
+        "title": "AdminUserResponse",
+        "description": "One staff account as the administrator sees it, never with anything about a password.\n\n`branchCode` is null for an administrator. `lockedUntil` is when a lock\nafter failed sign ins ends, and null when there has been none since the\nlast success."
+      },
+      "AssetCreateRequest": {
+        "properties": {
+          "assetTag": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Assettag"
+          },
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Modelid"
+          },
+          "branchCode": {
+            "type": "string",
+            "maxLength": 4,
+            "minLength": 1,
+            "title": "Branchcode"
+          },
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "acquiredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquiredon"
+          },
+          "acquisitionCost": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Acquisitioncost"
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "assetTag",
+          "modelId",
+          "branchCode",
+          "conditionGrade",
+          "acquiredOn",
+          "acquisitionCost"
+        ],
+        "title": "AssetCreateRequest",
+        "description": "A new unit. It starts at INTAKE, and its tag, model and branch never change."
+      },
+      "AssetHistoryEntryResponse": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AssetHistoryKind"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "kind",
+          "summary",
+          "reference"
+        ],
+        "title": "AssetHistoryEntryResponse",
+        "description": "One line of a unit's history. `reference` is the booking, rental or report, or null."
+      },
+      "AssetHistoryKind": {
+        "type": "string",
+        "enum": [
+          "ALLOCATION",
+          "RENTAL",
+          "DAMAGE_REPORT",
+          "AUDIT_EVENT"
+        ],
+        "title": "AssetHistoryKind",
+        "description": "Where an entry of a unit's history comes from."
+      },
       "AssetLocationPageResponse": {
         "properties": {
           "items": {
@@ -3221,6 +6803,211 @@
         "title": "AssetStatus",
         "description": "Asset lifecycle status. There is deliberately no RESERVED member.\n\nFuture occupancy is derived from AssetAllocation rows. A RESERVED status\nwould be a second source of truth able to disagree with the exclusion\nconstraint."
       },
+      "AssetTransitionRequest": {
+        "properties": {
+          "to": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "to"
+        ],
+        "title": "AssetTransitionRequest",
+        "description": "The status to move a unit to by hand, and why."
+      },
+      "AssetUpdateRequest": {
+        "properties": {
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "conditionGrade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConditionGrade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AssetUpdateRequest",
+        "description": "The paperwork of a unit to change, any of it. Never the tag, the model or the branch."
+      },
+      "AuditEventPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AuditEventPageResponse",
+        "description": "One page of the audit log, newest first."
+      },
+      "AuditEventResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "occurredAt": {
+            "type": "string",
+            "title": "Occurredat"
+          },
+          "actorUserId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actoruserid"
+          },
+          "actorName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actorname"
+          },
+          "actorRole": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entityType": {
+            "type": "string",
+            "title": "Entitytype"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Entityid"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "beforeState": {
+            "type": "object",
+            "title": "Beforestate"
+          },
+          "afterState": {
+            "type": "object",
+            "title": "Afterstate"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "occurredAt",
+          "actorUserId",
+          "actorName",
+          "actorRole",
+          "entityType",
+          "entityId",
+          "action",
+          "beforeState",
+          "afterState",
+          "requestId"
+        ],
+        "title": "AuditEventResponse",
+        "description": "One audit event, as the log shows it."
+      },
       "AvailabilityPageResponse": {
         "properties": {
           "from": {
@@ -3311,6 +7098,50 @@
         "title": "BranchAvailabilityResponse",
         "description": "Whether one branch can supply a model for the whole period asked about."
       },
+      "BranchCountsResponse": {
+        "properties": {
+          "collectionsDue": {
+            "type": "integer",
+            "title": "Collectionsdue"
+          },
+          "returnsDue": {
+            "type": "integer",
+            "title": "Returnsdue"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          },
+          "onHire": {
+            "type": "integer",
+            "title": "Onhire"
+          },
+          "quarantined": {
+            "type": "integer",
+            "title": "Quarantined"
+          },
+          "underRepair": {
+            "type": "integer",
+            "title": "Underrepair"
+          },
+          "available": {
+            "type": "integer",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collectionsDue",
+          "returnsDue",
+          "overdue",
+          "onHire",
+          "quarantined",
+          "underRepair",
+          "available"
+        ],
+        "title": "BranchCountsResponse",
+        "description": "What is due today and where the units stand, at a branch or across every branch."
+      },
       "BranchListResponse": {
         "properties": {
           "items": {
@@ -3327,6 +7158,60 @@
         ],
         "title": "BranchListResponse",
         "description": "The active branches, ordered by name."
+      },
+      "BranchPositionResponse": {
+        "properties": {
+          "collectionsDue": {
+            "type": "integer",
+            "title": "Collectionsdue"
+          },
+          "returnsDue": {
+            "type": "integer",
+            "title": "Returnsdue"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          },
+          "onHire": {
+            "type": "integer",
+            "title": "Onhire"
+          },
+          "quarantined": {
+            "type": "integer",
+            "title": "Quarantined"
+          },
+          "underRepair": {
+            "type": "integer",
+            "title": "Underrepair"
+          },
+          "available": {
+            "type": "integer",
+            "title": "Available"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collectionsDue",
+          "returnsDue",
+          "overdue",
+          "onHire",
+          "quarantined",
+          "underRepair",
+          "available",
+          "branchCode",
+          "branchName"
+        ],
+        "title": "BranchPositionResponse",
+        "description": "Where one trading branch stands today."
       },
       "BranchResponse": {
         "properties": {
@@ -3390,6 +7275,63 @@
         "type": "object",
         "title": "CancellationRequest",
         "description": "Why a reservation is being cancelled, when the caller wants to say."
+      },
+      "CategoryCreateRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parentCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentcategoryid"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "slug"
+        ],
+        "title": "CategoryCreateRequest",
+        "description": "A new category. It starts active, at the top unless a parent is named."
       },
       "CategoryListResponse": {
         "properties": {
@@ -3459,6 +7401,96 @@
         "title": "CategoryResponse",
         "description": "One active category. `parentCode` is null for a top level category."
       },
+      "CategoryUpdateRequest": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parentCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentcategoryid"
+          },
+          "sortOrder": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortorder"
+          },
+          "isActive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isactive"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CategoryUpdateRequest",
+        "description": "The fields of a category to change, any of them, and whether it is active."
+      },
       "ChargeResponse": {
         "properties": {
           "id": {
@@ -3507,6 +7539,29 @@
               }
             ],
             "title": "Rentalitemid"
+          },
+          "reversesChargeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reverseschargeid"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "type": "object",
@@ -3520,10 +7575,12 @@
           "amountIncVat",
           "status",
           "raisedAt",
-          "rentalItemId"
+          "rentalItemId",
+          "reversesChargeId",
+          "reason"
         ],
         "title": "ChargeResponse",
-        "description": "One money line on a rental. A deposit release is a negative amount."
+        "description": "One money line on a rental. A deposit release is a negative amount.\n\n`reversesChargeId` names the charge a reversal undoes. `reason` is the\nreason an administrator gave for waiving it, or the reason written on a\nreversal or an adjustment, and null on a charge nobody corrected."
       },
       "ChargeStatus": {
         "type": "string",
@@ -3714,6 +7771,10 @@
               }
             ],
             "title": "Rentalid"
+          },
+          "unitsShort": {
+            "type": "integer",
+            "title": "Unitsshort"
           }
         },
         "type": "object",
@@ -3732,10 +7793,11 @@
           "depositTotal",
           "canCheckOut",
           "refusal",
-          "rentalId"
+          "rentalId",
+          "unitsShort"
         ],
         "title": "CheckoutPreviewResponse",
-        "description": "What the counter needs to hand the equipment of a reservation over.\n\n`refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once\nthe reservation has been collected."
+        "description": "What the counter needs to hand the equipment of a reservation over.\n\n`refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once\nthe reservation has been collected. `unitsShort` is how many units the\nreservation still needs after one was released by hand, and while it is\nabove zero `canCheckOut` is false and the checkout answers 409."
       },
       "CheckoutRequest": {
         "properties": {
@@ -3968,6 +8030,27 @@
         ],
         "title": "CustomerPageResponse",
         "description": "One page of the customers a search found, best match first."
+      },
+      "CustomerStatusRequest": {
+        "properties": {
+          "accountStatus": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "accountStatus",
+          "reason"
+        ],
+        "title": "CustomerStatusRequest",
+        "description": "The standing a customer is to have, and why. The audit event keeps the reason."
       },
       "CustomerSummaryResponse": {
         "properties": {
@@ -4451,6 +8534,23 @@
         "title": "DashboardResponse",
         "description": "What is due today at one branch. Each list holds at most fifty rows."
       },
+      "DeactivationRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "DeactivationRequest",
+        "description": "Why an account is being stopped from signing in. The audit event keeps it."
+      },
       "DiaryCollectionResponse": {
         "properties": {
           "reservationId": {
@@ -4639,6 +8739,17 @@
         "title": "EmailDeliverableResponse",
         "description": "Whether a message for the address would be delivered in this environment.\n\nFalse when the environment only delivers mail to one address and this is\nnot it. It never depends on whether the address has an account."
       },
+      "GroupBy": {
+        "type": "string",
+        "enum": [
+          "asset",
+          "model",
+          "category",
+          "branch"
+        ],
+        "title": "GroupBy",
+        "description": "What one line of the report stands for."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4777,6 +8888,115 @@
         ],
         "title": "ModelAvailabilityRowResponse",
         "description": "One model of an availability search, with an answer from every branch."
+      },
+      "ModelCreateRequest": {
+        "properties": {
+          "sku": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Sku"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 140,
+            "title": "Slug"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoryid"
+          },
+          "manufacturer": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Manufacturer"
+          },
+          "modelNumber": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Modelnumber"
+          },
+          "shortDescription": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Shortdescription"
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longdescription"
+          },
+          "dailyRate": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Weeklyrate"
+          },
+          "depositAmount": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Depositamount"
+          },
+          "lateFeePerDay": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Latefeeperday"
+          },
+          "replacementValue": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Replacementvalue"
+          },
+          "minHireDays": {
+            "type": "integer",
+            "title": "Minhiredays"
+          },
+          "maxHireDays": {
+            "type": "integer",
+            "title": "Maxhiredays"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "title": "Ispublished",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sku",
+          "name",
+          "slug",
+          "categoryId",
+          "manufacturer",
+          "modelNumber",
+          "shortDescription",
+          "dailyRate",
+          "weeklyRate",
+          "depositAmount",
+          "lateFeePerDay",
+          "replacementValue",
+          "minHireDays",
+          "maxHireDays"
+        ],
+        "title": "ModelCreateRequest",
+        "description": "A new product model, with every figure a booking will copy. It starts unpublished."
       },
       "ModelDetailResponse": {
         "properties": {
@@ -5009,6 +9229,229 @@
         "title": "ModelSummaryResponse",
         "description": "A published catalogue entry as it appears in a list."
       },
+      "ModelUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 140
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "categoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryid"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "modelNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelnumber"
+          },
+          "shortDescription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortdescription"
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longdescription"
+          },
+          "dailyRate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weeklyrate"
+          },
+          "depositAmount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depositamount"
+          },
+          "lateFeePerDay": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latefeeperday"
+          },
+          "replacementValue": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacementvalue"
+          },
+          "minHireDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minhiredays"
+          },
+          "maxHireDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxhiredays"
+          },
+          "isPublished": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispublished"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModelUpdateRequest",
+        "description": "The fields of a product model to change, any of them but the SKU."
+      },
+      "MonthToDateResponse": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "utilisationPercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisationpercent"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "utilisationPercent",
+          "grossContribution"
+        ],
+        "title": "MonthToDateResponse",
+        "description": "Utilisation and gross contribution from the first of the month to the end of today."
+      },
       "NoShowRequest": {
         "properties": {
           "reason": {
@@ -5025,6 +9468,147 @@
         ],
         "title": "NoShowRequest",
         "description": "Why nobody collected the reservation, which staff always say."
+      },
+      "NotificationPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "NotificationPageResponse",
+        "description": "One page of the notification log, newest first."
+      },
+      "NotificationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "reservationId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reservationid"
+          },
+          "reservationReference": {
+            "type": "string",
+            "title": "Reservationreference"
+          },
+          "type": {
+            "$ref": "#/components/schemas/NotificationType"
+          },
+          "recipientEmail": {
+            "type": "string",
+            "title": "Recipientemail"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NotificationStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "queuedAt": {
+            "type": "string",
+            "title": "Queuedat"
+          },
+          "sentAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentat"
+          },
+          "resendOf": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resendof"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "reservationId",
+          "reservationReference",
+          "type",
+          "recipientEmail",
+          "subject",
+          "status",
+          "attempts",
+          "lastError",
+          "queuedAt",
+          "sentAt",
+          "resendOf"
+        ],
+        "title": "NotificationResponse",
+        "description": "One notification, as the log shows it."
+      },
+      "NotificationStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "SENT",
+          "FAILED"
+        ],
+        "title": "NotificationStatus",
+        "description": "Delivery outcome of a notification. A FAILED row can be sent again."
+      },
+      "NotificationType": {
+        "type": "string",
+        "enum": [
+          "BOOKING_CONFIRMATION"
+        ],
+        "title": "NotificationType",
+        "description": "What an outbound message is about. Phase one sends one kind only."
       },
       "OverdueRentalResponse": {
         "properties": {
@@ -5399,6 +9983,21 @@
         "title": "ProfileUpdateRequest",
         "description": "The contact and billing fields a customer may change, each of them optional.\n\nA field that is left out is left alone. `companyName` and `vatNumber` may\nbe sent as null or as an empty string to clear them."
       },
+      "PublicationRequest": {
+        "properties": {
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "published"
+        ],
+        "title": "PublicationRequest",
+        "description": "Whether the model is to be in the public catalogue."
+      },
       "QuoteBasis": {
         "type": "string",
         "enum": [
@@ -5487,6 +10086,23 @@
         ],
         "title": "QuoteResponse",
         "description": "What a hire will cost.\n\n`totalIncVat` is the hire charge. The deposit is not in it, because a\ndeposit is held and returned and not charged. `vatAmount` is worked out on\nthe subtotal after the discount."
+      },
+      "ReasonRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ReasonRequest",
+        "description": "The reason an administrator gives for an override."
       },
       "RegisterRequest": {
         "properties": {
@@ -5927,6 +10543,216 @@
         ],
         "title": "RentalStatus",
         "description": "Rental lifecycle status, governed by BR-29, BR-52 and BR-53."
+      },
+      "ReportDefinitionsResponse": {
+        "properties": {
+          "utilisation": {
+            "type": "string",
+            "title": "Utilisation"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "utilisation",
+          "grossContribution"
+        ],
+        "title": "ReportDefinitionsResponse",
+        "description": "The two definitions every figure of the report is read by."
+      },
+      "ReportFiguresResponse": {
+        "properties": {
+          "assetCount": {
+            "type": "integer",
+            "title": "Assetcount"
+          },
+          "daysOnHire": {
+            "type": "integer",
+            "title": "Daysonhire"
+          },
+          "serviceableDays": {
+            "type": "integer",
+            "title": "Serviceabledays"
+          },
+          "utilisationPercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisationpercent"
+          },
+          "hireRevenueExVat": {
+            "type": "string",
+            "title": "Hirerevenueexvat"
+          },
+          "lateFeesExVat": {
+            "type": "string",
+            "title": "Latefeesexvat"
+          },
+          "damageRecoveryExVat": {
+            "type": "string",
+            "title": "Damagerecoveryexvat"
+          },
+          "repairCosts": {
+            "type": "string",
+            "title": "Repaircosts"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assetCount",
+          "daysOnHire",
+          "serviceableDays",
+          "utilisationPercent",
+          "hireRevenueExVat",
+          "lateFeesExVat",
+          "damageRecoveryExVat",
+          "repairCosts",
+          "grossContribution"
+        ],
+        "title": "ReportFiguresResponse",
+        "description": "The figures of a line of the report, or of every line together."
+      },
+      "ReportLineResponse": {
+        "properties": {
+          "assetCount": {
+            "type": "integer",
+            "title": "Assetcount"
+          },
+          "daysOnHire": {
+            "type": "integer",
+            "title": "Daysonhire"
+          },
+          "serviceableDays": {
+            "type": "integer",
+            "title": "Serviceabledays"
+          },
+          "utilisationPercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisationpercent"
+          },
+          "hireRevenueExVat": {
+            "type": "string",
+            "title": "Hirerevenueexvat"
+          },
+          "lateFeesExVat": {
+            "type": "string",
+            "title": "Latefeesexvat"
+          },
+          "damageRecoveryExVat": {
+            "type": "string",
+            "title": "Damagerecoveryexvat"
+          },
+          "repairCosts": {
+            "type": "string",
+            "title": "Repaircosts"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "branchCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcode"
+          },
+          "categoryName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryname"
+          },
+          "modelName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelname"
+          },
+          "assetTag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assettag"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "assetCount",
+          "daysOnHire",
+          "serviceableDays",
+          "utilisationPercent",
+          "hireRevenueExVat",
+          "lateFeesExVat",
+          "damageRecoveryExVat",
+          "repairCosts",
+          "grossContribution",
+          "key",
+          "label",
+          "branchCode",
+          "categoryName",
+          "modelName",
+          "assetTag",
+          "status"
+        ],
+        "title": "ReportLineResponse",
+        "description": "One line of the report, for an asset, a model, a category or a branch.\n\n`assetTag` and `status` are set on a line for an asset. `branchCode` is set\non a line for an asset or a branch, `categoryName` on a line for an asset,\na model or a category, and `modelName` on a line for an asset or a model."
       },
       "ReservationLineRequest": {
         "properties": {
@@ -6398,6 +11224,133 @@
         "title": "SettlementWait",
         "description": "What a rental is waiting on before its deposit can be settled."
       },
+      "StaffCreateRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 5,
+            "title": "Email"
+          },
+          "fullName": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Fullname"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "branchCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "fullName",
+          "role"
+        ],
+        "title": "StaffCreateRequest",
+        "description": "A new staff account. The person chooses their own password through the link they are sent.\n\n`branchCode` is required for counter staff and must be null for an administrator."
+      },
+      "StaffCreatedResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AdminUserResponse"
+          },
+          "emailDeliverable": {
+            "type": "boolean",
+            "title": "Emaildeliverable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "emailDeliverable"
+        ],
+        "title": "StaffCreatedResponse",
+        "description": "A new staff account, and whether the email with the link to choose a password was taken.\n\n`emailDeliverable` is false when the message could not be handed to the\nemail provider. The person then asks for a new link from the sign in page\nonce mail reaches them."
+      },
+      "StaffUpdateRequest": {
+        "properties": {
+          "fullName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fullname"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "branchCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StaffUpdateRequest",
+        "description": "The fields of a staff account to change, any of them. Never the address or a password."
+      },
       "TokenRequest": {
         "properties": {
           "token": {
@@ -6513,6 +11466,10 @@
           "emailVerified": {
             "type": "boolean",
             "title": "Emailverified"
+          },
+          "emailDeliverable": {
+            "type": "boolean",
+            "title": "Emaildeliverable"
           }
         },
         "type": "object",
@@ -6521,10 +11478,77 @@
           "email",
           "fullName",
           "role",
-          "emailVerified"
+          "emailVerified",
+          "emailDeliverable"
         ],
         "title": "UserResponse",
-        "description": "The signed in account, as every session response and `/api/me` return it.\n\n`branchCode` is null unless the account is counter staff."
+        "description": "The signed in account, as every session response and `/api/me` return it.\n\n`branchCode` is null unless the account is counter staff.\n\n`emailDeliverable` is false when this environment would not hand a message\nfor the account's address to the email provider, because email is off or\nbecause mail goes to one approved address and this is not it. It is the\nsame rule the account routes answer with, and it depends on the\nconfiguration and the address alone. A screen reads it so that it never\npromises a confirmation email that cannot arrive."
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "CUSTOMER",
+          "COUNTER_STAFF",
+          "ADMIN"
+        ],
+        "title": "UserRole",
+        "description": "The single role carried by a UserAccount. A role is never a set."
+      },
+      "UtilisationReportResponse": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "groupBy": {
+            "$ref": "#/components/schemas/GroupBy"
+          },
+          "definitions": {
+            "$ref": "#/components/schemas/ReportDefinitionsResponse"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReportFiguresResponse"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportLineResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "groupBy",
+          "definitions",
+          "totals",
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "UtilisationReportResponse",
+        "description": "One page of the report, highest gross contribution first, with the totals over every line."
       },
       "ValidationError": {
         "properties": {

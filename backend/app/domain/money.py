@@ -170,6 +170,32 @@ class Money:
             )
         return Money(self.amount * PERCENT_BASE / (PERCENT_BASE + percentage))
 
+    def in_proportion(self, part: Decimal | int, whole: Decimal | int) -> Money:
+        """Return the share of this amount that `part` is of `whole`, unrounded.
+
+        The amount is multiplied by the part before it is divided by the whole,
+        so a share that comes out exact, such as 212.625, stays exact and is
+        then rounded the way the rule says, never from a figure a division had
+        already cut short.
+
+        Args:
+            part: The weight of the share, nought or more.
+            whole: The weight of everything the amount is shared across, above nought.
+
+        Raises:
+            InvalidMoney: If either is not a finite Decimal or an int, the part
+                is below nought, or the whole is not above nought.
+
+        """
+        share = _exact_percentage(part, "share")
+        everything = _exact_percentage(whole, "share")
+        if share < NOTHING or everything <= NOTHING:
+            raise InvalidMoney(
+                f"Attempted to share Money in the proportion {part} of {whole}. The part has "
+                "to be nought or more and the whole above nought."
+            )
+        return Money(self.amount * share / everything)
+
     def rounded(self) -> Money:
         """Return the amount as a charge is written, half up to the cent."""
         return Money(self.amount.quantize(ONE_CENT, rounding=ROUND_HALF_UP))

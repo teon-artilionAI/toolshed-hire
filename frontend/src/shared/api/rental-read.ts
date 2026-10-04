@@ -115,6 +115,8 @@ function readRentalCharge(value: unknown, path: string): RentalCharge {
     status: readOneOf(record, 'status', path, CHARGE_STATUSES),
     raisedAt: readTimestamp(record, 'raisedAt', path),
     rentalItemId: readNullableText(record, 'rentalItemId', path),
+    reversesChargeId: readNullableText(record, 'reversesChargeId', path),
+    reason: readNullableText(record, 'reason', path),
   }
 }
 

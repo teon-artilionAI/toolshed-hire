@@ -1,8 +1,11 @@
 """The read of a reservation as the counter is about to check it out.
 
 Two statements however many units the reservation holds. One finds the
-reservation with its branch, its customer and the rental opened from it, if
-there is one. One finds every unit the reservation holds right now, with its
+reservation with its branch, its customer, the rental opened from it, if there
+is one, and how many units its lines ask for, which is a sum over its lines
+through the unique key on a line's reservation and model, so the counter can
+be told a booking is short of a unit released by hand. One finds every unit
+the reservation holds right now, with its
 tag, its model, its last condition and meter reading, and the deposit copied
 onto its line. Nothing loops over the database, and nothing is locked, because
 a read decides nothing. The checkout locks what it changes.
@@ -15,7 +18,10 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from typing import Final
 
+from sqlalchemy import Label, func
+from sqlalchemy import select as select_columns
 from sqlmodel import Session, col, select
 
 from app.application.booking.read_models import ReservationKey
@@ -35,6 +41,20 @@ from app.infrastructure.query_log import logged_query
 
 logger = logging.getLogger(__name__)
 
+UNITS_WANTED_LABEL: Final[str] = "units_wanted"
+NO_UNITS: Final[int] = 0
+
+
+def _units_wanted() -> Label[int]:
+    """Return how many units the lines of the reservation of the row ask for, in all."""
+    return (
+        select_columns(func.coalesce(func.sum(col(ReservationLine.quantity)), NO_UNITS))
+        .where(col(ReservationLine.reservation_id) == col(Reservation.id))
+        .correlate(Reservation)
+        .scalar_subquery()
+        .label(UNITS_WANTED_LABEL)
+    )
+
 
 class SqlCheckoutReads:
     """Reads a reservation for its checkout through one session."""
@@ -46,18 +66,18 @@ class SqlCheckoutReads:
     def find(self, key: ReservationKey) -> CheckoutDetail | None:
         """Return the reservation as the counter checks it out, or None when there is none."""
         statement = (
-            select(Reservation, Branch, CustomerProfile, col(Rental.id))
+            select_columns(Reservation, Branch, CustomerProfile, col(Rental.id), _units_wanted())
             .join(Branch, col(Branch.id) == col(Reservation.branch_id))
             .join(CustomerProfile, col(CustomerProfile.id) == col(Reservation.customer_profile_id))
             .outerjoin(Rental, col(Rental.reservation_id) == col(Reservation.id))
             .where(key_condition(key))
         )
         with logged_query(logger, "hire.checkout_lookup", {"reservation": str(key)}) as outcome:
-            found = self._session.exec(statement).first()
+            found = self._session.execute(statement).first()
             outcome.row_count = 0 if found is None else 1
         if found is None:
             return None
-        reservation, branch, customer, rental_id = found
+        reservation, branch, customer, rental_id, units_wanted = found._tuple()
         return CheckoutDetail(
             reservation_id=reservation.id,
             reference=reservation.reference,
@@ -78,6 +98,7 @@ class SqlCheckoutReads:
             units=self._units_of(reservation),
             hire_total_inc_vat=Decimal(reservation.estimated_total_inc_vat),
             rental_id=rental_id,
+            units_wanted=int(units_wanted),
         )
 
     def _units_of(self, reservation: Reservation) -> tuple[CheckoutUnit, ...]:

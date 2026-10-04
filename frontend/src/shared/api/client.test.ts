@@ -116,7 +116,7 @@ describe.each([
 
 describe('the verbs on offer', () => {
   it('do not include DELETE, because this system never deletes a record', () => {
-    expect(Object.keys(api).sort()).toEqual(['get', 'patch', 'post', 'put'])
+    expect(Object.keys(api).sort()).toEqual(['get', 'getFile', 'patch', 'post', 'put'])
   })
 })
 

@@ -176,6 +176,7 @@ export const READY_CHECKOUT: ReservationCheckout = {
   canCheckOut: true,
   refusal: null,
   rentalId: null,
+  unitsShort: 0,
 }
 
 /** The replacement value copied onto the booking of each unit, which no model
@@ -229,6 +230,8 @@ export const RENTAL: Rental = {
       status: 'SETTLED',
       raisedAt: '2026-03-12T08:10:00+02:00',
       rentalItemId: null,
+      reversesChargeId: null,
+      reason: null,
     },
   ],
   depositHeld: '5555.55',

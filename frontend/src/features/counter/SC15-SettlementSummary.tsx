@@ -19,10 +19,10 @@
 import { Link } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import type { ChargeType, Rental, RentalCharge } from '../../shared/api/contract'
-import { isNegativeMoney, isNoMoney, money, unsignedMoney } from '../../shared/format'
+import { isNoMoney, money } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Card, DataTable, Notice } from '../../shared/ui'
-import { CHARGE_STATUS_LABEL, CHARGE_TYPE_LABEL } from './counter-labels'
+import { CHARGE_STATUS_LABEL, CHARGE_TYPE_LABEL, amountWords } from './counter-labels'
 import { damageHref } from './counter-links'
 import { BalancePayment } from './SC15-Balance-Payment'
 import { itemLabel } from './SC15-return-model'
@@ -36,11 +36,6 @@ const WITHHOLDING_CHARGES: readonly ChargeType[] = [
   'CLEANING',
   'ADJUSTMENT',
 ]
-
-/** An amount in words that say which way it runs. */
-function amountInWords(amount: string): string {
-  return isNegativeMoney(amount) ? `${unsignedMoney(amount)} back to the customer` : money(amount)
-}
 
 function FigureRow({ label, amount, strong = false }: { label: string; amount: string; strong?: boolean }) {
   return (
@@ -73,7 +68,7 @@ function ChargedAgainstDeposit({ charges }: { charges: readonly RentalCharge[] }
               {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}
               <span className="block text-xs text-slate-soft">{CHARGE_STATUS_LABEL[charge.status]}</span>
             </span>
-            <span className="tabular font-mono text-ink">{amountInWords(charge.amountIncVat)}</span>
+            <span className="tabular font-mono text-ink">{amountWords(charge.amountIncVat)}</span>
           </li>
         ))}
       </ul>

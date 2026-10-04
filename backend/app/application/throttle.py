@@ -15,10 +15,10 @@ table must not become a list of either. The salt is a secret of the service,
 which is what stops the short list of possible addresses being hashed and
 matched.
 
-Old windows are deleted here as well. One delete removes every window that
-began more than a day ago, and each process issues it at most once in fifteen
-minutes, so the table holds a day of counters at most and no request pays for
-the housekeeping twice.
+No window is longer than `LONGEST_THROTTLE_WINDOW`, which is what lets an old
+counter be deleted without knowing its rule. Counting never deletes anything.
+The lazy sweep prunes the counters whose window ended long ago, a bounded
+batch in one statement a call, through `app.application.throttle_pruning`.
 
 A second kind of count slides with the clock. The sign in lockout asks how
 many times an account failed in the fifteen minutes that end now (BR-46), and
@@ -37,18 +37,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final, Protocol
 
 logger = logging.getLogger(__name__)
 
-# How long a finished window is kept before it is deleted. No rule may use a
-# longer window than this, or its live counter would be swept.
-SWEEP_RETENTION: Final[timedelta] = timedelta(hours=24)
-# How often one process deletes old windows.
-SWEEP_INTERVAL: Final[timedelta] = timedelta(minutes=15)
+# The longest window a rule or a sliding count may use. The longest in use is
+# the hour of the two rules that send a message to an address. A counter
+# whose window began this long before a moment has ended by that moment.
+LONGEST_THROTTLE_WINDOW: Final[timedelta] = timedelta(hours=1)
 MINIMUM_RETRY_AFTER_SECONDS: Final[int] = 1
 # How finely an event of a sliding window is timed.
 SLIDING_RESOLUTION: Final[timedelta] = timedelta(seconds=1)
@@ -67,8 +65,16 @@ class RateLimitStore(Protocol):
         """
         ...
 
-    def delete_windows_before(self, cutoff: datetime) -> int:
-        """Delete every counter whose window began before `cutoff`, and return how many."""
+    def delete_windows_before(self, cutoff: datetime, limit: int) -> int:
+        """Delete at most `limit` counters whose window began before `cutoff`, oldest first.
+
+        It is one statement, and it skips a counter another transaction holds
+        locked rather than waiting for it.
+
+        Returns:
+            How many counters were deleted.
+
+        """
         ...
 
     def total_since(self, bucket_key_hash: str, since: datetime) -> int:
@@ -93,12 +99,12 @@ class ThrottleRule:
     window: timedelta
 
     def __post_init__(self) -> None:
-        """Refuse a rule that could never allow anything or never be swept safely.
+        """Refuse a rule that could never allow anything or never be pruned safely.
 
         Raises:
             ValueError: If the name is blank, the limit is below one, or the
                 window is not a whole number of seconds between one second
-                and the sweep retention.
+                and the longest window.
 
         """
         seconds = self.window.total_seconds()
@@ -107,11 +113,11 @@ class ThrottleRule:
                 f"Attempted to build the throttle rule {self.name!r} with a limit of "
                 f"{self.limit}. A rule needs a name and a limit of at least 1."
             )
-        if seconds < 1 or seconds != int(seconds) or self.window > SWEEP_RETENTION:
+        if seconds < 1 or seconds != int(seconds) or self.window > LONGEST_THROTTLE_WINDOW:
             raise ValueError(
                 f"Attempted to build the throttle rule {self.name!r} with a window of "
                 f"{self.window}. A window is a whole number of seconds, at least one and at "
-                f"most {SWEEP_RETENTION}."
+                f"most {LONGEST_THROTTLE_WINDOW}."
             )
 
     def window_start(self, now: datetime) -> datetime:
@@ -135,21 +141,21 @@ class SlidingWindow:
     span: timedelta
 
     def __post_init__(self) -> None:
-        """Refuse a window with no name, or a span the sweep would cut short.
+        """Refuse a window with no name, or a span the pruning would cut short.
 
         Raises:
             ValueError: If the name is blank, or the span is not a whole
-                number of seconds between one second and the sweep retention.
+                number of seconds between one second and the longest window.
 
         """
         seconds = self.span.total_seconds()
         if not self.name.strip():
             raise ValueError("Attempted to build a sliding window with no name.")
-        if seconds < 1 or seconds != int(seconds) or self.span > SWEEP_RETENTION:
+        if seconds < 1 or seconds != int(seconds) or self.span > LONGEST_THROTTLE_WINDOW:
             raise ValueError(
                 f"Attempted to build the sliding window {self.name!r} with a span of "
                 f"{self.span}. A span is a whole number of seconds, at least one and at "
-                f"most {SWEEP_RETENTION}."
+                f"most {LONGEST_THROTTLE_WINDOW}."
             )
 
     def second_of(self, now: datetime) -> datetime:
@@ -194,8 +200,6 @@ class Throttle:
                 "email and client addresses, and without a secret salt they can be matched."
             )
         self._salt = salt
-        self._sweep_lock = threading.Lock()
-        self._next_sweep_at: datetime | None = None
 
     def bucket_key_hash(self, rule: ThrottleRule | SlidingWindow, subject: str) -> str:
         """Return the salted SHA-256 that stands for one subject under one rule."""
@@ -243,7 +247,6 @@ class Throttle:
             now: The current instant, from the clock.
 
         """
-        self._sweep_when_due(store, now)
         window_start = rule.window_start(now)
         attempts = store.increment(self.bucket_key_hash(rule, subject), window_start)
         allowed = attempts <= rule.limit
@@ -265,18 +268,3 @@ class Throttle:
             },
         )
         return verdict
-
-    def _sweep_when_due(self, store: RateLimitStore, now: datetime) -> None:
-        """Delete the old windows, at most once per interval in this process."""
-        with self._sweep_lock:
-            if self._next_sweep_at is not None and now < self._next_sweep_at:
-                return
-            self._next_sweep_at = now + SWEEP_INTERVAL
-        deleted = store.delete_windows_before(now - SWEEP_RETENTION)
-        logger.info(
-            "throttle.windows_swept",
-            extra={
-                "deleted_count": deleted,
-                "retention_seconds": int(SWEEP_RETENTION.total_seconds()),
-            },
-        )

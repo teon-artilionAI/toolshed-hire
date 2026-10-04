@@ -4,6 +4,11 @@ A policy is a port with one implementation that runs in production and a
 counterpart for tests. There are two, the two Strategies the design document
 names. The pricing policy works out what a hire costs (BR-21), and the late
 fee policy works out what a unit owes for coming back late (BR-30, BR-31).
+
+Beside them sits one rule that is not swapped, the share of a hire charge each
+unit of a hire is given in the utilisation report, in `hire_charge_share`. It
+is here because it scales an amount, and every place that does is kept in this
+package and in the VAT module.
 """
 
 from __future__ import annotations

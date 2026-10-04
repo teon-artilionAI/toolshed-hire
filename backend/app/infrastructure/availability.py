@@ -14,6 +14,9 @@ artefact that changes with a PostgreSQL release or a locale, and building a
 control decision on one is how a 409 silently becomes a 500. Any other
 integrity fault is re-raised unchanged, because reporting a foreign key fault
 as a booking conflict would hide a real defect.
+
+The release of one allocation by an administrator is written through this
+repository as well, by `app.infrastructure.allocation_release` (US-32).
 """
 
 from __future__ import annotations
@@ -27,10 +30,12 @@ from sqlalchemy import exists, select
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col
 
+from app.application.availability.ports import HeldUnit
 from app.domain import availability, catalogue
 from app.domain.enums import AssetStatus
 from app.domain.errors import AllocationConflictError
 from app.domain.period import BookingPeriod
+from app.infrastructure.allocation_release import held_unit, write_release
 from app.infrastructure.models import Asset, AssetAllocation
 from app.infrastructure.schema_ddl import OVERLAP_CONSTRAINT_NAME
 
@@ -184,6 +189,14 @@ class SqlAssetRepository:
             self._session.add(row)
         self._session.flush()
         logger.debug("asset.units_saved", extra={"unit_count": len(assets)})
+
+    def find_allocation(self, allocation_id: UUID) -> HeldUnit | None:
+        """Return an allocation with its reservation and its unit's tag, or None."""
+        return held_unit(self._session, allocation_id)
+
+    def release_allocation(self, allocation: availability.AssetAllocation) -> None:
+        """Write the release of one allocation, which must still be stored as active."""
+        write_release(self._session, allocation)
 
     def translate_integrity_error(self, error: IntegrityError) -> AllocationConflictError | None:
         """Return the booking conflict an integrity error stands for, if it is one.

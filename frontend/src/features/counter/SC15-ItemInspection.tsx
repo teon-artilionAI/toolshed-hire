@@ -19,12 +19,12 @@ import { Link } from 'react-router-dom'
 import { MAX_ACCESSORIES_LENGTH } from '../../shared/api/checkout'
 import type { RentalCharge, RentalItem } from '../../shared/api/contract'
 import { CONDITION_GRADES } from '../../shared/api/rental-read'
-import { isNegativeMoney, money, unsignedMoney } from '../../shared/format'
+import { money } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Notice, StatusPill } from '../../shared/ui'
 import { CheckRow, SelectInput, TextInput } from './counter-fields'
 import { damageHref } from './counter-links'
-import { CHARGE_TYPE_LABEL, CONDITION_GRADE_LABEL, countOf } from './counter-labels'
+import { CHARGE_TYPE_LABEL, CONDITION_GRADE_LABEL, amountWords, countOf } from './counter-labels'
 import { isLost, isWorse, itemControlId, itemLabel } from './SC15-return-model'
 import type { ItemDraft, ReturnErrors } from './SC15-return-model'
 
@@ -34,9 +34,11 @@ const GRADE_OPTIONS = CONDITION_GRADES.map((grade) => ({ value: grade, label: CO
 export const LATE_FEE_IS_THE_SYSTEMS =
   'The system worked this fee out from the late fee policy. The counter confirms it with the return and cannot change it.'
 
+/** Said to counter staff wherever a charge is shown. */
+export const ONLY_THE_OWNER_CAN_WAIVE = 'Only the owner can waive a charge.'
+
 /** Said where a fee may look wrong. */
-export const ONLY_THE_OWNER_WAIVES =
-  'If it looks wrong, take the unit back anyway and tell the owner. Only the owner can waive a charge.'
+export const ONLY_THE_OWNER_WAIVES = `If it looks wrong, take the unit back anyway and tell the owner. ${ONLY_THE_OWNER_CAN_WAIVE}`
 
 /** How the unit went out, in one line. */
 function wentOut(item: RentalItem): string {
@@ -187,10 +189,7 @@ function LostItem({ item, charges }: { item: RentalItem; charges: readonly Renta
         <ul aria-label={`Charges for the loss of ${itemLabel(item)}`} className="mt-xs flex flex-col gap-xs text-sm">
           {forTheLoss.map((charge) => (
             <li key={charge.id} className="tabular break-words text-slate-soft">
-              {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}{' '}
-              {isNegativeMoney(charge.amountIncVat)
-                ? `${unsignedMoney(charge.amountIncVat)} back to the customer`
-                : money(charge.amountIncVat)}
+              {CHARGE_TYPE_LABEL[charge.type]}. {charge.description} {amountWords(charge.amountIncVat)}
             </li>
           ))}
         </ul>

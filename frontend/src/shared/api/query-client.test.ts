@@ -18,12 +18,14 @@ import {
   RESERVATION_ID,
   pageOf,
 } from '../../test/reservation-samples'
+import { adminQueries } from './admin-queries'
 import { listBranches } from './catalogue'
 import { catalogueQueries } from './catalogue-queries'
 import { locatorQueries, overviewQueries } from './counter-queries'
 import {
   CATALOGUE_FRESH_MS,
   MAX_QUERY_RETRIES,
+  REPORT_FRESH_MS,
   RETRY_BASE_DELAY_MS,
   RETRY_MAX_DELAY_MS,
   createQueryClient,
@@ -122,6 +124,13 @@ describe('the freshness rules', () => {
     ["the counter's dashboard", overviewQueries.dashboard('BLV').queryKey],
     ['a day of the diary', overviewQueries.diary({ branchCode: 'BLV', from: '2026-03-12', days: 1 }).queryKey],
     ['a locator search', locatorQueries.search({ q: 'TSH', page: 1, pageSize: 20 }).queryKey],
+    ["the owner's dashboard", adminQueries.dashboard().queryKey],
+    ['a page of the audit trail', adminQueries.auditEvents({ page: 1, pageSize: 20 }).queryKey],
+    ['a page of the notification log', adminQueries.notifications({ page: 1, pageSize: 20 }).queryKey],
+    ['a page of the asset register', adminQueries.assets({ page: 1, pageSize: 20 }).queryKey],
+    ['one unit of the asset register', adminQueries.asset('TSH-DR-0042').queryKey],
+    ['a page of the staff accounts', adminQueries.staff({ page: 1, pageSize: 20 }).queryKey],
+    ['a page of the customer holds', adminQueries.customerHolds({ status: 'ON_HOLD', page: 1, pageSize: 20 }).queryKey],
   ])('never treat %s as fresh, and refetch it on every use', (_what, queryKey) => {
     const defaults = createQueryClient().getQueryDefaults(queryKey)
 
@@ -129,6 +138,25 @@ describe('the freshness rules', () => {
     expect(defaults.refetchOnMount).toBe('always')
     expect(defaults.refetchOnWindowFocus).toBe('always')
     expect(defaults.refetchOnReconnect).toBe('always')
+  })
+
+  it('treat a report as fresh for a minute, so a return to the window does not work it out again', () => {
+    const query = { from: '2026-09-01', to: '2026-10-01', groupBy: 'model', page: 1, pageSize: 20 } as const
+    const defaults = createQueryClient().getQueryDefaults(adminQueries.report(query).queryKey)
+
+    expect(defaults.staleTime).toBe(REPORT_FRESH_MS)
+    expect(defaults.refetchOnWindowFocus).toBeUndefined()
+  })
+
+  it.each([
+    ["the owner's categories", adminQueries.categories().queryKey],
+    ["a page of the owner's models", adminQueries.models({ page: 1, pageSize: 20 }).queryKey],
+    ["one of the owner's models", adminQueries.model('a0de1000-0000-4000-8000-000000000001').queryKey],
+  ])('treat %s as catalogue data, fresh for a minute', (_what, queryKey) => {
+    const defaults = createQueryClient().getQueryDefaults(queryKey)
+
+    expect(defaults.staleTime).toBe(CATALOGUE_FRESH_MS)
+    expect(defaults.refetchOnWindowFocus).toBeUndefined()
   })
 
   it('never retry a write', () => {

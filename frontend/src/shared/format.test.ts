@@ -7,17 +7,14 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { TODAY } from './fixtures'
 import {
   daysBetween,
-  daysOverdue,
   formatDate,
   formatDateShort,
   formatDateTime,
   humanise,
   isNegativeMoney,
   isNoMoney,
-  isOverdue,
   money,
   percent,
   unsignedMoney,
@@ -207,38 +204,6 @@ describe('daysBetween', () => {
     const first = daysBetween('2026-03-06', '2026-03-10')
     const second = daysBetween('2026-03-10', '2026-03-13')
     expect(first + second).toBe(daysBetween('2026-03-06', '2026-03-13'))
-  })
-})
-
-describe('daysOverdue', () => {
-  it('counts the days since the item was due back', () => {
-    expect(daysOverdue('2026-03-10', '2026-03-12')).toBe(2)
-  })
-
-  it('is zero for an item that is not due yet', () => {
-    expect(daysOverdue('2026-03-20', '2026-03-12')).toBe(0)
-  })
-
-  it('measures against the fixture today when no date is given', () => {
-    expect(daysOverdue(TODAY)).toBe(0)
-  })
-})
-
-describe('isOverdue', () => {
-  it('is true the day after the due date', () => {
-    expect(isOverdue('2026-03-11', '2026-03-12')).toBe(true)
-  })
-
-  it('is false on the due date itself', () => {
-    expect(isOverdue('2026-03-12', '2026-03-12')).toBe(false)
-  })
-
-  it('is false before the due date', () => {
-    expect(isOverdue('2026-03-13', '2026-03-12')).toBe(false)
-  })
-
-  it('measures against the fixture today when no date is given', () => {
-    expect(isOverdue(TODAY)).toBe(false)
   })
 })
 

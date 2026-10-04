@@ -78,7 +78,9 @@ export type CheckoutUnit = Refine<Schemas['CheckoutUnitResponse'], { depositPerU
  *
  * `canCheckOut` is the server's answer for this person at this moment. When
  * it is false, `refusal` is the sentence that says why. `rentalId` is set once
- * the reservation has been collected. Every figure is the server's.
+ * the reservation has been collected. `unitsShort` is how many units it still
+ * needs after one was released. While it is above zero `canCheckOut` is false
+ * and `refusal` says how many are missing. Every figure is the server's.
  */
 export type ReservationCheckout = Refine<
   JsonOf<Paths['/api/reservations/{id}/checkout']['get']>,
@@ -148,25 +150,36 @@ export type RentalItem = Refine<
   { returnedAt: IsoTimestamp | null; lateFeePerDay: Money; lateFeeToday: Money; replacementValue: Money | null }
 >
 
-/** One charge on a hire. A release of a deposit is a negative amount. */
+/**
+ * One charge on a hire. A release of a deposit is a negative amount, and so is
+ * a reversal, which names the charge it cancels out in `reversesChargeId`.
+ * That is null on any other charge. `reason` is the owner's reason for a
+ * waiver, a reversal or an adjustment, and null for a charge the system
+ * raised. A reversed charge keeps its own status, so `REVERSED` is never sent.
+ */
 export type RentalCharge = Refine<
   Schemas['ChargeResponse'],
   { amountExVat: Money; vatAmount: Money; amountIncVat: Money; raisedAt: IsoTimestamp }
 >
 
 /**
- * One hire, from the checkout and the rental routes. Every figure is the
- * server's.
+ * One hire, from the checkout, the rental route and the owner's corrections.
+ * Every figure is the server's.
  *
  * The checkout answers 201 with the new hire, and 200 with the hire it made
- * before when the reservation is already out. The document describes both
- * bodies, so this is built from the two of them and the rental route, and a
- * repeated checkout is read as the same hire the first one made.
+ * before when the reservation is already out. A waiver, a reversal and an
+ * adjustment each answer 200 with the hire as it now stands. The document
+ * describes every one of those bodies, so this is built from all of them and
+ * the rental route, and a repeated checkout is read as the same hire the first
+ * one made.
  */
 export type Rental = Refine<
   JsonOf<Paths['/api/rentals/{id}']['get']> &
     CreatedJsonOf<Paths['/api/reservations/{id}/checkout']['post']> &
-    JsonOf<Paths['/api/reservations/{id}/checkout']['post']>,
+    JsonOf<Paths['/api/reservations/{id}/checkout']['post']> &
+    JsonOf<Paths['/api/admin/charges/{id}/waiver']['post']> &
+    JsonOf<Paths['/api/admin/charges/{id}/reversal']['post']> &
+    JsonOf<Paths['/api/admin/rentals/{id}/adjustments']['post']>,
   {
     from: IsoDate
     dueBackOn: IsoDate

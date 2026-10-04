@@ -89,6 +89,7 @@ function readSessionUser(value: unknown, requestPath: string): SessionUser {
     role,
     branchCode: readBranchCode(record, requestPath),
     emailVerified: readFlag(record, 'emailVerified', requestPath),
+    emailDeliverable: readFlag(record, 'emailDeliverable', requestPath),
   }
 }
 

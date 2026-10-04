@@ -57,6 +57,8 @@ function charge(number: number, overrides: Record<string, unknown>) {
     status: 'SETTLED',
     raisedAt: `${TWO_DAYS_AGO}T08:10:00+02:00`,
     rentalItemId: null,
+    reversesChargeId: null,
+    reason: null,
     ...overrides,
   }
 }

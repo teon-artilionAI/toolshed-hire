@@ -14,9 +14,11 @@ import logging
 
 from fastapi import APIRouter, status
 
-from app.api.deps import AnyRoleUser, SessionDependency
+from app.api.deps import AnyRoleUser, NotificationGatewayDependency, SessionDependency
 from app.api.identity_deps import branch_code_of
-from app.api.schemas import UserResponse, wire_role
+from app.api.schemas import UserResponse
+from app.api.user_presenter import user_response
+from app.application.identity.sessions import SignedInAccount
 
 logger = logging.getLogger(__name__)
 
@@ -29,26 +31,35 @@ router = APIRouter(tags=["identity"])
     status_code=status.HTTP_200_OK,
     summary="Return the signed in account",
 )
-def read_me(user: AnyRoleUser, session: SessionDependency) -> UserResponse:
+def read_me(
+    user: AnyRoleUser, session: SessionDependency, gateway: NotificationGatewayDependency
+) -> UserResponse:
     """Return the account behind the presented access token.
 
     Args:
         user: The active account, resolved by the layered auth dependencies.
         session: The request scoped session, used to resolve the branch code.
+        gateway: The email gateway, asked whether mail to the address would go.
 
     Returns:
         The account, in the shape every session response carries it in.
 
     """
-    logger.info(
-        "identity.me_read",
-        extra={"user_id": str(user.id), "role": user.role.value},
-    )
-    return UserResponse(
+    signed_in = SignedInAccount(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
-        role=wire_role(user.role),
+        role=user.role,
         branch_code=branch_code_of(session, user),
         email_verified=user.email_verified_at is not None,
     )
+    answer = user_response(signed_in, gateway)
+    logger.info(
+        "identity.me_read",
+        extra={
+            "user_id": str(user.id),
+            "role": user.role.value,
+            "email_deliverable": answer.email_deliverable,
+        },
+    )
+    return answer

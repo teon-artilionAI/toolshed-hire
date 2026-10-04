@@ -8,6 +8,10 @@
  * The API answers the same way whether or not it sent anything, and says
  * whether an email can reach the address at all. When it cannot, the notice
  * says that in plain words, with what the person can do instead.
+ *
+ * The session says the same of the account's address before anything is
+ * sent. When this environment cannot deliver to it, the notice does not ask
+ * the person to open a link that never reached them.
  */
 
 import { useRef, useState } from 'react'
@@ -15,16 +19,19 @@ import { Loader2, Send } from 'lucide-react'
 import { VERIFICATION_LINK_HOURS, resendVerification } from '../../shared/api/account'
 import type { EmailDelivery } from '../../shared/api/contract'
 import { Notice } from '../../shared/ui'
+import { useSession } from '../../shared/use-session'
 import { describeAccountFailure } from './account-failure'
 import type { AccountFailure } from './account-failure'
 import { AccountFailureNotice } from './account-failure-notice'
-import { DemonstrationEmailNote, WITHOUT_THE_LINK } from './email-delivery-note'
+import { DEMONSTRATION_EMAIL_REASON, DemonstrationEmailNote, WITHOUT_THE_LINK } from './email-delivery-note'
 
 export const EMAIL_UNCONFIRMED_TITLE = 'Your email address has not been confirmed'
 export const LINK_SENT_AGAIN_TITLE = 'We have sent the link again'
 
 /** @param email The address on the account, which is where the link goes. */
 export function EmailVerificationNotice({ email }: { email: string }) {
+  const { user } = useSession()
+  const reachable = user?.emailDeliverable === true
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState<EmailDelivery | null>(null)
   const [failure, setFailure] = useState<AccountFailure | null>(null)
@@ -49,10 +56,16 @@ export function EmailVerificationNotice({ email }: { email: string }) {
   return (
     <div className="flex flex-col gap-sm">
       <Notice tone="warn" title={EMAIL_UNCONFIRMED_TITLE}>
-        <p>
-          A hire cannot be confirmed online until it is. Open the link we sent to{' '}
-          <span className="break-all font-medium">{email}</span>, or send it again.
-        </p>
+        {reachable ? (
+          <p>
+            A hire cannot be confirmed online until it is. Open the link we sent to{' '}
+            <span className="break-all font-medium">{email}</span>, or send it again.
+          </p>
+        ) : (
+          <p>
+            A hire cannot be confirmed online until it is. {DEMONSTRATION_EMAIL_REASON} {WITHOUT_THE_LINK}
+          </p>
+        )}
         <button
           type="button"
           className="btn-secondary mt-sm px-md"

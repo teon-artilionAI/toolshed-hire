@@ -7,8 +7,8 @@ items and its charges, so no caller can store half a checkout.
 A rental that is going to change is read locked, with its items, the figures
 copied onto their booking lines and its charges, and written back whole by
 `save`. Two returns of one rental therefore take turns. `save` adds the
-charges that are new and moves a pending charge to settled, and it never
-touches a charge that was already settled (BR-24). `lock_due_overdue` is the
+charges that are new and moves a pending charge to settled or waived, and it
+never touches a charge that was already settled (BR-24). `lock_due_overdue` is the
 part of the lazy sweep that finds the hires past their due date (BR-52).
 
 The reads that return read models sit behind the same port, so a use case
@@ -83,6 +83,10 @@ class RentalRepository(Protocol):
 
     def find_id_for_reservation(self, reservation_id: UUID) -> UUID | None:
         """Return the key of the rental opened from a reservation, or None when there is none."""
+        ...
+
+    def find_rental_of_charge(self, charge_id: UUID) -> UUID | None:
+        """Return the key of the rental a charge is on, or None when there is no such charge."""
         ...
 
     def find_detail(self, key: RentalKey) -> RentalDetail | None:

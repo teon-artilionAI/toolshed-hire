@@ -12,13 +12,12 @@ names the route.
 
 And one table says, for a representative endpoint of every module and for the
 three roles and an anonymous caller, exactly who is let in and who is answered
-401 or 403. A later change adds a row to `MATRIX` and nothing else.
+401 or 403. The table is `MATRIX` in tests/api/role_matrix.py, and a later
+change adds a row to it and nothing else.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 from typing import Final
 
 import pytest
@@ -37,109 +36,17 @@ from app.config import Environment
 from app.domain.enums import UserRole
 from app.main import FRAMEWORK_ROUTE_PATHS, create_app
 from app.main import app as production_app
+from tests.api.role_matrix import API, MATRIX, Caller, MatrixRow
 from tests.api.route_policy_expectations import EXPECTED_POLICIES
 from tests.support.factories import Factory
-from tests.support.probe_app import ADMIN_PATH, COUNTER_PATH, CUSTOMER_PATH, FRESH_ADMIN_PATH
 from tests.support.tokens import authorization_header, mint_access_token
 
-# A key no customer and no reservation carries, so a route that lets the caller
-# in answers 404 and one that does not answers 401 or 403 before it looks.
-NOBODYS_KEY: Final[str] = "00000000-0000-4000-8000-000000000000"
 REFUSALS: Final[frozenset[int]] = frozenset(
     {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}
 )
 UNDECLARED_PATH: Final[str] = "/api/left-open-by-mistake"
 CONTRADICTORY_PATH: Final[str] = "/api/public-and-admin-at-once"
 
-
-class Caller(str, Enum):
-    """The four kinds of caller the matrix is asked about."""
-
-    ANONYMOUS = "anonymous"
-    CUSTOMER = "customer"
-    COUNTER = "counter"
-    ADMIN = "admin"
-
-
-EVERYONE: Final[frozenset[Caller]] = frozenset(Caller)
-SIGNED_IN: Final[frozenset[Caller]] = EVERYONE - {Caller.ANONYMOUS}
-STAFF: Final[frozenset[Caller]] = frozenset({Caller.COUNTER, Caller.ADMIN})
-ADMIN_ONLY: Final[frozenset[Caller]] = frozenset({Caller.ADMIN})
-CUSTOMER_ONLY: Final[frozenset[Caller]] = frozenset({Caller.CUSTOMER})
-API: Final[str] = "api"
-PROBE: Final[str] = "probe"
-
-
-@dataclass(frozen=True, slots=True)
-class MatrixRow:
-    """One endpoint and the callers it lets in.
-
-    Attributes:
-        module: The module the endpoint represents, which is the tag of its
-            router. A probe row names the policy it stands in for.
-        application: `API` for the real application, `PROBE` for the probe
-            application that mounts the policies no real route carries yet.
-        method: The HTTP method.
-        path: The path to request.
-        admits: Who is let in. Everybody else is refused, an anonymous caller
-            with 401 and a signed in one with 403.
-
-    """
-
-    module: str
-    application: str
-    method: str
-    path: str
-    admits: frozenset[Caller]
-
-
-# A request carries no body and no query string. A route that lets the caller
-# in then answers 422 or its own status, and one that does not answers 401 or
-# 403 before it looks at either, so no row needs a valid request.
-MATRIX: Final[tuple[MatrixRow, ...]] = (
-    MatrixRow("health", API, "GET", "/api/health", EVERYONE),
-    MatrixRow("auth", API, "POST", "/api/auth/login", EVERYONE),
-    MatrixRow("auth", API, "POST", "/api/auth/register", EVERYONE),
-    MatrixRow("auth", API, "POST", "/api/auth/email-verification", EVERYONE),
-    MatrixRow("auth", API, "POST", "/api/auth/email-verification/resend", SIGNED_IN),
-    MatrixRow("auth", API, "POST", "/api/auth/password-reset/request", EVERYONE),
-    MatrixRow("auth", API, "POST", "/api/auth/password-reset/complete", EVERYONE),
-    MatrixRow("identity", API, "GET", "/api/me", SIGNED_IN),
-    MatrixRow("identity", API, "GET", "/api/me/profile", CUSTOMER_ONLY),
-    MatrixRow("identity", API, "PATCH", "/api/me/profile", CUSTOMER_ONLY),
-    MatrixRow("identity", API, "GET", "/api/customers", STAFF),
-    MatrixRow("identity", API, "POST", "/api/customers", STAFF),
-    MatrixRow("identity", API, "GET", f"/api/customers/{NOBODYS_KEY}", STAFF),
-    MatrixRow("booking", API, "GET", "/api/reservations", SIGNED_IN),
-    MatrixRow("booking", API, "POST", "/api/reservations", SIGNED_IN),
-    MatrixRow("hire", API, "GET", f"/api/reservations/{NOBODYS_KEY}/checkout", STAFF),
-    MatrixRow("hire", API, "POST", f"/api/reservations/{NOBODYS_KEY}/checkout", STAFF),
-    MatrixRow("hire", API, "GET", f"/api/rentals/{NOBODYS_KEY}", STAFF),
-    MatrixRow("hire", API, "GET", "/api/rentals", STAFF),
-    MatrixRow("hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/returns", STAFF),
-    MatrixRow("hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/balance-payment", STAFF),
-    MatrixRow(
-        "hire", API, "POST", f"/api/rentals/{NOBODYS_KEY}/items/{NOBODYS_KEY}/loss", STAFF
-    ),
-    MatrixRow("hire", API, "GET", "/api/me/rentals", CUSTOMER_ONLY),
-    MatrixRow("hire", API, "POST", "/api/damage-reports", STAFF),
-    MatrixRow("hire", API, "GET", "/api/damage-reports", STAFF),
-    MatrixRow("hire", API, "GET", f"/api/damage-reports/{NOBODYS_KEY}", STAFF),
-    MatrixRow("hire", API, "POST", f"/api/damage-reports/{NOBODYS_KEY}/repair", ADMIN_ONLY),
-    MatrixRow("hire", API, "POST", f"/api/damage-reports/{NOBODYS_KEY}/resolution", ADMIN_ONLY),
-    MatrixRow("hire", API, "GET", "/api/counter/dashboard", STAFF),
-    MatrixRow("hire", API, "GET", "/api/counter/diary", STAFF),
-    MatrixRow("booking", API, "POST", f"/api/reservations/{NOBODYS_KEY}/no-show", STAFF),
-    MatrixRow("catalogue", API, "GET", "/api/assets/locator", STAFF),
-    MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
-    MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
-    MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),
-    MatrixRow("pricing", API, "GET", "/api/catalogue/models/any-model/quote", EVERYONE),
-    MatrixRow("administrator only", PROBE, "GET", ADMIN_PATH, ADMIN_ONLY),
-    MatrixRow("administrator, read again", PROBE, "GET", FRESH_ADMIN_PATH, ADMIN_ONLY),
-    MatrixRow("counter and administrator", PROBE, "GET", COUNTER_PATH, STAFF),
-    MatrixRow("customer only", PROBE, "GET", CUSTOMER_PATH, CUSTOMER_ONLY),
-)
 CELLS: Final[list[tuple[MatrixRow, Caller]]] = [
     (row, caller) for row in MATRIX for caller in Caller
 ]

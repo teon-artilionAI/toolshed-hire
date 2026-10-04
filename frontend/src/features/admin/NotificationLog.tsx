@@ -1,143 +1,155 @@
 /**
- * The email delivery log on SC-24.
+ * The notification log on SC-24.
  *
- * A booking confirmation that never arrived is a customer standing at the
- * counter with nothing to show. So the log records the attempt, not just the
- * intention, and a failed attempt is the loudest thing on the row with the
- * one action that fixes it right next to it.
+ * Every booking confirmation the system tried to send, newest first, one page
+ * at a time from `GET /api/admin/notifications`. The status filter and the page
+ * live in the address. A change of filter is one request, so it applies as it
+ * is chosen.
+ *
+ * A failed email is the one a customer is left waiting on, so it says what
+ * went wrong and offers "Send again" beside it. That is in
+ * NotificationEntry.tsx. The log has the shared loading, failed and empty
+ * states, and the server pages it.
  */
 
-import { useMemo, useState } from 'react'
-import { Loader2, Send } from 'lucide-react'
-import { formatDateTime, humanise } from '../../shared/format'
-import type { NotificationRecord } from '../../shared/types'
-import { DataTable, EmptyState, Field, StatusPill } from '../../shared/ui'
+import { useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { adminQueries } from '../../shared/api/admin-queries'
+import { NOTIFICATION_STATUSES } from '../../shared/api/audit-log'
+import type { EmailNotificationPage } from '../../shared/api/contract'
+import { queryPhase } from '../../shared/api/query-phase'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import Pagination from '../../shared/pagination'
+import { EmptyState, Field } from '../../shared/ui'
+import { countOf } from '../counter/counter-labels'
+import { notificationQueryFor, readNotificationFilters, writeNotificationFilters } from './audit-address'
+import type { NotificationFilters } from './audit-address'
+import { NOTIFICATION_STATUS_LABEL } from './audit-words'
+import { NotificationEntry } from './NotificationEntry'
+import { FIRST_PAGE } from './report-address'
 
-const SELECT_CLASS = 'field-input cursor-pointer transition-colors duration-200'
+const EVERY_STATUS = ''
+const STATUS_FILTER_ID = 'notification-status'
+const SKELETON_ROWS = 3
 
-type DeliveryFilter = 'ALL' | 'DELIVERED' | 'FAILED'
+function statusLine(page: EmailNotificationPage, filters: NotificationFilters): string {
+  const which = filters.status === null ? '' : ` that ${filters.status === 'FAILED' ? 'did not go out' : `are ${NOTIFICATION_STATUS_LABEL[filters.status].toLowerCase()}`}`
+  return `${countOf(page.total, 'email', 'emails')}${which}, newest first.`
+}
 
-export default function NotificationLog({
-  records,
-  sendingId,
-  onResend,
+function Loaded({
+  page,
+  filters,
+  onPage,
+  onEvery,
 }: {
-  records: NotificationRecord[]
-  sendingId: string | null
-  onResend: (record: NotificationRecord) => void
+  page: EmailNotificationPage
+  filters: NotificationFilters
+  onPage: (page: number) => void
+  onEvery: () => void
 }) {
-  const [filter, setFilter] = useState<DeliveryFilter>('ALL')
-
-  const shown = useMemo(
-    () =>
-      records
-        .filter((r) =>
-          filter === 'ALL'
-            ? true
-            : filter === 'DELIVERED'
-              ? r.delivered
-              : !r.delivered,
-        )
-        .sort((a, b) => b.at.localeCompare(a.at)),
-    [records, filter],
+  if (page.items.length === 0) {
+    const pastTheEnd = page.total > 0
+    return (
+      <div className="card">
+        <EmptyState
+          title={pastTheEnd ? 'That page is past the end of the log' : 'No email matches'}
+          body={
+            pastTheEnd
+              ? 'Go back to the first page of the log.'
+              : filters.status === null
+                ? 'The system has not tried to send an email yet.'
+                : 'No email stands that way. Show every email to see the whole log.'
+          }
+          action={
+            pastTheEnd ? (
+              <button type="button" className="btn-secondary px-md" onClick={() => onPage(FIRST_PAGE)}>
+                Go to the first page
+              </button>
+            ) : filters.status !== null ? (
+              <button type="button" className="btn-secondary px-md" onClick={onEvery}>
+                Show every email
+              </button>
+            ) : undefined
+          }
+        />
+      </div>
+    )
+  }
+  return (
+    <>
+      <ol className="flex flex-col gap-md" aria-label="Emails, newest first">
+        {page.items.map((notification) => (
+          <li key={notification.id}>
+            <NotificationEntry
+              notification={notification}
+              original={page.items.find((candidate) => candidate.id === notification.resendOf)}
+            />
+          </li>
+        ))}
+      </ol>
+      <Pagination label="Notification log pages" page={page.page} pageSize={page.pageSize} total={page.total} onPageChange={onPage} />
+    </>
   )
+}
+
+export default function NotificationLog() {
+  const [params, setParams] = useSearchParams()
+  const filters = readNotificationFilters(params)
+  const log = useQuery(adminQueries.notifications(notificationQueryFor(filters)))
+  const phase = queryPhase(log)
+  const regionRef = useRef<HTMLElement>(null)
+
+  function show(changes: Partial<NotificationFilters>) {
+    setParams(writeNotificationFilters({ ...filters, page: FIRST_PAGE, ...changes }), { replace: true })
+  }
+
+  function goToPage(page: number) {
+    show({ page })
+    regionRef.current?.focus()
+  }
 
   return (
     <>
-      <div className="mb-lg max-w-sm">
-        <Field label="Delivery" htmlFor="delivery-filter">
-          <select
-            id="delivery-filter"
-            className={SELECT_CLASS}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as DeliveryFilter)}
-          >
-            <option value="ALL">Every email we tried to send</option>
-            <option value="DELIVERED">Arrived</option>
-            <option value="FAILED">Did not arrive</option>
-          </select>
-        </Field>
-      </div>
-
-      {shown.length === 0 ? (
-        <EmptyState
-          title="Nothing to show for that filter"
-          body="Switch the delivery filter back to every email to see the full log."
-          action={
-            <button
-              type="button"
-              className="btn-secondary px-md"
-              onClick={() => setFilter('ALL')}
+      <form className="card mb-lg p-lg" aria-label="Choose which emails to show" onSubmit={(e) => e.preventDefault()}>
+        <div className="max-w-sm">
+          <Field label="Which emails" htmlFor={STATUS_FILTER_ID}>
+            <select
+              id={STATUS_FILTER_ID}
+              className="field-input cursor-pointer"
+              value={filters.status ?? EVERY_STATUS}
+              onChange={(e) => show({ status: NOTIFICATION_STATUSES.find((status) => status === e.target.value) ?? null })}
             >
-              Show every email
-            </button>
-          }
-        />
-      ) : (
-        <DataTable
-          columns={['When', 'Sent to', 'What it was', 'Booking', 'Delivery', 'Action']}
-          caption="Every email the system has tried to send, and whether it arrived"
-        >
-          {shown.map((record) => {
-            const sending = sendingId === record.id
-            return (
-              <tr
-                key={record.id}
-                className={`transition-colors duration-200 hover:bg-muted ${
-                  record.delivered ? '' : 'bg-status-overdue-wash'
-                }`}
-              >
-                <th scope="row" className="td whitespace-nowrap text-left font-normal">
-                  <span className="tabular font-mono text-xs text-ink">
-                    {formatDateTime(record.at)}
-                  </span>
-                </th>
-                <td className="td break-all">{record.to}</td>
-                <td className="td text-slate-soft">{humanise(record.kind)}</td>
-                <td className="td">
-                  <span className="font-mono text-xs">{record.reference}</span>
-                </td>
-                <td className="td">
-                  {record.delivered ? (
-                    <StatusPill status="AVAILABLE" label="Arrived" />
-                  ) : (
-                    <div className="min-w-[10rem]">
-                      <StatusPill status="OVERDUE" label="Did not arrive" />
-                      <span className="mt-xs block text-xs text-status-overdue">
-                        The mailbox rejected it. Check the address, then try again.
-                      </span>
-                    </div>
-                  )}
-                </td>
-                <td className="td">
-                  <button
-                    type="button"
-                    disabled={sending}
-                    onClick={() => onResend(record)}
-                    className={
-                      record.delivered ? 'btn-secondary px-md' : 'btn-primary px-md'
-                    }
-                  >
-                    {sending ? (
-                      <Loader2
-                        className="h-4 w-4 shrink-0 animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Send className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    )}
-                    {sending
-                      ? 'Sending'
-                      : record.delivered
-                        ? 'Send it again'
-                        : 'Try sending it again'}
-                  </button>
-                </td>
-              </tr>
-            )
-          })}
-        </DataTable>
-      )}
+              <option value={EVERY_STATUS}>Every email</option>
+              {NOTIFICATION_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {NOTIFICATION_STATUS_LABEL[status]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </form>
+
+      <section ref={regionRef} tabIndex={-1} aria-label="The emails">
+        <p role="status" className="mb-md text-sm text-slate-soft">
+          {phase === 'ready' && log.data !== undefined
+            ? statusLine(log.data, filters)
+            : phase === 'loading'
+              ? 'Loading the emails.'
+              : ''}
+        </p>
+        {phase === 'failed' ? (
+          <ErrorState what="the notification log" error={log.error} onRetry={() => void log.refetch()} />
+        ) : log.data === undefined ? (
+          <LoadingState shape="rows" count={SKELETON_ROWS} />
+        ) : (
+          <div aria-busy={log.isFetching}>
+            <Loaded page={log.data} filters={filters} onPage={goToPage} onEvery={() => show({ status: null })} />
+          </div>
+        )}
+      </section>
     </>
   )
 }

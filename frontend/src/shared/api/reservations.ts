@@ -1,11 +1,12 @@
 /**
  * The reservation endpoints.
  *
- * Seven routes, all of which need a signed in person. A customer creates a
+ * Eight routes, all of which need a signed in person. A customer creates a
  * reservation as a draft, puts it on hold, confirms it, cancels it, lists
- * their own and reads one. Counter staff use the same six, and the seventh,
- * which records that nobody came to collect a booking. Each function here
- * makes one call and reads the body into its contract type.
+ * their own and reads one. Counter staff use the same six, the seventh, which
+ * records that nobody came to collect a booking, and the eighth, which finds
+ * replacement units for a booking the owner took a unit from. Each function
+ * here makes one call and reads the body into its contract type.
  *
  * Every route answers with the whole reservation, and every figure in it is
  * the server's. So are `canHold`, `canConfirm` and `canCancel`, which say what
@@ -203,6 +204,21 @@ export function cancelReservation(id: string, reason: string | null): Promise<Re
 export function markNoShow(id: string, reason: string): Promise<Reservation> {
   const body: NoShowRequest = { reason }
   return api.post(`${reservationEndpoint(id)}/no-show`, body, readReservation)
+}
+
+/**
+ * POST /api/reservations/{id}/reallocation. No body. For staff at the branch
+ * the booking is collected from.
+ *
+ * Allocates replacement units for every line of a confirmed or held booking
+ * that is short, through the same path a hold takes. The answer is the
+ * reservation with the units it now has.
+ *
+ * @throws ApiError with status 409 naming the model and the dates when no unit
+ *   is free, and 403 at another branch.
+ */
+export function reallocateReservation(id: string): Promise<Reservation> {
+  return api.post(`${reservationEndpoint(id)}/reallocation`, undefined, readReservation)
 }
 
 /** GET /api/reservations. The caller's own, newest first. */
