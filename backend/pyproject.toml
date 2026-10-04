@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toolshed-hire-backend"
-version = "0.4.1"
+version = "0.4.2"
 description = "Toolshed Hire rental system backend, FastAPI and PostgreSQL walking skeleton"
 readme = "README.md"
 # Cloud Run and CI both run 3.12. The upper bound is left open so a developer
