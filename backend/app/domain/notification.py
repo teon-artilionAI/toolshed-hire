@@ -8,16 +8,23 @@ that was rolled back and never lost for one that was kept.
 The row stores the recipient and the subject and not the body. The body is
 rendered here from the booking reference when the message is sent, which means
 the email provider only ever receives an address and a reference.
+
+A notification that failed is sent again by a new one, which `resent` builds
+for the same booking and address, and never by changing the one that failed,
+so the log keeps both (US-36).
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 from typing import Final
 from uuid import UUID, uuid4
 
 from app.domain.enums import NotificationChannel, NotificationStatus, NotificationType
+from app.domain.errors import StateTransitionError
 
 # The longest failure reason a notification keeps. A reason is a short phrase
 # for the person who decides whether to send again, never a provider response.
@@ -25,6 +32,15 @@ FAILURE_REASON_MAX_LENGTH: Final[int] = 300
 # The longest provider message id a notification keeps.
 PROVIDER_MESSAGE_ID_MAX_LENGTH: Final[int] = 80
 IDEMPOTENCY_KEY_PREFIX: Final[str] = "notification-"
+# An administrator sends a failed notification again (US-36).
+RESEND_RULE: Final[str] = "US-36"
+# Where a notification that has not failed stands, as an administrator reads it.
+NOT_FAILED_IN_WORDS: Final[Mapping[NotificationStatus, str]] = MappingProxyType(
+    {
+        NotificationStatus.QUEUED: "still waiting to be sent",
+        NotificationStatus.SENT: "already sent",
+    }
+)
 CONFIRMATION_SUBJECT_TEMPLATE: Final[str] = "Your Toolshed Hire booking {reference}"
 CONFIRMATION_BODY_TEMPLATE: Final[str] = (
     "Thank you for booking with Toolshed Hire.\n"
@@ -153,6 +169,38 @@ class Notification:
         self.sent_at = sent_at
         self.last_error = None
         self.attempts += 1
+
+    def resent(self, *, queued_at: datetime) -> Notification:
+        """Return a new queued notification that sends this failed one again (US-36).
+
+        The new one is for the same booking, to the same address, with the
+        same subject. This one is left exactly as it is, so the failure and
+        the re-send are both in the log.
+
+        Args:
+            queued_at: When the administrator asked for it to be sent again.
+
+        Raises:
+            StateTransitionError: If this notification has not failed.
+
+        """
+        if self.status is not NotificationStatus.FAILED:
+            raise StateTransitionError(
+                f"Only a notification that failed can be sent again. This one is "
+                f"{NOT_FAILED_IN_WORDS[self.status]}.",
+                from_status=self.status.value,
+                to_status=NotificationStatus.QUEUED.value,
+                rule=RESEND_RULE,
+            )
+        return Notification(
+            reservation_id=self.reservation_id,
+            reservation_reference=self.reservation_reference,
+            recipient_email=self.recipient_email,
+            subject=self.subject,
+            queued_at=queued_at,
+            notification_type=self.notification_type,
+            channel=self.channel,
+        )
 
     def mark_failed(self, reason: str) -> None:
         """Record that an attempt failed, and why.

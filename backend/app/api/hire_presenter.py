@@ -96,6 +96,8 @@ def rental_response(view: RentalView) -> RentalResponse:
                 status=charge.status,
                 raised_at=charge.raised_at,
                 rental_item_id=charge.rental_item_id,
+                reverses_charge_id=charge.reverses_charge_id,
+                reason=charge.reason,
             )
             for charge in detail.charges
         ],
@@ -158,4 +160,5 @@ def checkout_response(view: CheckoutView) -> CheckoutPreviewResponse:
         can_check_out=view.can_check_out,
         refusal=view.refusal,
         rental_id=detail.rental_id,
+        units_short=detail.units_short,
     )

@@ -93,6 +93,8 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ix_damage_report_rental_item",
     "ix_rental_item_lost",
     "ix_audit_event_asset_status",
+    "ix_audit_event_actor",
+    "ix_audit_event_action",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -142,6 +144,21 @@ RENTAL_ITEM_RETURNED_INDEX: Final[str] = "ix_rental_item_returned_at"
 RENTAL_ITEM_LOST_INDEX: Final[str] = "ix_rental_item_lost"
 DAMAGE_REPORT_RESOLVED_INDEX: Final[str] = "ix_damage_report_resolved_at"
 AUDIT_STATUS_CHANGE_INDEX: Final[str] = "ix_audit_event_asset_status"
+
+# The indexes the two logs of the admin console are read through. The first
+# two are of the baseline. The other four are revision 0008, which finds the
+# history of one record by its key, every event of one action but a change of
+# status, everything one account did, partial on an event that has an actor,
+# and every notification newest first.
+AUDIT_ENTITY_INDEX: Final[str] = "ix_audit_event_entity"
+AUDIT_OCCURRED_INDEX: Final[str] = "ix_audit_event_occurred_at"
+AUDIT_ENTITY_ID_INDEX: Final[str] = "ix_audit_event_entity_id"
+AUDIT_ACTION_INDEX: Final[str] = "ix_audit_event_action"
+AUDIT_ACTOR_INDEX: Final[str] = "ix_audit_event_actor"
+NOTIFICATION_QUEUED_INDEX: Final[str] = "ix_notification_queued_at"
+NOTIFICATION_FAILED_INDEX: Final[str] = "ix_notification_failed"
+# The action the partial index of the report holds and that of the log leaves out.
+STATUS_CHANGE_ACTION: Final[str] = "asset.status_changed"
 
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006

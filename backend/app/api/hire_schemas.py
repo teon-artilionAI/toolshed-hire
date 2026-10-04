@@ -50,8 +50,8 @@ HOUR_METER_MIN: Final[int] = 0
 CHECKOUT_REFUSED_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": (
-        "The reservation is not confirmed or its hire has not started, and `detail` says "
-        "which, or a unit cannot go out on hire."
+        "The reservation is not confirmed, its hire has not started or it is short of a "
+        "unit, and `detail` says which, or a unit cannot go out on hire."
     ),
 }
 UNKNOWN_RENTAL_RESPONSE: Final[dict[str, object]] = {
@@ -112,7 +112,9 @@ class CheckoutPreviewResponse(CamelModel):
     """What the counter needs to hand the equipment of a reservation over.
 
     `refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once
-    the reservation has been collected.
+    the reservation has been collected. `unitsShort` is how many units the
+    reservation still needs after one was released by hand, and while it is
+    above zero `canCheckOut` is false and the checkout answers 409.
     """
 
     reservation_id: UUID = Field(serialization_alias="reservationId")
@@ -130,6 +132,7 @@ class CheckoutPreviewResponse(CamelModel):
     can_check_out: bool = Field(serialization_alias="canCheckOut")
     refusal: str | None
     rental_id: UUID | None = Field(serialization_alias="rentalId")
+    units_short: int = Field(serialization_alias="unitsShort")
 
 
 class RentalItemResponse(CamelModel):
@@ -164,7 +167,12 @@ class RentalItemResponse(CamelModel):
 
 
 class ChargeResponse(CamelModel):
-    """One money line on a rental. A deposit release is a negative amount."""
+    """One money line on a rental. A deposit release is a negative amount.
+
+    `reversesChargeId` names the charge a reversal undoes. `reason` is the
+    reason an administrator gave for waiving it, or the reason written on a
+    reversal or an adjustment, and null on a charge nobody corrected.
+    """
 
     id: UUID
     charge_type: ChargeType = Field(serialization_alias="type")
@@ -176,6 +184,8 @@ class ChargeResponse(CamelModel):
     status: ChargeStatus
     raised_at: Timestamp = Field(serialization_alias="raisedAt")
     rental_item_id: UUID | None = Field(serialization_alias="rentalItemId")
+    reverses_charge_id: UUID | None = Field(serialization_alias="reversesChargeId")
+    reason: str | None
 
 
 class RentalResponse(CamelModel):

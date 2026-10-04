@@ -46,7 +46,7 @@ from app.application.ownership import OwnerScope
 from app.domain import rental as domain
 from app.domain.enums import RentalStatus
 from app.infrastructure.checkout_query import SqlCheckoutReads
-from app.infrastructure.models import Rental, RentalItem
+from app.infrastructure.models import Charge, Rental, RentalItem
 from app.infrastructure.rental_aggregates import charge_row, rental_aggregates_of, write_rental
 from app.infrastructure.rental_list_query import SqlRentalList
 from app.infrastructure.rental_query import SqlRentalReads, rental_key_condition
@@ -109,6 +109,17 @@ class SqlRentalRepository:
         logger.debug(
             "hire.rental_for_reservation_lookup",
             extra={"reservation_id": str(reservation_id), "found": found is not None},
+        )
+        return found
+
+    def find_rental_of_charge(self, charge_id: UUID) -> UUID | None:
+        """Return the key of the rental a charge is on, through the charge's primary key."""
+        found = self._session.exec(
+            select(col(Charge.rental_id)).where(col(Charge.id) == charge_id)
+        ).first()
+        logger.debug(
+            "hire.rental_of_charge_lookup",
+            extra={"charge_id": str(charge_id), "found": found is not None},
         )
         return found
 

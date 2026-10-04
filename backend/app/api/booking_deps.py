@@ -31,6 +31,7 @@ from app.application.booking.create_reservation import CreateReservationUseCase
 from app.application.booking.hold_reservation import HoldReservationUseCase
 from app.application.booking.mark_no_show import MarkNoShowUseCase
 from app.application.booking.read_reservation import ReadReservations
+from app.application.booking.reallocate import ReallocateUseCase
 from app.domain.identity import Actor
 from app.infrastructure.models import UserAccount
 
@@ -78,6 +79,13 @@ def get_mark_no_show_use_case(
     return MarkNoShowUseCase(uow, clock)
 
 
+def get_reallocate_use_case(
+    uow: UnitOfWorkDependency, clock: ClockDependency, sweep: HoldSweepDependency
+) -> ReallocateUseCase:
+    """Return the use case that gives a short reservation replacement units, wired to the sweep."""
+    return ReallocateUseCase(uow, clock, sweep)
+
+
 def get_read_reservations(
     uow: UnitOfWorkDependency, clock: ClockDependency, sweep: HoldSweepDependency
 ) -> ReadReservations:
@@ -92,4 +100,5 @@ ConfirmReservation = Annotated[
 ]
 CancelReservation = Annotated[CancelReservationUseCase, Depends(get_cancel_reservation_use_case)]
 MarkNoShow = Annotated[MarkNoShowUseCase, Depends(get_mark_no_show_use_case)]
+Reallocate = Annotated[ReallocateUseCase, Depends(get_reallocate_use_case)]
 ReadReservationsDependency = Annotated[ReadReservations, Depends(get_read_reservations)]

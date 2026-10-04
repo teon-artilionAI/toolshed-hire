@@ -17,8 +17,9 @@ rule refused carries a plain sentence.
 
 The cases are in tests/api/reservation_create_refusals.py,
 tests/api/reservation_move_refusals.py,
-tests/api/reservation_checkout_refusals.py and
-tests/api/reservation_no_show_refusals.py. These run against the in memory
+tests/api/reservation_checkout_refusals.py,
+tests/api/reservation_no_show_refusals.py and
+tests/api/reservation_reallocation_refusals.py. These run against the in memory
 database, and the clock stands still on Monday the second of March
 2026 until a case moves it.
 """
@@ -40,6 +41,7 @@ from tests.api.reservation_checkout_refusals import CHECKOUT_REFUSALS
 from tests.api.reservation_create_refusals import CREATE_REFUSALS
 from tests.api.reservation_move_refusals import MOVE_REFUSALS
 from tests.api.reservation_no_show_refusals import NO_SHOW_REFUSALS
+from tests.api.reservation_reallocation_refusals import REALLOCATION_REFUSALS
 from tests.api.reservation_refusal_cases import Refusal, Stage
 from tests.api.test_plain_refusals import FORBIDDEN_PATTERNS, sentences_of
 from tests.support.booking_api import BookingClient, build_booking_world
@@ -53,6 +55,7 @@ REFUSALS: Final[list[Refusal]] = [
     *MOVE_REFUSALS,
     *CHECKOUT_REFUSALS,
     *NO_SHOW_REFUSALS,
+    *REALLOCATION_REFUSALS,
 ]
 CASE_IDS: Final[list[str]] = [refusal.name for refusal in REFUSALS]
 

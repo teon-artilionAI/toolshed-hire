@@ -71,7 +71,7 @@ def test_a_pending_charge_is_settled_with_its_time_and_reference() -> None:
 def test_a_charge_that_is_no_longer_pending_is_never_changed(
     status: ChargeStatus, words: str
 ) -> None:
-    final = replace(an_owed_fee(), status=status)
+    final = replace(an_owed_fee(), status=status, reason="Corrected by the office.")
     with pytest.raises(StateTransitionError, match=f"This charge is {words}") as refused:
         final.settled(settled_at=LATER, payment_reference="EFT-2")
     assert refused.value.rule == "BR-24"

@@ -22,6 +22,10 @@ Staff mark a confirmed booking nobody collected by posting a no show with a
 reason, from the first day of the hire (BR-17). Counter staff do it at their
 own branch only.
 
+Staff at the collection branch, and administrators, give a booking that lost a
+unit to a force release its replacements by posting a reallocation (US-32). A
+unit that cannot be found for a line is a 409 naming the model and the dates.
+
 The two reads are in `app/api/routers/reservation_reads.py`.
 """
 
@@ -37,6 +41,7 @@ from app.api.booking_deps import (
     CreateReservation,
     HoldReservation,
     MarkNoShow,
+    Reallocate,
     actor_of,
 )
 from app.api.deps import AnyRoleUser, CounterUser
@@ -236,4 +241,27 @@ def post_no_show(
     command = MarkNoShowCommand(
         actor=actor_of(user), key=ReservationKey.parse(reservation_key), reason=payload.reason
     )
+    return reservation_response(use_case.execute(command))
+
+
+@router.post(
+    "/{id}/reallocation",
+    response_model=ReservationResponse,
+    summary="Give a booking on hold or confirmed replacements for the units it is short of",
+    responses=MOVE_RESPONSES,
+)
+def post_reallocation(
+    reservation_key: ReservationPathKey, user: CounterUser, use_case: Reallocate
+) -> ReservationResponse:
+    """Top up every short line through the allocation path of a hold, all or nothing.
+
+    Raises:
+        NotFound: If there is no such reservation. HTTP 404.
+        BranchScopeError: If counter staff act at another branch. HTTP 403.
+        StateTransitionError: If it is neither on hold nor confirmed. HTTP 409.
+        AllocationConflictError: If no unit is free for a line, naming the
+            model and the dates. HTTP 409.
+
+    """
+    command = ReservationCommand(actor=actor_of(user), key=ReservationKey.parse(reservation_key))
     return reservation_response(use_case.execute(command))

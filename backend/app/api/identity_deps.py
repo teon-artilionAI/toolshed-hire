@@ -16,11 +16,11 @@ let through. Some clients leave it off a same origin request, and
 
 The third is `require_fresh_roles`, for the actions that must not act on a
 stale account. The ordinary chain loads the account once, at the start of the
-request. An administrator who waives a charge, changes a role or forces the
-release of an allocation is read again, under a row lock, so the role that is
-checked is the role that holds until the action commits. Those routes do not
-exist yet. When they are added they depend on `FreshAdminUser` and not on
-`AdminUser`.
+request. An administrator who waives, reverses or adjusts a charge, re-sends a
+notification or forces the release of an allocation is read again, under a
+row lock, so the role that is checked is the role that holds until the action
+commits. Those routes depend on `FreshAdminUser` and not on `AdminUser`, and
+so will the management of users and roles when it is added.
 
 The fourth is the cache policy. A response that carries an access token or
 changes a cookie is never stored.
@@ -237,8 +237,8 @@ def require_fresh_roles(*allowed: UserRole) -> Callable[[UserAccount, Session], 
     return dependency
 
 
-# The dependency of every route that waives a charge, manages users or roles,
-# or forces the release of an allocation. None of them exists yet.
+# The dependency of every route that corrects a charge, re-sends a notification
+# or forces a release, and of the management of users and roles when it comes.
 FreshAdminUser = Annotated[UserAccount, Depends(require_fresh_roles(UserRole.ADMIN))]
 
 
