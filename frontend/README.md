@@ -309,15 +309,14 @@ commits as `../backend/openapi.json`.
   default, and the server refuses true there, so the type leaves it out. The
   categories come as one page of a hundred, the largest the API serves, and
   the publication route answers with the model, which the screen reads.
-- The asset register routes are written by hand in
-  `api/contract-admin-assets.ts`, because the backend half of that change is
-  built at the same time and the document does not describe them yet. Once it
-  does, `npm run api:types` brings them in and each type is rebuilt from the
-  generated shapes like every other. Until then the readers in
-  `api/admin-assets.ts` check every member of every body. The status and the
-  grade of a unit are already the generated ones. A registration, a change of
-  paperwork and a move each answer with the unit and its history, the way the
-  unit's own read does, and the screen reads them that way.
+- The asset register routes, which are the owner's register of units, a
+  unit with its history, registering a unit, changing its paperwork and
+  moving it through its lifecycle, are in the document too. Their types are
+  in `api/contract-admin-assets.ts`, built from the generated file the same
+  way. The generated body of an edit allows null for the grade, and the server
+  refuses it, so the type does not. A registration, a change of paperwork and
+  a move each answer with the unit and its history, the way the unit's own
+  read does, and the screen reads them that way.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -1343,7 +1342,10 @@ bodies are in `asset-form.ts`.
   says plainly that the unit leaves the fleet for good and that its row and its
   whole history are kept. A 409 shows the server's sentence, and a booking it
   names, such as the one still holding a unit being retired, is a link to its
-  checkout, where the owner can release the unit from it.
+  checkout, where the owner can release the unit from it. The server also
+  refuses to put a unit back on the shelf by hand while one of its damage
+  reports is open, because resolving the report does that, and the question
+  shows its sentence the same way.
 - Every write sends one request for each press, disables its answer while it
   is in flight, shows the server's sentence on a 409 or a 403, puts each 422
   under its field and lists any message about a field the form has no box

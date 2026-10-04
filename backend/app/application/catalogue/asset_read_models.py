@@ -155,8 +155,18 @@ class AdminAssetEntry:
 
     @property
     def allowed_transitions(self) -> tuple[AssetStatus, ...]:
-        """Return the statuses an administrator may move the unit to, from the lifecycle rules."""
-        return transitions_by_hand(self.status)
+        """Return the statuses an administrator may move the unit to, from the lifecycle rules.
+
+        A unit with a damage report still open is not offered the move back to
+        service, because the move is refused until the report is resolved, and
+        a button that can only fail helps nobody. Retiring stays on offer while
+        a booking holds the unit, because its refusal names the booking that
+        has to be dealt with first (US-32).
+        """
+        moves = transitions_by_hand(self.status)
+        if self.open_damage_reports > 0:
+            return tuple(move for move in moves if move is not AssetStatus.AVAILABLE)
+        return moves
 
 
 @dataclass(frozen=True, slots=True)

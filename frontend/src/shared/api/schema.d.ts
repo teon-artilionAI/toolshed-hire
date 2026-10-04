@@ -1254,6 +1254,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the units of the fleet, retired or not, in tag order
+         * @description Return one page of the units that match, in tag order.
+         *
+         *     Raises:
+         *         ValidationFailure: If no branch has the code. HTTP 422, naming `branchCode`.
+         */
+        get: operations["read_assets_api_admin_assets_get"];
+        put?: never;
+        /**
+         * Register a unit, at INTAKE
+         * @description Register the unit and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the model or the branch
+         *             is unknown, or another unit carries the tag. HTTP 422, naming the
+         *             field.
+         */
+        post: operations["post_asset_api_admin_assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/assets/{tag}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one unit with its history, the newest first
+         * @description Return the unit with its history.
+         *
+         *     Raises:
+         *         NotFound: If no unit carries the tag. HTTP 404.
+         */
+        get: operations["read_asset_api_admin_assets__tag__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the paperwork of a unit, never its tag, model or branch
+         * @description Change the fields that were sent and record them before and after.
+         *
+         *     Raises:
+         *         NotFound: If no unit carries the tag. HTTP 404.
+         *         ValidationFailure: If a field breaks a rule, or the tag, the model or
+         *             the branch is sent. HTTP 422, naming the field.
+         */
+        patch: operations["patch_asset_api_admin_assets__tag__patch"];
+        trace?: never;
+    };
+    "/api/admin/assets/{tag}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a unit through its lifecycle by hand
+         * @description Move the unit and record the move, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If no unit carries the tag. HTTP 404.
+         *         ValidationFailure: For ON_HIRE or LOST, naming `to`, or a move out of
+         *             service with no reason, naming `reason`. HTTP 422.
+         *         StateTransitionError: If the move is not permitted from the unit's
+         *             status, or a booking or an open damage report holds the unit.
+         *             HTTP 409.
+         */
+        post: operations["post_transition_api_admin_assets__tag__transitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1438,6 +1530,129 @@ export interface components {
             reason: string;
         };
         /**
+         * AdminAssetDetailResponse
+         * @description One unit with its history, the newest first, at most fifty entries.
+         */
+        AdminAssetDetailResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assettag */
+            assetTag: string;
+            /**
+             * Modelid
+             * Format: uuid
+             */
+            modelId: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /** Serialnumber */
+            serialNumber: string | null;
+            status: components["schemas"]["AssetStatus"];
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /**
+             * Acquiredon
+             * Format: date
+             */
+            acquiredOn: string;
+            /** Acquisitioncost */
+            acquisitionCost: string;
+            /** Hourmeterreading */
+            hourMeterReading: number | null;
+            /** Notes */
+            notes: string | null;
+            /** Retiredon */
+            retiredOn: string | null;
+            /** Activeallocationcount */
+            activeAllocationCount: number;
+            /** Opendamagereports */
+            openDamageReports: number;
+            /** Allowedtransitions */
+            allowedTransitions: components["schemas"]["AssetStatus"][];
+            /** History */
+            history: components["schemas"]["AssetHistoryEntryResponse"][];
+        };
+        /**
+         * AdminAssetPageResponse
+         * @description One page of the units, in tag order.
+         */
+        AdminAssetPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminAssetResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminAssetResponse
+         * @description One unit as the register shows it, retired or not.
+         *
+         *     `allowedTransitions` lists the statuses an administrator may move it to by
+         *     hand, from the asset state model. `activeAllocationCount` counts the
+         *     bookings that hold it now and `openDamageReports` its reports that are
+         *     open or under repair.
+         */
+        AdminAssetResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assettag */
+            assetTag: string;
+            /**
+             * Modelid
+             * Format: uuid
+             */
+            modelId: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /** Serialnumber */
+            serialNumber: string | null;
+            status: components["schemas"]["AssetStatus"];
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /**
+             * Acquiredon
+             * Format: date
+             */
+            acquiredOn: string;
+            /** Acquisitioncost */
+            acquisitionCost: string;
+            /** Hourmeterreading */
+            hourMeterReading: number | null;
+            /** Notes */
+            notes: string | null;
+            /** Retiredon */
+            retiredOn: string | null;
+            /** Activeallocationcount */
+            activeAllocationCount: number;
+            /** Opendamagereports */
+            openDamageReports: number;
+            /** Allowedtransitions */
+            allowedTransitions: components["schemas"]["AssetStatus"][];
+        };
+        /**
          * AdminCategoryPageResponse
          * @description Every category, active or not, each parent followed by its children.
          */
@@ -1570,6 +1785,54 @@ export interface components {
             updatedAt: string;
         };
         /**
+         * AssetCreateRequest
+         * @description A new unit. It starts at INTAKE, and its tag, model and branch never change.
+         */
+        AssetCreateRequest: {
+            /** Assettag */
+            assetTag: string;
+            /**
+             * Modelid
+             * Format: uuid
+             */
+            modelId: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Serialnumber */
+            serialNumber?: string | null;
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /**
+             * Acquiredon
+             * Format: date
+             */
+            acquiredOn: string;
+            /** Acquisitioncost */
+            acquisitionCost: string;
+            /** Hourmeterreading */
+            hourMeterReading?: number | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * AssetHistoryEntryResponse
+         * @description One line of a unit's history. `reference` is the booking, rental or report, or null.
+         */
+        AssetHistoryEntryResponse: {
+            /** At */
+            at: string;
+            kind: components["schemas"]["AssetHistoryKind"];
+            /** Summary */
+            summary: string;
+            /** Reference */
+            reference: string | null;
+        };
+        /**
+         * AssetHistoryKind
+         * @description Where an entry of a unit's history comes from.
+         * @enum {string}
+         */
+        AssetHistoryKind: "ALLOCATION" | "RENTAL" | "DAMAGE_REPORT" | "AUDIT_EVENT";
+        /**
          * AssetLocationPageResponse
          * @description One page of the units a search found, in tag order.
          */
@@ -1617,6 +1880,28 @@ export interface components {
          * @enum {string}
          */
         AssetStatus: "INTAKE" | "AVAILABLE" | "ON_HIRE" | "QUARANTINED" | "UNDER_REPAIR" | "LOST" | "RETIRED";
+        /**
+         * AssetTransitionRequest
+         * @description The status to move a unit to by hand, and why.
+         */
+        AssetTransitionRequest: {
+            to: components["schemas"]["AssetStatus"];
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AssetUpdateRequest
+         * @description The paperwork of a unit to change, any of it. Never the tag, the model or the branch.
+         */
+        AssetUpdateRequest: {
+            /** Serialnumber */
+            serialNumber?: string | null;
+            conditionGrade?: components["schemas"]["ConditionGrade"] | null;
+            /** Hourmeterreading */
+            hourMeterReading?: number | null;
+            /** Notes */
+            notes?: string | null;
+        };
         /**
          * AuditEventPageResponse
          * @description One page of the audit log, newest first.
@@ -6249,6 +6534,266 @@ export interface operations {
             };
             /** @description There is no such product model. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_assets_api_admin_assets_get: {
+        parameters: {
+            query?: {
+                /** @description Part of the tag, the serial number or the model name. */
+                q?: string | null;
+                /** @description A branch code. Only the units it holds. */
+                branchCode?: string | null;
+                /** @description Only the units in this status. */
+                status?: components["schemas"]["AssetStatus"] | null;
+                /** @description Only the units of this product model. */
+                modelId?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many units a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_asset_api_admin_assets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_asset_api_admin_assets__tag__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tag painted on the unit. */
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No unit carries that tag. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_asset_api_admin_assets__tag__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tag painted on the unit. */
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No unit carries that tag. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_transition_api_admin_assets__tag__transitions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tag painted on the unit. */
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No unit carries that tag. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not one the unit may make from the status it is in, which `detail` names, or a booking or an open damage report still holds the unit and `detail` names it. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
