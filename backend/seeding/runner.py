@@ -4,6 +4,11 @@
 what the tests call. `run_seed` is what the entry point calls. It opens the
 session, commits once at the end and reports what happened, so a failure half
 way leaves the database exactly as it was.
+
+`run_seed` writes the season of trading history after everything else, in the
+same transaction. It is a step of its own and not part of `seed_database`, so
+a test of the catalogue, the people and the worked example reads a database
+that holds exactly those, and a test of the history asks for it by name.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from seeding.fleet import load_assets
 from seeding.history import load_worked_example
 from seeding.report import SeedTally
 from seeding.sequences import advance_reference_sequences
+from seeding.trading_history import load_trading_history
 
 logger = logging.getLogger("seed")
 
@@ -67,14 +73,15 @@ def seed_database(
 
 
 def run_seed() -> SeedTally:
-    """Seed the configured database in one transaction and log the outcome.
+    """Seed the configured database and its trading history in one transaction and log it.
 
     Returns:
         What the run created and what it found already present.
 
     Raises:
         RuntimeError: If SEED_PASSWORD is unset outside development and test.
-        SeedDataError: If the seed data cannot be loaded as it is written.
+        SeedDataError: If the seed data cannot be loaded as it is written, or
+            only part of the trading history is in the database.
 
     """
     password = resolve_seed_password()
@@ -88,6 +95,7 @@ def run_seed() -> SeedTally:
     )
     with session_scope() as session:
         tally = seed_database(session, password, customer_password)
+        load_trading_history(session, tally)
     if tally.changed_nothing:
         logger.info(
             "seed.nothing_to_do",
