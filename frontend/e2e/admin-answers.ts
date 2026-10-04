@@ -1,10 +1,11 @@
 /**
  * The API answered by the spec itself, for the owner's dashboard and report.
  *
- * The accessibility scan and the narrow screen check of SC-19, SC-20, SC-22
- * and SC-24 need a signed in owner, a day across three branches, a report with
- * rows, the trail and the log, whose answers are in audit-answers.ts, and the
- * catalogue, whose answers are in catalogue-answers.ts. A scan
+ * The accessibility scan and the narrow screen check of SC-19, SC-20, SC-21,
+ * SC-22 and SC-24 need a signed in owner, a day across three branches, a
+ * report with rows, the trail and the log, whose answers are in
+ * audit-answers.ts, the catalogue, whose answers are in catalogue-answers.ts,
+ * and the asset register, whose answers are in asset-answers.ts. A scan
  * should not depend on what a database happens to hold, and it should run with
  * or without a backend, so these answers stand in for the API. They are
  * shaped the way the API sends them, with long names and large figures, which
@@ -15,6 +16,7 @@
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { ASSET_ANSWERS, ASSET_TAG } from './asset-answers.ts'
 import { AUDIT_ANSWERS } from './audit-answers.ts'
 import { CATALOGUE_ANSWERS, CATALOGUE_MODEL_ID } from './catalogue-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
@@ -24,6 +26,9 @@ export const AUDIT_LOG_HEADING = 'Audit and notification log'
 
 /** The heading of SC-20, with the form closed or open. */
 export const CATALOGUE_HEADING = 'Catalogue and pricing'
+
+/** The heading of SC-21, with a unit open or not. */
+export const ASSET_REGISTER_HEADING = 'Asset register'
 
 /** What the session leaves in web storage once somebody has signed in. Without
  *  it the application does not ask whether there is a session. */
@@ -130,6 +135,7 @@ async function answerTheApi(route: Route): Promise<void> {
     'GET /api/admin/reports/utilisation': report(address.searchParams.get('groupBy') ?? 'model'),
     ...AUDIT_ANSWERS,
     ...CATALOGUE_ANSWERS,
+    ...ASSET_ANSWERS,
   }
   const body = answers[key]
   if (body === undefined) {
@@ -175,6 +181,8 @@ export const ADMIN_SCREENS: readonly AdminScreen[] = [
   { path: '/admin/audit?view=notifications', heading: AUDIT_LOG_HEADING, loaded: 'What went wrong' },
   { path: '/admin/catalogue', heading: CATALOGUE_HEADING, loaded: 'AC-YOUNGMAN-BOSS-CLIMA' },
   { path: `/admin/catalogue?model=${CATALOGUE_MODEL_ID}`, heading: CATALOGUE_HEADING, loaded: 'Last changed' },
+  { path: '/admin/assets', heading: ASSET_REGISTER_HEADING, loaded: ASSET_TAG },
+  { path: `/admin/assets?asset=${ASSET_TAG}`, heading: ASSET_REGISTER_HEADING, loaded: 'Held for booking TSH-R-26-000124' },
 ]
 
 /** Open an owner's screen as the signed in owner, with the API answered here. */

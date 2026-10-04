@@ -33,7 +33,11 @@
  * the question before a failed email is sent again. The catalogue is scanned
  * loaded from catalogue-answers.ts, with its form closed and open, then again
  * with the question before a new figure is saved, and with the question
- * before a model is hidden and the category form open.
+ * before a model is hidden and the category form open. The asset register
+ * is scanned loaded from asset-answers.ts, with no unit open and with one
+ * open, then again with the question before a unit is retired and its reason
+ * refused, and with the registration form showing every problem it holds
+ * back.
  *
  * The owner's corrections only show for an administrator, so the return
  * screen is scanned again as the owner with a reversal asked, and the checkout
@@ -42,7 +46,7 @@
  */
 
 import { expect, test } from '@playwright/test'
-import { ADMIN_SCREENS, AUDIT_LOG_HEADING, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
+import { ADMIN_SCREENS, ASSET_REGISTER_HEADING, AUDIT_LOG_HEADING, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
 import { blockingViolations } from './axe.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
@@ -151,6 +155,42 @@ test('the catalogue with a model being hidden and a category being added has no 
 
   await page.getByRole('region', { name: 'Categories' }).getByRole('button', { name: 'Add a category' }).click()
   await expect(page.getByRole('heading', { level: 3, name: 'Add a category' })).toBeFocused()
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+/** The asset register from the list the scans share, with a unit open or not. */
+function registerScreen(unitOpen: boolean) {
+  const found = ADMIN_SCREENS.find(
+    (screen) => screen.heading === ASSET_REGISTER_HEADING && screen.path.includes('asset=') === unitOpen,
+  )
+  if (found === undefined) throw new Error('ADMIN_SCREENS has no asset register to open.')
+  return found
+}
+
+test('a unit with the question before it is retired and its reason refused has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  await openAdminScreen(page, registerScreen(true))
+  const moves = page.getByRole('region', { name: 'Move it through its life' })
+
+  await moves.getByRole('button', { name: 'Retire it' }).click()
+  await expect(page.getByRole('heading', { level: 4, name: /^Retire .+\?$/ })).toBeFocused()
+  await page.getByRole('button', { name: 'Yes, retire it' }).click()
+  await expect(page.getByText('Write the reason, so whoever reads the history of this unit later knows why.')).toBeVisible()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+test('the registration of a unit with every problem it holds back has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  await openAdminScreen(page, registerScreen(false))
+
+  await page.getByRole('button', { name: 'Register a unit' }).first().click()
+  const form = page.getByRole('form', { name: 'The new unit' })
+  await form.getByRole('button', { name: 'Register the unit' }).click()
+  await expect(page.getByText(/Nothing has been saved yet\. 3 answers need fixing\./)).toBeVisible()
+
   expect(await blockingViolations(page)).toEqual([])
 })
 

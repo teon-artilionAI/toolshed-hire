@@ -21,17 +21,19 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-19` Admin Dashboard, `SC-22` Utilisation and Gross Contribution Report | The API, through the routes described under Reporting |
 | `SC-24` Audit and Notification Log, and the owner's corrections on `SC-14` and `SC-15` | The API, through the routes described under Admin operations |
 | `SC-20` Catalogue and Pricing Management | The API, through the routes described under Admin catalogue |
-| `SC-21` and `SC-23` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-21` Asset Register and Lifecycle | The API, through the routes described under Asset register |
+| `SC-23` | The typed sample data in `src/shared/fixtures.ts` |
 
 No customer or counter screen reads `src/shared/fixtures.ts` any more, and
-neither do `SC-19`, `SC-20`, `SC-22` and `SC-24`. The modules that still do
-are the two other administration screens and their helpers in
-`src/features/admin/`. The `reservations`, `rentals`, `charges`, `auditEvents`
-and `notifications` exports of the fixture file are now imported by nothing,
-and nor are the `AuditEvent` and `NotificationRecord` types in
-`src/shared/types.ts`. The `categories`, `productModels` and `assets` exports
-are still read by `SC-21`. They all go with the file once the last of those
-screens is connected.
+neither do `SC-19`, `SC-20`, `SC-21`, `SC-22` and `SC-24`. The only modules
+that still do are `SC-23` and its helpers in `src/features/admin/`, which read
+the `branches`, `customers` and `users` exports. The `TODAY`, `categories`,
+`productModels`, `assets`, `reservations`, `rentals`, `charges`,
+`damageReports`, `auditEvents` and `notifications` exports of the fixture file
+are now imported by nothing, and outside the fixture file nor are the
+`Category`, `ProductModel`, `Asset`, `ConditionGrade`, `DamageReport`,
+`AuditEvent` and `NotificationRecord` types in `src/shared/types.ts`. They all
+go with the file once `SC-23` is connected.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -307,6 +309,15 @@ commits as `../backend/openapi.json`.
   default, and the server refuses true there, so the type leaves it out. The
   categories come as one page of a hundred, the largest the API serves, and
   the publication route answers with the model, which the screen reads.
+- The asset register routes are written by hand in
+  `api/contract-admin-assets.ts`, because the backend half of that change is
+  built at the same time and the document does not describe them yet. Once it
+  does, `npm run api:types` brings them in and each type is rebuilt from the
+  generated shapes like every other. Until then the readers in
+  `api/admin-assets.ts` check every member of every body. The status and the
+  grade of a unit are already the generated ones. A registration, a change of
+  paperwork and a move each answer with the unit and its history, the way the
+  unit's own read does, and the screen reads them that way.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -387,6 +398,14 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   with the catalogue customers browse and the audit trail, so a change shows
   as soon as it is saved. A model a write answered with is kept under its key,
   so its form opens with the server's figures.
+- The asset register, its pages and its units under the `admin` segment, is
+  never fresh. A unit goes out on hire or into quarantine at a counter while
+  the owner has it open, and the moves it offers depend on where it stands
+  now. Each read is one page of twenty or one unit with its history, so
+  reading it again on focus costs one small query. A write keeps the unit the
+  server answered with under its tag, and marks everything under the `admin`
+  segment and the locator as out of date, because the dashboard, the report,
+  the count of units on each model and the trail all move with it.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -1252,6 +1271,105 @@ page moves focus to the top of the models. Every status carries words beside
 its colour, every target is at least 44 pixels, and the screen fits a phone
 360 pixels wide with nothing to scroll sideways, its questions and forms open.
 
+### Asset register
+
+The owner keeps the register of every unit on `SC-21`, retired units included,
+and moves units through their lifecycle there. The routes are in
+`api/admin-assets.ts` and the cached reads in `api/admin-queries.ts`. Every
+route is for an administrator, and the API answers anyone else with a 403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-21` | `GET /api/admin/assets?q=&branchCode=&status=&modelId=&page=&pageSize=` | One page of twenty units, in tag order |
+| `SC-21` | `GET /api/admin/assets/{tag}` | The unit with its history, read by its own route when it opens |
+| `SC-21` | `POST /api/admin/assets` | The new unit at intake, opened beside the register |
+| `SC-21` | `PATCH /api/admin/assets/{tag}` | The unit the server answered with, and the register read again |
+| `SC-21` | `POST /api/admin/assets/{tag}/transitions` | The unit the server answered with, and the register read again |
+| `SC-21` | `GET /api/admin/models?q=&page=1&pageSize=20` and `GET /api/admin/models/{id}` | The models that match a search, for the model filter and the registration |
+| `SC-21` | `GET /api/branches` | The branches, for the branch filter and the registration |
+
+#### The rules are the server's
+
+The browser holds no copy of the lifecycle. Each unit carries
+`allowedTransitions`, which the server works out from the asset lifecycle
+rules, and the screen offers exactly those moves and no other. The words of
+each move are in `src/features/admin/asset-words.ts`. "Commission it" puts a
+unit on the shelf, "Send it for repair" sends it to the workshop, "Quarantine
+it" holds it back and "Retire it" takes it out of the fleet for good. A status
+the server offers that has no words of its own is still offered, named by
+where the unit would then stand. The contract asks for a reason before a unit
+is sent for repair, quarantined or retired, so those three ask why, and the
+reason is held to the five to two hundred characters every reason of the
+owner's takes. A tag in the wrong form or carried by another unit, a cost
+below zero, a day after today and a meter reading below zero are all refused
+by the server, with a 422 that the form puts under the field it names. The
+forms only check what they need to write a body at all, which is that a model
+and a branch are chosen, the day is given, and a meter reading is a whole
+number or left empty. The cost is sent with two decimals and reworded in plain
+words when the server cannot read it, the way `SC-20` does for a figure. The
+bodies are in `asset-form.ts`.
+
+#### `SC-21` Asset Register and Lifecycle
+
+- The search, the branch, the status, the model and the page live in the
+  address under the names the API takes, and so do the unit open, as `asset`
+  with its tag, and the registration form, as `add=unit`. A reload or a shared
+  link shows the same view. The rules are in `asset-address.ts`.
+- Each unit shows its tag and serial number, its model and category, its
+  branch, where it stands in words beside its colour with the day it was
+  retired, its grade, and its open damage reports, each count a link to the
+  damage screen of the unit at `/counter/damage/<tag>`. Below the `lg` width
+  each unit is drawn as a block with every value beside the name of its
+  column, and it is the same table either way.
+- The model is found by searching for it. The catalogue holds more models than
+  one page of the largest size the API serves, and it grows, so the owner
+  types part of the name or the stock code, and the menu lists the first
+  twenty that match. A model already chosen stays in the menu by its own read.
+  This is in `SC21-Model-Picker.tsx`.
+- "Open" shows the unit above the register, read by its own route, with every
+  field, the bookings that hold it now, its open damage reports linked to the
+  damage screen where the owner resolves them, and its history, newest first.
+  A booking in the history links to its checkout, a hire to its return and a
+  damage report to the damage screen, and the events of the unit can be read
+  in full in the audit trail. A tag the server does not know says so plainly.
+- "Register a unit" opens a form with exactly the fields of the route. It asks
+  first, saying the unit starts at intake where nobody can book it, and that
+  its tag, model and branch never change once it is registered. Once it is
+  registered the new unit opens.
+- "Change the serial number, grade, meter reading or notes" opens a form inside
+  the unit, with the tag, the model and the branch shown read only. It sends
+  only what changed and asks first, naming what changes.
+- Each move asks first in a question of its own, saying what it does. Retiring
+  says plainly that the unit leaves the fleet for good and that its row and its
+  whole history are kept. A 409 shows the server's sentence, and a booking it
+  names, such as the one still holding a unit being retired, is a link to its
+  checkout, where the owner can release the unit from it.
+- Every write sends one request for each press, disables its answer while it
+  is in flight, shows the server's sentence on a 409 or a 403, puts each 422
+  under its field and lists any message about a field the form has no box
+  for. Once the server has answered, a notice says what was done and takes
+  focus, and the register is read again. The writes share `use-asset-write.ts`.
+- The register and the unit have the shared loading, failed and empty states.
+
+The lifecycle helper and the asset filters the screen kept while it showed
+sample data, `admin-lifecycle.ts`, `admin-asset-filters.ts` and
+`admin-fleet.ts`, are gone, and so are the old status and damage panels.
+
+#### Accessibility of this screen
+
+Every section, every part of a unit and every question has a real heading,
+the register is a table with headers at every width, the history is an
+ordered list, and every control has its label with its help and its error tied
+to it. The model search and its menu sit in a fieldset with a legend, and the
+menu's description says what the search found. A unit, the registration form
+and a question take focus when they open. Closing a unit gives focus back to
+its link in the register, closing the form gives it back to the button that
+opened it, and putting a question away gives it back to its move. Moving to
+another page moves focus to the top of the units. Every status carries words
+beside its colour, every target is at least 44 pixels, and the screen fits a
+phone 360 pixels wide with nothing to scroll sideways, a unit, its question,
+its form and the registration open.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -1378,7 +1496,11 @@ log are scanned loaded from `e2e/audit-answers.ts`, and the log again with the
 question before a failed email is sent again. The catalogue is scanned loaded
 from `e2e/catalogue-answers.ts` with its form closed and open, again with the
 question before a new figure is saved, and again with the question before a
-model is hidden and then with the category form open. The owner's corrections
+model is hidden and then with the category form open. The asset register is
+scanned loaded from `e2e/asset-answers.ts` with no unit open and with one
+open, again with the question before a unit is retired and its reason held
+back, and again with the registration form showing every problem it holds
+back. The owner's corrections
 only show for an administrator, so the return screen is scanned again as the
 owner with a reversal asked, and the checkout as the owner on a booking short
 of a unit with a release asked, from `e2e/owner-answers.ts`.
@@ -1387,7 +1509,9 @@ of a unit with a release asked, from `e2e/owner-answers.ts`.
 My Hires, My Account with a hire in its history, the nine counter screens, the
 owner's dashboard, the report by model and by unit, the audit trail, the
 notification log, the catalogue with its form closed and open and then with
-every question it asks and the category form open, and the return and the
+every question it asks and the category form open, the asset register with no
+unit open and with one open and then with a unit's question, its paperwork
+form and the registration form open, and the return and the
 checkout as the owner sees them with a question open, at 360 pixels wide and
 checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
@@ -1554,6 +1678,20 @@ no token first, through `e2e/admin-catalogue-backend.ts`, after the session
 routes. A 404 or a 405 from either means the routes are not there, and the
 spec skips itself.
 
+`e2e/admin-assets.spec.ts` needs the asset register routes. The owner signs in
+and opens the register, registers a unit with a tag built from the time, which
+no run has used, choosing its model by searching for the seeded
+`DR-BOSCH-GBH226`, commissions it, sends it for repair with a reason,
+commissions it again, and retires it with a reason after the question says
+that its row and its history are kept. Then they find it in the register by
+its tag, standing as retired, and open it to read the registration and the
+four moves in its history. The desktop project registers its unit at Cape
+Town CBD and the phone project at Bellville. The unit is left on the register
+retired, because nothing is ever deleted. The spec asks for the register and
+the models with no token first, through `e2e/admin-assets-backend.ts`, after
+the session routes. A 404 or a 405 from either means the routes are not there,
+and the spec skips itself.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1582,11 +1720,13 @@ pipeline does.
 The two counter journeys, the two counter overview journeys and the admin
 operations journey each sign the two counter assistants in once, so each
 assistant five times in a run. The damage journey, the reporting spec, the
-admin operations spec and the admin catalogue spec each sign the owner in
-once in each browser project, so the owner eight times in a run, which counts
-against their own address.
+admin operations spec, the admin catalogue spec and the asset register spec
+each sign the owner in once in each browser project, so the owner ten times in
+a run. That is the whole allowance for one email address. A second run inside
+the same window is refused at the owner's first sign in, the way it is for the
+first customer.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all eleven skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all twelve skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

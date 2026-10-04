@@ -12,15 +12,19 @@
  * The seed also makes one administrator, the owner, who resolves the damage
  * report the damage journey files, so the unit goes back on the shelf, who
  * reads the dashboard and the report in the reporting spec, who reads the
- * audit trail and reverses a charge in the admin operations spec, and who
- * changes a late fee and adds a model in the admin catalogue spec.
+ * audit trail and reverses a charge in the admin operations spec, who
+ * changes a late fee and adds a model in the admin catalogue spec, and who
+ * registers a unit and moves it through its lifecycle in the asset register
+ * spec.
  *
  * The API counts every sign in attempt for an email address and allows ten in
  * fifteen minutes. One run signs each assistant in five times, once for each
  * counter journey, each counter overview journey and the admin operations
- * journey, and the owner eight times, once for the damage journey, the
- * reporting spec, the admin operations spec and the admin catalogue spec in
- * each browser project.
+ * journey, and the owner ten times, once for the damage journey, the
+ * reporting spec, the admin operations spec, the admin catalogue spec and the
+ * asset register spec in each browser project. That is the whole allowance,
+ * so a second run against the same backend within fifteen minutes is refused
+ * at the owner's first sign in.
  */
 
 import { expect } from '@playwright/test'

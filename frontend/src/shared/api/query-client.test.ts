@@ -127,6 +127,8 @@ describe('the freshness rules', () => {
     ["the owner's dashboard", adminQueries.dashboard().queryKey],
     ['a page of the audit trail', adminQueries.auditEvents({ page: 1, pageSize: 20 }).queryKey],
     ['a page of the notification log', adminQueries.notifications({ page: 1, pageSize: 20 }).queryKey],
+    ['a page of the asset register', adminQueries.assets({ page: 1, pageSize: 20 }).queryKey],
+    ['one unit of the asset register', adminQueries.asset('TSH-DR-0042').queryKey],
   ])('never treat %s as fresh, and refetch it on every use', (_what, queryKey) => {
     const defaults = createQueryClient().getQueryDefaults(queryKey)
 

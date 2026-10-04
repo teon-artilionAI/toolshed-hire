@@ -28,10 +28,12 @@ const CENT_DIGITS = 2
  * What is wrong with a reason, or null when it may be sent.
  *
  * @param reason What was typed. The spaces around it do not count.
+ * @param record What the reason will be read with later, for example "this
+ *   hire" or "this unit".
  */
-export function reasonProblem(reason: string): string | null {
+export function reasonProblem(reason: string, record = 'this hire'): string | null {
   const given = reason.trim()
-  if (given === '') return 'Write the reason, so whoever reads this hire later knows why.'
+  if (given === '') return `Write the reason, so whoever reads ${record} later knows why.`
   if (given.length < MIN_REASON_LENGTH) {
     return `Write at least ${MIN_REASON_LENGTH} characters. This has ${given.length}.`
   }

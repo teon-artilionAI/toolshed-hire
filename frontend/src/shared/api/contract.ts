@@ -19,8 +19,9 @@
  * settlement types are in contract-returns.ts, the damage and quarantine
  * types are in contract-damage.ts, the reporting types are in
  * contract-reporting.ts, the admin operations types are in
- * contract-operations.ts, and the admin catalogue types are in
- * contract-admin-catalogue.ts. All ten are passed on from here, and the
+ * contract-operations.ts, the admin catalogue types are in
+ * contract-admin-catalogue.ts, and the asset register types are in
+ * contract-admin-assets.ts. All eleven are passed on from here, and the
  * session types below stay here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
@@ -176,6 +177,17 @@ export type {
   NewModelRequest,
   PublicationRequest,
 } from './contract-admin-catalogue'
+export type {
+  AdminAsset,
+  AdminAssetDetail,
+  AdminAssetPage,
+  AdminAssetQuery,
+  AssetChangesRequest,
+  AssetHistoryEntry,
+  AssetHistoryKind,
+  AssetTransitionRequest,
+  NewAssetRequest,
+} from './contract-admin-assets'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.
