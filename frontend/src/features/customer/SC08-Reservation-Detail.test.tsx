@@ -188,6 +188,17 @@ describe('whether cancelling is offered', () => {
     expect(notice).toHaveTextContent(`The reason given was "${TYPED_REASON}".`)
     expect(screen.queryByRole('button', { name: OPEN_QUESTION })).not.toBeInTheDocument()
   })
+
+  it.each(['Testing the live site.', 'Is the branch open?', 'Plans changed!'])(
+    'ends the sentence once when the reason "%s" ends one already',
+    async (reason) => {
+      await openBooking({ [DETAIL]: () => jsonResponse({ ...CANCELLED, cancellationReason: reason }) })
+
+      const notice = screen.getByText(CANCELLED_TITLE).closest('[role="status"]')
+      expect(notice).toHaveTextContent(`The reason given was "${reason}"`)
+      expect(notice?.textContent).not.toContain(`"${reason}".`)
+    },
+  )
 })
 
 describe('cancelling', () => {
