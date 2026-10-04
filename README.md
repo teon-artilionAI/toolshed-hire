@@ -89,9 +89,10 @@ system.
 
 The API scales down to nothing when it is idle and the database suspends after
 five minutes without a query, so both are asleep when nobody has used the site
-for a while. The first request after a quiet spell wakes them and takes about
-<!-- final: measured cold start --> seconds. A loading state shows while it
-waits, and every request after it is quick.
+for a while. The first request after a quiet spell wakes them and takes about six
+seconds. I measured 5.9 seconds on production on the morning of 4 October 2026
+after the site had been idle overnight, and between 0.26 and 0.6 seconds for
+the requests that followed. A loading state shows while it waits.
 
 ## What each task delivered
 
