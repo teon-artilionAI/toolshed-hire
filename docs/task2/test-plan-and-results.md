@@ -112,9 +112,9 @@ was kept.
 
 These are the figures of the release, from the release hardening pull request,
 [#60](https://github.com/teon-artilionAI/toolshed-hire/pull/60), the last change
-before `v0.4.0` on 4 October 2026. The hotfix `v0.4.1` the same afternoon added
-five backend tests and twelve frontend tests, and the rest of the table holds
-for it too. What testing by hand found is under
+before `v0.4.0` on 4 October 2026. The hotfixes `v0.4.1` and `v0.4.2` the same
+afternoon added five backend tests and fifteen frontend tests, and the rest of
+the table holds for them too. What testing by hand found is under
 [Testing the release by hand](#testing-the-release-by-hand).
 
 | Check | Result |
@@ -149,6 +149,7 @@ follows.
 | [#59](https://github.com/teon-artilionAI/toolshed-hire/pull/59) staff accounts and customer holds | 4,594 | 1,438 | 202 |
 | [#60](https://github.com/teon-artilionAI/toolshed-hire/pull/60) release hardening | 4,618 | 1,443 | 392 |
 | [#64](https://github.com/teon-artilionAI/toolshed-hire/pull/64) hotfix 0.4.1 | 4,623 | 1,455 | 392 |
+| [#69](https://github.com/teon-artilionAI/toolshed-hire/pull/69) hotfix 0.4.2 | 4,623 | 1,458 | 392 |
 
 ### Testing the release by hand
 
@@ -194,6 +195,18 @@ before half past ten, because the API's clock is pinned to 10:00 and the
 journey counted down on the browser's real clock. Each fix to a screen or to
 the seed has a test that fails without it. The longer timeout and the pipeline
 changes have none, and I checked them by running them.
+
+Then I tested `v0.4.1` the same way on production, signed in as the customer
+and as the owner. The customer searched, booked, held and confirmed a unit,
+found it under My Hires and cancelled it. At the Cape Town CBD counter the
+owner booked a unit for the trade customer, checked it out and took it back,
+and the deposit was released in full. The owner's screens, the September
+report and the worked example read as they should. One fault turned up. A
+cancellation reason that ended in a full stop read with a second full stop
+after the closing quote. It is issue
+[#68](https://github.com/teon-artilionAI/toolshed-hire/issues/68), fixed in
+[#69](https://github.com/teon-artilionAI/toolshed-hire/pull/69) and released
+as `v0.4.2`.
 
 ### Figures worked out by hand
 

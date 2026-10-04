@@ -102,7 +102,7 @@ the wait.
 | Task | What I delivered | Where it is |
 |---|---|---|
 | Task 1 | The design document, submitted on 16 August 2026, with the requirements, the design, security, the pipeline, the running costs and change management. A clickable prototype of all 24 screens on sample data, and a walking skeleton of the API. | [The Task 1 design document](docs/task1/INSY7315_Task1_ToolshedHire.pdf), and the baseline in [CHANGELOG.md](CHANGELOG.md) |
-| Task 2 | This system, released as `v0.4.0` with the fixes from testing it by hand in `v0.4.1`, and marked by the tag `task2-v1.0`. All 24 screens on a real API and database, hosting in two environments, the GitHub workflow and pipeline, and the recorded presentation. | This README and [docs/task2](docs/task2/README.md) |
+| Task 2 | This system, released as `v0.4.0` with the fixes from testing it by hand in `v0.4.1` and `v0.4.2`, and marked by the tag `task2-v1.0`. All 24 screens on a real API and database, hosting in two environments, the GitHub workflow and pipeline, and the recorded presentation. | This README and [docs/task2](docs/task2/README.md) |
 | Task 3 | To come. The final release `v1.0.0`, the report and the user guide, and the work listed under [Known limitations](#known-limitations). | |
 
 This table says where to find the evidence for each part of Task 2.
@@ -271,7 +271,7 @@ integration workflow also refuses a pull request into `main` from anything but a
 A fix to a released state goes the other way. A hotfix branch is cut from
 `main`, merged into `main` through a pull request and tagged in the same way,
 and then the hotfix branch, carrying the release merge commit, is merged into
-`develop`. `v0.4.1` went out like that.
+`develop`. `v0.4.1` and `v0.4.2` went out like that.
 
 | Release | Date | Release branch | What it added |
 |---|---|---|---|
@@ -280,6 +280,7 @@ and then the hotfix branch, carrying the release merge commit, is merged into
 | `v0.3.0` | 3 October 2026 | `release/0.3.0` | Registration and the counter journey, from a walk-in to the return, the deposit and damage (011 to 015) |
 | `v0.4.0` | 4 October 2026 | `release/task-2` | The owner's side, reporting, the audit trail and corrections, the catalogue, the asset register and users (017 to 021), the hardening (022) and this evidence (016) |
 | `v0.4.1` | 4 October 2026 | `hotfix/063-browser-test-fixes` | The fixes from testing `v0.4.0` by hand in a browser as each role (#63) |
+| `v0.4.2` | 4 October 2026 | `hotfix/068-cancel-reason-full-stop` | A fix found by testing `v0.4.1` by hand on production (#68) |
 
 The tag `task2-v1.0` marks the state I hand in for Task 2 and deploys nothing.
 `v1.0.0` is kept for the release in Task 3 where the built system matches the
