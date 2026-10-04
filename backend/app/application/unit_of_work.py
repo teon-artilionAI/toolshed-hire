@@ -20,6 +20,7 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
+from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
@@ -80,6 +81,11 @@ class UnitOfWork(Protocol):
     @property
     def catalogue_entries(self) -> CatalogueEntryRepository:
         """Return the product model repository the administrator writes through."""
+        ...
+
+    @property
+    def asset_register(self) -> AssetRegisterRepository:
+        """Return the units of the fleet the administrator registers, edits and moves."""
         ...
 
     @property

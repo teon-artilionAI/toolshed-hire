@@ -26,6 +26,7 @@ from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
+from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
@@ -40,6 +41,7 @@ from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
 from app.infrastructure.admin_catalogue_entries import SqlCatalogueEntryRepository
 from app.infrastructure.admin_categories import SqlCategoryRepository
+from app.infrastructure.asset_register import SqlAssetRegisterRepository
 from app.infrastructure.audit import SqlAuditLog
 from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
@@ -68,6 +70,7 @@ class SqlAlchemyUnitOfWork:
     product_models: ProductModelRepository
     categories: CategoryRepository
     catalogue_entries: CatalogueEntryRepository
+    asset_register: AssetRegisterRepository
     customers: CustomerRepository
     customer_directory: CustomerDirectory
     accounts: AccountRepository
@@ -115,6 +118,7 @@ class SqlAlchemyUnitOfWork:
         self.product_models = SqlProductModelRepository(session)
         self.categories = SqlCategoryRepository(session)
         self.catalogue_entries = SqlCatalogueEntryRepository(session)
+        self.asset_register = SqlAssetRegisterRepository(session)
         self.customers = SqlCustomerRepository(session)
         self.customer_directory = SqlCustomerDirectory(session)
         self.accounts = SqlAccountRepository(session)

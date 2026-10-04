@@ -18,6 +18,8 @@ from tests.support.probe_app import ADMIN_PATH, COUNTER_PATH, CUSTOMER_PATH, FRE
 # A key no customer and no reservation carries, so a route that lets the caller
 # in answers 404 and one that does not answers 401 or 403 before it looks.
 NOBODYS_KEY: Final[str] = "00000000-0000-4000-8000-000000000000"
+# A tag no unit carries, for the same reason.
+NOBODYS_TAG: Final[str] = "TSH-ZZ-0000"
 
 
 class Caller(str, Enum):
@@ -124,6 +126,13 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow(
         "catalogue", API, "POST", f"/api/admin/models/{NOBODYS_KEY}/publication", ADMIN_ONLY
     ),
+    MatrixRow("catalogue", API, "GET", "/api/admin/assets", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "GET", f"/api/admin/assets/{NOBODYS_TAG}", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "POST", "/api/admin/assets", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "PATCH", f"/api/admin/assets/{NOBODYS_TAG}", ADMIN_ONLY),
+    MatrixRow(
+        "catalogue", API, "POST", f"/api/admin/assets/{NOBODYS_TAG}/transitions", ADMIN_ONLY
+    ),
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
     MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
     MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),
@@ -134,4 +143,4 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow("customer only", PROBE, "GET", CUSTOMER_PATH, CUSTOMER_ONLY),
 )
 
-__all__ = ["API", "MATRIX", "NOBODYS_KEY", "PROBE", "Caller", "MatrixRow"]
+__all__ = ["API", "MATRIX", "NOBODYS_KEY", "NOBODYS_TAG", "PROBE", "Caller", "MatrixRow"]

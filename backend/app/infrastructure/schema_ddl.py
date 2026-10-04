@@ -95,6 +95,7 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ix_audit_event_asset_status",
     "ix_audit_event_actor",
     "ix_audit_event_action",
+    "ix_asset_allocation_released",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -175,6 +176,24 @@ PRODUCT_MODEL_SLUG_CONSTRAINT_NAME: Final[str] = "product_model_slug_key"
 # through `ix_asset_product_model` of revision 0004.
 PRODUCT_MODEL_CATEGORY_INDEX: Final[str] = "ix_product_model_category"
 PRODUCT_MODEL_PUBLISHED_INDEX: Final[str] = "ix_product_model_published"
+
+# The unique constraint on the tag painted on a unit (BR-34). The column is
+# declared unique in the baseline, and this is the name PostgreSQL gives the
+# constraint. The register recognises it when two administrators race to
+# register one tag.
+ASSET_TAG_CONSTRAINT_NAME: Final[str] = "asset_asset_tag_key"
+
+# The two indexes of revision 0010, which the asset register reads through. The
+# search of the register matches part of a serial number through the first, a
+# trigram index like the one on the tag. The history of one unit reads the
+# allocations it was released from through the second, which is partial on a
+# released allocation, and the active ones through the GiST index of the
+# exclusion constraint, which holds those and nothing else.
+ASSET_SERIAL_SEARCH_INDEX: Final[str] = "ix_asset_serial_trgm"
+ALLOCATION_RELEASED_INDEX: Final[str] = "ix_asset_allocation_released"
+# The index of the exclusion constraint, through which the register counts the
+# active allocations of a unit and finds the booking that holds it.
+OVERLAP_CONSTRAINT_INDEX: Final[str] = OVERLAP_CONSTRAINT_NAME
 
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006
