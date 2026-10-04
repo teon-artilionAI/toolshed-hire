@@ -34,6 +34,12 @@ person something wrong or made the first visit slower than it had to be.
   the day it came back.
 - A failed journey on staging keeps its screenshots.
 
+### Security
+
+- wheel 0.46.3 in the backend build requirements, for GHSA-8rrh-rw8j-w5fx. The
+  advisory is in `wheel unpack`, which the build never runs, but the pinned
+  0.45.1 was in the affected range.
+
 ## [0.4.0] - 2026-10-04
 
 The Admin console and the release checks. The owner can see which equipment
