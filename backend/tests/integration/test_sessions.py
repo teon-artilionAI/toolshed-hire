@@ -212,7 +212,7 @@ class TestTheCounters:
             session.commit()
         with Session(application_engine) as session:
             store = SqlRateLimitStore(session)
-            assert store.delete_windows_before(clock.now() - timedelta(days=1)) == 1
+            assert store.delete_windows_before(clock.now() - timedelta(days=1), limit=10) == 1
             session.commit()
             remaining = session.exec(select(RateLimitCounter)).all()
         assert [(row.bucket_key_hash, row.request_count) for row in remaining] == [(BUCKET, 3)]

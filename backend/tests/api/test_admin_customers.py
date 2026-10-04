@@ -37,6 +37,11 @@ from tests.support.clock import FixedClock
 from tests.support.factories import Factory
 
 ACCOUNT_ON_HOLD_PROBLEM = "https://toolshedhire.co.za/problems/account-on-hold"
+# A hold by hand is refused in the same plain words as a hold for no shows,
+# and never with a sentence about bookings that were not collected.
+ON_HOLD_SENTENCE = (
+    "This customer account is on hold, so it cannot make a reservation. Please contact a branch."
+)
 
 
 @pytest.fixture
@@ -157,10 +162,10 @@ class TestTheStanding:
         summary = answered(set_standing(people, owner, world.profile.id, "ON_HOLD"))
         assert set(summary) == CUSTOMER_MEMBERS
         assert summary["accountStatus"] == "ON_HOLD"
-        refused = people.create(world.customer, world.payload())
-        assert refused_with(refused, status.HTTP_403_FORBIDDEN)["type"] == (
-            ACCOUNT_ON_HOLD_PROBLEM
+        refused = refused_with(
+            people.create(world.customer, world.payload()), status.HTTP_403_FORBIDDEN
         )
+        assert (refused["type"], refused["detail"]) == (ACCOUNT_ON_HOLD_PROBLEM, ON_HOLD_SENTENCE)
         released = answered(set_standing(people, owner, world.profile.id, "ACTIVE"))
         assert (released["accountStatus"], released["noShowCount"]) == ("ACTIVE", 3)
         assert people.create(world.customer, world.payload()).status_code == 201

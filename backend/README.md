@@ -1,8 +1,9 @@
 # Toolshed Hire backend
 
-FastAPI and PostgreSQL. This directory is the walking skeleton, which means it
-proves the load bearing decisions end to end and nothing else. It is not a
-first pass at the whole application.
+FastAPI and PostgreSQL. This directory began as the walking skeleton, which
+proved the load bearing decisions end to end and nothing else. Every module of
+the design document has been built on it since, and each section below
+describes one of them as it stands.
 
 ## What it proves
 
@@ -76,7 +77,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, `admin_asset_deps.py` wires the reads and writes of the asset register, `admin_user_deps.py` wires the staff accounts and the customer holds, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `late_fee_deps.py` chooses the late fee policy, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, `admin_asset_deps.py` wires the reads and writes of the asset register, `admin_user_deps.py` wires the staff accounts and the customer holds, and `sweep_deps.py` wires the lazy sweep of its four parts. `user_presenter.py` shapes the signed in account that signing in, refreshing and `GET /api/me` return. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -108,7 +109,8 @@ it, so it has a file of its own in each layer. Its read is a port of its own,
 `AuditEventQuery` in `app/application/audit_reads.py` behind `ReadAuditLog`,
 with `SqlAuditEventReads` in `app/infrastructure/audit_query.py`, so nothing
 that writes the log can read it and nothing that reads it can write it. The throttle in
-`app/application/throttle.py` and the ownership scope in
+`app/application/throttle.py`, its pruning in `app/application/throttle_pruning.py`
+and the ownership scope in
 `app/application/ownership.py` belong to no module for the same reason.
 
 ## The four patterns in place
@@ -467,8 +469,46 @@ The counters are rows in `rate_limit_counter`, because the instances share no
 memory. A bucket is keyed by a salted SHA-256 and never by the address. The
 salt is derived from `JWT_SECRET`. Counting is one atomic statement, and it is
 committed before the password check starts, so the lock on a counter row lasts
-one statement and not one bcrypt. Windows older than a day are deleted, at
-most once every fifteen minutes by each process.
+one statement and not one bcrypt.
+
+No window is longer than an hour, `LONGEST_THROTTLE_WINDOW` in
+`app/application/throttle.py`, and a rule with a longer window is refused when
+it is built. A counter is kept for a day after its window has ended,
+`COUNTER_KEPT_AFTER_WINDOW` in `app/application/throttle_pruning.py`. The lazy
+sweep deletes the counters whose window ended more than a day ago, as its
+fourth part, in one statement a call that takes at most
+`COUNTER_PRUNE_BATCH_SIZE`, which is 500, oldest first. It logs how many went
+as `throttle.counters_pruned`. The statement finds its rows through
+`ix_rate_limit_counter_window_started_at`, revision `0012`, so when nothing is
+due it reads one index entry, and it skips a row another sweep has locked, so
+two sweeps at once never wait for each other. Sign in and the account routes
+delete nothing themselves.
+
+What degrades first is the pruning falling behind. It keeps up while fewer
+than 500 counters are written between two sweeps, which holds easily, because
+every availability search and every list of bookings or hires runs the sweep
+and an attempt writes two or three counters. A burst of attempts, such as an
+attack on sign in from many addresses, can write counters faster than that,
+and the table then holds more than a day until the sweeps catch up a batch at
+a time. Every read of the table goes through its unique key or the index of
+revision `0012`, so that costs disk and never time. At a hundred times today's
+traffic the pruning belongs with the rest of the sweep in a scheduled job.
+
+`refresh_session` is not pruned. A session row stays once it is rotated,
+revoked or out of time, because the application role holds no DELETE on that
+table and nothing in the domain is ever hard deleted (BR-51). It grows by a row
+for every sign in and every refresh. A refresh finds its row through the
+unique index on the token hash, and the revocations of one account go through
+`ix_refresh_session_live`, which holds the sessions nobody revoked. A session
+left to run out without a sign out stays in that index, so an account that
+signs in every day and never signs out gathers a row there a day, and a reset
+or a deactivation revokes them all in one statement. So the table costs disk
+long before it costs a request. When it matters, the job is an operator's,
+run as `toolshed_migrate`, which owns the tables, and never as `toolshed_app`.
+It would delete, in batches by key, the sessions whose `expires_at` passed
+more than ninety days before, which no browser can ever present again. The
+audit events of every sign in, refresh, reuse and sign out stay, so nothing
+the log answers is lost.
 
 `Throttle` in `app/application/throttle.py` is the reusable piece. The account
 routes use it with seven rules of their own, listed in the next section, and
@@ -593,8 +633,13 @@ with the same answer.
 ### Completing a reset
 
 `POST /api/auth/password-reset/complete` sets the new hash, clears the token,
-lifts any lock and revokes every refresh session of the account, in one
-transaction with the audit event `auth.password_reset_completed`. A browser
+lifts any lock, marks the email address as verified when it was not yet, and
+revokes every refresh session of the account, in one transaction with the
+audit event `auth.password_reset_completed`. The link only ever went to that
+address, so using it proves the person reads mail there, which is all a
+verification link proves. The event records `email_verified` before and after
+beside `locked`. A verification link still pending is left alone, so using it
+later succeeds and changes nothing. A browser
 that was signed in with the old password is signed out at its next refresh.
 The sessions are revoked with the reason `LOGOUT`. No reason is added to the
 enumeration, and of the four it has `LOGOUT` is the nearest, because the
@@ -707,9 +752,11 @@ It locks the due rows, checks each again and lapses it, so two sweeps at once
 take turns and the second finds nothing left to do. Its query reads through the
 partial index `ix_reservation_hold_expiry`. Every use case that is about to
 decide something about one reservation also lapses that one itself, so the
-bound on the batch never lets an expired hold be confirmed. The other half of
-the same sweep marks the bookings nobody collected, which is described under
-the counter overview below. Each half runs in a transaction of its own.
+bound on the batch never lets an expired hold be confirmed. The same sweep has
+three more parts. The second marks the bookings nobody collected, which is
+described under the counter overview below, the third marks the hires gone
+overdue, under Returns and settlement, and the fourth deletes old throttle
+counters, under Throttling. Each part runs in a transaction of its own.
 
 **A confirmation is where the customer is told.** `ConfirmReservationUseCase`
 queues the booking confirmation in its own transaction and sends it after the
@@ -722,9 +769,12 @@ profile by one. There is no route that deletes anything (BR-51).
 
 **A customer on hold cannot book.** A profile whose `account_status` is not
 `ACTIVE` is refused when a draft is created and again when it is put on hold,
-with `AccountOnHoldError`, which is a 403 (BR-18). For an account on hold the
-`detail` says why, which is three bookings in the last twelve months that were
-not collected, and that an administrator lifts the hold.
+with `AccountOnHoldError`, which is a 403 (BR-18). The `detail` says plainly
+that the account is on hold and to contact a branch, and nothing about why. A
+hold comes from the third no show in twelve months or from an administrator
+by hand, and the profile does not record which. Only the audit trail does,
+and a booking, which writes to the log, never reads it. So one neutral
+sentence serves both, and a blacklisted account is told the same.
 
 Every change of status writes one audit event in the same transaction (BR-49),
 `reservation.created`, `reservation.held`, `reservation.confirmed`,
@@ -827,9 +877,9 @@ units it has. The checkout read is two. `daysLateToday` and `lateFeeToday` are
 what the late fee policy says a unit still out would owe if it came back
 today, and `settlementWaitingOn` is the domain's `settlement_wait`, the same
 rule the return asks before it settles, both worked out in
-`app/application/hire/progress.py`. `damageAssessment` is `NOT_NEEDED` until
-damage and quarantine arrive, and `damage_assessment_of` is the one function
-that change replaces. A customer is never shown a tag.
+`app/application/hire/progress.py`. `damageAssessment` comes from
+`damage_assessment_of`, which reads `NOT_NEEDED`, `REQUIRED` or `DONE` as
+described under Damage and quarantine. A customer is never shown a tag.
 
 What degrades first as the data grows is the customer search on a short text.
 A trigram index cannot narrow a name pattern of two characters, so a search
@@ -850,8 +900,8 @@ date, find a unit at any branch, and a confirmed booking nobody collected
 becomes a no show that frees its units (FR-12, FR-15, FR-16, US-10, US-18,
 US-19, US-37, BR-17, BR-18, BR-43).
 
-**The no show half of the sweep.** `ExpireHoldsAndNoShowsUseCase` now has both
-halves, each in a transaction of its own. The second takes at most 25
+**The no show part of the sweep.** The second part of
+`ExpireHoldsAndNoShowsUseCase`, in a transaction of its own, takes at most 25
 confirmed reservations whose collection branch has closed on the first day of
 the hire, by the clock in Cape Town, earliest first day first. Its query joins
 the branch for its closing time, writes the status as the literal the partial
@@ -903,24 +953,27 @@ order, and a unit on hire carries the day it is due back and its rental.
 
 | Read | Statements | Indexes |
 |---|---|---|
-| Dashboard | 6, and the route adds the account, the branch and the sweep for 10 | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, the unique key on a line's reservation and model, `ix_rental_item_rental` |
-| Diary | 4, and 8 through the route | `ix_reservation_branch_start`, `ix_rental_branch_due_back`, and the same two for lines and units |
+| Dashboard | 6, and the route adds the account, the branch and the four of the sweep for 12 | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, the unique key on a line's reservation and model, `ix_rental_item_rental` |
+| Diary | 4, and 10 through the route | `ix_reservation_branch_start`, `ix_rental_branch_due_back`, and the same two for lines and units |
 | Locator | 2, the count and the page | `ix_asset_tag_trgm`, `ix_asset_product_model`, `ix_rental_item_asset` |
 
 `tests/integration/test_counter_reads.py` counts the statements with few rows
 and with many, and `tests/integration/test_counter_read_indexes.py` asks the
 planner to prove each index is used.
 
-**What the sweep costs a request.** Three statements when nothing is due, one
-for each part, each read through a partial index that holds only rows that
-could be due. The third part, which marks hires overdue, is described under
-Returns and settlement. When something is due, each reservation of a batch is loaded
-with its lines and allocations and written by its own statements, and a no
-show adds the lock, the count and the update of its customer. Twenty five of
-each is the most a request ever pays for.
+**What the sweep costs a request.** Four statements when nothing is due, one
+for each part. The first three each read through a partial index that holds
+only rows that could be due, and the fourth, which deletes old throttle
+counters, reads one entry of `ix_rate_limit_counter_window_started_at`. The
+third part, which marks hires overdue, is described under Returns and
+settlement, and the fourth under Throttling. When something is due, each
+reservation of a batch is loaded with its lines and allocations and written by
+its own statements, and a no show adds the lock, the count and the update of
+its customer. Twenty five of each, and one delete of at most 500 counters, is
+the most a request ever pays for.
 
 **What degrades first as the data grows.** The backlog of the sweep. It clears
-one batch of each half a request, so if bookings were missed faster than
+one batch of each part a request, so if bookings were missed faster than
 requests arrived to sweep them, their units would look taken for longer, and
 at a hundred times the volume the sweep belongs in a scheduled job. After that
 comes the diary of a busy branch, whose lists are not capped because the
@@ -1205,9 +1258,9 @@ in the domain with no database, and nothing else works it out.
 | The share of a hire charge raised on a whole hire | `app/domain/policies/hire_charge_share.py` |
 | Gross contribution and the sum of its parts | `app/domain/contribution.py` |
 
-The share scales an amount, so it uses `Money.in_proportion`, which is new. It
-multiplies before it divides, so an exact share such as R212.625 stays exact
-until it is rounded half up to R212.63. Every method that scales an amount is
+The share scales an amount, so it uses `Money.in_proportion`. It multiplies
+before it divides, so an exact share such as R212.625 stays exact until it is
+rounded half up to R212.63. Every method that scales an amount is
 called only from the policies and the VAT module, and
 `tests/unit/test_one_place_for_a_price.py` now holds this one to that as well,
 which is why the share lives among the policies.
@@ -1339,7 +1392,7 @@ changes nothing.
 
 | Read | Statements | Indexes |
 |---|---|---|
-| Report and CSV | 3, which are the units in scope with their money of the period, every dated fact about them as one `UNION ALL`, and the units of every hire charge on a whole hire. 4 when a category is named, which is checked first. The route adds the account, the branch when one is named and the sweep, which is 3 when nothing is due | `ix_charge_raised_at`, `ix_damage_report_resolved_at`, `ix_audit_event_asset_status`, `ix_rental_item_returned_at`, `ix_rental_item_lost`, `ix_reservation_confirmed_start`, `ix_reservation_hold_expiry`, `ix_audit_event_occurred_at`, `ix_asset_allocation_line`, `ix_rental_item_rental`, `ix_asset_branch_status` with a branch, and the primary keys |
+| Report and CSV | 3, which are the units in scope with their money of the period, every dated fact about them as one `UNION ALL`, and the units of every hire charge on a whole hire. 4 when a category is named, which is checked first. The route adds the account, the branch when one is named and the sweep, which is 4 when nothing is due | `ix_charge_raised_at`, `ix_damage_report_resolved_at`, `ix_audit_event_asset_status`, `ix_rental_item_returned_at`, `ix_rental_item_lost`, `ix_reservation_confirmed_start`, `ix_reservation_hold_expiry`, `ix_audit_event_occurred_at`, `ix_asset_allocation_line`, `ix_rental_item_rental`, `ix_asset_branch_status` with a branch, and the primary keys |
 | Dashboard | 2, every branch in one and the three counts in the other, and the 3 of the report for the month. The route adds the account and the sweep | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, `ix_notification_failed` |
 
 `tests/integration/test_report_reads.py` counts the statements with the
@@ -1804,7 +1857,9 @@ opens it, and a reset token, in one transaction with
 opens. After the commit the person is sent the reset link every account uses,
 `{FRONTEND_ORIGIN}/signin#reset=<token>`, in a message that says an account
 was opened for them, and chooses their own password through
-`POST /api/auth/password-reset/complete`. The link lasts the sixty minutes a
+`POST /api/auth/password-reset/complete`. The account starts with no verified
+address and ends verified when the password is chosen, because the link only
+reached the person through that address. The link lasts the sixty minutes a
 reset link lasts. Once it has run out the person asks for a new one from the
 sign in page, which works because the account is active. `emailDeliverable`
 in the answer is whether the email gateway took the message, so it is false
@@ -2028,20 +2083,6 @@ that change by hand, so building it inside the migration's transaction blocks
 writes to the table for a moment. A table a hundred times larger would want
 `CREATE INDEX CONCURRENTLY` outside a transaction instead.
 
-Revision `0011` adds three indexes and nothing else, read by the lists of
-people of the admin console. `ix_user_account_staff` on `user_account
-(lower(full_name), id)`, partial on `role <> 'CUSTOMER'`, holds the staff
-accounts and no customer's. `ix_customer_profile_name` on `customer_profile
-(lower(display_name), id)` gives the list of customers its order, and
-`ix_customer_profile_standing` on the same columns, partial on
-`account_status <> 'ACTIVE'`, holds the customers on hold or blacklisted. The
-names are indexed through `lower` on purpose. An index on the bare name could
-answer a search for part of a name by reading all of it, and on a small table
-the planner then preferred it to the trigram index the counter's search was
-written for, which `tests/integration/test_customer_search_index.py` caught.
-They are built inside the migration's transaction, with the same caution as
-the revisions before it for a table a hundred times larger.
-
 Revision `0010` adds two indexes and nothing else, both read by the asset
 register. `ix_asset_serial_trgm` is a trigram index on `asset.serial_number`,
 through which the register finds part of a serial number the way it finds
@@ -2059,6 +2100,31 @@ the search keeps the index it was written for. Both are built inside the
 migration's transaction, with the same caution as the revisions before it for
 a table a hundred times larger.
 
+Revision `0011` adds three indexes and nothing else, read by the lists of
+people of the admin console. `ix_user_account_staff` on `user_account
+(lower(full_name), id)`, partial on `role <> 'CUSTOMER'`, holds the staff
+accounts and no customer's. `ix_customer_profile_name` on `customer_profile
+(lower(display_name), id)` gives the list of customers its order, and
+`ix_customer_profile_standing` on the same columns, partial on
+`account_status <> 'ACTIVE'`, holds the customers on hold or blacklisted. The
+names are indexed through `lower` on purpose. An index on the bare name could
+answer a search for part of a name by reading all of it, and on a small table
+the planner then preferred it to the trigram index the counter's search was
+written for, which `tests/integration/test_customer_search_index.py` caught.
+They are built inside the migration's transaction, with the same caution as
+the revisions before it for a table a hundred times larger.
+
+Revision `0012` adds one index and nothing else,
+`ix_rate_limit_counter_window_started_at`, a btree on
+`rate_limit_counter.window_started_at`. The fourth part of the sweep finds the
+counters whose window ended more than a day ago through it, oldest first, so
+the statement reads one index entry when nothing is due and never reads the
+whole table, which the unique key on the bucket and the window cannot do
+because it leads with the bucket. The table holds about a day of counters, so
+building the index inside the migration's transaction blocks the throttle for
+a moment. Every counter is written once a window and then only has its count
+raised, which never touches the indexed column.
+
 ## The seed and the two database roles
 
 `python seed.py` gives a database a fleet worth looking at, so the system has
@@ -2067,6 +2133,15 @@ branches, fourteen categories, 120 published product models, 400 physical
 units (171 at CBD, 125 at BLV, 104 at SMW), five accounts with verified email
 addresses and a profile for each of the two customers, and the worked example
 from the design document as a hire that is already closed.
+
+In the same transaction it then writes a season of trading history, every hire
+from 1 June to 30 September 2026 at all three branches booked, collected,
+returned and settled through the domain for thirty walk-in customers and the
+two seeded ones, with about one hire in forty brought back damaged and
+repaired, so the utilisation report has something to read. Every unit ends the
+season back on the shelf and no audit event is written, so today's fleet is
+exactly as it was, and `seeding/trading_history.py` says how a second run
+finds the history and writes nothing.
 
 Thirty four units keep the tags the prototype showed. The other 366 are tagged
 `TSH-<prefix>-<number>`, numbered upward within each prefix in SKU order and
@@ -2131,7 +2206,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 `GET http://localhost:8000/api/health` should report
-`{"status": "healthy", "databaseReachable": true, "btreeGistInstalled": true, "revision": "local"}`.
+`{"status": "healthy", "environment": "development", "databaseReachable": true, "btreeGistInstalled": true, "revision": "local"}`.
 
 ## Endpoints
 
@@ -2229,9 +2304,14 @@ answer errors as `application/problem+json`.
 | `POST /api/auth/refresh` | none | 200 with the same body and a `Set-Cookie` that replaces the refresh token. 401 `session-expired`, with the cookie cleared. 403 `origin-not-allowed`. |
 | `POST /api/auth/logout` | none | 204 with the cookie cleared. 403 `origin-not-allowed`. |
 
-`user` is `id`, `email`, `fullName`, `role`, `branchCode` and `emailVerified`,
-and `GET /api/me` returns the same object. `role` is `customer`, `counter` or
-`admin`. `branchCode` is null unless the account is counter staff.
+`user` is `id`, `email`, `fullName`, `role`, `branchCode`, `emailVerified` and
+`emailDeliverable`, and `GET /api/me` returns the same object. `role` is
+`customer`, `counter` or `admin`. `branchCode` is null unless the account is
+counter staff. `emailDeliverable` is the email gateway's own rule for the
+account's address, the one behind the same field of the account routes, so it
+is false when email is off in this environment and when the address is not
+the one allowed recipient. The booking screen reads it so that it never
+promises a confirmation email that cannot arrive.
 
 ### The account routes
 
@@ -2525,11 +2605,10 @@ example `https://www.example.co.za`, with no path. Left unset it is the one
 origin in `CORS_ORIGINS`, and in development, when that list holds more than
 one, it is `http://localhost:5173`. Staging and production refuse to start
 when it cannot be worked out, when it is not `https` or when it names this
-machine. The deploy script sets the address of the site as `CORS_ORIGINS` on
-the service and does not pass `FRONTEND_ORIGIN` itself, so the deployed
-services use that fallback today. Passing `FRONTEND_ORIGIN` to the service as
-well would make the setting explicit. The start-up log shows the origin in use
-as `frontend_origin`.
+machine. The deploy script, `infra/scripts/deploy-api.sh`, passes the address
+of the site to the service as both `CORS_ORIGINS` and `FRONTEND_ORIGIN`, so a
+deployed service names its origin explicitly and never relies on the
+fallback. The start-up log shows the origin in use as `frontend_origin`.
 
 Three settings control email.
 
@@ -2566,6 +2645,7 @@ the same commands.
 ```bash
 ruff check .                     # lint, including S608 and C901 at complexity 10
 mypy app                         # strict type check
+mypy seed.py seeding seed_data scripts   # the same for the tools that are not in the image
 lint-imports                     # the layer contract
 pytest tests -m "not postgres"   # unit, component and API tests, no database
 pip-audit                        # known vulnerabilities in the installed packages
@@ -2603,8 +2683,9 @@ the compose file is a local throwaway and the port is bound to 127.0.0.1. I set
 
 ## Tests
 
-The suite is split in two by the `postgres` marker, and the pipeline runs the
-two halves as separate jobs.
+The suite is split in two by the `postgres` marker. The fast job of the
+pipeline runs the half without it, and the integration job migrates an empty
+PostgreSQL and runs the whole suite with coverage.
 
 ```bash
 pytest tests -m "not postgres"   # unit, component and API tests, no database
@@ -2810,6 +2891,21 @@ its audit event, `test_staff_admin_race.py` stages two administrators
 demoting each other and two stepping down at once, and
 `test_people_list_reads.py` counts the statements of each read and asks the
 planner about each of them.
+
+The pruning of the throttle counters, `emailDeliverable` and the reset that
+proves an address are tested the same way. `tests/unit/test_throttle_pruning.py`
+holds the cutoff, the batch, the order and the log line, and runs the pruning
+as the fourth part of the sweep against the in memory unit of work. On
+PostgreSQL, `test_throttle_counter_pruning.py` runs the sweep as the
+application role, counts its statements, asks the planner for the index of
+revision `0012` and shows a locked counter skipped rather than waited for.
+`tests/api/test_account_email_deliverable.py` reads `emailDeliverable` from
+signing in, refreshing and `GET /api/me` through a gateway that delivers to
+everybody, one that delivers to one inbox and one with email off.
+`tests/api/test_reset_proves_the_address.py` follows a customer and a new
+member of staff to a verified address through the reset link, and
+`tests/integration/test_reset_proves_the_address.py` makes the reset fail at
+its audit event and finds nothing kept.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

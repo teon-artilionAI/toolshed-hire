@@ -3,8 +3,9 @@
 Asking for a reset is answered the same way whatever the address, with the
 same work done. Only an address with an active account is sent a link. The
 link works once, for an hour, and only the newest one works. Using it sets the
-new password, ends every session of the account and lifts any lock, all in
-one transaction with one audit event.
+new password, ends every session of the account, lifts any lock and proves the
+address when it was not proved yet, all in one transaction with one audit
+event.
 """
 
 from __future__ import annotations
@@ -110,7 +111,7 @@ class TestAskingForAReset:
 
 
 class TestUsingTheLink:
-    """The new password, every session ended, the lock lifted, and one event."""
+    """The new password, every session ended, the lock lifted, the address proved, one event."""
 
     @pytest.fixture
     def token(self, desk: AccountDesk, account: Account) -> str:
@@ -150,12 +151,34 @@ class TestUsingTheLink:
         desk.complete_reset(token)
         (event,) = desk.audit(RESET_COMPLETED_ACTION)
         assert (event.entity_id, event.actor_user_id) == (account.id, account.id)
-        assert event.before_state == {"locked": False}
+        assert event.before_state == {"locked": False, "email_verified": False}
         assert event.after_state == {
             "locked": False,
+            "email_verified": True,
             "revoked_session_count": 1,
             "revoke_reason": RevokeReason.LOGOUT.value,
         }
+
+    def test_the_address_is_proved_when_it_was_not_yet(
+        self, desk: AccountDesk, account: Account, token: str
+    ) -> None:
+        assert desk.identity.account(account.id).email_verified_at is None
+        desk.complete_reset(token)
+        assert desk.identity.account(account.id).email_verified_at == desk.clock.now()
+
+    def test_an_address_already_proved_keeps_the_day_it_was_proved(
+        self, desk: AccountDesk, account: Account, token: str
+    ) -> None:
+        proved_earlier = desk.clock.now() - timedelta(days=30)
+        desk.identity.account(account.id).email_verified_at = proved_earlier
+        desk.complete_reset(token)
+        assert desk.identity.account(account.id).email_verified_at == proved_earlier
+        (event,) = desk.audit(RESET_COMPLETED_ACTION)
+        assert event.before_state is not None and event.after_state is not None
+        assert (event.before_state["email_verified"], event.after_state["email_verified"]) == (
+            True,
+            True,
+        )
 
     def test_a_used_link_is_refused(self, desk: AccountDesk, token: str) -> None:
         desk.complete_reset(token)
@@ -167,6 +190,7 @@ class TestUsingTheLink:
         desk.clock.advance(PASSWORD_RESET_LIFETIME)
         assert refused(desk, token).message == RESET_LINK_INVALID_MESSAGE
         assert desk.identity.account(account.id).password_hash == fake_hash(KNOWN_PASSWORD)
+        assert desk.identity.account(account.id).email_verified_at is None
         assert desk.audit(RESET_COMPLETED_ACTION) == []
 
     def test_a_link_a_second_short_of_an_hour_still_works(
