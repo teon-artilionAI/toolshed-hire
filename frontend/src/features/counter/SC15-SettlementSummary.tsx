@@ -10,6 +10,8 @@
  * a customer. A deposit given back is written as released, never with a bare
  * minus sign.
  *
+ * While the deposit waits for a damage report nothing has been worked out, so
+ * the panel shows no figures, only the deposit held and what it waits for.
  * When the server says the deposit is still waiting, the panel says on what.
  * A balance the deposit did not cover is taken at the counter, through the
  * form in SC15-Balance-Payment.tsx. A unit waiting for a damage report links
@@ -19,7 +21,7 @@
 import { Link } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import type { ChargeType, Rental, RentalCharge } from '../../shared/api/contract'
-import { isNoMoney, money } from '../../shared/format'
+import { isNegativeMoney, isNoMoney, money, unsignedMoney } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Card, DataTable, Notice } from '../../shared/ui'
 import { CHARGE_STATUS_LABEL, CHARGE_TYPE_LABEL, amountWords } from './counter-labels'
@@ -121,10 +123,33 @@ function Waiting({ rental, onPaid }: { rental: Rental; onPaid: (rental: Rental) 
   return null
 }
 
+/**
+ * The credits an owner's correction paid straight back to the customer after
+ * the hire was settled. A settled hire takes only a correction that gives
+ * money back, and the server settles that credit at once instead of touching
+ * the deposit figures, so the figures alone would not mention it. A credit
+ * raised before the settlement was counted in it and is not one of these.
+ */
+function paidBackAfterSettling(rental: Rental): RentalCharge[] {
+  const settledAt = rental.settledAt
+  if (settledAt === null) return []
+  return rental.charges.filter(
+    (charge) =>
+      charge.type !== 'DEPOSIT_RELEASE' &&
+      charge.status === 'SETTLED' &&
+      isNegativeMoney(charge.amountIncVat) &&
+      Date.parse(charge.raisedAt) > Date.parse(settledAt),
+  )
+}
+
+/** Writes "R 300.00 and R 50.00" from the amounts, without adding them up. */
+const AMOUNT_LIST = new Intl.ListFormat('en-ZA', { style: 'long', type: 'conjunction' })
+
 /** Said once the server has settled the deposit. */
 function Settled({ rental }: { rental: Rental }) {
   if (rental.settledAt === null) return null
   const inFull = isNoMoney(rental.depositWithheld)
+  const paidBack = paidBackAfterSettling(rental)
   return (
     <div className="mb-md">
       <Notice tone="success" title={`${rental.reference} is settled`}>
@@ -135,12 +160,32 @@ function Settled({ rental }: { rental: Rental }) {
             : `${money(rental.depositRefunded)} of the ${money(rental.depositHeld)} deposit was released.`}{' '}
           {isNoMoney(rental.balanceDue) ? 'Nothing is due.' : `The balance due is ${money(rental.balanceDue)}.`}
         </p>
+        {paidBack.length > 0 && (
+          <p className="mt-xs">
+            Since then, {paidBack.length === 1 ? 'a correction' : 'corrections'} gave{' '}
+            {AMOUNT_LIST.format(paidBack.map((charge) => unsignedMoney(charge.amountIncVat)))} back to the
+            customer. It is listed under the deposit below.
+          </p>
+        )}
       </Notice>
     </div>
   )
 }
 
 export function SettlementSummary({ rental, onPaid }: { rental: Rental; onPaid: (rental: Rental) => void }) {
+  // Until the last damage report is filed nothing has been worked out, so a
+  // table of noughts would read as a deposit that kept nothing and gave
+  // nothing back. The card says what it waits for instead.
+  if (rental.settlementWaitingOn === 'DAMAGE_ASSESSMENT') {
+    return (
+      <Card title="Deposit settlement">
+        <p className="text-sm text-slate-soft">
+          The deposit of {money(rental.depositHeld)} stays held. Nothing has been settled yet.
+        </p>
+        <Waiting rental={rental} onPaid={onPaid} />
+      </Card>
+    )
+  }
   const charged = rental.charges.filter((charge) => WITHHOLDING_CHARGES.includes(charge.type))
   return (
     <Card title="Deposit settlement">
