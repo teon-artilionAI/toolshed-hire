@@ -130,6 +130,24 @@ class TestTheSeedBookkeeping:
         with pytest.raises(ValueError, match="cannot be negative"):
             SeedTally().record("branch", created=-1, found=0)
 
+    def test_a_run_that_corrected_a_row_changed_something(self) -> None:
+        tally = SeedTally()
+        tally.record("user_account", created=0, found=5)
+        tally.record_corrected("user_account_opening_date", corrected=2)
+        assert not tally.changed_nothing
+        assert tally.total_corrected == 2
+        assert tally.total_created == 0
+
+    def test_a_run_that_corrected_nothing_changed_nothing(self) -> None:
+        tally = SeedTally()
+        tally.record("user_account", created=0, found=5)
+        tally.record_corrected("user_account_opening_date", corrected=0)
+        assert tally.changed_nothing
+
+    def test_a_negative_correction_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="cannot be negative"):
+            SeedTally().record_corrected("user_account_opening_date", corrected=-1)
+
     def test_the_number_of_a_reference_is_its_last_part(self) -> None:
         assert number_of("TSH-R-26-000123") == 123
         assert number_of("TSH-H-26-000098") == 98

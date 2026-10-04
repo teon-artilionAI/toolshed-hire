@@ -10,11 +10,21 @@ domain, so a message sent to it by a later feature reaches nobody.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Final
 
 from app.domain.enums import CustomerType, IdDocType, UserRole
+from seeding.worked_example import SOUTH_AFRICA_STANDARD_TIME
 
 CITY: Final[str] = "Cape Town"
+
+# When every seeded account and customer profile was opened. It comes before
+# the worked example, booked on 2 March 2026, and before the first walk in of
+# the trading history registers on 12 January 2026, so no seeded customer has
+# a hire older than the account it was booked on.
+ACCOUNTS_OPENED_AT: Final[datetime] = datetime(
+    2026, 1, 5, 8, 0, tzinfo=SOUTH_AFRICA_STANDARD_TIME
+)
 
 ADMIN_EMAIL: Final[str] = "marius@toolshedhire.co.za"
 CBD_COUNTER_EMAIL: Final[str] = "elmarie@toolshedhire.co.za"

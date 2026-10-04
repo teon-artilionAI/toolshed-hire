@@ -13,6 +13,7 @@ order they run in. The closed hire has its own module, beside this one.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Final
 
 import pytest
@@ -33,6 +34,8 @@ from app.infrastructure.security import verify_password
 from seed_data import PINNED_ASSETS
 from seeding import SeedTally, seed_database
 from seeding.fleet_plan import TAG_PATTERN
+from seeding.people import ACCOUNTS_OPENED_AT, TRADE_CUSTOMER_EMAIL
+from seeding.worked_example import BOOKED_AT
 from tests.support.factories import TEST_PASSWORD
 
 pytestmark = pytest.mark.postgres
@@ -142,6 +145,74 @@ class TestThePeopleAreLoaded:
         assert by_type[CustomerType.TRADE].company_name
         assert all(profile.registered_branch_id is not None for profile in profiles)
         assert all(profile.user_account_id is not None for profile in profiles)
+
+
+class TestSeededAccountsWereOpenedBeforeTheirHistory:
+    """Every seeded account and profile is opened before any seeded hire."""
+
+    def test_every_seeded_account_and_profile_is_opened_at_the_seeded_date(
+        self, postgres_engine: Engine, seeded: SeedTally
+    ) -> None:
+        with Session(postgres_engine) as session:
+            accounts = session.exec(select(col(UserAccount.created_at))).all()
+            profiles = session.exec(select(col(CustomerProfile.created_at))).all()
+
+        assert len(accounts) == ACCOUNT_COUNT
+        assert set(accounts) == {ACCOUNTS_OPENED_AT}
+        assert set(profiles) == {ACCOUNTS_OPENED_AT}
+        assert ACCOUNTS_OPENED_AT < BOOKED_AT
+
+    def test_a_row_an_earlier_run_stamped_with_its_own_day_is_moved_back(
+        self, postgres_engine: Engine, seeded: SeedTally
+    ) -> None:
+        stamped_late = datetime.now(UTC)
+        with Session(postgres_engine) as session:
+            account = session.exec(
+                select(UserAccount).where(col(UserAccount.email) == TRADE_CUSTOMER_EMAIL)
+            ).one()
+            profile = session.exec(
+                select(CustomerProfile).where(col(CustomerProfile.user_account_id) == account.id)
+            ).one()
+            account.created_at = stamped_late
+            profile.created_at = stamped_late
+            stranger = UserAccount(
+                email="not.seeded@example.com",
+                password_hash=account.password_hash,
+                role=UserRole.CUSTOMER,
+                full_name="Not Seeded",
+                created_at=stamped_late,
+            )
+            session.add_all([account, profile, stranger])
+            session.commit()
+            stranger_id = stranger.id
+
+        try:
+            with Session(postgres_engine) as session:
+                corrected = seed_database(session, TEST_PASSWORD)
+                session.commit()
+            with Session(postgres_engine) as session:
+                again = seed_database(session, TEST_PASSWORD)
+                session.commit()
+            with Session(postgres_engine) as session:
+                account_opened = session.exec(
+                    select(col(UserAccount.created_at)).where(
+                        col(UserAccount.email) == TRADE_CUSTOMER_EMAIL
+                    )
+                ).one()
+                stranger_opened = session.get_one(UserAccount, stranger_id).created_at
+        finally:
+            with Session(postgres_engine) as session:
+                session.delete(session.get_one(UserAccount, stranger_id))
+                session.commit()
+
+        assert corrected.total_created == 0
+        assert corrected.corrected == {
+            "user_account_opening_date": 1,
+            "customer_profile_opening_date": 1,
+        }
+        assert account_opened == ACCOUNTS_OPENED_AT
+        assert stranger_opened == stamped_late
+        assert again.changed_nothing
 
 
 class TestTheSeedIsIdempotent:
