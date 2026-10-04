@@ -13,8 +13,10 @@
  * The journeys run in the same browser project, so all of them work at the
  * same branch. counter.spec.ts takes the last model free on the first page and
  * has its unit out on hire while it runs. The no show journey takes the model
- * before it, the damage journey the one before that, and the admin operations
- * journey the one before that, so no two of them take the same unit.
+ * before it, the damage journey the one before that, the admin operations
+ * journey the one before that, and the counter journey of the release, in
+ * release-counter.ts, the one before that, so no two of them take the same
+ * unit.
  */
 
 import { expect } from '@playwright/test'

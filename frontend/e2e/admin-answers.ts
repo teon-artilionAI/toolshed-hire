@@ -17,6 +17,7 @@
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { fulfil } from './answered.ts'
 import { ASSET_ANSWERS, ASSET_TAG } from './asset-answers.ts'
 import { AUDIT_ANSWERS } from './audit-answers.ts'
 import { CATALOGUE_ANSWERS, CATALOGUE_MODEL_ID } from './catalogue-answers.ts'
@@ -46,6 +47,7 @@ const OWNER = {
   role: 'admin',
   branchCode: null,
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 const BRANCHES = {
@@ -128,7 +130,7 @@ function report(groupBy: string) {
   }
 }
 
-async function answerTheApi(route: Route): Promise<void> {
+async function answerTheApi(route: Route, instead: Record<string, unknown>): Promise<void> {
   const request = route.request()
   const address = new URL(request.url())
   const key = `${request.method()} ${address.pathname}`
@@ -142,13 +144,9 @@ async function answerTheApi(route: Route): Promise<void> {
     ...CATALOGUE_ANSWERS,
     ...ASSET_ANSWERS,
     ...USER_ANSWERS,
+    ...instead,
   }
-  const body = answers[key]
-  if (body === undefined) {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
-    return
-  }
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  await fulfil(route, answers[key])
 }
 
 /** The name the CSV answered here is given, and what it holds. */
@@ -173,24 +171,26 @@ export async function answerTheCsv(route: Route): Promise<void> {
 
 /** An owner's screen to open, and what proves it has loaded. */
 export interface AdminScreen {
+  /** The identifier in navigation.ts. */
+  id: string
   path: string
   heading: string
   /** Something that is only on the page once the screen has its data. */
-  loaded: string
+  loaded: string | RegExp
 }
 
 export const ADMIN_SCREENS: readonly AdminScreen[] = [
-  { path: '/admin', heading: 'Business overview', loaded: 'Branch by branch' },
-  { path: '/admin/reports', heading: 'Utilisation and gross contribution', loaded: 'What these figures mean' },
-  { path: '/admin/reports?groupBy=asset', heading: 'Utilisation and gross contribution', loaded: 'In the workshop' },
-  { path: '/admin/audit', heading: AUDIT_LOG_HEADING, loaded: 'Reservation confirmed' },
-  { path: '/admin/audit?view=notifications', heading: AUDIT_LOG_HEADING, loaded: 'What went wrong' },
-  { path: '/admin/catalogue', heading: CATALOGUE_HEADING, loaded: 'AC-YOUNGMAN-BOSS-CLIMA' },
-  { path: `/admin/catalogue?model=${CATALOGUE_MODEL_ID}`, heading: CATALOGUE_HEADING, loaded: 'Last changed' },
-  { path: '/admin/assets', heading: ASSET_REGISTER_HEADING, loaded: ASSET_TAG },
-  { path: `/admin/assets?asset=${ASSET_TAG}`, heading: ASSET_REGISTER_HEADING, loaded: 'Held for booking TSH-R-26-000124' },
-  { path: '/admin/users', heading: USERS_HEADING, loaded: LOCKED_ACCOUNT_NAME },
-  { path: '/admin/users?view=customers&status=ON_HOLD', heading: USERS_HEADING, loaded: HELD_CUSTOMER_NAME },
+  { id: 'SC-19', path: '/admin', heading: 'Business overview', loaded: 'Branch by branch' },
+  { id: 'SC-22', path: '/admin/reports', heading: 'Utilisation and gross contribution', loaded: 'What these figures mean' },
+  { id: 'SC-22', path: '/admin/reports?groupBy=asset', heading: 'Utilisation and gross contribution', loaded: 'In the workshop' },
+  { id: 'SC-24', path: '/admin/audit', heading: AUDIT_LOG_HEADING, loaded: 'Reservation confirmed' },
+  { id: 'SC-24', path: '/admin/audit?view=notifications', heading: AUDIT_LOG_HEADING, loaded: 'What went wrong' },
+  { id: 'SC-20', path: '/admin/catalogue', heading: CATALOGUE_HEADING, loaded: 'AC-YOUNGMAN-BOSS-CLIMA' },
+  { id: 'SC-20', path: `/admin/catalogue?model=${CATALOGUE_MODEL_ID}`, heading: CATALOGUE_HEADING, loaded: 'Last changed' },
+  { id: 'SC-21', path: '/admin/assets', heading: ASSET_REGISTER_HEADING, loaded: ASSET_TAG },
+  { id: 'SC-21', path: `/admin/assets?asset=${ASSET_TAG}`, heading: ASSET_REGISTER_HEADING, loaded: 'Held for booking TSH-R-26-000124' },
+  { id: 'SC-23', path: '/admin/users', heading: USERS_HEADING, loaded: LOCKED_ACCOUNT_NAME },
+  { id: 'SC-23', path: '/admin/users?view=customers&status=ON_HOLD', heading: USERS_HEADING, loaded: HELD_CUSTOMER_NAME },
 ]
 
 /** SC-23 from the screens above, on the staff accounts or the customer holds. */
@@ -200,10 +200,19 @@ export function usersScreen(customers: boolean): AdminScreen {
   return found
 }
 
-/** Open an owner's screen as the signed in owner, with the API answered here. */
-export async function openAdminScreen(page: Page, screen: AdminScreen): Promise<void> {
+/**
+ * Open an owner's screen as the signed in owner, with the API answered here.
+ *
+ * @param instead Answers that take the place of the shared ones for this
+ *   visit, by method and path, such as an empty list.
+ */
+export async function openAdminScreen(
+  page: Page,
+  screen: AdminScreen,
+  instead: Record<string, unknown> = {},
+): Promise<void> {
   await page.addInitScript(SESSION_HINT)
-  await page.route('**/api/**', answerTheApi)
+  await page.route('**/api/**', (route) => answerTheApi(route, instead))
   await page.goto(screen.path)
   await expect(page.getByRole('heading', { level: 1, name: screen.heading })).toBeVisible()
   await expect(page.getByText(screen.loaded).first()).toBeVisible()

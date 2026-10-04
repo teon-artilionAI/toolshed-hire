@@ -15,6 +15,7 @@
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { fulfil } from './answered.ts'
 import { DAMAGE_ANSWERS, DAMAGE_PATH } from './damage-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
 import { OVERVIEW_ANSWERS } from './overview-answers.ts'
@@ -39,6 +40,7 @@ const ASSISTANT = {
   role: 'counter',
   branchCode: 'CBD',
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 const BRANCHES = {
@@ -172,17 +174,14 @@ function answerTheApi(instead: Record<string, unknown>): (route: Route) => Promi
   return async (route) => {
     const request = route.request()
     const key = `${request.method()} ${new URL(request.url()).pathname}`
-    const body = instead[key] ?? ANSWERS[key]
-    if (body === undefined) {
-      await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
-      return
-    }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    await fulfil(route, instead[key] ?? ANSWERS[key])
   }
 }
 
 /** A counter screen to open, and the heading that proves it has loaded. */
 export interface CounterScreen {
+  /** The identifier in navigation.ts. */
+  id: string
   path: string
   heading: string
   /** Something that is only on the page once the screen has its data. */
@@ -190,15 +189,15 @@ export interface CounterScreen {
 }
 
 export const COUNTER_SCREENS: readonly CounterScreen[] = [
-  { path: `/counter/customers?q=thandi&customer=${CUSTOMER_ID}`, heading: 'Find a customer', loaded: 'Their bookings' },
-  { path: `/counter/booking?customer=${CUSTOMER_ID}`, heading: 'New booking', loaded: /1 model is free at Cape Town CBD/ },
-  { path: `/counter/checkout/${REFERENCE}`, heading: 'Checkout and deposit', loaded: 'Deposit to take now' },
-  { path: '/counter', heading: 'Today at the counter', loaded: 'Late fee so far' },
-  { path: '/counter/diary', heading: 'Branch diary', loaded: 'Booked, not collected yet' },
-  { path: '/counter/locator?q=TSH', heading: 'Where is it', loaded: 'Quarantined until inspected' },
-  { path: `/counter/return/${RETURN_RENTAL_ID}`, heading: 'Return and condition inspection', loaded: 'Units still out' },
-  { path: '/counter/overdue', heading: 'Overdue and late fees', loaded: 'Escalation queue, more than 14 days late' },
-  { path: DAMAGE_PATH, heading: 'Record damage', loaded: 'TSH-D-26-00012' },
+  { id: 'SC-12', path: `/counter/customers?q=thandi&customer=${CUSTOMER_ID}`, heading: 'Find a customer', loaded: 'Their bookings' },
+  { id: 'SC-13', path: `/counter/booking?customer=${CUSTOMER_ID}`, heading: 'New booking', loaded: /1 model is free at Cape Town CBD/ },
+  { id: 'SC-14', path: `/counter/checkout/${REFERENCE}`, heading: 'Checkout and deposit', loaded: 'Deposit to take now' },
+  { id: 'SC-10', path: '/counter', heading: 'Today at the counter', loaded: 'Late fee so far' },
+  { id: 'SC-11', path: '/counter/diary', heading: 'Branch diary', loaded: 'Booked, not collected yet' },
+  { id: 'SC-17', path: '/counter/locator?q=TSH', heading: 'Where is it', loaded: 'Quarantined until inspected' },
+  { id: 'SC-15', path: `/counter/return/${RETURN_RENTAL_ID}`, heading: 'Return and condition inspection', loaded: 'Units still out' },
+  { id: 'SC-18', path: '/counter/overdue', heading: 'Overdue and late fees', loaded: 'Escalation queue, more than 14 days late' },
+  { id: 'SC-16', path: DAMAGE_PATH, heading: 'Record damage', loaded: 'TSH-D-26-00012' },
 ]
 
 /**

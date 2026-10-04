@@ -155,6 +155,16 @@ The session types in `src/shared/api/contract.ts` come from the generated
 file, like every other wire type. The role and the token type are narrowed
 there, because the OpenAPI document types both as a plain `string`.
 
+The account also carries `emailDeliverable`, which says whether this
+environment can deliver email to the account's own address. A demonstration
+delivers to one address only. The generated file does not have the member
+yet, so I add it to `SessionUser` by hand until `npm run api:types` brings it
+in. The reader in `api/auth.ts` reads a missing one as false and logs
+`session.email_deliverable_missing`, so a screen never promises an email the
+backend has not said can arrive, and a backend without the member yet does not
+lock everyone out. A member that is there and is not true or false is a broken
+contract and is refused like any other.
+
 Refresh and logout are authenticated by the cookie alone, so the API checks
 the `Origin` of those two requests against its `CORS_ORIGINS` setting and
 answers 403 for any other. The backend default lists `http://localhost:5173`
@@ -493,7 +503,7 @@ Each step is one request, and the screen shows what the server answered.
 |---|---|---|
 | Review | `POST /api/reservations` | The draft the server priced. Every line, the subtotal, the VAT and the total, and the deposit apart from them with the sentence that it is held at collection and returned |
 | Hold | `POST /api/reservations/{id}/hold` | That the equipment is held and until when, with a countdown |
-| Confirm | `POST /api/reservations/{id}/confirm` | The reference, and that a confirmation email is on its way, only when the answer says the reservation is confirmed |
+| Confirm | `POST /api/reservations/{id}/confirm` | The reference, only when the answer says the reservation is confirmed. That a confirmation email is on its way, only when the session says email can reach the customer. Otherwise that this demonstration delivers email to one address only, so the confirmation will not arrive, and that the reference on the screen is the booking |
 
 The rules of a reservation are the server's. Every answer carries `canHold`,
 `canConfirm` and `canCancel`, and a button is offered from its flag and from
@@ -610,6 +620,9 @@ a screen reader hears a table at every width.
   the person, and what they can still do. That note is
   `email-delivery-note.tsx`, and registration, the reset request and the
   resend all use it.
+- On `SC-09` the notice about an unconfirmed address asks the person to open
+  the link only when the session says email can reach them. Otherwise it says
+  the link cannot reach them and what they can still do.
 - A 422 puts each message under the field it names, through
   `api/problem-fields.ts`, and lists any message about a field the form has no
   input for. A 429 says how long to wait, from `Retry-After`. Anything else is
@@ -1450,9 +1463,12 @@ they are not in.
   its column, and it is the same table either way.
 - "Add a staff account" opens a form with exactly the fields of the route. It
   asks first, saying the person chooses their own password from a link sent
-  to the address. Once the server has answered, a notice says so, and when
-  `emailDeliverable` is false it says plainly that this demonstration cannot
-  deliver the link, so the account can only be used once email is set up.
+  to the address, and that the answer says whether the link can reach them,
+  because this demonstration delivers email to one address only. Once the
+  server has answered, a notice says the link was sent only when
+  `emailDeliverable` is true. When it is false the notice says plainly that
+  the link will not arrive, and that the person cannot sign in until a link
+  reaches them.
 - "Open" shows the account above the list with every field. "Change the name,
   phone, role or branch" opens a form with the address read only, sends only
   what changed and asks first, saying what changes. "Deactivate the account"
@@ -1538,6 +1554,11 @@ npm run api:types
 npm run api:types:check
 ```
 
+Every `tsconfig*.json` that compiles code sets `"strict": true`. TypeScript 6
+turns it on by default, so the setting documents it rather than changes it.
+`npm run lint` runs oxlint with `.oxlintrc.json`, which makes
+`typescript/no-explicit-any` an error, so an `any` anywhere fails the lint.
+
 ## Tests
 
 I test the frontend at two levels.
@@ -1590,49 +1611,63 @@ npx playwright install chromium
 ```
 
 `e2e/smoke.spec.ts` and `e2e/accessibility.spec.ts` run with or without the
-backend. With no backend, the catalogue home and the search are scanned in
-their failed state, and the registration form with its branch menu in its
-failed state. The privacy notice is scanned too. The counter's customer
-lookup, new booking, checkout, dashboard, diary, locator, return screen,
-overdue worklist and damage screen are scanned loaded, with a signed in
-assistant, a customer, a booking, a day, units, hires and damage reports whose
-answers the spec gives itself, from `e2e/counter-answers.ts`,
+backend. The accessibility spec scans every numbered screen, `SC-01` to
+`SC-24`, and the privacy notice, each opened as the role it belongs to and
+loaded, from the one list in `e2e/screens.ts`. A first test checks that the
+list leaves no screen out. The API is answered by the spec itself, so a scan
+never depends on what a database holds. The customer's screens are answered
+from `e2e/customer-answers.ts` and `e2e/public-answers.ts`, with a signed in
+customer whose address email cannot reach, bookings, a profile, a hire and a
+basket. The counter's are answered from `e2e/counter-answers.ts`,
 `e2e/overview-answers.ts`, `e2e/return-answers.ts` and
-`e2e/damage-answers.ts`. The new booking is scanned again with a tool on it,
-the checkout again with every problem of its form on the screen, the diary
-again with the no show question open, the return again with its question
-open, the worklist again with the question about a lost unit open, and the
-damage screen again with every problem of its form showing, then with the
-amount to recover and its question open. The owner's dashboard and report are
-scanned loaded too, with a signed in owner, three branches and rows from
-`e2e/admin-answers.ts`. The report is scanned by model, by unit, and with a
-refusal of its period under the field. The audit trail and the notification
-log are scanned loaded from `e2e/audit-answers.ts`, and the log again with the
-question before a failed email is sent again. The catalogue is scanned loaded
-from `e2e/catalogue-answers.ts` with its form closed and open, again with the
-question before a new figure is saved, and again with the question before a
-model is hidden and then with the category form open. The asset register is
-scanned loaded from `e2e/asset-answers.ts` with no unit open and with one
-open, again with the question before a unit is retired and its reason held
-back, and again with the registration form showing every problem it holds
-back. The staff accounts and the customer holds are scanned loaded from
-`e2e/user-answers.ts`. The owner's corrections
-only show for an administrator, so the return screen is scanned again as the
-owner with a reversal asked, and the checkout as the owner on a booking short
-of a unit with a release asked, from `e2e/owner-answers.ts`.
+`e2e/damage-answers.ts`. The owner's are answered from `e2e/admin-answers.ts`,
+`e2e/audit-answers.ts`, `e2e/catalogue-answers.ts`, `e2e/asset-answers.ts`
+and `e2e/user-answers.ts`, and the report, the trail, the catalogue, the
+asset register and user management are each visited in both of their views.
+How an answer is sent, with its own status where it needs one, is in
+`e2e/answered.ts`. On top of the screens the spec scans the new booking with
+a tool on it, the checkout with every problem of its form on the screen, the
+diary with the no show question open, the return with its question open, the
+worklist with the question about a lost unit open, the damage screen with
+every problem of its form showing and then with the amount to recover and its
+question open, the report with a refusal of its period under the field, the
+notification log with the question before a failed email is sent again, the
+catalogue with the question before a new figure is saved, with a model being
+hidden and with the category form open, the asset register with a unit being
+retired and its reason held back and with the registration form showing every
+problem it holds back, and, as the owner, the return with a reversal asked and
+the checkout short of a unit with a release asked, from
+`e2e/owner-answers.ts`.
 
-`e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires, My Account with a hire in its history, the nine counter screens, the
-owner's dashboard, the report by model and by unit, the audit trail, the
-notification log, the catalogue with its form closed and open and then with
-every question it asks and the category form open, the asset register with no
-unit open and with one open and then with a unit's question, its paperwork
-form and the registration form open, the staff accounts and the customer
-holds, and the return and the
-checkout as the owner sees them with a question open, at 360 pixels wide and
-checks that nothing has to be scrolled sideways. It answers the API itself,
-like the counter scans, because a layout check should not depend on what a
-database holds. The measure is in `e2e/overflow.ts`.
+`e2e/accessibility-states.spec.ts` scans the states a screen moves into. On
+`SC-06` a refused sign in, a reset link asked for and the answer that it
+cannot reach the address, and a new password from a link with its problems
+showing. On `SC-05` the form holding back every problem, the answer that the
+link cannot reach the address, and an address confirmed from its link. On
+`SC-04` the basket, the review, the hold and the confirmation, which says that
+the confirmation email will not arrive. Then the empty and failed states, the
+catalogue with the API down, a search with nothing free, My Hires with no
+bookings, a booking that cannot be found, My Account with no hires, a new
+booking with no customer chosen, the overdue worklist with nothing overdue,
+the audit trail with nothing recorded and the report with the API down.
+
+Every scan writes one line to the output of the run, through
+`reportedViolations` in `e2e/axe.ts`, with how many affected elements it found
+at each impact and how many rules passed, for example
+`axe SC-07 /reservations: 0 critical, 0 serious, 0 moderate, 0 minor, 30 rules passed`.
+The same line is put on the test in the report.
+
+`e2e/narrow-screens.spec.ts` also runs with or without the backend. It lays
+every visit in `e2e/screens.ts` out at 360, 768 and 1440 pixels wide, so every
+numbered screen and the privacy notice at each width. At every width the page
+may be no wider than the window, measured as
+`document.documentElement.scrollWidth`, and the page heading has to be on the
+screen. At 360 pixels no box inside the screen may need scrolling sideways
+either. Then it looks closely at My Hires and My Account on a phone, the
+catalogue with every question it asks and the category form open, the asset
+register with a unit's question, its paperwork form and the registration form
+open, and the return and the checkout as the owner sees them with a question
+open. The measures and the three widths are in `e2e/overflow.ts`.
 
 `e2e/user-management.spec.ts` runs with or without the backend too. It opens
 the staff accounts and the customer holds with the answers from
@@ -1834,6 +1869,56 @@ first, through `e2e/admin-users-backend.ts`, after the session routes. A 404
 or a 405 from either means the routes are not there, and the spec skips
 itself.
 
+`e2e/release-journeys.spec.ts` holds the three role journeys of the release,
+each tagged `@staging`. The seeded customer books one unit at the first branch
+the API lists, reviews the cost, holds it, confirms it, finds it under My
+Hires and cancels it, five weeks or more ahead so the cancellation is never a
+late one. The counter assistant finds the seeded trade customer,
+`w.adonis@buildright.co.za`, by their address on `SC-12`, books one unit for
+today, checks it out and takes it straight back with the deposit released in
+full. The owner opens the dashboard, the report for the last full month, the
+asset register and the audit trail, and changes nothing. The counter steps are
+in `e2e/release-counter.ts`. It takes the fifth last model free at the branch,
+so it never takes a unit another counter journey of the run takes, and it
+registers nobody. On a local project the journeys skip themselves when the
+routes they need are not there, like the other backend specs. The
+confirmation's words about its email are checked by `e2e/reservation.spec.ts`,
+against what the sign in said about the address, and not here, because
+staging may still run an earlier build of the screens.
+
+The same three journeys run against the deployed staging site on the
+`staging` project, which the pipeline runs after each staging deploy. The
+three variables have to be in the environment of the command.
+
+```bash
+npx playwright test --project=staging
+```
+
+- The project exists only when `STAGING_URL` is set, its `baseURL` is that
+  address, and it runs only the tests tagged `@staging`. Asked for alone it
+  starts no preview server. The names are in `e2e/staging-run.ts`.
+- It needs `STAGING_URL`, `E2E_CUSTOMER_PASSWORD` and `E2E_STAFF_PASSWORD` in
+  the environment. Asking for it without any of them stops the run before a
+  test starts, naming what is missing and never a value. There is no fallback
+  to the development password on this project, see `e2e/staging.ts`.
+- Playwright names each step with what it typed, so the staging project
+  records no trace and no video, and a run that includes it writes no HTML
+  report. A password box in a screenshot of a failure shows only dots.
+- Staging runs on the real clock and nothing pins it. A branch refuses a
+  booking for today once it has closed at 17:00. Then the counter journey
+  books two days ahead, confirms it, and the customer cancels it from their
+  own `SC-08`, because the counter screens offer no cancellation of a
+  confirmed booking. It is two days and not one, because a confirmed booking
+  cancelled after 17:00 on the day before collection is counted against the
+  customer as a late cancellation. The journey says in the output which way
+  it went.
+- The journeys leave staging as they found it apart from the booking history.
+  What the customer books is cancelled, what the counter checks out comes
+  back, nobody is registered, and the owner only reads.
+- On staging each journey signs the customer in once, or twice when the
+  branch has closed, the assistant at Cape Town CBD once and the owner once.
+  Each journey may take four minutes, because the site may be waking up.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1845,8 +1930,12 @@ The customers, the password rule and the sign in are in `e2e/customer.ts`, the
 counter assistants in `e2e/staff.ts`, and the dates are counted at the
 branches by `e2e/hire-dates.ts`.
 
-One run makes fourteen sign ins. `session.spec.ts` signs the first customer in
-four times, twice in each browser project, and the booking journey twice more.
+One run makes sixteen customer sign ins. `session.spec.ts` signs the first
+customer in four times, twice in each browser project, the booking journey
+twice more, and the customer journey of the release twice more. When the
+branch has closed, the counter journey of the release signs the first
+customer in once in each project to cancel, which makes ten for that address,
+the most the window allows.
 The second customer is signed in six times, twice by each reservation spec and
 twice by the hire history journey.
 `account.spec.ts` signs in each of the two accounts it registers once, and
@@ -1859,17 +1948,18 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-The two counter journeys, the two counter overview journeys and the admin
-operations journey each sign the two counter assistants in once, so each
-assistant five times in a run. The damage journey, the reporting spec, the
-admin operations spec, the admin catalogue spec, the asset register spec and
-the user management spec each sign the owner in once in each browser project,
-so the owner twelve times in a run. That is more than the allowance for one
+The two counter journeys, the two counter overview journeys, the admin
+operations journey and the counter journey of the release each sign the two
+counter assistants in once, so each assistant six times in a run. The damage
+journey, the reporting spec, the admin operations spec, the admin catalogue
+spec, the asset register spec, the user management spec and the owner's
+journey of the release each sign the owner in once in each browser project,
+so the owner fourteen times in a run. That is more than the allowance for one
 email address, so against a local backend the owner's eleventh sign in is
 refused unless `LOGIN_ATTEMPTS_PER_EMAIL` is raised the way the pipeline
 raises it.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all thirteen skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn every one of these skips into a failure. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 
@@ -1877,5 +1967,6 @@ The scans use axe against the WCAG 2.2 level AA rules and fail on any serious
 or critical violation. An automated scan cannot judge everything, so it
 supports manual keyboard and screen reader checks and does not replace them.
 
-After a run, the HTML report is in `playwright-report/`. It does not open by
-itself. To read it, run `npx playwright show-report`.
+After a run, the HTML report is in `playwright-report/`, except after a run
+that includes the staging project. It does not open by itself. To read it,
+run `npx playwright show-report`.
