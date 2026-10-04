@@ -9,6 +9,31 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-04
+
+Fixes found by walking the 0.4.0 release by hand in a browser, as a customer,
+a counter assistant and the owner. None of them lost data. Each one told a
+person something wrong or made the first visit slower than it had to be.
+
+### Fixed
+
+- The browser waits fifteen seconds for an answer instead of eight, so the
+  first visit after a quiet spell no longer gives up on every read while the
+  API and the database wake. The API also starts with start up CPU boost.
+- The home page names the three branches instead of the suburbs they stand in.
+- A booking that has been collected or is back points to the hire history for
+  its charges, and says why there is nothing to cancel, instead of saying
+  nothing was charged and to ring the branch.
+- The seeded accounts are opened on 5 January 2026, before their hire
+  history. A database seeded earlier is put right on the next run.
+- The deposit card of a return shows no settlement figures while a damage
+  report is still to be filed, and says when a correction gave money back
+  after the hire was settled.
+- A unit on a return no longer lists a reversed or waived late fee as charged.
+- The diary says when a booking is due back, instead of a date that read like
+  the day it came back.
+- A failed journey on staging keeps its screenshots.
+
 ## [0.4.0] - 2026-10-04
 
 The Admin console and the release checks. The owner can see which equipment
