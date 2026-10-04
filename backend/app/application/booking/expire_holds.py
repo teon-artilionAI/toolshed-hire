@@ -1,4 +1,4 @@
-"""The lazy sweep, which lapses holds, marks bookings nobody collected and hires gone overdue.
+"""The lazy sweep, which lapses holds, marks no shows and overdue hires, and prunes counters.
 
 A hold lasts thirty minutes (BR-13), a confirmed booking that is not collected
 by the time its branch closes on the first day of the hire is a no show
@@ -12,7 +12,7 @@ read, and before a list of rentals is read. Until a sweep runs the exclusion
 constraint still protects the units, so a sweep that runs late costs a little
 availability and never costs correctness.
 
-The sweep has three parts and each runs in a transaction of its own. The
+The sweep has four parts and each runs in a transaction of its own. The
 first lapses holds, at most `HOLD_SWEEP_BATCH_SIZE` a call, oldest expiry
 first. The second marks no shows, at most `NO_SHOW_SWEEP_BATCH_SIZE` a call,
 earliest first day first, through `app.application.booking.no_show`. The third
@@ -20,7 +20,11 @@ marks hires overdue, at most `OVERDUE_SWEEP_BATCH_SIZE` a call, earliest due
 date first, through `app.application.hire.overdue`. In each the due rows are
 locked and then checked again, because a row can change between being found
 and being locked. Two sweeps at once therefore take turns on a row, and the
-second one finds it already dealt with.
+second one finds it already dealt with. The fourth deletes the throttle
+counters whose window ended more than a day ago, at most
+`COUNTER_PRUNE_BATCH_SIZE` in one statement, through
+`app.application.throttle_pruning`. It skips a counter another sweep has
+locked, so two sweeps at once never wait on each other there.
 
 A lapse releases its units with the reason `EXPIRED`, and a no show with the
 reason `NO_SHOW` and counts the strike on the customer. A hire gone overdue
@@ -31,11 +35,13 @@ work (BR-49), with no actor, because nobody asked for it.
 locked. The batch is bounded, so a use case that is about to decide something
 about one reservation makes sure of that one itself.
 
-What the sweep costs a request is three statements when nothing is due, one
-for each part, each read through a partial index that holds only the rows that
-could be due. When something is due, each reservation in a batch is loaded with
-its lines and allocations and written by its own statements, which the batch
-size bounds. What degrades first as the data grows is the backlog. The sweep
+What the sweep costs a request is four statements when nothing is due, one
+for each part. The first three read through a partial index that holds only
+the rows that could be due, and the fourth reads one entry of the index on
+the start of a counter's window. When something is due, each reservation in a
+batch is loaded with its lines and allocations and written by its own
+statements, which the batch size bounds, and the counters go in the one
+delete. What degrades first as the data grows is the backlog. The sweep
 clears one batch a call, so if holds ran out or bookings were missed faster
 than requests arrived to sweep them, they would wait and their units would look
 taken for longer. At a hundred times the volume this belongs in a scheduled
@@ -54,6 +60,7 @@ from uuid import UUID
 from app.application.booking.access import RESERVATION_EXPIRED_ACTION, record_change, state_of
 from app.application.booking.no_show import NoShowSweep, mark_due_no_shows
 from app.application.hire.overdue import mark_overdue_rentals
+from app.application.throttle_pruning import COUNTER_PRUNE_BATCH_SIZE, prune_finished_windows
 from app.application.unit_of_work import UnitOfWork
 from app.application.use_case import UseCase
 from app.domain.booking import Reservation
@@ -79,12 +86,14 @@ class SweepCommand:
         batch_size: The most reservations to lapse in this call.
         no_show_batch_size: The most reservations to mark as no shows.
         overdue_batch_size: The most rentals to mark as overdue.
+        counter_batch_size: The most throttle counters to delete.
 
     """
 
     batch_size: int = HOLD_SWEEP_BATCH_SIZE
     no_show_batch_size: int = NO_SHOW_SWEEP_BATCH_SIZE
     overdue_batch_size: int = OVERDUE_SWEEP_BATCH_SIZE
+    counter_batch_size: int = COUNTER_PRUNE_BATCH_SIZE
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +105,7 @@ class SweepResult:
         no_show_references: The references of the ones it marked as no shows.
         customers_put_on_hold: The customers those no shows put on hold.
         overdue_references: The references of the rentals it marked as overdue.
+        pruned_counter_count: How many throttle counters it deleted.
 
     """
 
@@ -103,6 +113,7 @@ class SweepResult:
     no_show_references: tuple[str, ...] = ()
     customers_put_on_hold: tuple[UUID, ...] = ()
     overdue_references: tuple[str, ...] = ()
+    pruned_counter_count: int = 0
 
     @property
     def expired_count(self) -> int:
@@ -170,27 +181,30 @@ def settle_overdue_hold(uow: UnitOfWork, reservation: Reservation, now: datetime
 
 
 class ExpireHoldsAndNoShowsUseCase(UseCase[SweepCommand, SweepResult]):
-    """Lapse the holds that ran out, mark the no shows and the overdue hires, a batch of each."""
+    """Lapse the holds that ran out, mark the no shows and the overdue hires, prune counters."""
 
     def execute(self, command: SweepCommand) -> SweepResult:
-        """Run the three parts of the sweep once, each in its own transaction.
+        """Run the four parts of the sweep once, each in its own transaction.
 
         Args:
-            command: How many reservations or rentals each part takes at most.
+            command: How many reservations, rentals or counters each part takes at most.
 
         Returns:
             The references of the reservations lapsed and marked, the
-            customers put on hold, and the rentals marked overdue.
+            customers put on hold, the rentals marked overdue and how many
+            throttle counters went.
 
         """
         expired = self._lapse_holds(command.batch_size)
         no_shows = self._mark_no_shows(command.no_show_batch_size)
         overdue = self._mark_overdue(command.overdue_batch_size)
+        pruned = self._prune_counters(command.counter_batch_size)
         return SweepResult(
             expired_references=expired,
             no_show_references=no_shows.marked,
             customers_put_on_hold=no_shows.customers_put_on_hold,
             overdue_references=overdue,
+            pruned_counter_count=pruned,
         )
 
     def _lapse_holds(self, batch_size: int) -> tuple[str, ...]:
@@ -257,3 +271,15 @@ class ExpireHoldsAndNoShowsUseCase(UseCase[SweepCommand, SweepResult]):
             },
         )
         return swept.marked
+
+    def _prune_counters(self, batch_size: int) -> int:
+        """Delete up to a batch of throttle counters long finished, and commit what went.
+
+        The count of what went is logged as `throttle.counters_pruned`.
+        """
+        now = self._clock.now()
+        with self._uow as uow:
+            pruned = prune_finished_windows(uow.rate_limits, now, batch_size)
+            if pruned:
+                uow.commit()
+        return pruned

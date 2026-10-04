@@ -210,6 +210,11 @@ CUSTOMER_STANDING_INDEX: Final[str] = "ix_customer_profile_standing"
 CUSTOMER_ROLE_LITERAL: Final[str] = "'CUSTOMER'"
 GOOD_STANDING_LITERAL: Final[str] = "'ACTIVE'"
 
+# The index of revision 0012, a btree on the start of a throttle counter's
+# window. The fourth part of the sweep finds the counters whose window ended
+# long ago through it, oldest first, and stops at its batch or its cutoff.
+RATE_LIMIT_WINDOW_INDEX: Final[str] = "ix_rate_limit_counter_window_started_at"
+
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006
 # adds the counter's damage flag to `rental_item`. It is NOT NULL and defaults

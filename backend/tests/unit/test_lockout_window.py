@@ -19,7 +19,7 @@ from typing import Final
 import pytest
 
 from app.application.identity.sign_in import LOGIN_FAILURES
-from app.application.throttle import SWEEP_RETENTION, SlidingWindow, Throttle
+from app.application.throttle import LONGEST_THROTTLE_WINDOW, SlidingWindow, Throttle
 from app.domain.account import (
     FAILED_LOGIN_WINDOW,
     LOCKOUT_DURATION,
@@ -49,7 +49,7 @@ class DictionaryStore:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
 
-    def delete_windows_before(self, cutoff: datetime) -> int:
+    def delete_windows_before(self, cutoff: datetime, limit: int) -> int:
         return 0
 
     def total_since(self, bucket_key_hash: str, since: datetime) -> int:
@@ -227,10 +227,10 @@ class TestTheSlidingCount:
 
     @pytest.mark.parametrize(
         "span",
-        [timedelta(0), timedelta(milliseconds=1500), SWEEP_RETENTION + ONE_SECOND],
-        ids=["nothing", "part of a second", "longer than a counter is kept"],
+        [timedelta(0), timedelta(milliseconds=1500), LONGEST_THROTTLE_WINDOW + ONE_SECOND],
+        ids=["nothing", "part of a second", "longer than the longest window"],
     )
-    def test_a_span_is_whole_seconds_and_no_longer_than_a_counter_is_kept(
+    def test_a_span_is_whole_seconds_and_no_longer_than_the_longest_window(
         self, span: timedelta
     ) -> None:
         with pytest.raises(ValueError, match="A span is a whole number of seconds"):
