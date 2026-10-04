@@ -201,7 +201,39 @@ describe('a hire with every unit back', () => {
     expect(screen.getByText(`Late fee. ${LATE_FEE_CHARGE.description}`)).toBeVisible()
     expect(screen.getByText('Settled', { selector: 'span' })).toBeVisible()
     expect(screen.getByText(/Nothing is due\./)).toBeVisible()
+    expect(screen.queryByText(/Since then/)).not.toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/-\s?R\s\d|R\s-\d/)
+  })
+
+  it('says when a correction gave money back after the hire was settled', async () => {
+    const reversal = {
+      ...LATE_FEE_CHARGE,
+      id: 'c3300000-0000-4000-8000-000000000009',
+      description: `Reversal of ${LATE_FEE_CHARGE.description}`,
+      amountExVat: '-386.47',
+      vatAmount: '-57.97',
+      amountIncVat: '-444.44',
+      raisedAt: '2026-03-12T11:00:00+02:00',
+      reversesChargeId: LATE_FEE_CHARGE.id,
+      reason: 'The customer rang ahead about the delay.',
+    }
+    await openReturn(showing({ ...SETTLED_HIRE, charges: [...SETTLED_HIRE.charges, reversal] }))
+
+    const notice = (await screen.findByText(`${RENTAL_REFERENCE} is settled`, {}, SCREEN_WAIT)).closest('[role]')
+    expect(notice).toHaveTextContent(`Since then, a correction gave ${money('444.44')} back to the customer.`)
+    // The deposit figures are the server's and stay as they were settled.
+    expect(settlementLine('Released to the customer')).toContain(money('4999.99'))
+    // The reversal names the unit of the fee it undoes, and the unit says so.
+    expect(screen.getByText(new RegExp(`Late fee reversed, ${money('444.44')} back to the customer\\.`))).toBeVisible()
+    expect(document.body.textContent).not.toMatch(/-\s?R\s\d|R\s-\d/)
+  })
+
+  it('never says a waived late fee was charged', async () => {
+    const waived = { ...LATE_FEE_CHARGE, status: 'WAIVED' as const, reason: 'Our van broke down.' }
+    await openReturn(showing({ ...OWES_A_BALANCE, charges: [OWES_A_BALANCE.charges[0], waived] }))
+
+    expect(await screen.findByText(new RegExp(`Late fee of ${money('444.44')} waived by the owner\\.`), {}, SCREEN_WAIT)).toBeVisible()
+    expect(screen.queryByText(/Late fee charged/)).not.toBeInTheDocument()
   })
 
   it('shows the balance due and a form for the payment when the deposit did not cover it', async () => {
@@ -220,6 +252,10 @@ describe('a hire with every unit back', () => {
     await openReturn(showing(WAITING_FOR_DAMAGE))
 
     expect(await screen.findByText('The deposit is waiting for a damage report', {}, SCREEN_WAIT)).toBeVisible()
+    // Nothing is worked out yet, so no figure of the settlement is shown.
+    expect(screen.getByText(`The deposit of ${money('5555.55')} stays held. Nothing has been settled yet.`)).toBeVisible()
+    expect(screen.queryByRole('rowheader', { name: 'Withheld from the deposit' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Nothing was charged against the deposit.')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Record the damage to TSH-PC-0007' })).toHaveAttribute(
       'href',
       `/counter/damage/TSH-PC-0007?rental=${RENTAL_ID}&rentalItem=${WAITING_FOR_DAMAGE.items[0].id}`,

@@ -20,6 +20,7 @@ from sqlmodel import Session
 from app.config import settings
 from app.infrastructure.database import session_scope
 from seeding.accounts import (
+    correct_opening_dates,
     load_accounts,
     load_customer_profiles,
     resolve_customer_seed_password,
@@ -41,8 +42,9 @@ def seed_database(
     """Load every seeded row that is missing, without committing.
 
     The order is the dependency order. Branches, categories and product models
-    come first, then the units, then the people, then the closed hire that
-    refers to all of them, and last the sequences.
+    come first, then the units, then the people with their opening dates put
+    right, then the closed hire that refers to all of them, and last the
+    sequences.
 
     Args:
         session: An open session. The caller owns the commit.
@@ -67,6 +69,7 @@ def seed_database(
     load_assets(session, branches, models, tally)
     accounts = load_accounts(session, branches, password, tally, customer_password)
     profiles = load_customer_profiles(session, branches, accounts, tally)
+    correct_opening_dates(session, accounts, profiles, tally)
     load_worked_example(session, branches, models, accounts, profiles, tally)
     advance_reference_sequences(session, tally)
     return tally
@@ -109,8 +112,10 @@ def run_seed() -> SeedTally:
         extra={
             "created_count": tally.total_created,
             "found_count": tally.total_found,
+            "corrected_count": tally.total_corrected,
             "created_by_kind": tally.created,
             "found_by_kind": tally.found,
+            "corrected_by_kind": tally.corrected,
         },
     )
     return tally

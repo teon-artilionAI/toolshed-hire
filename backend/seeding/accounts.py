@@ -5,6 +5,13 @@ so it can sign in straight after the load. An account that already exists is
 left alone, password included. Resetting a password on every run would make a
 second run a change, and on a live database it would undo a password somebody
 had since chosen.
+
+The one thing put right on an existing seeded row is when it was opened.
+Earlier runs stamped the accounts and profiles with the day they ran, which
+left the seeded customers with hire history older than their accounts. Every
+seeded row is now opened at `ACCOUNTS_OPENED_AT`, and a row an earlier run
+opened later than that is moved back to it. Nothing else on the row changes,
+and a row the seed did not write is never touched.
 """
 
 from __future__ import annotations
@@ -21,7 +28,13 @@ from app.domain.enums import UserRole
 from app.infrastructure.models import Branch, CustomerProfile, UserAccount
 from app.infrastructure.security import hash_password
 from seeding.errors import SeedDataError
-from seeding.people import ACCOUNTS, CUSTOMER_PROFILES, AccountSeed, CustomerProfileSeed
+from seeding.people import (
+    ACCOUNTS,
+    ACCOUNTS_OPENED_AT,
+    CUSTOMER_PROFILES,
+    AccountSeed,
+    CustomerProfileSeed,
+)
 from seeding.report import SeedTally
 
 logger = logging.getLogger("seed")
@@ -31,6 +44,8 @@ SEED_CUSTOMER_PASSWORD_VARIABLE: Final[str] = "SEED_CUSTOMER_PASSWORD"
 DEVELOPMENT_SEED_PASSWORD: Final[str] = "toolshed-dev-password"
 ACCOUNT_KIND = "user_account"
 CUSTOMER_PROFILE_KIND = "customer_profile"
+ACCOUNT_OPENING_KIND = "user_account_opening_date"
+PROFILE_OPENING_KIND = "customer_profile_opening_date"
 
 
 def resolve_seed_password() -> str:
@@ -165,6 +180,57 @@ def load_customer_profiles(
     return {seed.email: by_email[seed.email] for seed in CUSTOMER_PROFILES}
 
 
+def correct_opening_dates(
+    session: Session,
+    accounts: dict[str, UserAccount],
+    profiles: dict[str, CustomerProfile],
+    tally: SeedTally,
+) -> None:
+    """Move every seeded account and profile opened after `ACCOUNTS_OPENED_AT` back to it.
+
+    A run that created the rows has already opened them then, so this changes
+    nothing on a fresh database. It only puts right the rows an earlier run
+    stamped with its own day.
+
+    Args:
+        session: An open session. The caller owns the commit.
+        accounts: The seeded accounts by email address, as `load_accounts`
+            returned them.
+        profiles: The seeded customer profiles by email address, as
+            `load_customer_profiles` returned them.
+        tally: Where the corrected counts are recorded.
+
+    """
+    opened_at = ACCOUNTS_OPENED_AT.astimezone(UTC)
+    late_accounts = [row for row in accounts.values() if _opened_after(row.created_at, opened_at)]
+    late_profiles = [row for row in profiles.values() if _opened_after(row.created_at, opened_at)]
+    for row in (*late_accounts, *late_profiles):
+        row.created_at = opened_at
+        session.add(row)
+    if late_accounts or late_profiles:
+        session.flush()
+        logger.info(
+            "seed.opening_dates_corrected",
+            extra={
+                "opened_at": opened_at.isoformat(),
+                "accounts": sorted(row.email for row in late_accounts),
+                "profile_count": len(late_profiles),
+            },
+        )
+    tally.record_corrected(ACCOUNT_OPENING_KIND, corrected=len(late_accounts))
+    tally.record_corrected(PROFILE_OPENING_KIND, corrected=len(late_profiles))
+
+
+def _opened_after(created_at: datetime | None, opened_at: datetime) -> bool:
+    """Return True when a row was stamped later than the seeded opening date.
+
+    A row read back from the database always carries its stamp, so None can
+    only be a row this run added and has not flushed, which `_account_from`
+    and `_profile_from` already open at the right moment.
+    """
+    return created_at is not None and created_at > opened_at
+
+
 def _branch_for(code: str, branches: dict[str, Branch], owner: str) -> Branch:
     """Return the branch a seeded person names, or say which person named a bad one."""
     branch = branches.get(code)
@@ -192,6 +258,7 @@ def _account_from(
         branch_id=branch_id,
         is_active=True,
         email_verified_at=verified_at,
+        created_at=ACCOUNTS_OPENED_AT,
     )
 
 
@@ -216,4 +283,5 @@ def _profile_from(
         billing_city=seed.billing_city,
         billing_postal_code=seed.billing_postal_code,
         registered_branch_id=branch.id,
+        created_at=ACCOUNTS_OPENED_AT,
     )

@@ -198,6 +198,17 @@ function LostItem({ item, charges }: { item: RentalItem; charges: readonly Renta
   )
 }
 
+/**
+ * One late fee of a unit in words. A reversal carries the unit of the fee it
+ * undoes and a negative amount, and a waived fee was never taken, so neither
+ * is written as charged, and no amount is written with a bare minus sign.
+ */
+function lateFeeWords(charge: RentalCharge): string {
+  if (charge.reversesChargeId !== null) return ` Late fee reversed, ${amountWords(charge.amountIncVat)}.`
+  if (charge.status === 'WAIVED') return ` Late fee of ${money(charge.amountIncVat)} waived by the owner.`
+  return ` Late fee charged ${money(charge.amountIncVat)}.`
+}
+
 /** A unit that is already back, with when, how and what it was charged. A unit
  *  recorded as lost is closed too, and says so instead. */
 export function ReturnedItem({
@@ -228,7 +239,7 @@ export function ReturnedItem({
       </p>
       <p className="tabular mt-xs text-sm text-slate-soft">
         {item.daysLate === 0 ? 'Back on time.' : `Back ${countOf(item.daysLate, 'day', 'days')} late.`}
-        {lateFees.map((charge) => ` Late fee charged ${money(charge.amountIncVat)}.`).join('')}
+        {lateFees.map(lateFeeWords).join('')}
       </p>
       {item.damageAssessment === 'REQUIRED' && (
         <div className="mt-xs flex flex-col gap-xs">
