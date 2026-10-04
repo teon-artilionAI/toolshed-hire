@@ -1,9 +1,10 @@
 """The account security messages, and the links two of them carry (C-18).
 
-Three messages are written here. One asks a new customer to prove their email
-address. One lets somebody who forgot their password choose a new one. The
-third goes to an address that already has an account when somebody tries to
-register with it again, and it carries no token at all.
+Four messages are written here. One asks a new customer to prove their email
+address. One lets somebody who forgot their password choose a new one. One
+asks a new member of staff to choose their first password, through the same
+reset link. The fourth goes to an address that already has an account when
+somebody tries to register with it again, and it carries no token at all.
 
 A link puts its token in the fragment, the part of an address after `#`. A
 browser never sends the fragment to a server, so the token reaches no access
@@ -54,6 +55,20 @@ RESET_BODY_TEMPLATE: Final[str] = (
     "\n"
     "If you did not ask for this, you can ignore this message and your password "
     "stays as it is.\n"
+    "\n"
+    "Toolshed Hire\n"
+)
+INVITATION_SUBJECT: Final[str] = "Your Toolshed Hire staff account"
+INVITATION_BODY_TEMPLATE: Final[str] = (
+    "An administrator has opened a Toolshed Hire staff account for you.\n"
+    "\n"
+    "Open the link below to choose your password. It works once and stays "
+    "valid for {lifetime}.\n"
+    "\n"
+    "{link}\n"
+    "\n"
+    "If it has run out, open {sign_in_page}, choose to reset your password and "
+    "enter this email address, and a new link will be sent to you.\n"
     "\n"
     "Toolshed Hire\n"
 )
@@ -111,6 +126,23 @@ def password_reset_message(*, to: str, frontend_origin: str, token: str) -> Emai
         text_body=RESET_BODY_TEMPLATE.format(
             lifetime=lifetime_in_words(PASSWORD_RESET_LIFETIME),
             link=password_reset_link(frontend_origin, token),
+        ),
+    )
+
+
+def staff_invitation_message(*, to: str, frontend_origin: str, token: str) -> EmailMessage:
+    """Return the message that asks a new member of staff to choose their password.
+
+    The link is the reset link every account uses and carries a reset token,
+    so the password is chosen through the reset flow and nowhere else.
+    """
+    return EmailMessage(
+        to=to,
+        subject=INVITATION_SUBJECT,
+        text_body=INVITATION_BODY_TEMPLATE.format(
+            lifetime=lifetime_in_words(PASSWORD_RESET_LIFETIME),
+            link=password_reset_link(frontend_origin, token),
+            sign_in_page=f"{frontend_origin}{SIGN_IN_PATH}",
         ),
     )
 

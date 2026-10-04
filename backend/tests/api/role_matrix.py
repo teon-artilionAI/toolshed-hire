@@ -133,6 +133,17 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     MatrixRow(
         "catalogue", API, "POST", f"/api/admin/assets/{NOBODYS_TAG}/transitions", ADMIN_ONLY
     ),
+    MatrixRow("identity", API, "GET", "/api/admin/users", ADMIN_ONLY),
+    MatrixRow("identity", API, "POST", "/api/admin/users", ADMIN_ONLY),
+    MatrixRow("identity", API, "PATCH", f"/api/admin/users/{NOBODYS_KEY}", ADMIN_ONLY),
+    MatrixRow(
+        "identity", API, "POST", f"/api/admin/users/{NOBODYS_KEY}/deactivation", ADMIN_ONLY
+    ),
+    MatrixRow(
+        "identity", API, "POST", f"/api/admin/users/{NOBODYS_KEY}/reactivation", ADMIN_ONLY
+    ),
+    MatrixRow("identity", API, "GET", "/api/admin/customers", ADMIN_ONLY),
+    MatrixRow("identity", API, "POST", f"/api/admin/customers/{NOBODYS_KEY}/status", ADMIN_ONLY),
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
     MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
     MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),
