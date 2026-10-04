@@ -69,7 +69,12 @@ describe('the fields that changed', () => {
   })
 
   it('reads a record made from nothing, and a change with nothing kept', () => {
-    expect(changedFields(null, { status: 'DRAFT' })).toEqual([{ field: 'Status', before: null, after: 'draft' }])
-    expect(changedFields(null, null)).toEqual([])
+    expect(changedFields({}, { status: 'DRAFT' })).toEqual([{ field: 'Status', before: null, after: 'draft' }])
+    expect(changedFields({}, {})).toEqual([])
+  })
+
+  it('names the actions of the owner operations in words', () => {
+    expect(actionWords('reservation.unit_released')).toBe('Unit released from the booking')
+    expect(actionWords('notification.resent')).toBe('Email sent again')
   })
 })

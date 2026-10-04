@@ -7,7 +7,8 @@
  * beside the dashboard and the report in admin-answers.ts, with long names,
  * long addresses and long errors, which are what break a layout. The fields
  * that changed include a list and a record inside a record, so the words they
- * are written in are scanned too.
+ * are written in are scanned too. A side the server kept nothing of is an
+ * empty object, the way the real API sends it.
  */
 
 import { dateFromToday } from './hire-dates.ts'
@@ -48,12 +49,19 @@ const AUDIT_PAGE = {
     }),
     event(1, {
       actorName: 'Elmarie Fourie-Vanderwesthuizen',
-      actorRole: 'COUNTER_STAFF',
       entityType: 'charge',
       entityId: 'c3300000-0000-4000-8000-000000000011',
-      action: 'charge.reversed',
-      beforeState: null,
-      afterState: { reason: 'Charged twice for the same day because the booking was entered at two counters at once' },
+      action: 'charge.adjusted',
+      beforeState: {},
+      afterState: {
+        status: 'PENDING',
+        reason: 'Charged twice for the same day because the booking was entered at two counters at once',
+        rental_reference: 'TSH-H-26-000099',
+        charge_type: 'ADJUSTMENT',
+        amount_inc_vat: '-1150.00',
+        rental_status: 'RETURNED',
+        balance_due: '0.00',
+      },
     }),
   ],
   page: 1,

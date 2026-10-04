@@ -58,11 +58,10 @@ function readInstant(record: Record<string, unknown>, key: string, path: string)
   return value
 }
 
-/** The fields before or after a change. An object, or null when there were none. */
-function readState(record: Record<string, unknown>, key: string, path: string): AuditState | null {
-  const value = record[key]
-  if (value === null) return null
-  return readObject(value, path, `the field ${key} of an audit event, as an object or null`)
+/** The fields before or after a change. Always an object, and an empty one
+ *  when the server kept nothing on that side. */
+function readState(record: Record<string, unknown>, key: string, path: string): AuditState {
+  return readObject(record[key], path, `the field ${key} of an audit event, as an object`)
 }
 
 function readAuditEvent(value: unknown, path: string): AuditEvent {

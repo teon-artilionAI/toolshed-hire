@@ -1,11 +1,16 @@
 /**
  * The filters above the audit trail on SC-24.
  *
- * The kind of record, the record itself by its key or its reference, the
- * action, and a range of days. The text boxes would ask the server on every
- * key, so the filters are applied together with one button, and the address
- * then says what is shown. The form follows the address when the address
- * changes, such as after the back button or a button on an event.
+ * The kind of record, the record itself by its key, the action, and a range
+ * of days. The text boxes would ask the server on every key, so the filters
+ * are applied together with one button, and the address then says what is
+ * shown. The form follows the address when the address changes, such as after
+ * the back button or a button on an event.
+ *
+ * The server narrows to one record by its key and by nothing else, so a
+ * reference typed in the box is not sent. The box says so under itself and
+ * nothing is applied until it holds a key or is cleared. The button on an
+ * event fills the key in, which is the usual way to get one.
  *
  * The person who acted is narrowed from an event, because the server filters
  * by the key of the account and nobody knows that by heart. While it applies,
@@ -15,12 +20,12 @@
  * about.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Search, UserRound, X } from 'lucide-react'
 import type { FieldErrors } from '../../shared/api/problem-fields'
 import { DateInput, SelectInput, TextInput } from '../counter/counter-fields'
-import { writeTrailFilters } from './audit-address'
+import { isRecordKey, writeTrailFilters } from './audit-address'
 import type { TrailFilters } from './audit-address'
 import { ENTITY_TYPE_LABEL, entityTypeWords } from './audit-words'
 import { FIRST_PAGE } from './report-address'
@@ -30,6 +35,11 @@ const ANY_RECORD = ''
 /** The earliest day the date pickers open on. Nothing was recorded before the
  *  system went live in 2026, so an earlier day can only find nothing. */
 const EARLIEST_DAY = '2026-01-01'
+
+/** Said under the record box when it holds something that is not a key. */
+const NOT_A_RECORD_KEY =
+  'Enter the key of a record as an event shows it, such as 5f0c2a9e-0000-4000-8000-000000000124. ' +
+  'A booking or hire reference is not a key. Press "Only this" on one of its events instead.'
 
 /** What the person is typing, before it is applied. */
 interface Draft {
@@ -76,11 +86,14 @@ export default function AuditFilters({
   onClear: () => void
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(filters))
+  const [keyRefused, setKeyRefused] = useState(false)
+  const recordBox = useRef<HTMLInputElement>(null)
   const addressSays = writeTrailFilters(filters).toString()
   const [lastAddress, setLastAddress] = useState(addressSays)
   if (addressSays !== lastAddress) {
     setLastAddress(addressSays)
     setDraft(draftOf(filters))
+    setKeyRefused(false)
   }
 
   function patch(change: Partial<Draft>) {
@@ -89,9 +102,16 @@ export default function AuditFilters({
 
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const entityId = given(draft.entityId)
+    if (entityId !== null && !isRecordKey(entityId)) {
+      setKeyRefused(true)
+      recordBox.current?.focus()
+      return
+    }
+    setKeyRefused(false)
     onApply({
       entityType: given(draft.entityType),
-      entityId: given(draft.entityId),
+      entityId,
       action: given(draft.action),
       actorUserId: filters.actorUserId,
       from: given(draft.from),
@@ -113,12 +133,16 @@ export default function AuditFilters({
         />
         <TextInput
           id="audit-entity-id"
-          label="Record key or reference"
-          help="For example the reference of a booking or a hire, or the key an event shows."
+          label="Record key"
+          help={'The key an event shows. "Only this" on an event fills it in.'}
           value={draft.entityId}
-          onChange={(entityId) => patch({ entityId })}
-          error={fieldErrors.entityId}
+          onChange={(entityId) => {
+            setKeyRefused(false)
+            patch({ entityId })
+          }}
+          error={keyRefused ? NOT_A_RECORD_KEY : fieldErrors.entityId}
           autoComplete="off"
+          inputRef={recordBox}
         />
         <TextInput
           id="audit-action"

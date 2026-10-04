@@ -286,16 +286,14 @@ commits as `../backend/openapi.json`.
   the month so far on the dashboard.
 - The admin operations routes, which are the audit trail, the notification
   log and its re-send, the charge corrections, the release of a unit and the
-  reallocation, are not in the document yet, because the backend half of that
-  change is built at the same time. Their types are written by hand from the
-  agreed contract in `api/contract-operations.ts`, in the same style, and are
-  rebuilt from the generated file once the document has them. The same file
-  holds the two members that change adds to types that are generated already.
-  Every charge on a hire gains `reversesChargeId` and `reason`, and the
-  checkout gains `unitsShort`. `api/contract-counter.ts` adds them to its own
-  types from there. Until then the readers in `api/audit-log.ts`,
-  `api/rental-read.ts` and `api/checkout.ts` check every one of those members,
-  so a body that breaks the contract still fails at the boundary.
+  reallocation, are in the document too. Their types are in
+  `api/contract-operations.ts`, built from the generated file the same way.
+  Every charge on a hire carries `reversesChargeId` and `reason`, and the
+  checkout carries `unitsShort`, in the generated shapes
+  `api/contract-counter.ts` already reads. An audit event's `beforeState` and
+  `afterState` are always objects, empty when nothing was kept on that side.
+  The trail is narrowed to one record by its key only, so the screen sends
+  `entityId` as a key and never as a reference.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -1059,9 +1057,12 @@ administrator, and the API answers anyone else with a 403.
   and the plain address is the trail. Moving from one to the other moves focus
   to the heading of the new one and starts it with no filter. The rules are
   in `src/features/admin/audit-address.ts`.
-- The trail is narrowed by the kind of record, the record by its key or its
-  reference, the action, the person who acted and a range of days, all in the
-  address under the names the API takes. The text boxes would ask the server
+- The trail is narrowed by the kind of record, the record by its key, the
+  action, the person who acted and a range of days, all in the address under
+  the names the API takes. The kinds of record offered are the ones the
+  backend writes, and a unit released from a booking is recorded against the
+  booking. The server takes a record by its key only, so a reference typed in
+  the box is not sent and the box says so. The text boxes would ask the server
   on every key, so the filters apply together with one button. The person who
   acted is narrowed from an event, "Only what this person did", because the
   server filters by the key of the account. "Only this booking" on an event
@@ -1088,8 +1089,9 @@ administrator, and the API answers anyone else with a 403.
 
 - For a signed in administrator and nobody else, each charge offers what the
   server allows for where it stands. "Waive" on a pending charge, and
-  "Reverse" on a settled one that no other charge on the hire reverses. The
-  server sends no flag for either, so the offer follows the status and the
+  "Reverse" on a settled one that no other charge on the hire reverses. A
+  movement of the deposit and a reversal are never reversed. The server sends
+  no flag for any of this, so the offer follows the type, the status and the
   `reversesChargeId` it sends, and its 409 is the last word.
 - Each asks first, in words that say what will happen, and asks for a reason
   of five to two hundred characters. A waiver keeps the charge on the hire as
@@ -1100,7 +1102,9 @@ administrator, and the API answers anyone else with a 403.
 - "Adjust the hire" takes an amount including VAT, positive or negative and
   never zero, and a reason, and says in words what will be added as the
   amount is typed. The amount is the owner's own figure, sent with two
-  decimals, and nothing is worked out from it.
+  decimals, and nothing is worked out from it. A settled hire is never charged
+  more, so on one only an amount that gives money back is taken, and the
+  server refunds it at once and the hire stays settled.
 - A reversal says which charge it reverses, the charge it reverses says so,
   and a charge the owner waived, reversed or added shows their reason.
 - A refused reason or amount lands under its box, and a 409 or a 403 shows the
@@ -1113,8 +1117,9 @@ administrator, and the API answers anyone else with a 403.
   administrator gets "Release this unit" on each, on the handover form or,
   when the booking cannot go out yet, in a list of the units set aside. It
   asks for a reason and says the unit goes back on the shelf and the booking
-  is then short a unit until it is reallocated. The answer is not read. The
-  checkout is read again and shows the booking as the server now has it.
+  is then short a unit until it is reallocated. The route answers with the
+  booking, which the screen does not read. The checkout is read again and
+  shows the booking as the server now has it.
 - While `unitsShort` is above zero the screen says how many units are missing
   and offers any member of staff "Find a replacement unit", with a sentence
   beside it saying what it does. One press posts the reallocation, which goes

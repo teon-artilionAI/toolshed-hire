@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   NO_TRAIL_FILTERS,
+  isRecordKey,
   notificationQueryFor,
   readNotificationFilters,
   readTrailFilters,
@@ -32,12 +33,14 @@ describe('the view', () => {
 describe('the filters of the trail', () => {
   it('read every filter by the name the API takes, and leave out what is empty', () => {
     const read = readTrailFilters(
-      new URLSearchParams('entityType=reservation&entityId=%20TSH-R-26-000124%20&action=&actorUserId=abc&from=2026-03-01&to=2026-03-12&page=3'),
+      new URLSearchParams(
+        'entityType=reservation&entityId=%205f0c2a9e-0000-4000-8000-000000000124%20&action=&actorUserId=abc&from=2026-03-01&to=2026-03-12&page=3',
+      ),
     )
 
     expect(read).toEqual({
       entityType: 'reservation',
-      entityId: 'TSH-R-26-000124',
+      entityId: '5f0c2a9e-0000-4000-8000-000000000124',
       action: null,
       actorUserId: 'abc',
       from: '2026-03-01',
@@ -63,6 +66,13 @@ describe('the filters of the trail', () => {
   it('say whether any filter is applied, the page aside', () => {
     expect(trailIsFiltered({ ...NO_TRAIL_FILTERS, page: 4 })).toBe(false)
     expect(trailIsFiltered({ ...NO_TRAIL_FILTERS, actorUserId: 'abc' })).toBe(true)
+  })
+
+  it('tell the key of a record from a reference, which the server does not take', () => {
+    expect(isRecordKey('5f0c2a9e-0000-4000-8000-000000000124')).toBe(true)
+    expect(isRecordKey('5F0C2A9E-0000-4000-8000-000000000124')).toBe(true)
+    expect(isRecordKey('TSH-R-26-000124')).toBe(false)
+    expect(isRecordKey('5f0c2a9e00004000800000000000124')).toBe(false)
   })
 
   it('make the query with twenty to a page', () => {

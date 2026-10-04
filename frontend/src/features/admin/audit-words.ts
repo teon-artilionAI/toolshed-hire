@@ -17,13 +17,17 @@
 import type { AuditActorRole, AuditEvent, AuditState, NotificationStatus } from '../../shared/api/contract'
 import { branchDateTime } from '../../shared/today'
 
-/** The records the trail is kept about, by the names the backend gives them,
- *  in the order the filter offers them. */
+/**
+ * The records the trail is kept about, by the names the backend gives them,
+ * in the order the filter offers them. These are every kind the backend
+ * writes. A unit released from a booking or a replacement found for one is
+ * recorded against the booking, so there is no kind of its own for an
+ * allocation.
+ */
 export const ENTITY_TYPE_LABEL: Readonly<Record<string, string>> = {
   reservation: 'Booking',
   rental: 'Hire',
   charge: 'Charge',
-  allocation: 'Unit set aside for a booking',
   notification: 'Email',
   asset: 'Unit',
   damage_report: 'Damage report',
@@ -47,6 +51,9 @@ const ACTION_LABEL: Readonly<Record<string, string>> = {
   'rental.item_lost': 'Unit recorded as lost',
   'rental.overdue': 'Hire became overdue',
   'reservation.no_show': 'Booking marked as a no show',
+  'reservation.unit_released': 'Unit released from the booking',
+  'reservation.reallocated': 'Replacement units set aside for the booking',
+  'notification.resent': 'Email sent again',
   'customer.walk_in_registered': 'Walk in registered at the counter',
 }
 
@@ -158,11 +165,9 @@ export interface FieldChange {
 /**
  * The fields that changed, in the order the server recorded them, the fields
  * after the change first. A field whose value is the same on both sides is
- * left out.
+ * left out. A side the server kept nothing of arrives as an empty object.
  */
-export function changedFields(before: AuditState | null, after: AuditState | null): FieldChange[] {
-  const was = before ?? {}
-  const now = after ?? {}
+export function changedFields(was: AuditState, now: AuditState): FieldChange[] {
   const names = [...Object.keys(now), ...Object.keys(was).filter((name) => !(name in now))]
   return names
     .filter((name) => !(name in was) || !(name in now) || JSON.stringify(was[name]) !== JSON.stringify(now[name]))

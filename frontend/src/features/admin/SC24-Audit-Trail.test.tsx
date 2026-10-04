@@ -106,7 +106,7 @@ describe('the filters', () => {
     await findEvents()
 
     await user.selectOptions(screen.getByLabelText('Kind of record'), 'reservation')
-    await user.type(screen.getByLabelText('Record key or reference'), ' TSH-R-26-000124 ')
+    await user.type(screen.getByLabelText('Record key'), ` ${RESERVATION_ID} `)
     await user.type(screen.getByLabelText('Action'), 'reservation.confirmed')
     await user.type(screen.getByLabelText('From'), '2026-03-01')
     await user.type(screen.getByLabelText('To'), '2026-03-12')
@@ -116,11 +116,46 @@ describe('the filters', () => {
 
     await waitFor(() => expect(network.requestsTo(AUDIT_ROUTE)).toHaveLength(2))
     expect(lastAsked(network, AUDIT_ROUTE).toString()).toBe(
-      'entityType=reservation&entityId=TSH-R-26-000124&action=reservation.confirmed&from=2026-03-01&to=2026-03-12&page=1&pageSize=20',
+      `entityType=reservation&entityId=${RESERVATION_ID}&action=reservation.confirmed&from=2026-03-01&to=2026-03-12&page=1&pageSize=20`,
     )
     expect(currentAddress()).toBe(
-      '/admin/audit?entityType=reservation&entityId=TSH-R-26-000124&action=reservation.confirmed&from=2026-03-01&to=2026-03-12',
+      `/admin/audit?entityType=reservation&entityId=${RESERVATION_ID}&action=reservation.confirmed&from=2026-03-01&to=2026-03-12`,
     )
+  })
+
+  it('send a record only by its key, and say so under the box when given a reference', async () => {
+    const { user, network } = await openLog()
+    await findEvents()
+    const box = screen.getByLabelText('Record key')
+
+    await user.type(box, 'TSH-R-26-000124')
+    await user.click(screen.getByRole('button', { name: 'Show these events' }))
+
+    expect(box).toHaveAccessibleDescription(/A booking or hire reference is not a key\./)
+    expect(box).toHaveFocus()
+    expect(network.requestsTo(AUDIT_ROUTE)).toHaveLength(1)
+    expect(currentAddress()).toBe('/admin/audit')
+
+    await user.clear(box)
+    expect(box).not.toHaveAccessibleDescription(/is not a key/)
+  })
+
+  it('offer every kind of record the backend writes, and nothing it never writes', async () => {
+    await openLog()
+    await findEvents()
+
+    const kinds = within(screen.getByLabelText('Kind of record')).getAllByRole('option').map((option) => option.getAttribute('value'))
+    expect(kinds).toEqual([
+      '',
+      'reservation',
+      'rental',
+      'charge',
+      'notification',
+      'asset',
+      'damage_report',
+      'customer_profile',
+      'user_account',
+    ])
   })
 
   it('are read from the address, so a reload shows the same events', async () => {
@@ -138,7 +173,7 @@ describe('the filters', () => {
     await user.click(within(event('Reservation confirmed')).getByRole('button', { name: /^Only this booking/ }))
     await waitFor(() => expect(lastAsked(network, AUDIT_ROUTE).get('entityId')).toBe(RESERVATION_ID))
     expect(lastAsked(network, AUDIT_ROUTE).get('entityType')).toBe('reservation')
-    expect(screen.getByLabelText('Record key or reference')).toHaveValue(RESERVATION_ID)
+    expect(screen.getByLabelText('Record key')).toHaveValue(RESERVATION_ID)
 
     await user.click(await screen.findByRole('button', { name: `Only what ${ADMIN.fullName} did` }, SCREEN_WAIT))
     await waitFor(() => expect(lastAsked(network, AUDIT_ROUTE).get('actorUserId')).toBe(ADMIN.id))

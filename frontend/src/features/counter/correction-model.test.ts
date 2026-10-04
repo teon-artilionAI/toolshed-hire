@@ -29,9 +29,15 @@ describe('the amount of an adjustment', () => {
   })
 
   it('is needed, has to be money and cannot be zero', () => {
-    expect(amountProblem('')).toMatch(/^Enter the amount/)
-    expect(amountProblem('ten')).toMatch(/^Enter rand and cents only/)
-    expect(amountProblem('-0.00')).toMatch(/^An adjustment of nothing changes nothing/)
-    expect(amountProblem('-150')).toBeNull()
+    expect(amountProblem('', false)).toMatch(/^Enter the amount/)
+    expect(amountProblem('ten', false)).toMatch(/^Enter rand and cents only/)
+    expect(amountProblem('-0.00', false)).toMatch(/^An adjustment of nothing changes nothing/)
+    expect(amountProblem('-150', false)).toBeNull()
+    expect(amountProblem('150', false)).toBeNull()
+  })
+
+  it('can only give money back once the hire is settled', () => {
+    expect(amountProblem('150', true)).toMatch(/^This hire is settled, so it can only give money back\./)
+    expect(amountProblem('-150', true)).toBeNull()
   })
 })

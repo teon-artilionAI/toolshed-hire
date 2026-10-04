@@ -11,7 +11,9 @@
  * A filter the address names is passed to the server as it stands, apart from
  * a day that is not a day on the calendar and a status the log does not have,
  * which are left out. Whether a filter makes sense is the server's to say,
- * with a 422 that the screen puts under the control.
+ * with a 422 that the screen puts under the control. The form itself only
+ * applies a record that is given by its key, because that is all the server
+ * takes.
  */
 
 import type {
@@ -41,6 +43,16 @@ export const LOG_PARAMETER = {
 
 /** The value of `view` for the notification log. The trail has none. */
 export const NOTIFICATIONS_VIEW = 'notifications'
+
+/** The key of a record as the trail writes it. The server takes nothing else
+ *  as `entityId`, not even the reference of a booking or a hire. */
+const RECORD_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Whether a value is the key of a record, the only thing the trail can be
+ *  narrowed to one record by. */
+export function isRecordKey(value: string): boolean {
+  return RECORD_KEY.test(value)
+}
 
 /** The filters of the trail that have a control on the screen, by the names
  *  the server gives them. A refusal of any other is listed apart. */

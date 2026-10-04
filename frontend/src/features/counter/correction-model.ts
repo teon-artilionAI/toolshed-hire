@@ -14,7 +14,7 @@
 
 import { MAX_REASON_LENGTH, MIN_REASON_LENGTH } from '../../shared/api/corrections'
 import type { Money } from '../../shared/api/contract'
-import { isNoMoney } from '../../shared/format'
+import { isNegativeMoney, isNoMoney } from '../../shared/format'
 
 /** Said under every reason box. */
 export const REASON_HELP = `Between ${MIN_REASON_LENGTH} and ${MAX_REASON_LENGTH} characters. It is kept with the change and in the audit trail.`
@@ -58,12 +58,20 @@ export function amountForTheWire(typed: string): Money | null {
 /**
  * What is wrong with the amount of an adjustment, or null when it may be sent.
  *
+ * A settled hire is never charged more, so once the hire is settled the server
+ * only takes an amount that gives money back and refuses any other with a
+ * 409. That is said here before anything is sent.
+ *
  * @param typed What was typed in the box.
+ * @param hireSettled Whether the hire is settled, as the server last said.
  */
-export function amountProblem(typed: string): string | null {
+export function amountProblem(typed: string, hireSettled: boolean): string | null {
   if (typed.trim() === '') return 'Enter the amount, including VAT, for example 150.00 or -150.00.'
   const amount = amountForTheWire(typed)
   if (amount === null) return 'Enter rand and cents only, for example 150.00, with a minus in front to give money back.'
   if (isNoMoney(amount)) return 'An adjustment of nothing changes nothing. Enter an amount that is not zero.'
+  if (hireSettled && !isNegativeMoney(amount)) {
+    return 'This hire is settled, so it can only give money back. Put a minus in front, for example -150.00.'
+  }
   return null
 }

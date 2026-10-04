@@ -4,7 +4,8 @@
  *
  * Every charge is listed. An administrator is offered what the server allows
  * for each charge, a waiver on a pending one and a reversal on a settled one
- * nothing reverses yet, and an adjustment of the hire. Each asks first with a
+ * nothing reverses yet that is neither a movement of the deposit nor a
+ * reversal itself, and an adjustment of the hire. Each asks first with a
  * reason, sends the body the contract names once, and shows the hire the
  * server answered with. A 409 or a 403 shows the server's sentence and a 422
  * lands under its box. Counter staff are offered none of it.
@@ -94,12 +95,15 @@ describe('the charges on a hire', () => {
     expect(within(waived).getByText(WAIVER_REASON)).toBeVisible()
   })
 
-  it('offers the owner a waiver on a pending charge, a reversal on a settled one, and nothing on one already reversed', async () => {
+  it('offers the owner a waiver on a pending charge, and no reversal the server would refuse', async () => {
     await openAs(ADMIN, AFTER_REVERSAL)
 
     expect(within(charge('Late fee')).getByRole('button', { name: WAIVE_LATE_FEE })).toBeVisible()
+    // The original is reversed already, the reversal is not reversed again,
+    // and a settled movement of the deposit is never reversed.
     expect(within(charge('Hire', 0)).queryByRole('button')).not.toBeInTheDocument()
-    expect(within(charge('Deposit held')).getByRole('button', { name: /^Reverse the deposit hold/ })).toBeVisible()
+    expect(within(charge('Hire', 1)).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(charge('Deposit held')).queryByRole('button')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Adjust the hire' })).toBeVisible()
     expect(screen.queryByText(/^Only the owner can waive a charge\./)).not.toBeInTheDocument()
   })

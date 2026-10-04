@@ -10,7 +10,9 @@
  * Nothing here or above it adds up a figure.
  *
  * A settled charge is never changed. A reversal is a new charge that points
- * back at the original, so both stay on the hire.
+ * back at the original, so both stay on the hire. A movement of the deposit is
+ * never reversed. Once a hire is settled it only takes a correction that gives
+ * money back, which the server refunds at once, and the hire stays settled.
  *
  * Each write is sent once for each press of a button and never repeated by the
  * client, because a request that timed out may still have reached the server.
@@ -36,9 +38,9 @@ function under(base: string, id: string, action: string): string {
 }
 
 /**
- * The release route's answer is not one the screen reads. The contract names
- * no body for it, so whatever comes back is accepted and the screen reads the
- * checkout preview again for what changed.
+ * The release route answers with the reservation that held the unit. The
+ * screen does not read it, because what it shows after a release is the
+ * checkout preview, with the units and the shortfall, and it reads that again.
  */
 function ignoreTheBody(): void {}
 
@@ -57,9 +59,9 @@ export function waiveCharge(chargeId: string, reason: string): Promise<Rental> {
  * POST /api/admin/charges/{id}/reversal. A new charge of the same type with
  * the amounts the other way, pointing back at a settled one.
  *
- * @throws ApiError with status 409 when the charge is not settled or has been
- *   reversed already, 422 when the reason is refused, and 403 for anyone but an
- *   administrator.
+ * @throws ApiError with status 409 when the charge is not settled, moves the
+ *   deposit, is itself a reversal or has been reversed already, 422 when the
+ *   reason is refused, and 403 for anyone but an administrator.
  */
 export function reverseCharge(chargeId: string, reason: string): Promise<Rental> {
   const body: CorrectionReasonRequest = { reason }
@@ -71,7 +73,8 @@ export function reverseCharge(chargeId: string, reason: string): Promise<Rental>
  * inclusive, positive or negative.
  *
  * @throws ApiError with status 422 naming `amountIncVat` or `reason` when
- *   either is refused, and 403 for anyone but an administrator.
+ *   either is refused, 409 when the amount charges a settled hire more, and
+ *   403 for anyone but an administrator.
  */
 export function adjustHire(rentalId: string, amountIncVat: Money, reason: string): Promise<Rental> {
   const body: HireAdjustmentRequest = { amountIncVat, reason }

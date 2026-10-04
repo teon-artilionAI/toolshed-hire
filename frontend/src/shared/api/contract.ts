@@ -20,8 +20,7 @@
  * types are in contract-damage.ts, the reporting types are in
  * contract-reporting.ts, and the admin operations types are in
  * contract-operations.ts. All nine are passed on from here, and the session
- * types below stay here. The admin operations types are written by hand until
- * the generated document describes their routes, and that file says why.
+ * types below stay here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member

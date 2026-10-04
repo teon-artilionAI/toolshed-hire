@@ -9,16 +9,18 @@
  *
  * For a signed in administrator and nobody else, each charge offers what the
  * server allows for where it stands. "Waive" on a pending charge, and
- * "Reverse" on a settled one no other charge on the hire reverses yet. The
- * server sends no flag for either, so the offer follows the status and
- * `reversesChargeId` it sends, and its 409 is the last word. "Adjust the hire"
- * adds a charge of the owner's own amount. Counter staff see the sentence that
- * only the owner can waive a charge.
+ * "Reverse" on a settled one that no other charge on the hire reverses yet.
+ * The server never reverses a movement of the deposit, because it works the
+ * deposit out again after every correction, and never reverses a reversal, so
+ * neither is offered. The server sends no flag for any of this, so the offer
+ * follows the type, the status and `reversesChargeId` it sends, and its 409 is
+ * the last word. "Adjust the hire" adds a charge of the owner's own amount.
+ * Counter staff see the sentence that only the owner can waive a charge.
  */
 
 import { useState } from 'react'
 import { Scale, Undo2 } from 'lucide-react'
-import type { Rental, RentalCharge } from '../../shared/api/contract'
+import type { ChargeType, Rental, RentalCharge } from '../../shared/api/contract'
 import { branchDateTime } from '../../shared/today'
 import { Card } from '../../shared/ui'
 import { CHARGE_NOUN, CHARGE_STATUS_LABEL, CHARGE_TYPE_LABEL, amountWords } from './counter-labels'
@@ -36,10 +38,22 @@ export interface Corrected {
   charge: RentalCharge | null
 }
 
+/** The charges that move the deposit, which the server refuses to reverse. */
+const DEPOSIT_MOVEMENTS: readonly ChargeType[] = ['DEPOSIT_HOLD', 'DEPOSIT_RELEASE', 'DEPOSIT_FORFEIT']
+
+/** Whether the server would take a reversal of a settled charge. */
+function mayBeReversed(charge: RentalCharge, charges: readonly RentalCharge[]): boolean {
+  return (
+    !DEPOSIT_MOVEMENTS.includes(charge.type) &&
+    charge.reversesChargeId === null &&
+    !charges.some((other) => other.reversesChargeId === charge.id)
+  )
+}
+
 /** Which correction the server allows for a charge where it stands, if any. */
 function correctionFor(charge: RentalCharge, charges: readonly RentalCharge[]): ChargeCorrectionKind | null {
   if (charge.status === 'PENDING') return 'waiver'
-  if (charge.status === 'SETTLED' && !charges.some((other) => other.reversesChargeId === charge.id)) return 'reversal'
+  if (charge.status === 'SETTLED' && mayBeReversed(charge, charges)) return 'reversal'
   return null
 }
 

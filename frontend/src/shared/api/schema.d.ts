@@ -487,6 +487,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reservations/{id}/reallocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give a booking on hold or confirmed replacements for the units it is short of
+         * @description Top up every short line through the allocation path of a hold, all or nothing.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         *         BranchScopeError: If counter staff act at another branch. HTTP 403.
+         *         StateTransitionError: If it is neither on hold nor confirmed. HTTP 409.
+         *         AllocationConflictError: If no unit is free for a line, naming the
+         *             model and the dates. HTTP 409.
+         */
+        post: operations["post_reallocation_api_reservations__id__reallocation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations/{id}": {
         parameters: {
             query?: never;
@@ -921,6 +948,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the audit log, newest first
+         * @description Return one page of the audit log, newest first.
+         *
+         *     Raises:
+         *         ValidationFailure: If `to` is before `from`. HTTP 422, naming `to`.
+         */
+        get: operations["read_audit_events_api_admin_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the notification log, newest first
+         * @description Return one page of the notification log, newest first.
+         */
+        get: operations["read_notifications_api_admin_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications/{id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a failed notification again, as a new notification
+         * @description Queue the notification again, commit, send it and return the new one.
+         *
+         *     Raises:
+         *         NotFound: If there is no such notification. HTTP 404.
+         *         StateTransitionError: If it has not failed. HTTP 409.
+         */
+        post: operations["post_resend_api_admin_notifications__id__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/charges/{id}/waiver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Waive a charge still owed, with a reason
+         * @description Waive the charge and work the rental out again, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such charge. HTTP 404.
+         *         StateTransitionError: If the charge is not pending. HTTP 409.
+         */
+        post: operations["post_waiver_api_admin_charges__id__waiver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/charges/{id}/reversal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reverse a settled charge with a new negated charge, with a reason
+         * @description Reverse the charge and work the rental out again, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such charge. HTTP 404.
+         *         StateTransitionError: If the charge is not settled, is a deposit
+         *             movement, is itself a reversal or was reversed already. HTTP 409.
+         */
+        post: operations["post_reversal_api_admin_charges__id__reversal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/rentals/{id}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adjust a hire by an amount that includes VAT, with a reason
+         * @description Add the adjustment and work the rental out again, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         *         ValidationFailure: If the amount is nothing. HTTP 422, naming
+         *             `body.amountIncVat`.
+         *         StateTransitionError: If the amount is owed and the hire is
+         *             SETTLED. HTTP 409.
+         */
+        post: operations["post_adjustment_api_admin_rentals__id__adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/allocations/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release one active allocation by hand, with a reason
+         * @description Release the allocation with the reason REALLOCATED, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such allocation. HTTP 404.
+         *         StateTransitionError: If it is not active, or its unit is out on hire
+         *             on its booking. HTTP 409.
+         */
+        post: operations["post_release_api_admin_allocations__id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1095,6 +1290,16 @@ export interface components {
          */
         AccountStatus: "ACTIVE" | "ON_HOLD" | "BLACKLISTED";
         /**
+         * AdjustmentRequest
+         * @description An adjustment of a hire, VAT included, and the reason for it.
+         */
+        AdjustmentRequest: {
+            /** Amountincvat */
+            amountIncVat: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * AdminDashboardResponse
          * @description The business across every branch today.
          */
@@ -1163,6 +1368,50 @@ export interface components {
          * @enum {string}
          */
         AssetStatus: "INTAKE" | "AVAILABLE" | "ON_HIRE" | "QUARANTINED" | "UNDER_REPAIR" | "LOST" | "RETIRED";
+        /**
+         * AuditEventPageResponse
+         * @description One page of the audit log, newest first.
+         */
+        AuditEventPageResponse: {
+            /** Items */
+            items: components["schemas"]["AuditEventResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AuditEventResponse
+         * @description One audit event, as the log shows it.
+         */
+        AuditEventResponse: {
+            /** Id */
+            id: number;
+            /** Occurredat */
+            occurredAt: string;
+            /** Actoruserid */
+            actorUserId: string | null;
+            /** Actorname */
+            actorName: string | null;
+            actorRole: components["schemas"]["UserRole"] | null;
+            /** Entitytype */
+            entityType: string;
+            /**
+             * Entityid
+             * Format: uuid
+             */
+            entityId: string;
+            /** Action */
+            action: string;
+            /** Beforestate */
+            beforeState: Record<string, unknown>;
+            /** Afterstate */
+            afterState: Record<string, unknown>;
+            /** Requestid */
+            requestId: string | null;
+        };
         /**
          * AvailabilityPageResponse
          * @description One page of an availability search.
@@ -1323,6 +1572,10 @@ export interface components {
         /**
          * ChargeResponse
          * @description One money line on a rental. A deposit release is a negative amount.
+         *
+         *     `reversesChargeId` names the charge a reversal undoes. `reason` is the
+         *     reason an administrator gave for waiving it, or the reason written on a
+         *     reversal or an adjustment, and null on a charge nobody corrected.
          */
         ChargeResponse: {
             /**
@@ -1346,6 +1599,10 @@ export interface components {
             raisedAt: string;
             /** Rentalitemid */
             rentalItemId: string | null;
+            /** Reverseschargeid */
+            reversesChargeId: string | null;
+            /** Reason */
+            reason: string | null;
         };
         /**
          * ChargeStatus
@@ -1399,7 +1656,9 @@ export interface components {
          * @description What the counter needs to hand the equipment of a reservation over.
          *
          *     `refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once
-         *     the reservation has been collected.
+         *     the reservation has been collected. `unitsShort` is how many units the
+         *     reservation still needs after one was released by hand, and while it is
+         *     above zero `canCheckOut` is false and the checkout answers 409.
          */
         CheckoutPreviewResponse: {
             /**
@@ -1439,6 +1698,8 @@ export interface components {
             refusal: string | null;
             /** Rentalid */
             rentalId: string | null;
+            /** Unitsshort */
+            unitsShort: number;
         };
         /**
          * CheckoutRequest
@@ -2050,6 +2311,66 @@ export interface components {
             reason: string;
         };
         /**
+         * NotificationPageResponse
+         * @description One page of the notification log, newest first.
+         */
+        NotificationPageResponse: {
+            /** Items */
+            items: components["schemas"]["NotificationResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * NotificationResponse
+         * @description One notification, as the log shows it.
+         */
+        NotificationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reservationreference */
+            reservationReference: string;
+            type: components["schemas"]["NotificationType"];
+            /** Recipientemail */
+            recipientEmail: string;
+            /** Subject */
+            subject: string;
+            status: components["schemas"]["NotificationStatus"];
+            /** Attempts */
+            attempts: number;
+            /** Lasterror */
+            lastError: string | null;
+            /** Queuedat */
+            queuedAt: string;
+            /** Sentat */
+            sentAt: string | null;
+            /** Resendof */
+            resendOf: string | null;
+        };
+        /**
+         * NotificationStatus
+         * @description Delivery outcome of a notification. A FAILED row can be sent again.
+         * @enum {string}
+         */
+        NotificationStatus: "QUEUED" | "SENT" | "FAILED";
+        /**
+         * NotificationType
+         * @description What an outbound message is about. Phase one sends one kind only.
+         * @enum {string}
+         */
+        NotificationType: "BOOKING_CONFIRMATION";
+        /**
          * OverdueRentalResponse
          * @description A rental past its due date with a unit still out, and the late fee it has run up.
          */
@@ -2241,6 +2562,14 @@ export interface components {
             depositTotal: string;
             /** Latefeeperday */
             lateFeePerDay: string;
+        };
+        /**
+         * ReasonRequest
+         * @description The reason an administrator gives for an override.
+         */
+        ReasonRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * RegisterRequest
@@ -2753,6 +3082,12 @@ export interface components {
             /** Emailverified */
             emailVerified: boolean;
         };
+        /**
+         * UserRole
+         * @description The single role carried by a UserAccount. A role is never a set.
+         * @enum {string}
+         */
+        UserRole: "CUSTOMER" | "COUNTER_STAFF" | "ADMIN";
         /**
          * UtilisationReportResponse
          * @description One page of the report, highest gross contribution first, with the totals over every line.
@@ -3765,6 +4100,65 @@ export interface operations {
             };
         };
     };
+    post_reallocation_api_reservations__id__reallocation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_reservation_api_reservations__id__get: {
         parameters: {
             query?: never;
@@ -3899,7 +4293,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description The reservation is not confirmed or its hire has not started, and `detail` says which, or a unit cannot go out on hire. */
+            /** @description The reservation is not confirmed, its hire has not started or it is short of a unit, and `detail` says which, or a unit cannot go out on hire. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4687,6 +5081,417 @@ export interface operations {
             };
             /** @description The caller is not an administrator. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_audit_events_api_admin_audit_events_get: {
+        parameters: {
+            query?: {
+                /** @description Only events about this kind of record, for example `reservation`. */
+                entityType?: string | null;
+                /** @description Only events about this record. */
+                entityId?: string | null;
+                /** @description Only events of this action, for example `charge.waived`. */
+                action?: string | null;
+                /** @description Only events this account made. */
+                actorUserId?: string | null;
+                /** @description The first business day, which is included. */
+                from?: string | null;
+                /** @description The last business day, which is included. */
+                to?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many events a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_notifications_api_admin_notifications_get: {
+        parameters: {
+            query?: {
+                /** @description Only notifications in this status. */
+                status?: components["schemas"]["NotificationStatus"] | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many notifications a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_resend_api_admin_notifications__id__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the notification. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such notification. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The notification has not failed, so there is nothing to send again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_waiver_api_admin_charges__id__waiver_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the charge. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such charge. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The charge is not pending. A settled charge is reversed instead. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_reversal_api_admin_charges__id__reversal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the charge. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such charge. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The charge is not settled, is a deposit movement, is itself a reversal or has been reversed already, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_adjustment_api_admin_rentals__id__adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The hire is settled, so only a correction that gives money back can be made to it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_release_api_admin_allocations__id__release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the allocation. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such allocation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The allocation is no longer active, or its unit is out on hire on the booking, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

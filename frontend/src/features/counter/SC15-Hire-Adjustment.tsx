@@ -2,7 +2,9 @@
  * The owner's adjustment of a hire on SC-15.
  *
  * It takes an amount including VAT, positive to charge the customer more and
- * negative to give money back, and a written reason. Under them it says in
+ * negative to give money back, and a written reason. A settled hire is never
+ * charged more, so on one the form only takes an amount that gives money back,
+ * which the server refunds at once. Under them it says in
  * words what will be added, and the words follow the amount as it is typed.
  * The amount is the owner's own figure, written back as typed. Nothing is
  * worked out from it.
@@ -30,9 +32,9 @@ const REASON_ID = 'adjustment-reason'
 const HEADING_ID = 'adjustment-heading'
 
 /** What the adjustment will add, in words, from the amount as typed. */
-function adjustmentWords(typed: string, reference: string): string {
+function adjustmentWords(typed: string, reference: string, hireSettled: boolean): string {
   const amount = amountForTheWire(typed)
-  if (amount === null || amountProblem(typed) !== null) {
+  if (amount === null || amountProblem(typed, hireSettled) !== null) {
     return 'Enter the amount to see what will be added to the hire.'
   }
   const what = isNegativeMoney(amount)
@@ -56,9 +58,10 @@ export function HireAdjustment({
   const [reason, setReason] = useState('')
   const [tried, setTried] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
+  const settled = rental.status === 'SETTLED'
   const failure = write.failure
   const server = failure?.kind === 'refused' ? failure.fields : {}
-  const amountError = (tried ? amountProblem(amount) : null) ?? server.amountIncVat
+  const amountError = (tried ? amountProblem(amount, settled) : null) ?? server.amountIncVat
   const reasonError = (tried ? reasonProblem(reason) : null) ?? server.reason
   const problems = [
     ...(amountError === undefined || amountError === null ? [] : [{ id: AMOUNT_ID, message: amountError }]),
@@ -76,7 +79,7 @@ export function HireAdjustment({
     setTried(true)
     write.clearFailure()
     const wire = amountForTheWire(amount)
-    if (amountProblem(amount) !== null || reasonProblem(reason) !== null || wire === null) return
+    if (amountProblem(amount, settled) !== null || reasonProblem(reason) !== null || wire === null) return
     const given = reason.trim()
     write.send(async () => {
       const answered = await adjustHire(rental.id, wire, given)
@@ -102,7 +105,11 @@ export function HireAdjustment({
         <TextInput
           id={AMOUNT_ID}
           label="Amount in rand, including VAT"
-          help="For example 150.00 to charge more, or -150.00 to give money back."
+          help={
+            settled
+              ? 'For example -150.00 to give money back. The hire is settled, so it is never charged more.'
+              : 'For example 150.00 to charge more, or -150.00 to give money back.'
+          }
           inputMode="decimal"
           autoComplete="off"
           value={amount}
@@ -123,7 +130,7 @@ export function HireAdjustment({
         />
       </div>
       <p className="mt-md rounded bg-muted p-sm text-sm text-ink" aria-live="polite">
-        {adjustmentWords(amount, rental.reference)}
+        {adjustmentWords(amount, rental.reference, settled)}
       </p>
       {failure !== null && failure.kind !== 'fault' && failure.kind !== 'refused' && (
         <div className="mt-md">
