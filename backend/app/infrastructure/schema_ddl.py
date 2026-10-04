@@ -91,6 +91,8 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ux_user_account_email_verification_token_hash",
     "ux_user_account_password_reset_token_hash",
     "ix_damage_report_rental_item",
+    "ix_rental_item_lost",
+    "ix_audit_event_asset_status",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -130,6 +132,16 @@ RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
 # through the second.
 DAMAGE_REPORT_RENTAL_ITEM_INDEX: Final[str] = "ix_damage_report_rental_item"
 DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
+
+# The five indexes of revision 0007, which the utilisation report reads a
+# period through. The charges raised in a period, the hires still out or back
+# since it began, the losses recorded, the damage reports open or resolved in
+# it, and the changes of each unit's status, partial on that one action.
+CHARGE_RAISED_INDEX: Final[str] = "ix_charge_raised_at"
+RENTAL_ITEM_RETURNED_INDEX: Final[str] = "ix_rental_item_returned_at"
+RENTAL_ITEM_LOST_INDEX: Final[str] = "ix_rental_item_lost"
+DAMAGE_REPORT_RESOLVED_INDEX: Final[str] = "ix_damage_report_resolved_at"
+AUDIT_STATUS_CHANGE_INDEX: Final[str] = "ix_audit_event_asset_status"
 
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006

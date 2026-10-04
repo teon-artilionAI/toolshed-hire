@@ -33,6 +33,7 @@ from uuid import UUID
 
 from sqlalchemy import ColumnElement, RowMapping, Select, func, literal_column
 from sqlalchemy import select as select_columns
+from sqlalchemy.orm import Mapped
 from sqlmodel import SQLModel, col, select
 from sqlmodel.sql.expression import Select as EntitySelect
 
@@ -73,8 +74,15 @@ DIARY_STATUSES: Final[tuple[ReservationStatus, ...]] = (
 )
 
 
-def due_for_collection(branch_id: UUID, today: date) -> list[ColumnElement[bool]]:
-    """Return the conditions of a confirmed reservation at the branch whose hire has started."""
+def due_for_collection(
+    branch_id: UUID | Mapped[UUID], today: date
+) -> list[ColumnElement[bool]]:
+    """Return the conditions of a confirmed reservation at the branch whose hire has started.
+
+    The branch is a key, or the key column of a `branch` row the conditions
+    are correlated with, which is how the admin dashboard counts every branch
+    in one statement.
+    """
     return [
         col(Reservation.branch_id) == branch_id,
         col(Reservation.status) == literal_column(CONFIRMED_STATUS_LITERAL),
@@ -82,8 +90,8 @@ def due_for_collection(branch_id: UUID, today: date) -> list[ColumnElement[bool]
     ]
 
 
-def still_out(branch_id: UUID) -> list[ColumnElement[bool]]:
-    """Return the conditions of a rental at the branch with a unit still out."""
+def still_out(branch_id: UUID | Mapped[UUID]) -> list[ColumnElement[bool]]:
+    """Return the conditions of a rental at the branch with a unit still out, keyed as above."""
     return [col(Rental.branch_id) == branch_id, col(Rental.returned_at).is_(None)]
 
 

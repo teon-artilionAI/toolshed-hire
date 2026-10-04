@@ -54,7 +54,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -67,7 +67,7 @@ layers, the application layer imports the domain and nothing else, and the API
 layer is the only one that imports everything, because it is where the pieces
 are put together.
 
-The design document describes eight modules. Seven have code so far, and each
+The design document describes eight modules. All eight have code now, and each
 keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
@@ -79,8 +79,8 @@ keeps the same name in every layer it appears in.
 | `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
 | `money` | `Money`, `PricingPolicy`, `StandardPricingPolicy`, `FixedRatePricingPolicy`, `LineSnapshot`, `HireQuote`, `HireTotals` | `QuoteHire` | none yet, a quote writes nothing |
+| `reporting` | The day counting in `report_days` and `unit_days`, `utilisation_percent`, `Contribution`, `shares_of_hire_charge` | `FleetReportQuery`, `AdminDashboardQuery`, `FleetFigures`, `ReadUtilisationReport`, `ReadAdminDashboard` | `SqlFleetReport`, `SqlAdminDashboard` |
 
-`reporting` gains its package when its first use case is built.
 The audit trail belongs to no module, because every module writes to
 it, so it has a file of its own in each layer. The throttle in
 `app/application/throttle.py` and the ownership scope in
@@ -1132,6 +1132,204 @@ that matches is sorted to find one page, the way the list of rentals is. A few
 hundred reports a year make that nothing for a long time. At a hundred times
 that it wants an index on `reported_at` and a page keyed on it.
 
+## The utilisation report and the admin dashboard
+
+The owner can see which equipment earns its keep, for any period, per unit,
+model, category and branch, and can take it away as CSV (FR-24, US-33, US-34,
+NFR-04, C-32). The admin dashboard shows the business across every branch
+today (SC-19). There is no new table. Revision `0007` adds five indexes.
+
+**The two definitions.** They are written once, in
+`app/application/reporting/definitions.py`. Every page of the report carries
+them, the first line of the CSV repeats them, and they read as follows.
+
+- Utilisation, per asset, for a period. The days the asset was on an active
+  allocation within the period, divided by the days it was in the fleet and
+  serviceable within the period. Days quarantined, under repair, lost or
+  retired are left out of the denominator. Days are half open, [from, to).
+- Gross contribution, per asset, for a period. Hire revenue excluding VAT
+  attributed to that asset, plus late fees and damage recovery charged on it
+  (excluding VAT), less the actual repair costs recorded against it. It
+  excludes acquisition cost, depreciation, finance, staff and premises costs
+  and all overheads. It is labelled gross contribution everywhere, never
+  profit.
+
+**One module for each rule.** Each piece of the arithmetic is a pure function
+in the domain with no database, and nothing else works it out.
+
+| Rule | Module |
+|---|---|
+| The overlap, the union and the difference of half open spans of days | `app/domain/report_days.py` |
+| The serviceable days and the days on hire of one unit | `app/domain/unit_days.py` |
+| Utilisation as a percentage, two decimals, half up, None with no serviceable day | `app/domain/utilisation.py` |
+| The share of a hire charge raised on a whole hire | `app/domain/policies/hire_charge_share.py` |
+| Gross contribution and the sum of its parts | `app/domain/contribution.py` |
+
+The share scales an amount, so it uses `Money.in_proportion`, which is new. It
+multiplies before it divides, so an exact share such as R212.625 stays exact
+until it is rounded half up to R212.63. Every method that scales an amount is
+called only from the policies and the VAT module, and
+`tests/unit/test_one_place_for_a_price.py` now holds this one to that as well,
+which is why the share lives among the policies.
+
+**How the out of service spans are built.** Every day is a business day in
+Cape Town, and an instant becomes the day it falls on there. A unit is in the
+fleet from `acquired_on` up to `retired_on` when that is set. Within that it is
+out of service on every day any of these says so.
+
+1. A damage report, in any status, runs from the day it was reported up to the
+   day it was resolved, or on to the end of the period while it is open.
+2. A lost unit, which is a rental item closed with no condition, is out from
+   the day the loss was recorded up to the day of the next recorded change of
+   the unit's status, or on to the end of the period.
+3. The recorded changes of status are the `asset.status_changed` audit events
+   that checkout, a return, a loss and every move of a damage report write.
+   After a change the unit holds the status that change gave it, and before
+   its first change it holds the status that change moved it from. The last
+   change before the period and the first after it are read too, so a unit
+   already quarantined when the period began is out from its first day. This
+   is what makes a unit quarantined at its return out of service from that
+   day and not only from the day its report is filed. A day in INTAKE,
+   QUARANTINED, UNDER_REPAIR, LOST or RETIRED is out of service.
+4. A unit whose status has never been recorded as changing holds its present
+   status since it was acquired, when that is INTAKE, QUARANTINED or
+   UNDER_REPAIR. So an asset still at INTAKE is never serviceable. A present
+   status of LOST or RETIRED is never stretched back that way, because each
+   carries a date of its own.
+
+The spans of a unit are joined into one union before anything is counted, so
+a day a quarantine and a report both name comes off once.
+
+**What that misses.** First, a status set without an audit event, which only
+the seed does. Its quarantined and under repair units have no history, so they
+are out of service on every day of any period, including one long before they
+were damaged. Second, a day is counted whole. A unit quarantined at four in
+the afternoon is out of service all that day, one back on the shelf at nine in
+the morning is serviceable all that day, and a move and its undoing on the
+same day take no day off. Third, a unit moved out of service and back with no
+event for either move would count as serviceable throughout. Every route that
+moves a unit writes its event in the same transaction (BR-49), so that can
+only come from rows written outside the application. Fourth, damage nobody has
+reported yet does not exist for the report. A unit sitting damaged on the
+shelf counts as serviceable until its report or its change of status.
+
+**Days on hire.** A rental item is on hire from the day it went out up to the
+day it came back, or up to tomorrow while it is still out, and always for at
+least the day it went out, which is how the prototype counts a hire collected
+today. A booking that is confirmed, or held by a hold that has not run out,
+and not yet collected counts its own dates. An allocation released without
+going out counts nothing. The spans of a unit are joined, so a unit that ran
+late into a booking already made for it is counted once, and only a day the
+unit was serviceable counts, so utilisation never passes a hundred percent.
+The one case that changes today is a booking that still holds a unit put into
+quarantine, whose booked days are left out until the unit is back.
+
+**Money.** Everything excludes VAT. A charge counts in the period its business
+day of `raised_at` falls in. A HIRE, LATE_FEE or DAMAGE_RECOVERY charge with a
+rental item belongs to that unit. The DEPOSIT_FORFEIT of a lost unit counts as
+damage recovery, because with the recovery it makes up the replacement value
+the customer paid, which is how `app/domain/damage_recovery.py` already counts
+what was recovered for a unit. A HIRE charge raised on a whole hire is shared
+between its units. Each unit weighs the amount of its booking line divided by
+the units the line books, its share is the charge in that proportion rounded
+half up to the cent, and the last unit, in line order and then tag order,
+takes whatever the rounding left, so the shares add up to the charge. A waived
+charge counts nothing. A reversal is a negative row of the same type, so it
+nets off. Deposit movements, ADJUSTMENT and CLEANING are no part of the
+definition and are left out. Repair costs are the `actual_repair_cost` of the
+reports resolved within the period, against their unit, whatever the outcome.
+
+**Grouping and paging.** A line for a model, a category or a branch adds up
+the day counts and the four parts of its units and works its utilisation and
+gross contribution out from the sums, so it is never an average of
+percentages. Lines are ranked by gross contribution, highest first, and then
+by key. The totals are over every line. A unit is in the report when it was in
+the fleet during the period, or when money was charged or a repair cost was
+recorded on it within the period after it had left, so the totals keep every
+rand of the period. A category includes its children, active or not. A unit's
+share of a whole hire is the same whatever the report is narrowed to, because
+every unit of such a hire is read to weigh it.
+
+| Route | Query | Answers |
+|---|---|---|
+| `GET /api/admin/reports/utilisation` | `from` and `to` required, `groupBy` of `asset`, `model`, `category` or `branch`, `branchCode`, `categorySlug`, `page`, `pageSize` from 1 to 100 and 20 by default | 200 with `from`, `to`, `groupBy`, `definitions`, `totals`, `items`, `page`, `pageSize` and `total`. 422 naming `query.from`, `query.to`, `query.groupBy`, `query.page`, `query.pageSize`, `query.branchCode` or `query.categorySlug`. 403 for anybody but an administrator. |
+| `GET /api/admin/reports/utilisation.csv` | the same but the page | 200, `text/csv; charset=utf-8`, an attachment named `toolshed-gross-contribution-<groupBy>-<from>-<to>.csv`. The same refusals as problem documents. |
+| `GET /api/admin/dashboard` | none | 200 with `date`, `branches`, `totals`, `monthToDate`, `openDamageReports`, `customersOnHold` and `failedNotifications`. 403 for anybody but an administrator. |
+
+`to` has to be after `from` and at most 366 days later. A line carries `key`,
+`label`, `branchCode`, `categoryName`, `modelName`, `assetTag`, `status` and
+the nine figures. `assetTag` and `status` are set on a line for a unit,
+`branchCode` on a line for a unit or a branch, `categoryName` on a line for a
+unit, a model or a category and `modelName` on a line for a unit or a model.
+`utilisationPercent` is null when there was no serviceable day.
+
+**The CSV.** It is worked out before the response starts, so a refusal is
+still a problem document, and then written a line at a time by a generator.
+The first line is a comment cell that says these are gross contribution
+figures and not profit, names the period and repeats both definitions. The
+second names the columns of the screen. A line for a unit begins with its tag,
+model, category, branch and status, a line for a model with its model and
+category, a line for a category with its category and a line for a branch with
+its code and name, and every line ends with the nine figures, money with two
+decimals and no currency sign. Every cell that begins with `=`, `+`, `-`, `@`,
+a tab or a carriage return is written with a single quote in front (C-32).
+The one exception is a cell that is a plain decimal number, such as a negative
+gross contribution of `-180.00`, which no spreadsheet can read as a formula and
+which the owner needs to add up, so it is written as it is. `-1+2` is still
+escaped. `escaped_cell` in `app/api/csv_cells.py` is the rule and has tests of
+its own.
+
+**The admin dashboard.** For each trading branch it counts the collections
+due, the returns due today and the overdue hires with the very conditions the
+counter's dashboard uses, `due_for_collection` and `still_out`, so the two can
+never disagree, and the units on hire, in quarantine, under repair and on the
+shelf. The totals add the branches up. `monthToDate` runs from the first of the
+month up to tomorrow, so today counts in full, and is worked out by the same
+`FleetFigures` as the report. The three counts that wait for an administrator
+are the reports open or under repair, the customers on hold and the
+notifications that failed.
+
+**The sweep runs first.** Both the report and the dashboard run it before they
+read anything. The contract asks it of the dashboard, and I run it before the
+report as well, because the report counts the days of bookings not yet
+collected, and a booking nobody collected or a hold that ran out would
+otherwise count days nobody has booked. The report's statement also leaves out
+a hold whose time has run out, so a backlog the sweep has not reached yet
+changes nothing.
+
+| Read | Statements | Indexes |
+|---|---|---|
+| Report and CSV | 3, which are the units in scope with their money of the period, every dated fact about them as one `UNION ALL`, and the units of every hire charge on a whole hire. 4 when a category is named, which is checked first. The route adds the account, the branch when one is named and the sweep, which is 3 when nothing is due | `ix_charge_raised_at`, `ix_damage_report_resolved_at`, `ix_audit_event_asset_status`, `ix_rental_item_returned_at`, `ix_rental_item_lost`, `ix_reservation_confirmed_start`, `ix_reservation_hold_expiry`, `ix_audit_event_occurred_at`, `ix_asset_allocation_line`, `ix_rental_item_rental`, `ix_asset_branch_status` with a branch, and the primary keys |
+| Dashboard | 2, every branch in one and the three counts in the other, and the 3 of the report for the month. The route adds the account and the sweep | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, `ix_notification_failed` |
+
+`tests/integration/test_report_reads.py` counts the statements with the
+worked dataset and again with twenty more units hired, and asks the planner to
+prove each condition of a period uses the index revision `0007` built for it.
+
+**What degrades first as the data grows.** The report reads every unit in
+scope and every dated fact of the period into memory on each request, works
+the days out in Python and then groups, ranks and pages there. That is linear
+in the units and in the hires, reports and changes of the period. At four
+hundred units it is a few thousand rows and a few milliseconds. At a hundred
+times the fleet, forty thousand units, one request would hold a few hundred
+thousand rows and take seconds, and every page of the screen and every
+dashboard would pay for the whole report again. That is what degrades first.
+The way out is into PostgreSQL in two steps. First the day counting, which
+`daterange` and `datemultirange` can do in one statement, `range_agg` for the
+union of a unit's spans, `-` to take the out of service days away and `*` to
+keep the days on hire that were serviceable, with the length of each range
+summed, so the statement returns finished figures and the grouping, the
+ranking and the page become `GROUP BY`, `ORDER BY` and a keyed page. Second, at
+that size, a table of each unit's figures for each day, written as hires,
+returns, reports and charges happen, so a report of any period is a sum over
+an index. The share of a whole hire stays the policy in the domain and is
+written into that table when the charge is raised. After the report come the
+two counts of the dashboard that stand on no index, the open damage reports
+and the customers on hold, a few hundred and a few thousand rows today, which
+would want partial indexes. The audit log grows fastest of all, and revision
+`0007` keeps what the report reads of it to two short index lookups a unit and
+the changes of the period.
+
 ## The schema
 
 Migration `0001` is the baseline. It creates seventeen tables with singular
@@ -1185,6 +1383,21 @@ holds its lock for a moment however many items there are. The release before
 it never names the column, so its inserts take the default and it keeps working
 against a migrated database. A privilege on a table covers the columns it gains
 later, so there is nothing to grant.
+
+Revision `0007` adds five indexes and nothing else, all of them read by the
+utilisation report. `ix_charge_raised_at` on `charge.raised_at` finds the
+charges of a period. `ix_rental_item_returned_at` on `rental_item.returned_at`
+finds the hires still out and those back since a period began.
+`ix_rental_item_lost`, partial on a rental item closed with no condition,
+holds the lost units and nothing else. `ix_damage_report_resolved_at` on
+`damage_report.resolved_at` finds the reports open during a period and those
+resolved in it. `ix_audit_event_asset_status` on `audit_event (entity_id,
+occurred_at)`, partial on the action `asset.status_changed`, finds the last
+change of a unit's status before a period and the first after it. Each is
+built inside the migration's transaction, which blocks writes to its table
+while it builds, and `audit_event` is written by every change. On the tables of
+a first year that takes moments. A table a hundred times larger would want
+`CREATE INDEX CONCURRENTLY` outside a transaction instead.
 
 ## The seed and the two database roles
 
@@ -1299,6 +1512,9 @@ uvicorn app.main:app --reload --port 8000
 | GET | `/api/counter/dashboard` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/counter/diary` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/assets/locator` | Counter staff and administrators, every branch. |
+| GET | `/api/admin/reports/utilisation` | An administrator. |
+| GET | `/api/admin/reports/utilisation.csv` | An administrator. |
+| GET | `/api/admin/dashboard` | An administrator. |
 | GET | `/api/customers` | Counter staff and administrators. |
 | POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
 | GET | `/api/customers/{id}` | Counter staff and administrators. |
@@ -1816,6 +2032,24 @@ and its history, and that the two reads of revision `0005` stand on its
 indexes. `test_flagged_return.py` takes a unit back flagged in the grade it
 went out in and reads the committed row, which holds the flag in its column and
 the notes exactly as they were posted.
+
+The report and the dashboard are tested the same way. `tests/unit` holds the
+day counting on half open spans, the serviceable days of a unit acquired,
+retired, damaged, lost and moved through its statuses, the days on hire of a
+unit back, still out, back the day it went out and late into a booking, the
+percentage at its rounding edges, gross contribution, the share of a whole
+hire with its rounding cent and its reversal, the escape of a CSV cell, the
+lines, ranking, totals and pages, and both use cases against fakes of their
+ports, with every refusal and the sweep before the read. `tests/api` pins the
+shapes of the report, the CSV and the dashboard, a hire of two units shared
+between them, every refused parameter by name, the three roles and a caller
+with no credential, a model name a spreadsheet would run, and a booking the
+sweep marks before the dashboard counts it. On PostgreSQL,
+`test_report_worked_dataset.py` builds the fleet in `tests/support/report_dataset.py`,
+whose docstring works every figure out by hand, and asserts every grouping,
+both filters, the totals and the dashboard against those figures.
+`test_report_losses.py` follows a loss to the next recorded change, and
+`test_report_reads.py` counts the statements and proves the indexes.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as
