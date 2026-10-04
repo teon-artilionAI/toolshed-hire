@@ -5,8 +5,8 @@
  * signed in owner, a day across three branches and a report with rows. A scan
  * should not depend on what a database happens to hold, and it should run with
  * or without a backend, so these answers stand in for the API. They are
- * shaped the way the contract for the reporting routes describes them, with
- * long names and large figures, which are what break a layout. The report
+ * shaped the way the API sends them, with long names and large figures, which
+ * are what break a layout. The report
  * answers with units when it is asked for units, so the states of units are
  * scanned too.
  */
@@ -130,11 +130,12 @@ async function answerTheApi(route: Route): Promise<void> {
 /** The name the CSV answered here is given, and what it holds. */
 export const CSV_FILE_NAME = 'toolshed-gross-contribution-model-2026-09-01-2026-10-01.csv'
 export const CSV_BODY =
-  '﻿# These are gross contribution figures and not profit.\r\n' +
-  'Model,Units,Days on hire,Serviceable days,Utilisation percent,Gross contribution\r\n' +
-  'CP 100 Plate Compactor with Water Tank and Wheel Kit,126,18342,116204,25.29,1155554.44\r\n'
+  '"# These are gross contribution figures and not profit. The period is 2026-09-01 up to but not including 2026-10-01. Days are half open, [from, to)."\r\n' +
+  'Model,Category,Units,Days on hire,Serviceable days,Utilisation percent,Hire revenue ex VAT,Late fees ex VAT,Damage recovery ex VAT,Repair costs,Gross contribution\r\n' +
+  'CP 100 Plate Compactor with Water Tank and Wheel Kit,Compaction and Earthmoving,126,18342,116204,25.29,1234567.89,98765.43,45678.90,123456.78,1155554.44\r\n' +
+  "'=Bosch GBH 2-26 DRE,Drilling,4,3,90,3.33,1020.00,0.00,150.00,13495.67,-12345.67\r\n"
 
-/** Answer the CSV route the way the contract describes it. */
+/** Answer the CSV route the way the API does. */
 export async function answerTheCsv(route: Route): Promise<void> {
   await route.fulfill({
     status: 200,

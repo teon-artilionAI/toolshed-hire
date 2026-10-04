@@ -19,8 +19,7 @@
  * settlement types are in contract-returns.ts, the damage and quarantine
  * types are in contract-damage.ts, and the reporting types are in
  * contract-reporting.ts. All eight are passed on from here, and the session
- * types below stay here. The reporting types are written by hand until the
- * OpenAPI document describes those routes, and that module says so.
+ * types below stay here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member

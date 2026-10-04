@@ -16,7 +16,6 @@
 import { api } from './client'
 import type { ApiFile } from './client'
 import type {
-  AssetStatus,
   ReportDefinitions,
   ReportFigures,
   ReportGrouping,
@@ -30,7 +29,9 @@ import {
   readCount,
   readDate,
   readList,
+  readNullableOneOf,
   readNullablePercent,
+  readNullableText,
   readObject,
   readOneOf,
   readSignedMoney,
@@ -76,31 +77,20 @@ function readFigures(record: Record<string, unknown>, path: string): ReportFigur
 }
 
 /**
- * A member that names where a row sits, which does not apply at every
- * grouping. The contract writes it as null where it does not apply, and I also
- * take it being left out as null, because a row for a model has no tag either
- * way and nothing on the screen reads the difference.
+ * The members that name where a row sits do not apply at every grouping. The
+ * server sends every one of them on every row, null where it does not apply,
+ * so a row that leaves one out breaks the contract like any other.
  */
-function readPlace(record: Record<string, unknown>, key: string, path: string): string | null {
-  return record[key] === undefined || record[key] === null ? null : readText(record, key, path)
-}
-
-function readStatus(record: Record<string, unknown>, path: string): AssetStatus | null {
-  return record.status === undefined || record.status === null
-    ? null
-    : readOneOf(record, 'status', path, ASSET_STATUSES)
-}
-
 function readRow(value: unknown, path: string): ReportRow {
   const record = readObject(value, path, 'a row of the report')
   return {
     key: readText(record, 'key', path),
     label: readText(record, 'label', path),
-    branchCode: readPlace(record, 'branchCode', path),
-    categoryName: readPlace(record, 'categoryName', path),
-    modelName: readPlace(record, 'modelName', path),
-    assetTag: readPlace(record, 'assetTag', path),
-    status: readStatus(record, path),
+    branchCode: readNullableText(record, 'branchCode', path),
+    categoryName: readNullableText(record, 'categoryName', path),
+    modelName: readNullableText(record, 'modelName', path),
+    assetTag: readNullableText(record, 'assetTag', path),
+    status: readNullableOneOf(record, 'status', path, ASSET_STATUSES),
     ...readFigures(record, path),
   }
 }

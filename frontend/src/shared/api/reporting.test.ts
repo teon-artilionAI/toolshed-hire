@@ -15,6 +15,7 @@ import {
   CSV_BODY,
   CSV_FILE_NAME,
   DASHBOARD,
+  HAMMER_ROW,
   REPORT,
   REPORT_CSV_ROUTE,
   REPORT_ROUTE,
@@ -41,21 +42,23 @@ describe('the report', () => {
     await expect(getUtilisationReport(QUERY)).resolves.toEqual(REPORT)
   })
 
-  it('reads a unit with its state, and a row that leaves out where it does not sit as null', async () => {
-    const { assetTag: _tag, branchCode: _branch, ...unplaced } = { ...UNIT_ROW, status: undefined }
-    mockApi({ [REPORT_ROUTE]: () => jsonResponse({ ...REPORT, groupBy: 'asset', items: [UNIT_ROW, unplaced] }) })
+  it('reads a unit with its state, and null where a row does not sit', async () => {
+    mockApi({ [REPORT_ROUTE]: () => jsonResponse({ ...REPORT, groupBy: 'asset', items: [UNIT_ROW, HAMMER_ROW] }) })
 
     const report = await getUtilisationReport({ ...QUERY, groupBy: 'asset' })
 
-    expect(report.items[0].status).toBe('QUARANTINED')
+    expect(report.items[0]).toMatchObject({ assetTag: 'TSH-DR-0042', branchCode: 'CBD', status: 'QUARANTINED' })
     expect(report.items[1]).toMatchObject({ assetTag: null, branchCode: null, status: null })
   })
+
+  const { status: _status, ...rowWithNoState } = HAMMER_ROW
 
   it.each([
     ['money with no decimals', { ...REPORT, totals: { ...REPORT.totals, repairCosts: '12' } }, 'repairCosts'],
     ['a percentage as a number', { ...REPORT, totals: { ...REPORT.totals, utilisationPercent: 15.78 } }, 'utilisationPercent'],
     ['a grouping it does not know', { ...REPORT, groupBy: 'profit' }, 'groupBy'],
     ['a state no unit has', { ...REPORT, items: [{ ...UNIT_ROW, status: 'RESERVED' }] }, 'status'],
+    ['a row that leaves its state out instead of sending null', { ...REPORT, items: [rowWithNoState] }, 'status'],
     ['no definitions', { ...REPORT, definitions: undefined }, 'definitions'],
   ])('refuses %s, naming the field', async (_what, body, field) => {
     mockApi({ [REPORT_ROUTE]: () => jsonResponse(body) })

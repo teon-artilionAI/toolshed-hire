@@ -1,6 +1,7 @@
 /**
  * The owner's dashboard and the utilisation report, for tests, shaped the way
- * the contract for the reporting routes describes them.
+ * the API sends them. Every row carries every member that names where it
+ * sits, null where it does not apply.
  *
  * The owner is `ADMIN` from session-samples.ts, and the clock of the tests
  * that use these is pinned to `TEST_NOW`, so today is `TEST_TODAY` and the last
@@ -145,11 +146,17 @@ export const DASHBOARD: AdminDashboard = {
 /** The name the CSV route gives the file of the last full month by model. */
 export const CSV_FILE_NAME = 'toolshed-gross-contribution-model-2026-02-01-2026-03-01.csv'
 
-/** What the CSV holds, the comment row first. */
+/**
+ * What the CSV holds, the way the API writes it. The comment row comes first,
+ * as one quoted cell, because the definitions in it hold commas. A cell a
+ * spreadsheet could run carries a single quote in front, and a plain number
+ * below zero is written as it is.
+ */
 export const CSV_BODY =
-  '# These are gross contribution figures and not profit.\r\n' +
-  'Model,Units,Days on hire,Serviceable days,Utilisation percent,Gross contribution\r\n' +
-  'Bosch GBH 2-26 DRE rotary hammer,6,44,174,25.29,6368.70\r\n'
+  '"# These are gross contribution figures and not profit. The period is 2026-02-01 up to but not including 2026-03-01. Days are half open, [from, to)."\r\n' +
+  'Model,Category,Units,Days on hire,Serviceable days,Utilisation percent,Hire revenue ex VAT,Late fees ex VAT,Damage recovery ex VAT,Repair costs,Gross contribution\r\n' +
+  'Bosch GBH 2-26 DRE rotary hammer,Drilling,6,44,174,25.29,6160.00,208.70,0.00,0.00,6368.70\r\n' +
+  "'=CP 100 Plate Compactor,Compaction,4,3,90,3.33,1020.00,0.00,150.00,1450.00,-280.00\r\n"
 
 /** A 200 with a CSV body, the way the CSV route sends one. */
 export function csvResponse(fileName: string | null = CSV_FILE_NAME, body: string = CSV_BODY): Response {

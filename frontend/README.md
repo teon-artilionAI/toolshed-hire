@@ -275,11 +275,12 @@ commits as `../backend/openapi.json`.
   Each unit of a hire also carries `replacementValue` for staff, which is null
   for a customer, as its tag is.
 - The reporting routes, which are the owner's dashboard, the utilisation and
-  gross contribution report and its CSV, are not in the document yet. Their
-  types are in `api/contract-reporting.ts`, written by hand from the agreed
-  contract, and `contract.ts` passes them on like the others. Once the backend
-  commits a document that describes those routes, each type there is replaced
-  by one built from the generated file, and the readers stay as they are.
+  gross contribution report and its CSV, are in the document too. Their types
+  are in `api/contract-reporting.ts`, built from the generated file the same
+  way. Every row of the report carries `branchCode`, `categoryName`,
+  `modelName`, `assetTag` and `status`, null where they do not apply, and a
+  utilisation over no serviceable days is null, on a row, in the totals and in
+  the month so far on the dashboard.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -973,7 +974,9 @@ them in full beside the figures. They are these.
   value with no control is listed above the figures.
 - The branches and categories come from the catalogue routes, each with its
   own loading and failed state. A failed list offers to be read again, and
-  until then the filter offers every branch or every category.
+  until then the filter offers every branch or every category. A category
+  takes in the categories directly under it, because that is how the server
+  filters.
 - The totals come first and are over every row of the report, then the two
   definitions, then one page of twenty rows. Below the `lg` width each row is
   drawn as a block with every figure beside its name, so nothing is scrolled
