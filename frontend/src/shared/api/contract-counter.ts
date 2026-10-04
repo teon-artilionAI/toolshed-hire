@@ -10,6 +10,10 @@
  * Nothing imports this file but contract.ts and contract-returns.ts, whose
  * pages of hires are made of the `Rental` here. The application imports these
  * types from contract.ts, like every other wire type.
+ *
+ * A charge and the checkout preview carry members the admin operations change
+ * added, which the generated document does not describe yet. Those members
+ * come from contract-operations.ts, and go once the document has them.
  */
 
 import type {
@@ -24,6 +28,7 @@ import type {
   Refine,
   Schemas,
 } from './contract-kit'
+import type { ChargeCorrectionMembers, CheckoutShortfall } from './contract-operations'
 
 /**
  * One customer as the counter sees them, from the lookup, the walk in and the
@@ -78,7 +83,8 @@ export type CheckoutUnit = Refine<Schemas['CheckoutUnitResponse'], { depositPerU
  *
  * `canCheckOut` is the server's answer for this person at this moment. When
  * it is false, `refusal` is the sentence that says why. `rentalId` is set once
- * the reservation has been collected. Every figure is the server's.
+ * the reservation has been collected. `unitsShort` is how many units it still
+ * needs after one was released. Every figure is the server's.
  */
 export type ReservationCheckout = Refine<
   JsonOf<Paths['/api/reservations/{id}/checkout']['get']>,
@@ -89,7 +95,8 @@ export type ReservationCheckout = Refine<
     hireTotalIncVat: Money
     depositTotal: Money
   }
->
+> &
+  CheckoutShortfall
 
 /**
  * What was recorded about one unit as it went out.
@@ -148,11 +155,16 @@ export type RentalItem = Refine<
   { returnedAt: IsoTimestamp | null; lateFeePerDay: Money; lateFeeToday: Money; replacementValue: Money | null }
 >
 
-/** One charge on a hire. A release of a deposit is a negative amount. */
+/**
+ * One charge on a hire. A release of a deposit is a negative amount, and so is
+ * a reversal, which names the charge it cancels out in `reversesChargeId`.
+ * `reason` is the owner's reason for a waiver, a reversal or an adjustment.
+ */
 export type RentalCharge = Refine<
   Schemas['ChargeResponse'],
   { amountExVat: Money; vatAmount: Money; amountIncVat: Money; raisedAt: IsoTimestamp }
->
+> &
+  ChargeCorrectionMembers
 
 /**
  * One hire, from the checkout and the rental routes. Every figure is the

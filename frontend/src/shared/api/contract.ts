@@ -17,9 +17,11 @@
  * contract-account.ts, the counter types are in contract-counter.ts, the
  * counter overview types are in contract-overview.ts, the returns and
  * settlement types are in contract-returns.ts, the damage and quarantine
- * types are in contract-damage.ts, and the reporting types are in
- * contract-reporting.ts. All eight are passed on from here, and the session
- * types below stay here.
+ * types are in contract-damage.ts, the reporting types are in
+ * contract-reporting.ts, and the admin operations types are in
+ * contract-operations.ts. All nine are passed on from here, and the session
+ * types below stay here. The admin operations types are written by hand until
+ * the generated document describes their routes, and that file says why.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -147,6 +149,20 @@ export type {
   UtilisationReport,
   UtilisationReportQuery,
 } from './contract-reporting'
+export type {
+  AuditActorRole,
+  AuditEvent,
+  AuditEventPage,
+  AuditEventQuery,
+  AuditState,
+  CorrectionReasonRequest,
+  EmailNotification,
+  EmailNotificationPage,
+  EmailNotificationQuery,
+  HireAdjustmentRequest,
+  NotificationStatus,
+  NotificationType,
+} from './contract-operations'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.

@@ -14,8 +14,8 @@
  * makes, and the session writes one for every change of state. That is what I
  * want in a browser and noise in a test run, and the basket writes one for
  * every change too. So I drop the lines whose event name starts with `api.`,
- * `session.`, `basket.`, `booking.`, `counter.` or `file.` and let everything
- * else through. A warning from React still prints.
+ * `session.`, `basket.`, `booking.`, `counter.`, `admin.` or `file.` and let
+ * everything else through. A warning from React still prints.
  *
  * After each test I put back anything a test replaced on the global object,
  * such as `fetch`, and return the clock to real time. I also put the session
@@ -43,8 +43,8 @@ import { MARKER_VALUE, SESSION_HINT_KEY } from '../shared/session-markers'
 import { resetSessionForTests } from '../shared/session-store'
 
 /** The prefixes of the event names the API client, the session, the basket,
- *  the counter and the saving of a file log. */
-const QUIET_EVENT_PREFIXES = ['api.', 'session.', 'basket.', 'booking.', 'counter.', 'file.']
+ *  the counter, the owner's writes and the saving of a file log. */
+const QUIET_EVENT_PREFIXES = ['api.', 'session.', 'basket.', 'booking.', 'counter.', 'admin.', 'file.']
 
 const CONSOLE_LEVELS = ['info', 'warn', 'error'] as const
 

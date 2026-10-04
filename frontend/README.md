@@ -19,13 +19,16 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-15` Return and Condition Inspection, `SC-18` Overdue and Late Fee Worklist, and the hire history of `SC-09` | The API, through the routes described under Returns and settlement |
 | `SC-16` Damage Report Capture | The API, through the routes described under Damage and quarantine |
 | `SC-19` Admin Dashboard, `SC-22` Utilisation and Gross Contribution Report | The API, through the routes described under Reporting |
-| `SC-20`, `SC-21`, `SC-23` and `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-24` Audit and Notification Log, and the owner's corrections on `SC-14` and `SC-15` | The API, through the routes described under Admin operations |
+| `SC-20`, `SC-21` and `SC-23` | The typed sample data in `src/shared/fixtures.ts` |
 
 No customer or counter screen reads `src/shared/fixtures.ts` any more, and
-neither do `SC-19` and `SC-22`. The modules that still do are the four other
-administration screens and their helpers in `src/features/admin/`. The
-`reservations`, `rentals` and `charges` exports of the fixture file are now
-imported by nothing. They go with the file once the last of those screens is
+neither do `SC-19`, `SC-22` and `SC-24`. The modules that still do are the
+three other administration screens and their helpers in
+`src/features/admin/`. The `reservations`, `rentals`, `charges`, `auditEvents`
+and `notifications` exports of the fixture file are now imported by nothing,
+and nor are the `AuditEvent` and `NotificationRecord` types in
+`src/shared/types.ts`. They go with the file once the last of those screens is
 connected.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
@@ -281,6 +284,18 @@ commits as `../backend/openapi.json`.
   `modelName`, `assetTag` and `status`, null where they do not apply, and a
   utilisation over no serviceable days is null, on a row, in the totals and in
   the month so far on the dashboard.
+- The admin operations routes, which are the audit trail, the notification
+  log and its re-send, the charge corrections, the release of a unit and the
+  reallocation, are not in the document yet, because the backend half of that
+  change is built at the same time. Their types are written by hand from the
+  agreed contract in `api/contract-operations.ts`, in the same style, and are
+  rebuilt from the generated file once the document has them. The same file
+  holds the two members that change adds to types that are generated already.
+  Every charge on a hire gains `reversesChargeId` and `reason`, and the
+  checkout gains `unitsShort`. `api/contract-counter.ts` adds them to its own
+  types from there. Until then the readers in `api/audit-log.ts`,
+  `api/rental-read.ts` and `api/checkout.ts` check every one of those members,
+  so a body that breaks the contract still fails at the boundary.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -345,6 +360,16 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   out over the whole fleet, so asking again on every return to the window
   would cost that whole sum each time for figures that have not moved. The CSV
   is not cached at all. Each press of its button is one request.
+- The audit trail and the notification log, under the `admin` segment too, are
+  never fresh. Every write in the system adds to the trail, and an email moves
+  from queued to sent or failed a moment after it is listed. Each read is one
+  page of twenty, so reading it again on focus costs one small query. A
+  re-send marks the log, the trail and the dashboard as out of date. An
+  owner's correction of a hire puts the hire the server answered with into the
+  cache the way a return does, and marks everything under the `admin` segment
+  as out of date as well. A release or a reallocation marks the reservations,
+  the locator, the counter's day and the `admin` segment as out of date, so
+  the checkout on the screen is read again.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -663,6 +688,9 @@ it. The dashboard and the diary take their branch from the same place.
   it is due back, and links to the return of the hire by its key. A 409 or a
   403 shows the server's message and offers to read the booking again. A 422
   goes back to the form with each message under its control.
+- An administrator can release a unit the booking holds, and any member of
+  staff can find a replacement for a booking short of one. Both are described
+  under Admin operations.
 
 #### Accessibility of these screens
 
@@ -799,6 +827,11 @@ out a late fee, a settlement or a balance, and never adds money up.
 - A 409 or a 403 shows the server's message and offers to read the hire again.
   A 422 goes back to the form with each message under its control. The writes
   share `use-rental-write.ts`, which sends each one once.
+- Under everything is every charge on the hire, in the order the server sent
+  them, with what each is for, the server's sentence, its amount in words that
+  say which way it runs, where it stands and when it was raised. Counter staff
+  read the sentence that only the owner can waive a charge. The owner's
+  corrections there are described under Admin operations.
 
 #### `SC-18` Overdue and Late Fee Worklist
 
@@ -948,12 +981,12 @@ them in full beside the figures. They are these.
 - The figures link to where the owner goes next. The month opens the report
   for the same period, from the dates the server sent. The open damage reports
   open the asset register, the customers on hold open the customer holds on
-  `SC-23`, and the failed notifications open the log on `SC-24`. What is due at
-  a branch opens the diary on `SC-11` at that branch. The link chooses the
-  branch for the tab through `chooseWorkBranch` in
-  `src/features/counter/work-branch.ts` first, so the diary does not ask. The
-  three screens it links to that still show sample data say so above
-  themselves.
+  `SC-23`, and the failed notifications open the notification log on `SC-24`
+  showing only the emails that failed. What is due at a branch opens the
+  diary on `SC-11` at that branch. The link chooses the branch for the tab
+  through `chooseWorkBranch` in `src/features/counter/work-branch.ts` first,
+  so the diary does not ask. The two screens it links to that still show
+  sample data say so above themselves.
 - It is read again when the window comes back into focus and on the refresh
   button, and the line above the figures says when they were read. It has the
   loading and failed states, and says so when the server lists no branch.
@@ -998,6 +1031,106 @@ every width, and every control has its label. Moving to another page of the
 report moves focus to the top of the figures. Every status carries words
 beside its colour, every target is at least 44 pixels, and both screens fit a
 phone 360 pixels wide with nothing to scroll sideways.
+
+### Admin operations
+
+The owner reads the audit trail and the email log on `SC-24`, sends a failed
+confirmation again, corrects a charge on the return screen `SC-15`, and frees
+a unit a booking holds on the checkout `SC-14`. The reads and the re-send are
+in `api/audit-log.ts`, the corrections and the release in `api/corrections.ts`,
+the reallocation in `api/reservations.ts`, and the cached reads in
+`api/admin-queries.ts`. Every route under `/api/admin/` is for an
+administrator, and the API answers anyone else with a 403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-24` | `GET /api/admin/audit-events?entityType=&entityId=&action=&actorUserId=&from=&to=&page=&pageSize=` | One page of events, newest first |
+| `SC-24` | `GET /api/admin/notifications?status=&page=&pageSize=` | One page of emails, newest first |
+| `SC-24` | `POST /api/admin/notifications/{id}/resend` | The new email, and the log read again with it on |
+| `SC-15` | `POST /api/admin/charges/{id}/waiver` and `/reversal` | The hire as the server now has it |
+| `SC-15` | `POST /api/admin/rentals/{id}/adjustments` | The hire with the new adjustment among its charges |
+| `SC-14` | `POST /api/admin/allocations/{id}/release` | The booking read again, now short a unit |
+| `SC-14` | `POST /api/reservations/{id}/reallocation` | The booking's new units, and the booking read again |
+
+#### `SC-24` Audit and Notification Log
+
+- Two views, the audit trail and the notification log, as two links with the
+  current one marked. The view is in the address as `?view=notifications`,
+  and the plain address is the trail. Moving from one to the other moves focus
+  to the heading of the new one and starts it with no filter. The rules are
+  in `src/features/admin/audit-address.ts`.
+- The trail is narrowed by the kind of record, the record by its key or its
+  reference, the action, the person who acted and a range of days, all in the
+  address under the names the API takes. The text boxes would ask the server
+  on every key, so the filters apply together with one button. The person who
+  acted is narrowed from an event, "Only what this person did", because the
+  server filters by the key of the account. "Only this booking" on an event
+  narrows to its record the same way. A refusal puts each message under its
+  filter and lists any other.
+- Each event says what happened in words, when, who and in what role, or that
+  the system did it with no person behind it, and the record it is about. The
+  fields that changed are a small definition list, each with how it read
+  before and after, in words and never as raw JSON. An instant reads as a day
+  and a time at the branches. The words are in `audit-words.ts`, the known
+  actions by hand and any other from its name.
+- The screen says that nobody can change the trail, the owner included, and
+  offers nothing that would.
+- The log is narrowed by status, as it is chosen, and paged. A failed email
+  says what the mail provider said and offers "Send again". That asks first,
+  saying a new email goes out and the failed one stays in the log, then posts
+  the re-send once. The answer says where the new attempt stands, and the log
+  is read again with it on, marked as sending a failed one again. A 409 or a 403
+  shows the server's sentence. The request is in `use-resend.ts`.
+- Both views have the shared loading, failed and empty states, and page
+  controls. Moving to another page moves focus to the top of the list.
+
+#### Charge corrections on `SC-15`
+
+- For a signed in administrator and nobody else, each charge offers what the
+  server allows for where it stands. "Waive" on a pending charge, and
+  "Reverse" on a settled one that no other charge on the hire reverses. The
+  server sends no flag for either, so the offer follows the status and the
+  `reversesChargeId` it sends, and its 409 is the last word.
+- Each asks first, in words that say what will happen, and asks for a reason
+  of five to two hundred characters. A waiver keeps the charge on the hire as
+  waived. A reversal leaves the charge as it is and adds one for the same
+  amount the other way. Either way the server works the deposit and the
+  balance out again, and the screen shows the hire it answered with, with a
+  notice that takes focus.
+- "Adjust the hire" takes an amount including VAT, positive or negative and
+  never zero, and a reason, and says in words what will be added as the
+  amount is typed. The amount is the owner's own figure, sent with two
+  decimals, and nothing is worked out from it.
+- A reversal says which charge it reverses, the charge it reverses says so,
+  and a charge the owner waived, reversed or added shows their reason.
+- A refused reason or amount lands under its box, and a 409 or a 403 shows the
+  server's sentence. The rules are in `correction-model.ts` and the writes go
+  through `use-rental-write.ts`.
+
+#### Force release and reallocation on `SC-14`
+
+- Each unit of the checkout carries the key of its allocation, so an
+  administrator gets "Release this unit" on each, on the handover form or,
+  when the booking cannot go out yet, in a list of the units set aside. It
+  asks for a reason and says the unit goes back on the shelf and the booking
+  is then short a unit until it is reallocated. The answer is not read. The
+  checkout is read again and shows the booking as the server now has it.
+- While `unitsShort` is above zero the screen says how many units are missing
+  and offers any member of staff "Find a replacement unit", with a sentence
+  beside it saying what it does. One press posts the reallocation, which goes
+  through the same path as a hold, shows the booking's new units and reads the
+  checkout again. When nothing is free the server's 409 names the model and
+  the dates, and the screen shows it. The writes share
+  `use-allocation-write.ts`.
+
+#### Accessibility of these screens
+
+Every view and every question has a real heading, every event, email and
+charge is an article named by its heading, and every control has its label.
+Each question takes focus when it opens and gives it back when it closes, and
+what a write did is said in a notice that takes focus. Every status carries
+words beside its colour, every target is at least 44 pixels, and every screen
+fits a phone 360 pixels wide with nothing to scroll sideways, questions open.
 
 ### Model pictures
 
@@ -1120,12 +1253,19 @@ damage screen again with every problem of its form showing, then with the
 amount to recover and its question open. The owner's dashboard and report are
 scanned loaded too, with a signed in owner, three branches and rows from
 `e2e/admin-answers.ts`. The report is scanned by model, by unit, and with a
-refusal of its period under the field.
+refusal of its period under the field. The audit trail and the notification
+log are scanned loaded from `e2e/audit-answers.ts`, and the log again with the
+question before a failed email is sent again. The owner's corrections only
+show for an administrator, so the return screen is scanned again as the owner
+with a reversal asked, and the checkout as the owner on a booking short of a
+unit with a release asked, from `e2e/owner-answers.ts`.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
 My Hires, My Account with a hire in its history, the nine counter screens, the
-owner's dashboard and the report by model and by unit at 360 pixels wide and
-checks that nothing has to be scrolled sideways. It answers the API itself,
+owner's dashboard, the report by model and by unit, the audit trail, the
+notification log, and the return and the checkout as the owner sees them with
+a question open, at 360 pixels wide and checks that nothing has to be scrolled
+sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
 database holds.
 
@@ -1262,6 +1402,19 @@ spec asks the dashboard, the report and the CSV with no token first, through
 `e2e/reporting-backend.ts`. A 404 or a 405 from any of them means the routes
 are not there, and the spec skips itself.
 
+`e2e/admin-operations.spec.ts` needs the admin operations routes. A counter
+assistant books one unit for a new walk in through `e2e/counter-booking.ts`,
+which takes the fourth last model free at the branch, checks it out and takes
+it back as it went. Then the owner signs in on a browser of their own, narrows
+the audit trail to bookings with the filter in the address, opens the
+notification log, and on the return screen of that hire reverses the hire
+charge with a written reason and sees the reversal row with the reason and
+the original marked as reversed. The trail and the log are checked for their
+shape and not for particular entries. The spec asks the trail and the log with
+no token first, through `e2e/operations-backend.ts`, after the returns routes.
+A 404 or a 405 from either means the routes are not there, and the spec skips
+itself.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1287,13 +1440,13 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-The two counter journeys and the two counter overview journeys each sign the
-two counter assistants in once, so each assistant four times in a run. The
-damage journey and the reporting spec each sign the owner in once in each
-browser project, so the owner four times in a run, which counts against their
-own address.
+The two counter journeys, the two counter overview journeys and the admin
+operations journey each sign the two counter assistants in once, so each
+assistant five times in a run. The damage journey, the reporting spec and the
+admin operations spec each sign the owner in once in each browser project, so
+the owner six times in a run, which counts against their own address.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all nine skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all ten skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

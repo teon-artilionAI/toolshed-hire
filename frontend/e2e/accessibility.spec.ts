@@ -28,13 +28,21 @@
  * The owner's dashboard and report need a signed in owner, three branches and
  * rows. Their answers are in admin-answers.ts, so both are scanned loaded every
  * time, the report once by model and once by unit, and again with a refusal of
- * its period under the field.
+ * its period under the field. The audit trail and the notification log are
+ * scanned loaded the same way, from audit-answers.ts, and the log again with
+ * the question before a failed email is sent again.
+ *
+ * The owner's corrections only show for an administrator, so the return
+ * screen is scanned again as the owner with a reversal asked, and the checkout
+ * as the owner on a booking short of a unit with a release asked. Those
+ * answers are in owner-answers.ts.
  */
 
 import { expect, test } from '@playwright/test'
-import { ADMIN_SCREENS, openAdminScreen } from './admin-answers.ts'
+import { ADMIN_SCREENS, AUDIT_LOG_HEADING, openAdminScreen } from './admin-answers.ts'
 import { blockingViolations } from './axe.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
+import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
 import { CATALOGUE_HOME, PRIVACY, REGISTER, SEARCH, SIGN_IN } from './routes.ts'
 
 /** A region that is still waiting on the API. */
@@ -95,6 +103,30 @@ test('the report with a refusal under its period has no serious or critical acce
 
   expect(await blockingViolations(page)).toEqual([])
 })
+
+test('the notification log with the question before sending again has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  const log = ADMIN_SCREENS.find((screen) => screen.heading === AUDIT_LOG_HEADING && screen.path.includes('notifications'))
+  if (log === undefined) throw new Error('ADMIN_SCREENS has no notification log to open.')
+  await openAdminScreen(page, log)
+
+  await page.getByRole('button', { name: /^Send again / }).click()
+  await expect(page.getByRole('heading', { level: 4, name: /^Send the booking confirmation for .+ again\?$/ })).toBeFocused()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+for (const owner of OWNER_COUNTER_SCREENS) {
+  test(`${owner.name} has no serious or critical accessibility violations`, async ({ page }) => {
+    await openCounterScreen(page, owner.screen, owner.instead)
+    await expect(page.locator(BUSY_REGION)).toHaveCount(0)
+    expect(await blockingViolations(page)).toEqual([])
+
+    await owner.ask(page)
+    expect(await blockingViolations(page)).toEqual([])
+  })
+}
 
 test('a new booking with a tool on it has no serious or critical accessibility violations', async ({ page }) => {
   const [, booking] = COUNTER_SCREENS

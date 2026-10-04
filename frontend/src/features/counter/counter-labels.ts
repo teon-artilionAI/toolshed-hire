@@ -20,6 +20,7 @@ import type {
   IdDocumentType,
   RentalStatus,
 } from '../../shared/api/contract'
+import { isNegativeMoney, money, unsignedMoney } from '../../shared/format'
 
 export const ACCOUNT_STANDING_LABEL: Record<AccountStatus, string> = {
   ACTIVE: 'Good standing',
@@ -87,6 +88,18 @@ export const CHARGE_TYPE_LABEL: Record<ChargeType, string> = {
   ADJUSTMENT: 'Adjustment',
 }
 
+/** A charge named in the middle of a sentence, for example "Waive the late fee". */
+export const CHARGE_NOUN: Record<ChargeType, string> = {
+  HIRE: 'hire charge',
+  DEPOSIT_HOLD: 'deposit hold',
+  DEPOSIT_RELEASE: 'deposit release',
+  DEPOSIT_FORFEIT: 'forfeit of the deposit',
+  LATE_FEE: 'late fee',
+  DAMAGE_RECOVERY: 'recovery charge',
+  CLEANING: 'cleaning charge',
+  ADJUSTMENT: 'adjustment',
+}
+
 /** Where a charge stands. Only the owner waives one. */
 export const CHARGE_STATUS_LABEL: Record<ChargeStatus, string> = {
   PENDING: 'Not settled yet',
@@ -127,6 +140,15 @@ export const DAMAGE_STATUS_PILL: Record<DamageStatus, string> = {
   UNDER_REPAIR: 'UNDER_REPAIR',
   RESOLVED: 'RESOLVED',
   WRITTEN_OFF: 'RETIRED',
+}
+
+/**
+ * An amount of a charge in words that say which way it runs. Money going back
+ * to the customer, such as a deposit released or a reversal, is written as
+ * that and never with a bare minus sign.
+ */
+export function amountWords(amount: string): string {
+  return isNegativeMoney(amount) ? `${unsignedMoney(amount)} back to the customer` : money(amount)
 }
 
 /** A count with its noun, for example "1 unit" or "3 units". */

@@ -117,3 +117,15 @@ export function rememberCustomer(client: QueryClient, customer: CustomerSummary)
 export function forgetReservationsAfterCheckout(client: QueryClient): void {
   void client.invalidateQueries({ queryKey: [RESERVATIONS_KEY] })
 }
+
+/**
+ * Mark what a change to the units of a booking touches as out of date, after a
+ * unit is released or a replacement is found. The checkout of the booking and
+ * its detail read differently, a unit moved on or off the shelf for the
+ * locator, and the counter's day counts the booking another way.
+ */
+export function forgetAfterAllocationChange(client: QueryClient): void {
+  void client.invalidateQueries({ queryKey: [RESERVATIONS_KEY] })
+  void client.invalidateQueries({ queryKey: [ASSETS_KEY] })
+  forgetCounterDay(client)
+}

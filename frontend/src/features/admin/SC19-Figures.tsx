@@ -18,7 +18,7 @@ import { StatTile } from '../../shared/ui'
 import {
   ASSET_REGISTER_PATH,
   CUSTOMER_HOLDS_PATH,
-  NOTIFICATION_LOG_PATH,
+  FAILED_NOTIFICATIONS_HREF,
   reportHref,
 } from './admin-links'
 import { DEFAULT_GROUPING } from './report-address'
@@ -150,7 +150,7 @@ export function NeedsAttention({ dashboard }: { dashboard: AdminDashboard }) {
           action="Open the customer holds"
         />
         <FigureLink
-          to={NOTIFICATION_LOG_PATH}
+          to={FAILED_NOTIFICATIONS_HREF}
           label="Failed notifications"
           value={failedNotifications}
           hint={failedNotifications > 0 ? 'Emails that did not reach the customer' : 'Every email went out'}

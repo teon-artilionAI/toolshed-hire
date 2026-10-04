@@ -1,191 +1,188 @@
 /**
- * The audit trail table on SC-24, with its filters.
+ * The audit trail on SC-24, with its filters.
  *
- * An audit log that cannot be narrowed down is a wall of text nobody reads.
- * The filters here are the four questions actually asked after something
- * goes wrong: who did it, what kind of thing was it, when, and does this
- * word appear anywhere in it.
+ * One page of events at a time from `GET /api/admin/audit-events`, newest
+ * first, narrowed by the kind of record, the record, the action, the person
+ * who acted and a range of days. Every filter and the page live in the
+ * address under the names the API takes, so a reload or a shared link shows
+ * the same events. The server does the filtering and the paging.
+ *
+ * Nobody can change the trail, the owner included. There is no route that
+ * edits or removes an event and the database role the API runs as cannot do
+ * it either, so the screen offers nothing of the kind and says so.
+ *
+ * It has the shared loading, failed and empty states. A refusal puts each of
+ * the server's messages under the filter it names, and lists any other.
+ * Moving to another page moves focus to the top of the events.
  */
 
-import { useMemo, useState } from 'react'
-import { RotateCcw } from 'lucide-react'
-import { formatDateTime, humanise } from '../../shared/format'
-import type { AuditEvent } from '../../shared/types'
-import { DataTable, EmptyState, Field } from '../../shared/ui'
+import { useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { adminQueries } from '../../shared/api/admin-queries'
+import type { AuditEvent, AuditEventPage } from '../../shared/api/contract'
+import { fieldErrorsFromProblem, isRefusal, otherFieldMessages } from '../../shared/api/problem-fields'
+import { queryPhase } from '../../shared/api/query-phase'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import Pagination from '../../shared/pagination'
+import { EmptyState, Notice } from '../../shared/ui'
+import { countOf } from '../counter/counter-labels'
+import {
+  NO_TRAIL_FILTERS,
+  TRAIL_FIELDS,
+  readTrailFilters,
+  trailIsFiltered,
+  trailQueryFor,
+  writeTrailFilters,
+} from './audit-address'
+import type { TrailFilters } from './audit-address'
+import { AuditEventEntry } from './AuditEventEntry'
+import AuditFilters from './AuditFilters'
+import { FIRST_PAGE } from './report-address'
 
-const SELECT_CLASS = 'field-input cursor-pointer transition-colors duration-200'
-const ANY = 'ANY'
+const SKELETON_ROWS = 3
 
-interface Filters {
-  text: string
-  actor: string
-  action: string
-  from: string
-  to: string
+/** The name of the person the trail is narrowed to, from an event of theirs. */
+function actorNameOn(page: AuditEventPage | undefined, actorUserId: string | null): string | null {
+  if (actorUserId === null || page === undefined) return null
+  return page.items.find((event) => event.actorUserId === actorUserId)?.actorName ?? null
 }
 
-const NO_FILTERS: Filters = { text: '', actor: ANY, action: ANY, from: '', to: '' }
-
-export default function AuditTrail({ events }: { events: AuditEvent[] }) {
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
-
-  const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
-    setFilters((current) => ({ ...current, [key]: value }))
-
-  const actors = useMemo(
-    () => [...new Set(events.map((e) => e.actor))].sort((a, b) => a.localeCompare(b)),
-    [events],
+function Events({
+  page,
+  filtered,
+  onPage,
+  onClear,
+  onOnlyRecord,
+  onOnlyActor,
+}: {
+  page: AuditEventPage
+  filtered: boolean
+  onPage: (page: number) => void
+  onClear: () => void
+  onOnlyRecord: (event: AuditEvent) => void
+  onOnlyActor: (event: AuditEvent) => void
+}) {
+  if (page.items.length === 0) {
+    const pastTheEnd = page.total > 0
+    return (
+      <div className="card">
+        <EmptyState
+          title={pastTheEnd ? 'That page is past the end of the trail' : 'Nothing was recorded that matches'}
+          body={
+            pastTheEnd
+              ? 'Go back to the first page of the trail.'
+              : filtered
+                ? 'The trail only holds what happened, so an empty answer usually means the filters are too narrow. Widen the days or clear the filters.'
+                : 'Nothing has been recorded yet.'
+          }
+          action={
+            pastTheEnd ? (
+              <button type="button" className="btn-secondary px-md" onClick={() => onPage(FIRST_PAGE)}>
+                Go to the first page
+              </button>
+            ) : filtered ? (
+              <button type="button" className="btn-secondary px-md" onClick={onClear}>
+                Clear the filters
+              </button>
+            ) : undefined
+          }
+        />
+      </div>
+    )
+  }
+  return (
+    <>
+      <ol className="flex flex-col gap-md" aria-label="Events, newest first">
+        {page.items.map((event) => (
+          <li key={event.id}>
+            <AuditEventEntry event={event} onOnlyRecord={onOnlyRecord} onOnlyActor={onOnlyActor} />
+          </li>
+        ))}
+      </ol>
+      <Pagination label="Audit trail pages" page={page.page} pageSize={page.pageSize} total={page.total} onPageChange={onPage} />
+    </>
   )
-  const actions = useMemo(
-    () => [...new Set(events.map((e) => e.action))].sort((a, b) => a.localeCompare(b)),
-    [events],
-  )
+}
 
-  const shown = useMemo(() => {
-    const needle = filters.text.trim().toLowerCase()
-    return events
-      .filter((e) => {
-        const day = e.at.slice(0, 10)
-        return (
-          (needle === '' ||
-            `${e.entity} ${e.detail} ${e.action} ${e.actor}`
-              .toLowerCase()
-              .includes(needle)) &&
-          (filters.actor === ANY || e.actor === filters.actor) &&
-          (filters.action === ANY || e.action === filters.action) &&
-          (filters.from === '' || day >= filters.from) &&
-          (filters.to === '' || day <= filters.to)
-        )
-      })
-      .sort((a, b) => b.at.localeCompare(a.at))
-  }, [events, filters])
+export default function AuditTrail() {
+  const [params, setParams] = useSearchParams()
+  const filters = readTrailFilters(params)
+  const trail = useQuery(adminQueries.auditEvents(trailQueryFor(filters)))
+  const phase = queryPhase(trail)
+  const refused = phase === 'failed' && isRefusal(trail.error)
+  const fieldErrors = fieldErrorsFromProblem(trail.error)
+  const otherMessages = otherFieldMessages(fieldErrors, TRAIL_FIELDS)
+  const regionRef = useRef<HTMLElement>(null)
 
-  const filtered = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS)
+  function show(next: TrailFilters) {
+    setParams(writeTrailFilters(next), { replace: true })
+  }
+
+  function goToPage(page: number) {
+    show({ ...filters, page })
+    regionRef.current?.focus()
+  }
+
+  const onOnlyRecord = (event: AuditEvent) =>
+    show({ ...filters, entityType: event.entityType, entityId: event.entityId, page: FIRST_PAGE })
+  const onOnlyActor = (event: AuditEvent) => show({ ...filters, actorUserId: event.actorUserId, page: FIRST_PAGE })
 
   return (
     <>
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Find words in an entry" htmlFor="audit-text">
-          <input
-            id="audit-text"
-            type="search"
-            className="field-input"
-            placeholder="TSH-DR-0042, or deposit"
-            value={filters.text}
-            onChange={(e) => set('text', e.target.value)}
-          />
-        </Field>
-        <Field label="Who did it" htmlFor="audit-actor">
-          <select
-            id="audit-actor"
-            className={SELECT_CLASS}
-            value={filters.actor}
-            onChange={(e) => set('actor', e.target.value)}
-          >
-            <option value={ANY}>Anybody</option>
-            {actors.map((actor) => (
-              <option key={actor} value={actor}>
-                {actor === 'system' ? 'The system itself' : actor}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="What happened" htmlFor="audit-action">
-          <select
-            id="audit-action"
-            className={SELECT_CLASS}
-            value={filters.action}
-            onChange={(e) => set('action', e.target.value)}
-          >
-            <option value={ANY}>Anything</option>
-            {actions.map((action) => (
-              <option key={action} value={action}>
-                {humanise(action)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="From" htmlFor="audit-from">
-          <input
-            id="audit-from"
-            type="date"
-            className="field-input cursor-pointer"
-            value={filters.from}
-            onChange={(e) => set('from', e.target.value)}
-          />
-        </Field>
-        <Field label="Up to and including" htmlFor="audit-to">
-          <input
-            id="audit-to"
-            type="date"
-            className="field-input cursor-pointer"
-            value={filters.to}
-            onChange={(e) => set('to', e.target.value)}
-          />
-        </Field>
+      <div className="mb-lg">
+        <Notice tone="info" title="Nobody can change this record">
+          <p>
+            Every event is written in the same step as the change it describes. No one, the owner included, can
+            edit or remove an event, and the database refuses it too. A correction is a new event of its own.
+          </p>
+        </Notice>
       </div>
-
-      <p className="mb-md flex flex-wrap items-center gap-md text-sm text-slate-soft">
-        <span role="status">
-          Showing {shown.length} of {events.length} entries
-        </span>
-        {filtered && (
-          <button
-            type="button"
-            className="btn-ghost px-sm"
-            onClick={() => setFilters(NO_FILTERS)}
-          >
-            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Clear the filters
-          </button>
+      <AuditFilters
+        filters={filters}
+        fieldErrors={fieldErrors}
+        actorName={actorNameOn(trail.data, filters.actorUserId)}
+        onApply={show}
+        onClear={() => show(NO_TRAIL_FILTERS)}
+      />
+      <section ref={regionRef} tabIndex={-1} aria-label="The events">
+        <p role="status" className="mb-md text-sm text-slate-soft">
+          {phase === 'ready' && trail.data !== undefined
+            ? `${countOf(trail.data.total, 'event matches', 'events match')}, newest first.`
+            : phase === 'loading'
+              ? 'Loading the events.'
+              : refused
+                ? 'The trail was not read for those filters.'
+                : ''}
+        </p>
+        {refused ? (
+          <Notice tone="error" title="The trail cannot be read with those filters">
+            <p>Check the messages under the filters above and change what they point to.</p>
+            {otherMessages.length > 0 && (
+              <ul className="mt-xs list-disc pl-lg">
+                {otherMessages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            )}
+          </Notice>
+        ) : phase === 'failed' ? (
+          <ErrorState what="the audit trail" error={trail.error} onRetry={() => void trail.refetch()} />
+        ) : trail.data === undefined ? (
+          <LoadingState shape="rows" count={SKELETON_ROWS} />
+        ) : (
+          <div aria-busy={trail.isFetching}>
+            <Events
+              page={trail.data}
+              filtered={trailIsFiltered(filters)}
+              onPage={goToPage}
+              onClear={() => show(NO_TRAIL_FILTERS)}
+              onOnlyRecord={onOnlyRecord}
+              onOnlyActor={onOnlyActor}
+            />
+          </div>
         )}
-      </p>
-
-      {shown.length === 0 ? (
-        <EmptyState
-          title="Nothing was recorded that matches"
-          body="Widen the dates or clear the search. The trail only holds what actually happened, so an empty result usually means the filters are too narrow."
-          action={
-            <button
-              type="button"
-              className="btn-secondary px-md"
-              onClick={() => setFilters(NO_FILTERS)}
-            >
-              Clear the filters
-            </button>
-          }
-        />
-      ) : (
-        <DataTable
-          columns={['When', 'Who', 'What happened', 'What it touched', 'Detail']}
-          caption="Audit trail of everything the system and the staff have done"
-        >
-          {shown.map((event) => (
-            <tr
-              key={event.id}
-              className="transition-colors duration-200 hover:bg-muted"
-            >
-              <th scope="row" className="td whitespace-nowrap text-left font-normal">
-                <span className="tabular font-mono text-xs text-ink">
-                  {formatDateTime(event.at)}
-                </span>
-              </th>
-              <td className="td">
-                {event.actor === 'system' ? (
-                  <span className="text-slate-soft">The system itself</span>
-                ) : (
-                  event.actor
-                )}
-              </td>
-              <td className="td font-medium text-ink">{humanise(event.action)}</td>
-              <td className="td">
-                <span className="font-mono text-xs">{event.entity}</span>
-              </td>
-              <td className="td min-w-[16rem] text-slate-soft">{event.detail}</td>
-            </tr>
-          ))}
-        </DataTable>
-      )}
+      </section>
     </>
   )
 }

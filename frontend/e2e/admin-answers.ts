@@ -1,8 +1,9 @@
 /**
  * The API answered by the spec itself, for the owner's dashboard and report.
  *
- * The accessibility scan and the narrow screen check of SC-19 and SC-22 need a
- * signed in owner, a day across three branches and a report with rows. A scan
+ * The accessibility scan and the narrow screen check of SC-19, SC-22 and SC-24
+ * need a signed in owner, a day across three branches, a report with rows, and
+ * the trail and the log, whose answers are in audit-answers.ts. A scan
  * should not depend on what a database happens to hold, and it should run with
  * or without a backend, so these answers stand in for the API. They are
  * shaped the way the API sends them, with long names and large figures, which
@@ -13,7 +14,11 @@
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { AUDIT_ANSWERS } from './audit-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
+
+/** The heading of SC-24, on both of its views. */
+export const AUDIT_LOG_HEADING = 'Audit and notification log'
 
 /** What the session leaves in web storage once somebody has signed in. Without
  *  it the application does not ask whether there is a session. */
@@ -118,6 +123,7 @@ async function answerTheApi(route: Route): Promise<void> {
     'GET /api/catalogue/categories': CATEGORIES,
     'GET /api/admin/dashboard': DASHBOARD,
     'GET /api/admin/reports/utilisation': report(address.searchParams.get('groupBy') ?? 'model'),
+    ...AUDIT_ANSWERS,
   }
   const body = answers[key]
   if (body === undefined) {
@@ -159,6 +165,8 @@ export const ADMIN_SCREENS: readonly AdminScreen[] = [
   { path: '/admin', heading: 'Business overview', loaded: 'Branch by branch' },
   { path: '/admin/reports', heading: 'Utilisation and gross contribution', loaded: 'What these figures mean' },
   { path: '/admin/reports?groupBy=asset', heading: 'Utilisation and gross contribution', loaded: 'In the workshop' },
+  { path: '/admin/audit', heading: AUDIT_LOG_HEADING, loaded: 'Reservation confirmed' },
+  { path: '/admin/audit?view=notifications', heading: AUDIT_LOG_HEADING, loaded: 'What went wrong' },
 ]
 
 /** Open an owner's screen as the signed in owner, with the API answered here. */

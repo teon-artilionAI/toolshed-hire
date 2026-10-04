@@ -16,6 +16,11 @@
  * last unit is back it shows the settlement from the server's figures, and
  * whatever the deposit is still waiting on.
  *
+ * Under everything is every charge on the hire. A signed in administrator can
+ * waive, reverse or adjust there, through SC15-Charges.tsx, and the screen
+ * then shows the hire the server answers with. Counter staff read the charges
+ * and the sentence that only the owner can waive one.
+ *
  * What a write did is said at the top in a notice that takes focus, so a
  * keyboard or screen reader user hears it without looking for it.
  */
@@ -27,11 +32,14 @@ import type { Rental } from '../../shared/api/contract'
 import { queryPhase } from '../../shared/api/query-phase'
 import { rentalQueries } from '../../shared/api/rental-queries'
 import { ErrorState, LoadingState } from '../../shared/async-states'
-import { formatDate, money } from '../../shared/format'
+import { formatDate, isNoMoney, money } from '../../shared/format'
 import { Card, Notice, PageHeader, StatTile, StatusPill } from '../../shared/ui'
-import { RENTAL_STATUS_LABEL, countOf } from './counter-labels'
+import { useSession } from '../../shared/use-session'
+import { CHARGE_NOUN, RENTAL_STATUS_LABEL, countOf } from './counter-labels'
 import { OVERDUE_PATH } from './counter-links'
 import { isNotFound } from './counter-refusal'
+import { RentalCharges } from './SC15-Charges'
+import type { Corrected } from './SC15-Charges'
 import { ReturnedItem } from './SC15-ItemInspection'
 import { ReturnForm } from './SC15-Return-Form'
 import { isLost, itemsOut } from './SC15-return-model'
@@ -40,13 +48,22 @@ import { SettlementSummary } from './SC15-SettlementSummary'
 const TITLE = 'Return and condition inspection'
 
 /** What the last write did, with the hire it answered with. */
-interface Outcome {
-  kind: 'returned' | 'paid'
-  rental: Rental
+type Outcome = { kind: 'returned' | 'paid'; rental: Rental } | { kind: 'corrected'; corrected: Corrected; rental: Rental }
+
+/** What an owner's correction did, in words, from the hire the server answered with. */
+function correctionWords({ kind, charge, rental }: Corrected): { title: string; body: string } {
+  const title =
+    charge === null
+      ? `${rental.reference} is adjusted`
+      : `The ${CHARGE_NOUN[charge.type]} is ${kind === 'waiver' ? 'waived' : 'reversed'}`
+  const balance = isNoMoney(rental.balanceDue) ? 'Nothing is due.' : `The balance due is ${money(rental.balanceDue)}.`
+  return { title, body: `The charges below are as the server now has them, with your reason. ${balance}` }
 }
 
 /** What a write did, in words, from the hire the server answered with. */
-function outcomeWords({ kind, rental }: Outcome): { title: string; body: string } {
+function outcomeWords(outcome: Outcome): { title: string; body: string } {
+  if (outcome.kind === 'corrected') return correctionWords(outcome.corrected)
+  const { kind, rental } = outcome
   const out = itemsOut(rental).length
   if (kind === 'paid') {
     return { title: `${rental.reference} is settled`, body: 'The payment of the balance is recorded.' }
@@ -102,10 +119,13 @@ function StillOut({ rental }: { rental: Rental }) {
 
 function ReturnView({
   rental,
+  ownerSignedIn,
   onWritten,
   onReload,
 }: {
   rental: Rental
+  /** True only for a signed in administrator, who may correct a charge. */
+  ownerSignedIn: boolean
   onWritten: (outcome: Outcome) => void
   onReload: () => void
 }) {
@@ -172,12 +192,19 @@ function ReturnView({
       {out.length === 0 && (
         <SettlementSummary rental={rental} onPaid={(answered) => onWritten({ kind: 'paid', rental: answered })} />
       )}
+
+      <RentalCharges
+        rental={rental}
+        ownerSignedIn={ownerSignedIn}
+        onCorrected={(corrected) => onWritten({ kind: 'corrected', corrected, rental: corrected.rental })}
+      />
     </div>
   )
 }
 
 export default function ReturnAndConditionInspection() {
   const { rentalId = '' } = useParams()
+  const { role } = useSession()
   const hire = useQuery({ ...rentalQueries.detail(rentalId), enabled: rentalId !== '' })
   const phase = queryPhase(hire)
   const data = hire.data
@@ -219,7 +246,12 @@ export default function ReturnAndConditionInspection() {
         <LoadingState label="Loading the hire" shape="detail" count={2} />
       ) : (
         <div aria-busy={hire.isFetching}>
-          <ReturnView rental={data} onWritten={setOutcome} onReload={() => void hire.refetch()} />
+          <ReturnView
+            rental={data}
+            ownerSignedIn={role === 'admin'}
+            onWritten={setOutcome}
+            onReload={() => void hire.refetch()}
+          />
         </div>
       )}
     </>

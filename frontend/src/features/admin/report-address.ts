@@ -65,8 +65,9 @@ export interface ReportFilters {
   page: number
 }
 
-/** Whether a value is a day on the calendar written `YYYY-MM-DD`. */
-function isCalendarDate(value: string | null): value is IsoDate {
+/** Whether a value is a day on the calendar written `YYYY-MM-DD`. The audit
+ *  trail reads the days in its address with this too. */
+export function isCalendarDate(value: string | null): value is IsoDate {
   if (value === null || !DATE_SHAPE.test(value)) return false
   const parsed = new Date(`${value}T00:00:00Z`)
   // A day such as 31 September parses as 1 October, so it is read back and
