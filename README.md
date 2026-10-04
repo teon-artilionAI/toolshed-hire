@@ -27,7 +27,7 @@ alone.
 |---|---|
 | Live system | <https://toolshed-hire.vercel.app> |
 | Staging | <https://toolshed-hire-staging.vercel.app> |
-| Recorded presentation | <!-- final: video link --> |
+| Recorded presentation | The link is added here once the recording is done on 4 October 2026. <!-- final: video link --> |
 | Slides | [toolshed-hire-task-2.pdf](docs/task2/slides/toolshed-hire-task-2.pdf). The outline and the demonstration script are in [presentation.md](docs/task2/presentation.md). |
 | Task 1 design document | [INSY7315_Task1_ToolshedHire.pdf](docs/task1/INSY7315_Task1_ToolshedHire.pdf) |
 | Task 2 evidence | [docs/task2](docs/task2/README.md) |
