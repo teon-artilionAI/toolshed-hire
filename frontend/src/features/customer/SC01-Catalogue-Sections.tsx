@@ -23,8 +23,9 @@ const CATEGORY_SKELETON_COUNT = 8
 
 const STAT_TILE_COUNT = 3
 
-/** Writes "Woodstock, Stikland and Firgrove" from a list of suburbs. */
-const SUBURB_LIST = new Intl.ListFormat('en-ZA', { style: 'long', type: 'conjunction' })
+/** Writes "Cape Town CBD, Bellville and Somerset West" from the branch names.
+ *  A customer knows a branch by its name, not by the suburb it stands in. */
+const BRANCH_LIST = new Intl.ListFormat('en-ZA', { style: 'long', type: 'conjunction' })
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`
@@ -80,7 +81,7 @@ export function CatalogueStats({
       <StatTile
         label="Branches"
         value={branches.data.items.length}
-        hint={SUBURB_LIST.format(branches.data.items.map((branch) => branch.suburb))}
+        hint={BRANCH_LIST.format(branches.data.items.map((branch) => branch.name))}
       />
       <StatTile
         label="Days in this hire"
