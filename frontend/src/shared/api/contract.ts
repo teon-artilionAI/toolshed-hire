@@ -166,6 +166,7 @@ export type {
 export type {
   AdminCategory,
   AdminCategoryList,
+  AdminCategoryQuery,
   AdminModel,
   AdminModelPage,
   AdminModelQuery,

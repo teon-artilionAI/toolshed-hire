@@ -164,10 +164,30 @@ describe('changing a model', () => {
     expect(network.requestsTo(CHANGE_ROUTE)).toHaveLength(1)
   })
 
-  it('says so plainly for a model the server does not know', async () => {
-    await openCatalogue({ [modelRoute(HAMMER.id)]: () => problemResponse(404) }, EDITING)
+  it.each([
+    ['a key it does not know', () => problemResponse(404)],
+    ['something that is not a key', () => problemResponse(422, { errors: { fields: { 'path.id': 'Input should be a valid UUID' } } })],
+  ])('says so plainly for %s', async (_what, answer) => {
+    await openCatalogue({ [modelRoute(HAMMER.id)]: answer }, EDITING)
 
     expect(await screen.findByRole('heading', { level: 2, name: 'That model is not in the catalogue' }, SCREEN_WAIT)).toBeVisible()
+  })
+
+  it('puts a figure the server could not read as an amount in plain words, linked to its box', async () => {
+    const pattern = "String should match pattern '^-?\\d{1,10}(\\.\\d{1,2})?$'"
+    const refusal = () => problemResponse(422, { errors: { fields: { 'body.dailyRate': pattern } } })
+    const { user, network } = await openCatalogue({ [CHANGE_ROUTE]: refusal }, EDITING)
+    const form = await findForm(`The details of ${HAMMER.name}`)
+    await retype(user, within(form).getByLabelText('Daily rate, in rand'), 'about 300')
+    await user.click(within(form).getByRole('button', { name: 'Save the changes' }))
+    await user.click(screen.getByRole('button', { name: 'Yes, save the changes' }))
+
+    const problems = await screen.findByRole('alert', {}, SCREEN_WAIT)
+    const plain = 'Enter an amount in rand, for example 280.00.'
+    expect(within(problems).getByRole('link', { name: plain })).toHaveAttribute('href', '#model-dailyRate')
+    expect(within(form).getByLabelText('Daily rate, in rand')).toHaveAccessibleDescription(expect.stringContaining(plain))
+    expect(screen.queryByText(/should match pattern/)).not.toBeInTheDocument()
+    expect(lastBody(network, CHANGE_ROUTE)).toEqual({ dailyRate: 'about 300' })
   })
 
   it('closes unsaved and gives focus back to the button that opened it', async () => {

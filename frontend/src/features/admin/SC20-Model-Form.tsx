@@ -11,7 +11,9 @@
  * server comes back as a 422, and the form goes back to the fields with each
  * message under the field it names, listed above the form as well with a link
  * to each, and any message about a field the form has no box for listed with
- * them. A 409 or a 403 shows the server's sentence in the question. One press
+ * them. A figure the server could not read as an amount gets a plain sentence
+ * in place of the server's, which quotes a pattern. A 409 or a 403 shows the
+ * server's sentence in the question. One press
  * of the answer sends one request, and it is disabled while it is in flight.
  * The rules and the bodies are in model-form.ts.
  */
@@ -36,6 +38,7 @@ import {
   modelFieldId,
   movesAFigure,
   newModelRequestFrom,
+  plainMoneyMessages,
 } from './model-form'
 import type { ModelDraft, ModelDraftErrors, ModelField } from './model-form'
 import { ModelFields } from './SC20-Model-Fields'
@@ -126,9 +129,10 @@ export function ModelForm({
 
   function answer() {
     if (asking === null) return
+    const sent = asking.body
     const outcome = {
       onRefused: (fields: FieldErrors) => {
-        setServerErrors(fields)
+        setServerErrors(plainMoneyMessages(fields, sent))
         setAsking(null)
         setFocusTarget({ to: 'problems' })
       },

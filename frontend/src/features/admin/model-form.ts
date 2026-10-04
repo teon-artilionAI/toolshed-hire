@@ -13,10 +13,13 @@
  *
  * An amount is sent the way the API takes money, with two decimals, written
  * out by its digits and never through a float. One that is not an amount at
- * all is sent as it was typed, so the server says what is wrong with it.
+ * all is sent as it was typed, so the server says what is wrong with it. The
+ * server says that in its framework's words, which quote a pattern, so the
+ * form puts it in plain words under the same field.
  */
 
 import type { AdminModel, Money, ModelChangesRequest, NewModelRequest } from '../../shared/api/contract'
+import type { FieldErrors } from '../../shared/api/problem-fields'
 import { amountForTheWire } from '../counter/correction-model'
 
 /** What the owner is typing, one string for each field. */
@@ -81,8 +84,14 @@ const TEXT_FIELDS = ['name', 'slug', 'manufacturer', 'modelNumber', 'shortDescri
 
 const WHOLE_NUMBER = /^\d+$/
 
+/** Money in the form the API reads it in a request, up to ten digits of rand
+ *  and two of cents. It refuses any other form before a rule of its own runs. */
+const MONEY_THE_API_READS = /^-?\d{1,10}(\.\d{1,2})?$/
+
 const CHOOSE_A_CATEGORY = 'Choose the category the model sits in.'
 const WHOLE_DAYS = 'Enter a whole number of days, for example 1.'
+const NOT_AN_AMOUNT = 'Enter an amount in rand, for example 280.00.'
+const TOO_LARGE_AN_AMOUNT = 'Enter an amount of at most R9,999,999,999.99.'
 
 /** A new model, with nothing filled in. */
 export const EMPTY_MODEL_DRAFT: ModelDraft = {
@@ -213,6 +222,28 @@ export interface MoneyChange {
   field: MoneyField
   before: Money
   after: string
+}
+
+/**
+ * The server's messages for a refused body, with each one about a figure it
+ * could not read as an amount put in plain words.
+ *
+ * Whether the server could read a figure is told from what was sent, never
+ * from the words of its message. A figure the browser could not read either is
+ * not an amount at all, and one it could is too large. Each message stays
+ * under its own field, so the list above the form still links to the box.
+ *
+ * @param fields The messages the server sent, by field.
+ * @param sent The body that was refused.
+ */
+export function plainMoneyMessages(fields: FieldErrors, sent: NewModelRequest | ModelChangesRequest): FieldErrors {
+  const plain: Record<string, string> = { ...fields }
+  for (const field of MONEY_FIELDS) {
+    const value = sent[field]
+    if (plain[field] === undefined || value === undefined || MONEY_THE_API_READS.test(value)) continue
+    plain[field] = amountForTheWire(value) === null ? NOT_AN_AMOUNT : TOO_LARGE_AN_AMOUNT
+  }
+  return plain
 }
 
 /** Whether a change moves any figure. */

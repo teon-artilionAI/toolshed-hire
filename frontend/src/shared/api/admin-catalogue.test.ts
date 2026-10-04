@@ -3,12 +3,12 @@
  *
  * The readers check every member of a category and a model, so a body that
  * breaks the contract fails with the name of the field. A key is always
- * encoded into the path, and the publication route is not read, whatever it
- * answers with.
+ * encoded into the path, and the publication route is read like every other,
+ * because it answers with the model.
  */
 
 import { describe, expect, it } from 'vitest'
-import { jsonResponse, mockApi, noContentResponse } from '../../test/api-mock'
+import { jsonResponse, mockApi } from '../../test/api-mock'
 import {
   CATEGORIES_ROUTE,
   HAMMER,
@@ -26,6 +26,14 @@ describe('the categories', () => {
     mockApi({ [CATEGORIES_ROUTE]: () => jsonResponse(categoryList()) })
 
     await expect(listAdminCategories()).resolves.toEqual(categoryList())
+  })
+
+  it('asks for the first page at the largest size the API serves, so every category is on it', async () => {
+    const network = mockApi({ [CATEGORIES_ROUTE]: () => jsonResponse(categoryList()) })
+
+    await listAdminCategories()
+
+    expect(Object.fromEntries(network.requests[0].query)).toEqual({ page: '1', pageSize: '100' })
   })
 
   it('refuses a category that leaves out whether it is switched on, naming the field', async () => {
@@ -68,13 +76,22 @@ describe('the models', () => {
     expect(network.requests[0].path).toBe('/api/admin/models/a%2Fb%3Fc')
   })
 
-  it('sends the publication and does not read its answer', async () => {
-    const network = mockApi({ [publicationRoute(HAMMER.id)]: () => noContentResponse() })
+  it('sends the publication and reads the model it answers with', async () => {
+    const hidden = { ...HAMMER, isPublished: false }
+    const network = mockApi({ [publicationRoute(HAMMER.id)]: () => jsonResponse(hidden) })
 
-    await expect(setModelPublication(HAMMER.id, false)).resolves.toBeUndefined()
+    await expect(setModelPublication(HAMMER.id, false)).resolves.toEqual(hidden)
 
     expect(network.requests[0].body).toEqual({ published: false })
-    network.setRoute(publicationRoute(HAMMER.id), () => jsonResponse({ ...HAMMER, isPublished: true }))
-    await expect(setModelPublication(HAMMER.id, true)).resolves.toBeUndefined()
+  })
+
+  it('refuses a publication answer that leaves out whether the model is published, naming the field', async () => {
+    const { isPublished: _isPublished, ...withoutState } = HAMMER
+    mockApi({ [publicationRoute(HAMMER.id)]: () => jsonResponse(withoutState) })
+
+    const failure = await failureOf(setModelPublication(HAMMER.id, true))
+
+    expect(failure.kind).toBe('malformed')
+    expect(failure.detail).toContain('isPublished')
   })
 })

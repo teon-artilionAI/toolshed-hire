@@ -16,7 +16,11 @@ import {
   moneyForTheWire,
   movesAFigure,
   newModelRequestFrom,
+  plainMoneyMessages,
 } from './model-form'
+
+/** What the API says about money it could not read, in its framework's words. */
+const PATTERN_MESSAGE = "String should match pattern '^-?\\d{1,10}(\\.\\d{1,2})?$'"
 
 describe('money for the wire', () => {
   it.each([
@@ -71,6 +75,29 @@ describe('the model form', () => {
 
     expect(checked.errors).toBeNull()
     expect(checked.body).toMatchObject({ sku: '', weeklyRate: '99999.00', depositAmount: '-1.00' })
+  })
+})
+
+describe("the server's messages about money", () => {
+  it('puts a figure that is not an amount at all in plain words, under the same field', () => {
+    const fields = { dailyRate: PATTERN_MESSAGE, slug: 'That name in the web address is already in use.' }
+
+    expect(plainMoneyMessages(fields, { dailyRate: 'fifty' })).toEqual({
+      dailyRate: 'Enter an amount in rand, for example 280.00.',
+      slug: 'That name in the web address is already in use.',
+    })
+  })
+
+  it('says an amount with more digits than the API reads is too large', () => {
+    expect(plainMoneyMessages({ replacementValue: PATTERN_MESSAGE }, { replacementValue: '12345678901.00' })).toEqual({
+      replacementValue: 'Enter an amount of at most R9,999,999,999.99.',
+    })
+  })
+
+  it("keeps the server's own sentence about an amount it could read", () => {
+    const fields = { depositAmount: 'Enter an amount of zero or more.' }
+
+    expect(plainMoneyMessages(fields, { depositAmount: '-1.00' })).toEqual(fields)
   })
 })
 

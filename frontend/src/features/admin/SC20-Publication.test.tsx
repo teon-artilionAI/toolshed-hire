@@ -2,15 +2,15 @@
  * Tests for showing a model to customers and hiding it on SC-20, with the
  * network replaced at `fetch`.
  *
- * Each asks first in words, posts once with the contract's body, says what it
- * did in a notice that takes focus, and reads the list again. A 409 or a 403
- * shows the server's sentence, and putting the question away gives focus back
- * to its button.
+ * Each asks first in words, posts once with the contract's body, says what the
+ * model it answered with now is in a notice that takes focus, and reads the
+ * list again. A 409 or a 403 shows the server's sentence, and putting the
+ * question away gives focus back to its button.
  */
 
 import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { neverAnswers, noContentResponse, problemResponse } from '../../test/api-mock'
+import { jsonResponse, neverAnswers, problemResponse } from '../../test/api-mock'
 import { BREAKER, HAMMER, MODELS_ROUTE, publicationRoute } from '../../test/admin-catalogue-samples'
 import { TEST_NOW } from '../../test/catalogue-samples'
 import { SCREEN_WAIT } from '../../test/render-app'
@@ -22,7 +22,9 @@ beforeEach(() => {
 
 describe('publishing and hiding a model', () => {
   it('asks first, then publishes with one request and reads the list again', async () => {
-    const { user, network } = await openCatalogue({ [publicationRoute(BREAKER.id)]: () => noContentResponse() })
+    const { user, network } = await openCatalogue({
+      [publicationRoute(BREAKER.id)]: () => jsonResponse({ ...BREAKER, isPublished: true }),
+    })
     await user.click(within(await rowOf(BREAKER.name)).getByRole('button', { name: `Publish ${BREAKER.name}` }))
 
     expect(screen.getByRole('heading', { level: 3, name: `Publish ${BREAKER.name}?` })).toHaveFocus()
@@ -40,7 +42,9 @@ describe('publishing and hiding a model', () => {
   })
 
   it('asks first, then hides with one request and says bookings already made still stand', async () => {
-    const { user, network } = await openCatalogue({ [publicationRoute(HAMMER.id)]: () => noContentResponse() })
+    const { user, network } = await openCatalogue({
+      [publicationRoute(HAMMER.id)]: () => jsonResponse({ ...HAMMER, isPublished: false }),
+    })
     await user.click(within(await rowOf(HAMMER.name)).getByRole('button', { name: `Hide ${HAMMER.name}` }))
 
     expect(screen.getByRole('heading', { level: 3, name: `Hide ${HAMMER.name} from customers?` })).toHaveFocus()

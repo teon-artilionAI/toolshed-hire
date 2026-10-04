@@ -6,8 +6,10 @@
  * before its form opens, so the form starts from the model as the server holds
  * it and not from a row of the list. A model a write answered with is already
  * in the cache under its key. That read has the shared loading and failed
- * states, and a model the server does not know says so plainly. The form needs the
- * categories for its menu, so it waits for them too.
+ * states, and a model the server does not know says so plainly. The key comes
+ * from the address, which anybody can write, so a key the server refuses as
+ * not a key at all says the same. The form needs the categories for its menu,
+ * so it waits for them too.
  *
  * The heading of the section takes focus when it opens, so a keyboard carries
  * on from the top of the form.
@@ -23,7 +25,7 @@ import { queryPhase } from '../../shared/api/query-phase'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { branchDateTime } from '../../shared/today'
 import { EmptyState } from '../../shared/ui'
-import { isNotFound } from '../counter/counter-refusal'
+import { isNotOnFile } from '../counter/counter-refusal'
 import { NEW_MODEL } from './catalogue-address'
 import { ModelForm } from './SC20-Model-Form'
 
@@ -101,7 +103,7 @@ function ExistingModel({ id, ...props }: EditorProps & { id: string }) {
       </Frame>
     )
   }
-  if (phase === 'failed' && isNotFound(read.error)) {
+  if (phase === 'failed' && isNotOnFile(read.error)) {
     return (
       <Frame title="That model is not in the catalogue">
         <EmptyState

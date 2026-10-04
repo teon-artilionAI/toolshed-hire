@@ -1116,6 +1116,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return every category, active or not, each parent followed by its children
+         * @description Return one page of every category, each parent followed by its children.
+         */
+        get: operations["read_categories_api_admin_categories_get"];
+        put?: never;
+        /**
+         * Create a category, active
+         * @description Create the category and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the parent is unknown or
+         *             not at the top, or the code or slug is taken. HTTP 422, naming
+         *             the field.
+         */
+        post: operations["post_category_api_admin_categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the fields of a category that are sent, or switch it off
+         * @description Change the fields that were sent and record what changed, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such category. HTTP 404.
+         *         ValidationFailure: As for a creation, and when the category has
+         *             children and is to be put under another. HTTP 422, naming the field.
+         */
+        patch: operations["patch_category_api_admin_categories__id__patch"];
+        trace?: never;
+    };
+    "/api/admin/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the product models, published or not, by name
+         * @description Return one page of the product models that match, by name.
+         */
+        get: operations["read_models_api_admin_models_get"];
+        put?: never;
+        /**
+         * Create a product model, unpublished
+         * @description Create the model and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the category is unknown
+         *             or switched off, or the SKU or slug is taken. HTTP 422, naming
+         *             the field.
+         */
+        post: operations["post_model_api_admin_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/models/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one product model, published or not
+         * @description Return the product model.
+         *
+         *     Raises:
+         *         NotFound: If there is no such model. HTTP 404.
+         */
+        get: operations["read_model_api_admin_models__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the fields of a product model that are sent, never its SKU
+         * @description Change the fields that were sent and record the figures before and after.
+         *
+         *     Raises:
+         *         NotFound: If there is no such model. HTTP 404.
+         *         ValidationFailure: As for a creation, and when the SKU is sent. HTTP
+         *             422, naming the field.
+         */
+        patch: operations["patch_model_api_admin_models__id__patch"];
+        trace?: never;
+    };
+    "/api/admin/models/{id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a product model, or take it out of the public catalogue
+         * @description Publish or hide the model and record it, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such model. HTTP 404.
+         */
+        post: operations["post_publication_api_admin_models__id__publication_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1300,6 +1438,49 @@ export interface components {
             reason: string;
         };
         /**
+         * AdminCategoryPageResponse
+         * @description Every category, active or not, each parent followed by its children.
+         */
+        AdminCategoryPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminCategoryResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminCategoryResponse
+         * @description One category as the administrator sees it. `modelCount` counts its own models.
+         */
+        AdminCategoryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Description */
+            description: string | null;
+            /** Parentcategoryid */
+            parentCategoryId: string | null;
+            /** Parentname */
+            parentName: string | null;
+            /** Sortorder */
+            sortOrder: number;
+            /** Isactive */
+            isActive: boolean;
+            /** Modelcount */
+            modelCount: number;
+        };
+        /**
          * AdminDashboardResponse
          * @description The business across every branch today.
          */
@@ -1319,6 +1500,74 @@ export interface components {
             customersOnHold: number;
             /** Failednotifications */
             failedNotifications: number;
+        };
+        /**
+         * AdminModelPageResponse
+         * @description One page of the product models, by name.
+         */
+        AdminModelPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminModelResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminModelResponse
+         * @description One product model as the administrator sees it, published or not.
+         *
+         *     `assetCount` is every unit of the fleet that realises it, whatever its status.
+         */
+        AdminModelResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sku */
+            sku: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Categoryid
+             * Format: uuid
+             */
+            categoryId: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Modelnumber */
+            modelNumber: string;
+            /** Shortdescription */
+            shortDescription: string;
+            /** Longdescription */
+            longDescription: string | null;
+            /** Dailyrate */
+            dailyRate: string;
+            /** Weeklyrate */
+            weeklyRate: string;
+            /** Depositamount */
+            depositAmount: string;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+            /** Replacementvalue */
+            replacementValue: string;
+            /** Minhiredays */
+            minHireDays: number;
+            /** Maxhiredays */
+            maxHireDays: number;
+            /** Ispublished */
+            isPublished: boolean;
+            /** Assetcount */
+            assetCount: number;
+            /** Updatedat */
+            updatedAt: string;
         };
         /**
          * AssetLocationPageResponse
@@ -1542,6 +1791,27 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * CategoryCreateRequest
+         * @description A new category. It starts active, at the top unless a parent is named.
+         */
+        CategoryCreateRequest: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Description */
+            description?: string | null;
+            /** Parentcategoryid */
+            parentCategoryId?: string | null;
+            /**
+             * Sortorder
+             * @default 0
+             */
+            sortOrder: number;
+        };
+        /**
          * CategoryListResponse
          * @description The active categories, each parent followed by its children.
          */
@@ -1568,6 +1838,26 @@ export interface components {
             sortOrder: number;
             /** Modelcount */
             modelCount: number;
+        };
+        /**
+         * CategoryUpdateRequest
+         * @description The fields of a category to change, any of them, and whether it is active.
+         */
+        CategoryUpdateRequest: {
+            /** Code */
+            code?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Parentcategoryid */
+            parentCategoryId?: string | null;
+            /** Sortorder */
+            sortOrder?: number | null;
+            /** Isactive */
+            isActive?: boolean | null;
         };
         /**
          * ChargeResponse
@@ -2191,6 +2481,50 @@ export interface components {
             branches: components["schemas"]["BranchAvailabilityResponse"][];
         };
         /**
+         * ModelCreateRequest
+         * @description A new product model, with every figure a booking will copy. It starts unpublished.
+         */
+        ModelCreateRequest: {
+            /** Sku */
+            sku: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Categoryid
+             * Format: uuid
+             */
+            categoryId: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Modelnumber */
+            modelNumber: string;
+            /** Shortdescription */
+            shortDescription: string;
+            /** Longdescription */
+            longDescription?: string | null;
+            /** Dailyrate */
+            dailyRate: string;
+            /** Weeklyrate */
+            weeklyRate: string;
+            /** Depositamount */
+            depositAmount: string;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+            /** Replacementvalue */
+            replacementValue: string;
+            /** Minhiredays */
+            minHireDays: number;
+            /** Maxhiredays */
+            maxHireDays: number;
+            /**
+             * Ispublished
+             * @default false
+             */
+            isPublished: boolean;
+        };
+        /**
          * ModelDetailResponse
          * @description A published catalogue entry as its own page shows it.
          */
@@ -2281,6 +2615,42 @@ export interface components {
             maxHireDays: number;
             /** Imagepath */
             imagePath: string | null;
+        };
+        /**
+         * ModelUpdateRequest
+         * @description The fields of a product model to change, any of them but the SKU.
+         */
+        ModelUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Categoryid */
+            categoryId?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Modelnumber */
+            modelNumber?: string | null;
+            /** Shortdescription */
+            shortDescription?: string | null;
+            /** Longdescription */
+            longDescription?: string | null;
+            /** Dailyrate */
+            dailyRate?: string | null;
+            /** Weeklyrate */
+            weeklyRate?: string | null;
+            /** Depositamount */
+            depositAmount?: string | null;
+            /** Latefeeperday */
+            lateFeePerDay?: string | null;
+            /** Replacementvalue */
+            replacementValue?: string | null;
+            /** Minhiredays */
+            minHireDays?: number | null;
+            /** Maxhiredays */
+            maxHireDays?: number | null;
+            /** Ispublished */
+            isPublished?: boolean | null;
         };
         /**
          * MonthToDateResponse
@@ -2513,6 +2883,14 @@ export interface components {
             companyName?: string | null;
             /** Vatnumber */
             vatNumber?: string | null;
+        };
+        /**
+         * PublicationRequest
+         * @description Whether the model is to be in the public catalogue.
+         */
+        PublicationRequest: {
+            /** Published */
+            published: boolean;
         };
         /**
          * QuoteBasis
@@ -5483,6 +5861,394 @@ export interface operations {
             };
             /** @description The allocation is no longer active, or its unit is out on hire on the booking, and `detail` says which. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_categories_api_admin_categories_get: {
+        parameters: {
+            query?: {
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many categories a page holds. Every category fits the default. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_category_api_admin_categories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_category_api_admin_categories__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the category. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such category. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_models_api_admin_models_get: {
+        parameters: {
+            query?: {
+                /** @description Free text matched against SKU, name, manufacturer and model number. */
+                q?: string | null;
+                /** @description Only the models of this category. */
+                categoryId?: string | null;
+                /** @description True for the published models only, false for the hidden ones. */
+                published?: boolean | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many models a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_model_api_admin_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_model_api_admin_models__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the product model. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such product model. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_model_api_admin_models__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the product model. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such product model. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_publication_api_admin_models__id__publication_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the product model. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such product model. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

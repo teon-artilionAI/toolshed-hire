@@ -297,14 +297,16 @@ commits as `../backend/openapi.json`.
   The trail is narrowed to one record by its key only, so the screen sends
   `entityId` as a key and never as a reference.
 - The admin catalogue routes, which are the owner's list of categories and of
-  models, adding and changing each, and publishing or hiding a model, are not
-  in the document yet, because the backend half of that change is built at
-  the same time. Their types are written by hand from the contract in
-  `api/contract-admin-catalogue.ts`, and the readers in
-  `api/admin-catalogue.ts` check every member, so a body that breaks the
-  contract still fails at the boundary with the name of the field. Once the
-  document has the routes, `npm run api:types` brings them in and each type
-  there is rebuilt from the generated shapes.
+  models, adding and changing each, and publishing or hiding a model, are in
+  the document too. Their types are in `api/contract-admin-catalogue.ts`,
+  built from the generated file the same way. The generated bodies of an edit
+  allow null in every field, and the server refuses null in all but a
+  category's `description` and `parentCategoryId` and a model's
+  `longDescription`, so the types allow it in those three only. The generated
+  body of a new model requires `isPublished`, because the server gives it a
+  default, and the server refuses true there, so the type leaves it out. The
+  categories come as one page of a hundred, the largest the API serves, and
+  the publication route answers with the model, which the screen reads.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -1168,8 +1170,8 @@ API answers anyone else with a 403.
 | `SC-20` | `GET /api/admin/models?q=&categoryId=&published=&page=&pageSize=` | One page of twenty models, published or not |
 | `SC-20` | `GET /api/admin/models/{id}` | The model, read by its own route when its form opens |
 | `SC-20` | `POST /api/admin/models` and `PATCH /api/admin/models/{id}` | The model the server answered with, and the list read again |
-| `SC-20` | `POST /api/admin/models/{id}/publication` | The list read again, with the model shown or hidden |
-| `SC-20` | `GET /api/admin/categories` | Every category, switched on or off, each parent before its children |
+| `SC-20` | `POST /api/admin/models/{id}/publication` | The model the server answered with, and the list read again |
+| `SC-20` | `GET /api/admin/categories?page=1&pageSize=100` | Every category, switched on or off, each parent before its children |
 | `SC-20` | `POST /api/admin/categories` and `PATCH /api/admin/categories/{id}` | The categories read again with the change in them |
 
 #### The rules are the server's
@@ -1183,8 +1185,11 @@ names. The forms only check what they need to write a body at all, which is
 that a model has a category and that a number of days or a place in the list
 is a whole number. An amount typed as rand and cents is sent with two
 decimals, written out by its digits and never through a float. Anything else
-is sent as it was typed, so the server says what is wrong with it. The
-browser works out no figure.
+is sent as it was typed, so the server says what is wrong with it. The server
+refuses money it cannot read as an amount in its framework's words, which
+quote a pattern, so the form says it in a plain sentence under the same field
+instead. Whether that happened is told from what was sent and never from the
+server's words. The browser works out no figure.
 
 #### `SC-20` Catalogue and Pricing Management
 
@@ -1214,9 +1219,11 @@ browser works out no figure.
   the model starts hidden from customers and that its stock code cannot be
   changed afterwards. Once added, the list shows it by its stock code.
 - "Publish" and "Hide" ask first in a row of their own under the model. Hiding
-  says that bookings already made still stand. The answer of the route is not
-  read, because the contract does not say what it is, and the list is read
-  again instead.
+  says that bookings already made still stand. The route answers with the
+  model as it now stands, and the notice says what that is. Asking for what
+  the model already is changes nothing on the server.
+- A model key in the address that the server does not know, or refuses as not
+  a key at all, opens a section that says the model is not in the catalogue.
 - The categories are listed with what each sits under, its place in the list,
   how many models it holds and whether it is switched on. A category is added
   or changed in a form above the list, and its parent is chosen from the top

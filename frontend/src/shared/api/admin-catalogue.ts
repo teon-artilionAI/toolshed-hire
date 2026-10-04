@@ -21,6 +21,7 @@ import { api } from './client'
 import type {
   AdminCategory,
   AdminCategoryList,
+  AdminCategoryQuery,
   AdminModel,
   AdminModelPage,
   AdminModelQuery,
@@ -46,6 +47,19 @@ const MODELS_ENDPOINT = '/admin/models'
 
 /** How many models a page of the owner's list holds. */
 export const CATALOGUE_PAGE_SIZE = 20
+
+/** The largest page the API serves of any list, and its default for the
+ *  categories. */
+const LARGEST_PAGE_SIZE = 100
+
+const FIRST_PAGE = 1
+
+/**
+ * The one page of categories the screen reads. It is the largest the API
+ * serves, so every category of a hire business fits on it. The screen counts
+ * them by the total the server sends.
+ */
+const EVERY_CATEGORY: AdminCategoryQuery = { page: FIRST_PAGE, pageSize: LARGEST_PAGE_SIZE }
 
 /** An id is user input by the time it reaches here, so it is always encoded. */
 function one(base: string, id: string): string {
@@ -120,20 +134,13 @@ function readModelPage(value: unknown, path: string): AdminModelPage {
 }
 
 /**
- * The contract does not say what the publication route answers, so the screen
- * does not read it. It reads the list again, which shows the model as the
- * server now has it.
- */
-function ignoreTheBody(): void {}
-
-/**
  * GET /api/admin/categories. Every category, switched on or not, each parent
- * before its children.
+ * before its children, on one page of the largest size.
  *
  * @throws ApiError with status 403 for anyone but an administrator.
  */
 export function listAdminCategories(signal?: AbortSignal): Promise<AdminCategoryList> {
-  return api.get(CATEGORIES_ENDPOINT, readCategoryList, { signal })
+  return api.get(CATEGORIES_ENDPOINT, readCategoryList, { query: EVERY_CATEGORY, signal })
 }
 
 /**
@@ -201,12 +208,13 @@ export function changeModel(id: string, changes: ModelChangesRequest): Promise<A
 
 /**
  * POST /api/admin/models/{id}/publication. Shows the model to customers or
- * hides it from them.
+ * hides it from them, and answers with the model as it now stands. Asking for
+ * what the model already is changes nothing and answers the same way.
  *
- * @throws ApiError with status 409 or 422 when the server refuses, 404 when
- *   there is no such model, and 403 for anyone but an administrator.
+ * @throws ApiError with status 422 when the server refuses, 404 when there is
+ *   no such model, and 403 for anyone but an administrator.
  */
-export function setModelPublication(id: string, published: boolean): Promise<void> {
+export function setModelPublication(id: string, published: boolean): Promise<AdminModel> {
   const body: PublicationRequest = { published }
-  return api.post(`${one(MODELS_ENDPOINT, id)}/publication`, body, ignoreTheBody)
+  return api.post(`${one(MODELS_ENDPOINT, id)}/publication`, body, readAdminModel)
 }

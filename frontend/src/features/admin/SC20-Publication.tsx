@@ -6,11 +6,14 @@
  * away, at the figures it has now. Hiding says that it leaves the catalogue at
  * once and that bookings already made still stand. Whether the server allows
  * either is the server's to say, and a refusal shows its sentence here. The
- * list is read again once the server has answered, so the model shows where it
- * now stands.
+ * server answers with the model as it now stands, which is kept under its key
+ * and is what the notice reports. The list is read again as well, so the row
+ * shows it too.
  */
 
+import { useQueryClient } from '@tanstack/react-query'
 import { setModelPublication } from '../../shared/api/admin-catalogue'
+import { rememberAdminModel } from '../../shared/api/admin-queries'
 import type { AdminModel } from '../../shared/api/contract'
 import { WriteQuestion } from './SC20-Write-Question'
 import { useCatalogueWrite } from './use-catalogue-write'
@@ -25,11 +28,17 @@ export function PublicationQuestion({
   onDone: (published: boolean) => void
   onCancel: () => void
 }) {
+  const queryClient = useQueryClient()
   const write = useCatalogueWrite('model_publication', model.id)
   const publishing = !model.isPublished
 
   function answer() {
-    write.send(() => setModelPublication(model.id, publishing), { onAnswer: () => onDone(publishing) })
+    write.send(() => setModelPublication(model.id, publishing), {
+      onAnswer: (answered) => {
+        rememberAdminModel(queryClient, answered)
+        onDone(answered.isPublished)
+      },
+    })
   }
 
   return (
