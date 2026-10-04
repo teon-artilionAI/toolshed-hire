@@ -7,8 +7,10 @@
  * a minute, because it covers a period and the server works it out over the
  * whole fleet. The catalogue, its categories and its models, is fresh for a
  * minute like the customer's catalogue. The asset register is never fresh,
- * because a unit moves at a counter while the owner reads it. Those rules live
- * in query-client.ts, and the key is all a query needs to get the right one.
+ * because a unit moves at a counter while the owner reads it, and nor are the
+ * staff accounts and the customer holds, because a lock, a sign in or a no
+ * show changes them while the owner reads them. Those rules live in
+ * query-client.ts, and the key is all a query needs to get the right one.
  *
  * The CSV is not here. It is a file to save and not data to keep, so the
  * screen asks for it once for each press of the button.
@@ -18,13 +20,17 @@ import { queryOptions } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { getAdminAsset, listAdminAssets } from './admin-assets'
 import { getAdminModel, listAdminCategories, listAdminModels } from './admin-catalogue'
+import { listCustomerHolds } from './admin-customers'
 import { getAdminDashboard } from './admin-dashboard'
+import { listStaffAccounts } from './admin-users'
 import { listAuditEvents, listNotifications } from './audit-log'
 import type {
   AdminAssetDetail,
   AdminAssetQuery,
+  AdminCustomerQuery,
   AdminModel,
   AdminModelQuery,
+  AdminUserQuery,
   AuditEventQuery,
   EmailNotificationQuery,
   UtilisationReportQuery,
@@ -33,12 +39,15 @@ import {
   ADMIN_ASSETS_SEGMENT,
   ADMIN_AUDIT_SEGMENT,
   ADMIN_CATALOGUE_SEGMENT,
+  ADMIN_CUSTOMERS_SEGMENT,
   ADMIN_DASHBOARD_SEGMENT,
   ADMIN_KEY,
   ADMIN_NOTIFICATIONS_SEGMENT,
   ADMIN_REPORT_SEGMENT,
+  ADMIN_USERS_SEGMENT,
   ASSETS_KEY,
   CATALOGUE_KEY,
+  CUSTOMERS_KEY,
 } from './query-client'
 import { getUtilisationReport } from './reporting'
 
@@ -105,6 +114,43 @@ export const adminQueries = {
       queryKey: [ADMIN_KEY, ADMIN_ASSETS_SEGMENT, 'unit', tag],
       queryFn: ({ signal }) => getAdminAsset(tag, signal),
     }),
+
+  /** One page of the staff and admin accounts. */
+  staff: (query: AdminUserQuery) =>
+    queryOptions({
+      queryKey: [ADMIN_KEY, ADMIN_USERS_SEGMENT, query],
+      queryFn: ({ signal }) => listStaffAccounts(query, signal),
+    }),
+
+  /** One page of the customers, by their standing. */
+  customerHolds: (query: AdminCustomerQuery) =>
+    queryOptions({
+      queryKey: [ADMIN_KEY, ADMIN_CUSTOMERS_SEGMENT, query],
+      queryFn: ({ signal }) => listCustomerHolds(query, signal),
+    }),
+}
+
+/**
+ * Mark the staff accounts as out of date after a write of the owner's, or a
+ * refusal that says an account moved on since it was read. Only the server
+ * knows which page an account now falls on. The trail gained an event as well.
+ */
+export function forgetTheStaff(client: QueryClient): void {
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_USERS_SEGMENT] })
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_AUDIT_SEGMENT] })
+}
+
+/**
+ * Mark everything that shows a customer's standing as out of date after the
+ * owner moved one. The holds are read again, the dashboard counts the
+ * customers on hold, the trail gained an event, and the counter's lookup says
+ * whether a customer may book.
+ */
+export function forgetTheHolds(client: QueryClient): void {
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_CUSTOMERS_SEGMENT] })
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_DASHBOARD_SEGMENT] })
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_AUDIT_SEGMENT] })
+  void client.invalidateQueries({ queryKey: [CUSTOMERS_KEY] })
 }
 
 /**

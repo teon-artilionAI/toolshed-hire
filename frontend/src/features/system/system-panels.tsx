@@ -79,9 +79,8 @@ export function FailureNotice({ error, what }: { error: ApiError; what: string }
       <Notice tone="warn" title="The backend is not running">
         <p>{`${what} did not get through. ${error.detail}`}</p>
         <p className="mt-sm">
-          This screen and the catalogue screens need the API. The screens that still read from
-          fixtures are unaffected. Start it from the backend directory with its virtual
-          environment active:
+          This screen and every numbered screen need the API. Start it from the backend
+          directory with its virtual environment active:
         </p>
         <p className="mt-xs break-all font-mono text-xs">{START_BACKEND_COMMAND}</p>
       </Notice>

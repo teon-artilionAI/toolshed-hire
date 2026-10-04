@@ -96,6 +96,8 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ix_audit_event_actor",
     "ix_audit_event_action",
     "ix_asset_allocation_released",
+    "ix_user_account_staff",
+    "ix_customer_profile_standing",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -194,6 +196,19 @@ ALLOCATION_RELEASED_INDEX: Final[str] = "ix_asset_allocation_released"
 # The index of the exclusion constraint, through which the register counts the
 # active allocations of a unit and finds the booking that holds it.
 OVERLAP_CONSTRAINT_INDEX: Final[str] = OVERLAP_CONSTRAINT_NAME
+
+# The three indexes of revision 0011, which the administrator's lists of people
+# read through. The first holds the staff accounts and no customer's, by name,
+# and the lock on every active administrator reads it too. The second puts the
+# customers in name order, and the third holds the customers on hold or
+# blacklisted, by name. Each predicate is written into a statement as the
+# literal the index was built with, so the planner matches it whatever plan
+# the server caches.
+STAFF_ACCOUNT_INDEX: Final[str] = "ix_user_account_staff"
+CUSTOMER_NAME_ORDER_INDEX: Final[str] = "ix_customer_profile_name"
+CUSTOMER_STANDING_INDEX: Final[str] = "ix_customer_profile_standing"
+CUSTOMER_ROLE_LITERAL: Final[str] = "'CUSTOMER'"
+GOOD_STANDING_LITERAL: Final[str] = "'ACTIVE'"
 
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006

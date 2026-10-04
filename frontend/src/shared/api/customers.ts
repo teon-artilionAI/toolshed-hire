@@ -45,7 +45,9 @@ export const MIN_CUSTOMER_SEARCH_LENGTH = 3
 /** The longest search the API accepts. */
 export const MAX_CUSTOMER_SEARCH_LENGTH = 80
 
-function readCustomerSummary(value: unknown, path: string): CustomerSummary {
+/** One customer as the counter sees them. The owner's customer holds read the
+ *  same shape, so admin-customers.ts reads it with this too. */
+export function readCustomerSummary(value: unknown, path: string): CustomerSummary {
   const record = readObject(value, path, 'a customer')
   return {
     id: readText(record, 'id', path),

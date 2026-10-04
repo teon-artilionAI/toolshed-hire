@@ -58,6 +58,12 @@ first pass at the whole application.
    model permits, and is never retired while a booking holds it. A retired
    unit keeps its row, its history and its figures in the report, and is never
    offered for hire again.
+15. Only the owner opens a staff account, changes a role or releases a
+   customer from hold, and access follows the people who work here. A new
+   account chooses its own password through the reset link it is sent, a
+   deactivated one is stopped on its next request with every refresh session
+   revoked, a role change reaches the next request, and two administrators
+   demoting each other at once cannot leave the business without one.
 
 ## Layout
 
@@ -70,7 +76,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, `admin_asset_deps.py` wires the reads and writes of the asset register, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, `admin_asset_deps.py` wires the reads and writes of the asset register, `admin_user_deps.py` wires the staff accounts and the customer holds, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -88,7 +94,7 @@ keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
-| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
+| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer`, `StaffDetails` and the rules of a staff account in `staff_account`, `StandingChange` in `customer_standing` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer`, `StaffRepository`, `StaffDirectory`, `ReadStaff`, `OpenStaffAccountUseCase`, `EditStaffAccountUseCase`, `DeactivateStaffAccountUseCase`, `ReactivateStaffAccountUseCase`, `CustomerListing`, `ReadCustomerList`, `ChangeCustomerStandingUseCase` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher`, `SqlStaffRepository`, `SqlStaffDirectory`, `SqlCustomerListing` |
 | `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle`, `DamageReport`, the quarantine rule in `quarantine`, `file_damage_report`, the corrections in `charge_corrections` and their rework in `resettlement` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview`, `DamageReportRepository`, `FileDamageReportUseCase`, `SendForRepairUseCase`, `CloseDamageReportUseCase`, `ReadDamageReports`, `WaiveChargeUseCase`, `ReverseChargeUseCase`, `AdjustRentalUseCase` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview`, `SqlDamageReportRepository`, `SqlDamageReportReads` |
 | `catalogue` | `ProductModel`, `Asset`, the forms of a code and a slug in `catalogue_forms`, `CategoryTerms` and `CatalogueCategory` with the nesting rule in `category_rules`, `ModelTerms` and `CatalogueEntry` with the money and hire day rules in `catalogue_entry_rules`, `RegisteredUnit` and `UnitDetails` with the rules of a tag and its paperwork in `asset_register`, the moves by hand in `asset_transitions` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets`, `CategoryRepository`, `CatalogueEntryRepository`, `AdminCatalogueQuery`, `ReadAdminCatalogue`, `CreateCategoryUseCase`, `EditCategoryUseCase`, `CreateModelUseCase`, `EditModelUseCase`, `PublishModelUseCase`, `AssetRegisterRepository`, `AssetRegisterQuery`, `ReadAssetRegister`, `RegisterUnitUseCase`, `EditUnitUseCase`, `MoveUnitUseCase` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator`, `SqlCategoryRepository`, `SqlCatalogueEntryRepository`, `SqlAdminCatalogue`, `SqlAssetRegisterRepository`, `SqlAssetRegister` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
@@ -497,9 +503,11 @@ design document allows a claim to be trusted for.
 The charge corrections, the re-send, the force release, the five writes of
 the admin catalogue and the three writes of the asset register depend on
 `FreshAdminUser` from
-`app/api/identity_deps.py`, and user and role management will when it is
-added. It reads the account again under a shared row lock, so
-the role that is checked is the role that holds until the action commits.
+`app/api/identity_deps.py`, and so does a change of a customer's standing. It
+reads the account again under a shared row lock, so the role that is checked
+is the role that holds until the action commits. The writes of user and role
+management depend on `AdminUser` and take a stronger lock inside the use case,
+which is described under User and role management.
 
 ### Ownership and branch scope
 
@@ -596,8 +604,10 @@ names `newPassword`.
 
 ### The messages
 
-The three messages go through the `NotificationGateway` port, so the Resend
-adapter and the fake both carry them. None of them writes a `notification`
+The three messages go through the `NotificationGateway` port, and so does the
+invitation a new member of staff is sent, which is described under User and
+role management. The Resend adapter and the fake both carry all four. None of
+them writes a `notification`
 row, because that table records the booking confirmation and nothing else.
 Each is sent inside the request, after the commit and with no transaction
 open, with the five second timeout the adapter already has. A message that
@@ -1769,6 +1779,157 @@ which is a few hundred rows over a unit's life. The audit events grow fastest
 and are read off the end of their index, so the history stays four short
 statements however long the unit has been in the fleet.
 
+## User and role management
+
+Only the owner opens a staff account, changes a role or a branch, stops an
+account signing in and lifts a customer's hold, and access follows the people
+who work here (FR-25, US-35, BR-18, BR-41, BR-44, BR-51). There is no new
+table and no new column. Revision `0011` adds three indexes. Every route is
+for an administrator alone, and counter staff and customers are answered 403.
+
+**A staff account.** It is a `user_account` whose role is COUNTER_STAFF or
+ADMIN. A customer's account is never listed or changed here, and a key that
+names one is a 404, because a customer is kept through their profile.
+`app/domain/staff_account.py` holds the rules. Counter staff work at one
+trading branch and an administrator at none, each a 422 naming `branchCode`,
+the name is required and at most 120 characters, the phone may be empty and
+is otherwise held to the rule a customer's number is held to, and CUSTOMER is
+a 422 naming `role`. `ck_user_account_branch_scope` has the last word on the
+role and the branch.
+
+**No password is read or set.** `POST /api/admin/users` writes the account
+with a bcrypt hash of 32 random bytes that are thrown away, so no password
+opens it, and a reset token, in one transaction with
+`user_account.created`. The random value is hashed before the transaction
+opens. After the commit the person is sent the reset link every account uses,
+`{FRONTEND_ORIGIN}/signin#reset=<token>`, in a message that says an account
+was opened for them, and chooses their own password through
+`POST /api/auth/password-reset/complete`. The link lasts the sixty minutes a
+reset link lasts. Once it has run out the person asks for a new one from the
+sign in page, which works because the account is active. `emailDeliverable`
+in the answer is whether the email gateway took the message, so it is false
+when email is off, when the address is not the one allowed recipient, and when
+the provider refused it. An address another account holds, a customer's
+included, is a 422 naming `email`, whether the lookup finds it or the unique
+constraint does when two administrators race. No request body has a field for
+a password, so a body that sends one is a 422 naming it.
+
+**Changing an account.** `PATCH /api/admin/users/{id}` changes the name, the
+phone, the role and the branch it names. An edit that makes somebody an
+administrator and names no branch lets go of their branch, because an
+administrator belongs to none and that is the only value it can take. An edit
+that moves an administrator to the counter has to name a branch. A role change
+takes effect on the next request the person makes, because every request
+reads the role from the account and never from the token, and a demoted
+administrator is refused an admin route with the token they already hold. An
+edit that changes nothing writes nothing. `user_account.updated` records the
+names of the fields that changed, and the role and the branch before and
+after. The name and the phone are recorded by name only, the way a customer's
+own edit is.
+
+**Stopping an account.** `POST /api/admin/users/{id}/deactivation` takes a
+`reason` of 5 to 200 characters. In one transaction it sets `is_active` to
+false, revokes every live refresh session of the account with `ADMIN_REVOKE`,
+withdraws a reset link still pending, and records `user_account.deactivated`
+with the reason, how many sessions were revoked and whether a link was
+withdrawn. The link is withdrawn because it would otherwise let the person
+choose a password while they cannot sign in, which a reactivation would then
+bring back. The design document does not ask for that, and I added it on
+purpose. The access token the person holds stops working on its next
+request, because every request checks that the account is active, signing in
+is answered with the 401 a wrong password gets, and a refresh is a 401.
+`POST /api/admin/users/{id}/reactivation` sets it active again and records
+`user_account.reactivated`, and the person signs in with the password they
+had. Asking for the state an account is already in writes nothing. Nothing is
+deleted (BR-51), so every booking, rental and audit event the account touched
+still names it.
+
+One window is left, and it is harmless. A refresh that read the account a
+moment before a deactivation committed can still commit a new session after
+it. That session is live in the table, but the access token it came with is
+refused on its first request and the next refresh reads the account again and
+refuses it, so nothing comes of it.
+
+**The last administrator and the race.** The last active administrator can
+never be deactivated or moved to another role, and an administrator cannot
+deactivate their own account, each a 409 `state-transition` that changes
+nothing. Every write of this section starts by locking every active
+administrator with `FOR UPDATE`, in the order of their keys, through
+`SqlStaffRepository.lock_active_administrators`, and refuses with 403 an
+actor who is no longer among them. That one lock does two jobs. It reads the
+administrator again, as `FreshAdminUser` does elsewhere, and it is what the
+rule about the last administrator is asked under. Two administrators who
+demote each other at the same moment take turns. When the second is let
+through, PostgreSQL reads the rows it waited for again, the first's change is
+there, and the second is refused because it is no longer an administrator.
+Two who each step down at once leave one as well, because the second sees
+the first step down and is refused by the rule about the last one.
+`tests/integration/test_staff_admin_race.py` stages both for real. I did not
+put `FreshAdminUser` on these routes. It takes a shared lock on the caller's
+own row before the use case runs, and two administrators each holding one and
+each wanting to change the other's row would wait on each other until
+PostgreSQL broke the deadlock with an error.
+
+**The customer holds (BR-18).** `GET /api/admin/customers` lists the
+customers by name as the `CustomerSummary` the counter reads, narrowed by
+`status` and searched by `q` the way the counter searches.
+`POST /api/admin/customers/{id}/status` takes `accountStatus` and a `reason`
+of 5 to 200 characters. Any standing may move to any other. In one transaction
+the profile is locked, the way a no show locks it before it counts a strike,
+the standing is written and `customer.status_changed` is recorded with the
+standing before and after and the reason. Nothing else on the profile
+changes, so releasing a hold keeps `noShowCount`. A customer on hold or
+blacklisted is refused the next booking with 403 `account-on-hold` by
+`CustomerProfile.ensure_may_book`, the rule every booking already asks. Asking
+for the standing a customer already has writes nothing. This write depends on
+`FreshAdminUser`, as the other admin writes do.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/users` | `q` of 2 to 80 characters, `role`, `active`, `page`, `pageSize` | 200 with `items` of `AdminUser`, by name. 422 naming the parameter, and `query.role` for CUSTOMER. |
+| `POST /api/admin/users` | `email`, `fullName`, `phone`, `role`, `branchCode` | 201 with `user` and `emailDeliverable`. 403 when the caller stopped being an administrator. 422 naming the field. |
+| `PATCH /api/admin/users/{id}` | any of `fullName`, `phone`, `role`, `branchCode` | 200 with the `AdminUser`. 404. 409 `state-transition` for the last active administrator. 422 naming the field. |
+| `POST /api/admin/users/{id}/deactivation` | `reason` | 200 with the `AdminUser`. 404. 409 `state-transition` for the caller's own account or the last active administrator. 422 naming `body.reason`. |
+| `POST /api/admin/users/{id}/reactivation` | none | 200 with the `AdminUser`. 404. |
+| `GET /api/admin/customers` | `status`, `q` of 2 to 80 characters, `page`, `pageSize` | 200 with `items` of `CustomerSummary`, by name. 422 naming the parameter. |
+| `POST /api/admin/customers/{id}/status` | `accountStatus`, `reason` | 200 with the `CustomerSummary`. 404. 422 naming the field. |
+
+`AdminUser` carries `id`, `email`, `fullName`, `phone`, `role`, `branchCode`,
+`isActive`, `emailVerified`, `lastLoginAt`, `lockedUntil` and `createdAt`, and
+never anything about a password. `role` is the stored value, for example
+`COUNTER_STAFF`, and `branchCode` is null for an administrator.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| A page of staff | 2, the count and the page, with the branch joined by its key | `ix_user_account_staff`, `branch_pkey` |
+| One staff account | 1 | `user_account_pkey`, `branch_pkey` |
+| The lock on the administrators | 1 | `ix_user_account_staff` |
+| A page of customers on hold or blacklisted | 2 | `ix_customer_profile_standing`, then `user_account_pkey` and `branch_pkey` for each row |
+| A page of every customer, or of those in good standing | 2. The page is read off `ix_customer_profile_name` in its order and stops at the end of the page. The count reads every customer | `ix_customer_profile_name` |
+| A page of customers searched by `q` | 2 | the trigram and unique indexes of the counter's search, `ix_customer_profile_name` for the order |
+| Open an account | the lock, the address, the branch, the insert, the audit event, the read of the answer | `ix_user_account_staff`, `user_account_email_key`, `branch_code_key` |
+| Edit, deactivate or reactivate | the lock, the account under its lock, the branch when one is named, the update, the reset link withdrawn when one is pending, the revocation, the audit event, the read | `ix_user_account_staff`, `user_account_pkey`, `ix_refresh_session_live` |
+| Set a standing | the profile under its lock, the update, the audit event, the read | `customer_profile_pkey` |
+
+`tests/integration/test_people_list_reads.py` counts the statements with few
+customers and many and asks the planner, with sequential scans switched off,
+for a plan of every statement each read sends, word for word. None of them
+names a sequential scan except the count of every customer in good standing,
+which is a count of almost every row and is what degrades first.
+
+**What degrades first as the data grows.** The count of the customer list with
+no standing named, or with ACTIVE, which is almost every customer. Each page
+counts every profile that matches, so the count reads the whole of an index
+or of the table, and OFFSET reads every customer before a deep page. A few
+thousand customers make that a millisecond or two. At a hundred times that it
+wants an estimate from the planner or no total, and a page keyed on the name
+and the key, which the order of `ix_customer_profile_name` already allows. The
+held customers and the staff stay small whatever the business does, so their
+pages stay a handful of index entries. Every staff write locks every active
+administrator, which serialises the writes of this section through two or
+three rows. Staff accounts change a few times a year, so that costs nothing,
+and it is the price of a rule that can never be raced.
+
 ## The schema
 
 Migration `0001` is the baseline. It creates seventeen tables with singular
@@ -1866,6 +2027,20 @@ indexes a foreign key by itself. `product_model` is the catalogue, 120 rows
 that change by hand, so building it inside the migration's transaction blocks
 writes to the table for a moment. A table a hundred times larger would want
 `CREATE INDEX CONCURRENTLY` outside a transaction instead.
+
+Revision `0011` adds three indexes and nothing else, read by the lists of
+people of the admin console. `ix_user_account_staff` on `user_account
+(lower(full_name), id)`, partial on `role <> 'CUSTOMER'`, holds the staff
+accounts and no customer's. `ix_customer_profile_name` on `customer_profile
+(lower(display_name), id)` gives the list of customers its order, and
+`ix_customer_profile_standing` on the same columns, partial on
+`account_status <> 'ACTIVE'`, holds the customers on hold or blacklisted. The
+names are indexed through `lower` on purpose. An index on the bare name could
+answer a search for part of a name by reading all of it, and on a small table
+the planner then preferred it to the trigram index the counter's search was
+written for, which `tests/integration/test_customer_search_index.py` caught.
+They are built inside the migration's transaction, with the same caution as
+the revisions before it for a table a hundred times larger.
 
 Revision `0010` adds two indexes and nothing else, both read by the asset
 register. `ix_asset_serial_trgm` is a trigram index on `asset.serial_number`,
@@ -2021,6 +2196,13 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/admin/assets` | An administrator, read again under a lock. |
 | PATCH | `/api/admin/assets/{tag}` | An administrator, read again under a lock. |
 | POST | `/api/admin/assets/{tag}/transitions` | An administrator, read again under a lock. |
+| GET | `/api/admin/users` | An administrator. |
+| POST | `/api/admin/users` | An administrator, read again under the lock on every active administrator. |
+| PATCH | `/api/admin/users/{id}` | An administrator, read again under the lock on every active administrator. |
+| POST | `/api/admin/users/{id}/deactivation` | An administrator, read again under the lock on every active administrator. |
+| POST | `/api/admin/users/{id}/reactivation` | An administrator, read again under the lock on every active administrator. |
+| GET | `/api/admin/customers` | An administrator. |
+| POST | `/api/admin/customers/{id}/status` | An administrator, read again under a lock. |
 | GET | `/api/customers` | Counter staff and administrators. |
 | POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
 | GET | `/api/customers/{id}` | Counter staff and administrators. |
@@ -2610,6 +2792,24 @@ from the day it moved. `test_asset_register_race.py` stages a race for one
 tag. `test_asset_register_reads.py` counts the statements of a page, a unit
 and its history with few rows and many, and `test_asset_register_indexes.py`
 asks the planner to prove each condition stands on its index.
+
+User and role management is tested the same way. `tests/unit` holds the
+rules of a staff account, the role and the branch, the last administrator and
+the own account, a customer's standing, and the use cases against the in
+memory unit of work in `tests/support/memory_staff.py`, which can lose an
+address to the unique constraint or fail at its audit event, with the reset
+link read out of the fake gateway. `tests/api` lists, opens, edits,
+deactivates and reactivates through the routes, chooses the password of a new
+account through the link and signs in with it, refuses a deactivated account
+its sign in, its refresh and its token, refuses a demoted administrator an
+admin route with the token they had, puts a customer on hold and sees the
+booking refused, and asks every route for every refusal with the field or
+the status it names. On PostgreSQL, `test_staff_account_transaction.py`
+follows an account from opening to reactivation and makes each write fail at
+its audit event, `test_staff_admin_race.py` stages two administrators
+demoting each other and two stepping down at once, and
+`test_people_list_reads.py` counts the statements of each read and asks the
+planner about each of them.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

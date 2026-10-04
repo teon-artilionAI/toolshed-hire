@@ -37,6 +37,7 @@ from app.application.identity.ports import (
     CustomerRepository,
     SessionRepository,
 )
+from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
 from app.infrastructure.admin_catalogue_entries import SqlCatalogueEntryRepository
@@ -55,6 +56,7 @@ from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
 from app.infrastructure.rate_limit import SqlRateLimitStore
 from app.infrastructure.rentals import SqlRentalRepository
+from app.infrastructure.staff_accounts import SqlStaffRepository
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,7 @@ class SqlAlchemyUnitOfWork:
     customers: CustomerRepository
     customer_directory: CustomerDirectory
     accounts: AccountRepository
+    staff: StaffRepository
     sessions: SessionRepository
     rate_limits: RateLimitStore
     notifications: NotificationOutbox
@@ -122,6 +125,7 @@ class SqlAlchemyUnitOfWork:
         self.customers = SqlCustomerRepository(session)
         self.customer_directory = SqlCustomerDirectory(session)
         self.accounts = SqlAccountRepository(session)
+        self.staff = SqlStaffRepository(session)
         self.sessions = SqlSessionRepository(session)
         self.rate_limits = SqlRateLimitStore(session)
         self.notifications = SqlNotificationOutbox(session)

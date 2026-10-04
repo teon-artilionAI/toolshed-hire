@@ -31,6 +31,7 @@ from app.application.identity.ports import (
     CustomerRepository,
     SessionRepository,
 )
+from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
 
@@ -101,6 +102,11 @@ class UnitOfWork(Protocol):
     @property
     def accounts(self) -> AccountRepository:
         """Return the account repository of this transaction."""
+        ...
+
+    @property
+    def staff(self) -> StaffRepository:
+        """Return the staff accounts the administrator writes through."""
         ...
 
     @property

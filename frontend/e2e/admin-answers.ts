@@ -2,10 +2,11 @@
  * The API answered by the spec itself, for the owner's dashboard and report.
  *
  * The accessibility scan and the narrow screen check of SC-19, SC-20, SC-21,
- * SC-22 and SC-24 need a signed in owner, a day across three branches, a
- * report with rows, the trail and the log, whose answers are in
+ * SC-22, SC-23 and SC-24 need a signed in owner, a day across three branches,
+ * a report with rows, the trail and the log, whose answers are in
  * audit-answers.ts, the catalogue, whose answers are in catalogue-answers.ts,
- * and the asset register, whose answers are in asset-answers.ts. A scan
+ * the asset register, whose answers are in asset-answers.ts, and the staff
+ * accounts and customer holds, whose answers are in user-answers.ts. A scan
  * should not depend on what a database happens to hold, and it should run with
  * or without a backend, so these answers stand in for the API. They are
  * shaped the way the API sends them, with long names and large figures, which
@@ -20,6 +21,10 @@ import { ASSET_ANSWERS, ASSET_TAG } from './asset-answers.ts'
 import { AUDIT_ANSWERS } from './audit-answers.ts'
 import { CATALOGUE_ANSWERS, CATALOGUE_MODEL_ID } from './catalogue-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
+import { HELD_CUSTOMER_NAME, LOCKED_ACCOUNT_NAME, USER_ANSWERS } from './user-answers.ts'
+
+/** The heading of SC-23, on both of its views. */
+export const USERS_HEADING = 'Users, roles and account holds'
 
 /** The heading of SC-24, on both of its views. */
 export const AUDIT_LOG_HEADING = 'Audit and notification log'
@@ -136,6 +141,7 @@ async function answerTheApi(route: Route): Promise<void> {
     ...AUDIT_ANSWERS,
     ...CATALOGUE_ANSWERS,
     ...ASSET_ANSWERS,
+    ...USER_ANSWERS,
   }
   const body = answers[key]
   if (body === undefined) {
@@ -183,7 +189,16 @@ export const ADMIN_SCREENS: readonly AdminScreen[] = [
   { path: `/admin/catalogue?model=${CATALOGUE_MODEL_ID}`, heading: CATALOGUE_HEADING, loaded: 'Last changed' },
   { path: '/admin/assets', heading: ASSET_REGISTER_HEADING, loaded: ASSET_TAG },
   { path: `/admin/assets?asset=${ASSET_TAG}`, heading: ASSET_REGISTER_HEADING, loaded: 'Held for booking TSH-R-26-000124' },
+  { path: '/admin/users', heading: USERS_HEADING, loaded: LOCKED_ACCOUNT_NAME },
+  { path: '/admin/users?view=customers&status=ON_HOLD', heading: USERS_HEADING, loaded: HELD_CUSTOMER_NAME },
 ]
+
+/** SC-23 from the screens above, on the staff accounts or the customer holds. */
+export function usersScreen(customers: boolean): AdminScreen {
+  const found = ADMIN_SCREENS.find((screen) => screen.heading === USERS_HEADING && screen.path.includes('view=customers') === customers)
+  if (found === undefined) throw new Error('ADMIN_SCREENS has no user management view to open.')
+  return found
+}
 
 /** Open an owner's screen as the signed in owner, with the API answered here. */
 export async function openAdminScreen(page: Page, screen: AdminScreen): Promise<void> {

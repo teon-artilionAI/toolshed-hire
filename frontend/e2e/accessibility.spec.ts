@@ -37,7 +37,9 @@
  * is scanned loaded from asset-answers.ts, with no unit open and with one
  * open, then again with the question before a unit is retired and its reason
  * refused, and with the registration form showing every problem it holds
- * back.
+ * back. The staff accounts and the customer holds are scanned loaded from
+ * user-answers.ts, and again with their forms and questions open in
+ * user-management.spec.ts.
  *
  * The owner's corrections only show for an administrator, so the return
  * screen is scanned again as the owner with a reversal asked, and the checkout
