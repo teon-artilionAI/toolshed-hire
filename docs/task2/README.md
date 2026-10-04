@@ -7,12 +7,11 @@ the architecture and the pipeline.
 
 | File | What it holds |
 |---|---|
-| [test-plan-and-results.md](test-plan-and-results.md) | How I test the system, what runs on every push, pull request and release, how concurrency is tested, the latest results, and how each non-functional requirement, NFR-01 to NFR-18, is verified today |
+| [test-plan-and-results.md](test-plan-and-results.md) | How I test the system, what runs on every push, pull request, deployment and release, how concurrency is tested, the latest results and the figures worked out by hand, and how each non-functional requirement, NFR-01 to NFR-18, is verified today |
 | [security-controls.md](security-controls.md) | Each of the 44 security controls in the Task 1 design document, C-01 to C-44, with its status today and the file, test or workflow step that shows it |
 | [deviations.md](deviations.md) | Every place I know of where the built system differs from the Task 1 design document, and why |
 | [presentation.md](presentation.md) | The outline of the recorded presentation, slide by slide, and the step by step script of the live demonstration |
-
-<!-- final: add the slides file and the Task 2 screenshots to this folder and list them here -->
+| [slides](slides/toolshed-hire-task-2.pdf) | The slides of the recorded presentation, as a [PDF](slides/toolshed-hire-task-2.pdf) and as [PowerPoint](slides/toolshed-hire-task-2.pptx) |
 
 ## Other evidence elsewhere in the repository
 
