@@ -1,20 +1,26 @@
 """Settling the deposit once every unit is back, and the payment of a balance (BR-32, BR-33, BR-53).
 
 The deposit is settled in one calculation with no database anywhere,
-`deposit_settlement_of`. What is owed is the late fees and the recovery
-charges still pending. The deposit pays what it can of that, so what is
+`deposit_settlement_of`. What is owed is every charge still pending, which is
+the late fees and the recovery charges, and any adjustment or reversal an
+administrator raised (`app.domain.charge_corrections`). A credit counts
+against what is owed. The deposit pays what it can of that, so what is
 withheld is never more than what is held, and what is left of the deposit is
 released. What the deposit cannot cover is the balance due. A deposit kept
 for a lost unit was already kept when the loss was recorded, so it counts as
 withheld and is not available to pay anything else.
 
-`settle_deposit` applies that calculation to a rental. Each pending charge the
-deposit covers in full is settled, in the order the charges were raised, the
-remainder is released as a DEPOSIT_RELEASE charge with a negative amount, and
-the rental carries the three figures. With nothing left due every charge is
-settled or waived, so the rental is SETTLED and `settled_at` is stamped in the
-same transaction (BR-53). With a balance due it stays RETURNED until the
-balance is paid.
+`settle_deposit` applies that calculation to a rental, and
+`settle_covered_charges` settles what it paid for. With nothing left due every
+pending charge is settled, a credit with the debits it is set against.
+Otherwise each debit the deposit covers in full is settled, in the order the
+charges were raised, and a credit waits with the rest for the balance. The
+remainder of the deposit is released as a DEPOSIT_RELEASE charge with a
+negative amount, and the rental carries the three figures. With nothing left
+due every charge is settled or waived, so the rental is SETTLED and
+`settled_at` is stamped in the same transaction (BR-53). With a balance due it
+stays RETURNED until the balance is paid. A credit larger than everything owed
+and the deposit together is paid back by the credit itself being settled.
 
 When the deposit may be settled is `settlement_wait`. It is one function, and
 it answers what the rental still waits on, in the order the waits are lifted.
@@ -45,10 +51,6 @@ from app.domain.return_charges import deposit_release_charge
 SETTLEMENT_RULE: Final[str] = "BR-32"
 BALANCE_RULE: Final[str] = "BR-33"
 NOTHING_WAITING: Final[int] = 0
-# The charges the deposit is withheld for (BR-32).
-WITHHELD_FOR: Final[frozenset[ChargeType]] = frozenset(
-    {ChargeType.LATE_FEE, ChargeType.DAMAGE_RECOVERY}
-)
 
 UNITS_STILL_OUT_MESSAGE: Final[str] = (
     "The deposit is settled once every unit is back. One or more is still out."
@@ -172,11 +174,6 @@ def settle_deposit(rental: Rental, *, settled_by: UUID, now: datetime) -> Deposi
         raise _refused(rental, UNITS_STILL_OUT_MESSAGE, SETTLEMENT_RULE)
     if deposit_was_settled(rental):
         raise _refused(rental, ALREADY_SETTLED_MESSAGE, SETTLEMENT_RULE)
-    owed_charges = [
-        charge
-        for charge in rental.charges
-        if charge.is_pending() and charge.charge_type in WITHHELD_FOR
-    ]
     settlement = deposit_settlement_of(
         held=Money.create(rental.deposit_held),
         forfeited=_sum(
@@ -184,9 +181,9 @@ def settle_deposit(rental: Rental, *, settled_by: UUID, now: datetime) -> Deposi
             for charge in rental.charges
             if charge.charge_type is ChargeType.DEPOSIT_FORFEIT
         ),
-        owed=_sum(charge.total() for charge in owed_charges),
+        owed=pending_total(rental),
     )
-    _settle_what_the_deposit_covers(rental, owed_charges, settlement.covered, now)
+    settle_covered_charges(rental, settlement, now)
     if settlement.released > Money.zero():
         rental.charges.append(
             deposit_release_charge(
@@ -238,22 +235,40 @@ def record_balance_payment(rental: Rental, *, payment_reference: str, now: datet
     return paid
 
 
-def _settle_what_the_deposit_covers(
-    rental: Rental, owed: list[Charge], covered: Money, now: datetime
-) -> None:
-    """Settle each owed charge the deposit pays in full, in the order they were raised."""
-    remaining = covered
-    paid: dict[UUID, Charge] = {}
-    for charge in owed:
-        if charge.total() <= remaining:
-            remaining = remaining.subtract(charge.total())
-            paid[charge.id] = charge.settled(
-                settled_at=now,
-                payment_reference=payment_reference(
-                    rental.reference, rental.charge_position(charge)
-                ),
-            )
+def pending_total(rental: Rental) -> Money:
+    """Return what the charges still pending on a rental add up to, credits included."""
+    return _sum(charge.total() for charge in rental.charges if charge.is_pending())
+
+
+def settle_covered_charges(rental: Rental, settlement: DepositSettlement, now: datetime) -> None:
+    """Settle the pending charges a settlement paid for, in the order they were raised.
+
+    With no balance left every pending charge is settled, a credit with the
+    debits it is set against. With a balance each debit the deposit covers in
+    full is settled, and a credit stays pending with the rest until the
+    balance is paid, so what is pending less what is due is always the part of
+    the deposit already spent on them.
+    """
+    pending = [charge for charge in rental.charges if charge.is_pending()]
+    nothing = Money.zero()
+    if settlement.balance_due > nothing:
+        remaining = settlement.covered
+        covered: list[Charge] = []
+        for charge in pending:
+            if nothing < charge.total() <= remaining:
+                remaining = remaining.subtract(charge.total())
+                covered.append(charge)
+        pending = covered
+    paid = {charge.id: _settled(rental, charge, now) for charge in pending}
     rental.charges = [paid.get(charge.id, charge) for charge in rental.charges]
+
+
+def _settled(rental: Rental, charge: Charge, now: datetime) -> Charge:
+    """Return a pending charge settled, with the simulated reference that numbers it."""
+    return charge.settled(
+        settled_at=now,
+        payment_reference=payment_reference(rental.reference, rental.charge_position(charge)),
+    )
 
 
 def _sum(amounts: Iterable[Money]) -> Money:

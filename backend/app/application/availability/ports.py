@@ -2,7 +2,9 @@
 
 `lock_allocatable` is the one method in the system that takes row locks on
 candidate units. Every flow that allocates goes through it, so there is one
-copy of the locking and no second copy to drift away from it.
+copy of the locking and no second copy to drift away from it. The force
+release of one allocation by an administrator goes through the same port,
+`find_allocation` and `release_allocation` (US-32).
 
 `AvailabilityQuery` is the read side. It answers where a model is free for a
 period without locking anything and without holding anything, so a search can
@@ -13,6 +15,7 @@ exclusion constraint still has the last word when somebody books.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -24,6 +27,22 @@ from app.application.availability.read_models import (
 from app.domain.availability import AssetAllocation
 from app.domain.catalogue import Asset
 from app.domain.period import BookingPeriod
+
+
+@dataclass(frozen=True, slots=True)
+class HeldUnit:
+    """One allocation, the reservation that holds it and the tag of its unit.
+
+    Attributes:
+        allocation_id: The allocation.
+        reservation_id: The reservation whose line it is held for.
+        asset_tag: The tag of the unit, for the audit event of a release.
+
+    """
+
+    allocation_id: UUID
+    reservation_id: UUID
+    asset_tag: str
 
 
 class AvailabilityQuery(Protocol):
@@ -89,4 +108,22 @@ class AssetRepository(Protocol):
 
     def save_units(self, assets: Sequence[Asset]) -> None:
         """Write the status, the condition, the meter and the retirement of units locked earlier."""
+        ...
+
+    def find_allocation(self, allocation_id: UUID) -> HeldUnit | None:
+        """Return an allocation with the reservation that holds it, or None when there is none.
+
+        Nothing is locked. The caller locks the reservation next, and the
+        allocation is changed only under that lock.
+        """
+        ...
+
+    def release_allocation(self, allocation: AssetAllocation) -> None:
+        """Write the release of one allocation the domain let go, under its reservation's lock.
+
+        Raises:
+            LookupError: If the allocation is not stored as active, which
+                means the caller did not hold the lock of its reservation.
+
+        """
         ...

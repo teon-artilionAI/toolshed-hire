@@ -1,7 +1,8 @@
 """The audit events of a hire after checkout, written in the unit of work of the change (BR-49).
 
-A return, a loss, a settlement, a balance payment and the sweep that marks a
-hire overdue each write an event for the rental, saying where it stood before
+A return, a loss, a settlement, a balance payment, the rework of a settlement
+after a charge is corrected and the sweep that marks a hire overdue each write
+an event for the rental, saying where it stood before
 and where it stands now, with the three figures of the deposit. A unit that
 moves writes an event of its own, the way a checkout writes one for every unit
 it hands over, so the history of a unit can be read without the rental.
@@ -30,6 +31,7 @@ RENTAL_ITEMS_RETURNED_ACTION: Final[str] = "rental.items_returned"
 RENTAL_ITEM_LOST_ACTION: Final[str] = "rental.item_lost"
 RENTAL_DEPOSIT_SETTLED_ACTION: Final[str] = "rental.deposit_settled"
 RENTAL_BALANCE_PAID_ACTION: Final[str] = "rental.balance_paid"
+RENTAL_SETTLEMENT_REWORKED_ACTION: Final[str] = "rental.settlement_reworked"
 RENTAL_OVERDUE_ACTION: Final[str] = "rental.overdue"
 RESERVATION_RETURNED_ACTION: Final[str] = "reservation.returned"
 
@@ -121,6 +123,7 @@ __all__ = [
     "RENTAL_ITEMS_RETURNED_ACTION",
     "RENTAL_ITEM_LOST_ACTION",
     "RENTAL_OVERDUE_ACTION",
+    "RENTAL_SETTLEMENT_REWORKED_ACTION",
     "RESERVATION_RETURNED_ACTION",
     "record_rental_change",
     "record_unit_moves",

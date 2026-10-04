@@ -69,6 +69,12 @@
  * of the fleet. Asking again on every return to the window would cost the
  * server that whole sum each time for figures that have not moved. So a report
  * is fresh for a minute, and the owner can reload for the latest.
+ *
+ * The audit trail and the notification log are never fresh. Every write in the
+ * system adds to the trail, and an email moves from queued to sent or failed a
+ * moment after it was listed, so the owner reading either to answer a customer
+ * must see it as it stands. Each read is one page of twenty, so asking again
+ * on focus costs one small indexed query and not the whole log.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -129,6 +135,12 @@ export const ADMIN_DASHBOARD_SEGMENT = 'dashboard'
 /** The second segment of the utilisation and gross contribution report. */
 export const ADMIN_REPORT_SEGMENT = 'report'
 
+/** The second segment of the audit trail. */
+export const ADMIN_AUDIT_SEGMENT = 'audit'
+
+/** The second segment of the notification log. */
+export const ADMIN_NOTIFICATIONS_SEGMENT = 'notifications'
+
 /** How long a report counts as fresh. */
 export const REPORT_FRESH_MS = 60_000
 
@@ -136,8 +148,8 @@ export const REPORT_FRESH_MS = 60_000
  *  and it is asked for again whenever a screen mounts, the window regains
  *  focus or the network comes back. Availability, quotes, reservations, the
  *  customer's own profile and hires, the customers the counter looks up, the
- *  counter's day, the locator, the hires, the damage reports and the owner's
- *  dashboard all run on it. */
+ *  counter's day, the locator, the hires, the damage reports, the owner's
+ *  dashboard, the audit trail and the notification log all run on it. */
 const NEVER_FRESH = {
   staleTime: AVAILABILITY_FRESH_MS,
   refetchOnMount: 'always',
@@ -192,5 +204,7 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([DAMAGE_KEY], NEVER_FRESH)
   client.setQueryDefaults([ADMIN_KEY, ADMIN_DASHBOARD_SEGMENT], NEVER_FRESH)
   client.setQueryDefaults([ADMIN_KEY, ADMIN_REPORT_SEGMENT], { staleTime: REPORT_FRESH_MS })
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_AUDIT_SEGMENT], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_NOTIFICATIONS_SEGMENT], NEVER_FRESH)
   return client
 }

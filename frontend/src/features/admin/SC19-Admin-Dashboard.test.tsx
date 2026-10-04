@@ -126,7 +126,7 @@ describe('the business today', () => {
     const waiting = screen.getByRole('region', { name: 'Waiting on you' })
     expect(within(waiting).getByRole('link', { name: /Open damage reports 3/ })).toHaveAttribute('href', '/admin/assets')
     expect(within(waiting).getByRole('link', { name: /Customers on hold 1/ })).toHaveAttribute('href', '/admin/users')
-    expect(within(waiting).getByRole('link', { name: /Failed notifications 0/ })).toHaveAttribute('href', '/admin/audit')
+    expect(within(waiting).getByRole('link', { name: /Failed notifications 0/ })).toHaveAttribute('href', '/admin/audit?view=notifications&status=FAILED')
     expect(within(waiting).getByText('Every email went out')).toBeVisible()
   })
 

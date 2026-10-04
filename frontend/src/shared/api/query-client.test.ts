@@ -125,6 +125,8 @@ describe('the freshness rules', () => {
     ['a day of the diary', overviewQueries.diary({ branchCode: 'BLV', from: '2026-03-12', days: 1 }).queryKey],
     ['a locator search', locatorQueries.search({ q: 'TSH', page: 1, pageSize: 20 }).queryKey],
     ["the owner's dashboard", adminQueries.dashboard().queryKey],
+    ['a page of the audit trail', adminQueries.auditEvents({ page: 1, pageSize: 20 }).queryKey],
+    ['a page of the notification log', adminQueries.notifications({ page: 1, pageSize: 20 }).queryKey],
   ])('never treat %s as fresh, and refetch it on every use', (_what, queryKey) => {
     const defaults = createQueryClient().getQueryDefaults(queryKey)
 

@@ -8,6 +8,7 @@
  */
 
 import type { IsoDate, ReportGrouping } from '../../shared/api/contract'
+import { writeNotificationFilters } from './audit-address'
 import { FIRST_PAGE, writeReportFilters } from './report-address'
 
 /** SC-22, the utilisation and gross contribution report. */
@@ -19,8 +20,15 @@ export const ASSET_REGISTER_PATH = '/admin/assets'
 /** SC-23, where the customer holds are lifted. */
 export const CUSTOMER_HOLDS_PATH = '/admin/users'
 
-/** SC-24, where the notification log is. */
-export const NOTIFICATION_LOG_PATH = '/admin/audit'
+/** SC-24, where the audit trail and the notification log are. */
+export const AUDIT_LOG_PATH = '/admin/audit'
+
+/** SC-24 on the notification log, showing only the emails that failed, which
+ *  are the ones the owner can send again. */
+export const FAILED_NOTIFICATIONS_HREF = `${AUDIT_LOG_PATH}?${writeNotificationFilters({
+  status: 'FAILED',
+  page: FIRST_PAGE,
+}).toString()}`
 
 /**
  * SC-22 for one period at one grouping, with no filter, from the first page.

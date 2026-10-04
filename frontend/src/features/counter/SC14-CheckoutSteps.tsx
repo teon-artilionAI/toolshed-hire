@@ -10,6 +10,7 @@
  * pixels, because this is filled in standing at a counter.
  */
 
+import type { ReactNode } from 'react'
 import { MAX_ACCESSORIES_LENGTH } from '../../shared/api/checkout'
 import type { CheckoutUnit } from '../../shared/api/contract'
 import { CONDITION_GRADES } from '../../shared/api/rental-read'
@@ -28,6 +29,7 @@ export function UnitFields({
   errors,
   disabled,
   onChange,
+  children,
 }: {
   unit: CheckoutUnit
   /** Where the unit sits on the reservation, counted from zero. */
@@ -36,6 +38,8 @@ export function UnitFields({
   errors: CheckoutErrors
   disabled: boolean
   onChange: (patch: Partial<UnitDraft>) => void
+  /** What else is offered on the unit, such as the owner's release of it. */
+  children?: ReactNode
 }) {
   const id = (control: Parameters<typeof unitControlId>[1]) => unitControlId(index, control)
   return (
@@ -96,6 +100,7 @@ export function UnitFields({
           autoComplete="off"
         />
       </div>
+      {children}
     </fieldset>
   )
 }

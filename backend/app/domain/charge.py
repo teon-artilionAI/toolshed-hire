@@ -17,9 +17,11 @@ reference of the form `SIM-TSH-H-26-000099-01`, which names the rental and the
 place of the charge on it, and no payment gateway is ever called.
 
 A charge that is raised and not yet paid, a late fee for example, is PENDING.
-`settled` is the one way it moves on, and it refuses a charge that is no longer
-pending. That is the guard of BR-24. A settled, waived or reversed charge is
-final, and nothing in the domain hands back a changed copy of one.
+`settled` and the waiver in `app.domain.charge_corrections` are the only two
+ways it moves on, and both ask `ensure_may_change` first, which refuses a
+charge that is no longer pending. That is the guard of BR-24. A settled, waived
+or reversed charge is final, and nothing in the domain hands back a changed
+copy of one.
 """
 
 from __future__ import annotations
@@ -88,6 +90,9 @@ class Charge:
         settled_at: When it was settled, if it has been.
         payment_reference: The simulated settlement reference, if settled.
         damage_report_id: The damage report a recovery was raised for, or None.
+        reverses_charge_id: The charge a reversal undoes, or None (BR-24).
+        reason: Why an administrator waived, reversed or adjusted it, or None
+            for a charge nobody corrected. It is stored as `waiver_reason`.
         id: The charge key, generated here so it is known before the insert.
 
     """
@@ -106,6 +111,8 @@ class Charge:
     settled_at: datetime | None = None
     payment_reference: str | None = None
     damage_report_id: UUID | None = None
+    reverses_charge_id: UUID | None = None
+    reason: str | None = None
     id: UUID = field(default_factory=uuid4)
 
     def __post_init__(self) -> None:
@@ -113,11 +120,13 @@ class Charge:
 
         Raises:
             ValueError: If the amount including VAT is not the other two added,
-                if a deposit movement carries VAT, or if the description is
-                blank or wider than its column. Each means the calling code
-                built the charge wrongly.
+                if a deposit movement carries VAT, if the description is blank
+                or wider than its column, or if a waived charge carries no
+                reason (BR-25). Each means the calling code built it wrongly.
 
         """
+        if self.status is ChargeStatus.WAIVED and not (self.reason or "").strip():
+            raise ValueError(f"Attempted to build waived charge {self.id} with no reason.")
         if self.amount_inc_vat != self.amount_ex_vat + self.vat_amount:
             raise ValueError(
                 f"Attempted to build a {self.charge_type.value} charge of {self.amount_ex_vat} "
@@ -267,8 +276,11 @@ class Charge:
             payment_reference=payment_reference,
         )
 
-    def ensure_may_change(self) -> None:
+    def ensure_may_change(self, to_status: ChargeStatus = ChargeStatus.SETTLED) -> None:
         """Refuse any change to a charge that is no longer pending (BR-24).
+
+        Args:
+            to_status: Where the change would have moved it, for the log.
 
         Raises:
             StateTransitionError: If the charge is settled, waived or reversed.
@@ -280,6 +292,6 @@ class Charge:
             f"This charge is {FINAL_STANDING_IN_WORDS[self.status]}, so it cannot be changed. "
             "A correction is a new charge.",
             from_status=self.status.value,
-            to_status=ChargeStatus.SETTLED.value,
+            to_status=to_status.value,
             rule=SETTLED_CHARGE_RULE,
         )

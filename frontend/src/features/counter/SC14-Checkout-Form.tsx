@@ -16,9 +16,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { PackageCheck, RotateCw } from 'lucide-react'
-import type { ReservationCheckout } from '../../shared/api/contract'
+import type { CheckoutUnit, ReservationCheckout } from '../../shared/api/contract'
 import { ErrorState } from '../../shared/async-states'
 import { Notice } from '../../shared/ui'
 import { draftFor, serverErrorsByControl, toCheckoutRequest, validateCheckout } from './checkout-form'
@@ -43,6 +43,7 @@ export function CheckoutForm({
   handover,
   headingRef,
   onReload,
+  unitAction,
 }: {
   checkout: ReservationCheckout
   stage: CheckoutStage
@@ -50,6 +51,8 @@ export function CheckoutForm({
   handover: Handover
   headingRef: RefObject<HTMLHeadingElement | null>
   onReload: () => void
+  /** What else is offered on each unit, such as the owner's release of it. */
+  unitAction?: (unit: CheckoutUnit) => ReactNode
 }) {
   const [draft, setDraft] = useState<CheckoutDraft>(() => draftFor(checkout))
   const [tried, setTried] = useState(false)
@@ -155,7 +158,9 @@ export function CheckoutForm({
             errors={errors}
             disabled={handover.pending}
             onChange={(patch) => patchUnit(unit.allocationId, patch)}
-          />
+          >
+            {unitAction?.(unit)}
+          </UnitFields>
         ))}
       </section>
       <DepositAndAgreement

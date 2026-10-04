@@ -91,7 +91,7 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-21', path: '/admin/assets', name: 'Asset Register and Lifecycle', navLabel: 'Assets', role: 'admin', live: false, inNav: true, icon: 'Boxes' },
   { id: 'SC-22', path: '/admin/reports', name: 'Utilisation and Gross Contribution Report', navLabel: 'Reports', role: 'admin', live: true, inNav: true, icon: 'BarChart3' },
   { id: 'SC-23', path: '/admin/users', name: 'User and Role Management', navLabel: 'Users', role: 'admin', live: false, inNav: true, icon: 'ShieldCheck' },
-  { id: 'SC-24', path: '/admin/audit', name: 'Audit and Notification Log', navLabel: 'Audit', role: 'admin', live: false, inNav: true, icon: 'ScrollText' },
+  { id: 'SC-24', path: '/admin/audit', name: 'Audit and Notification Log', navLabel: 'Audit', role: 'admin', live: true, inNav: true, icon: 'ScrollText' },
 
   // Supporting pages. Not among the twenty-four numbered screens.
   // The identifier stays outside the SC series for the same reason the

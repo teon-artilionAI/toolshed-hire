@@ -117,7 +117,11 @@ const RESERVATION = {
   createdAt: `${TODAY}T08:00:00+02:00`,
 }
 
-const CHECKOUT = {
+/** What the checkout of the booking answers, by its route. owner-answers.ts
+ *  answers the same route with the booking short of a unit. */
+export const CHECKOUT_ROUTE = `GET /api/reservations/${REFERENCE}/checkout`
+
+export const CHECKOUT = {
   reservationId: RESERVATION_ID,
   reference: REFERENCE,
   status: 'CONFIRMED',
@@ -136,6 +140,7 @@ const CHECKOUT = {
   canCheckOut: true,
   refusal: null,
   rentalId: null,
+  unitsShort: 0,
 }
 
 /** What each route answers. Anything else is a 404, as from a backend without it. */
@@ -155,21 +160,25 @@ const ANSWERS: Record<string, unknown> = {
     total: 1,
   },
   [`GET /api/catalogue/models/${MODEL_SLUG}/availability`]: { from: TODAY, to: TOMORROW, hireDays: 1, quantity: 1, branches: ANSWERS_FROM },
-  [`GET /api/reservations/${REFERENCE}/checkout`]: CHECKOUT,
+  [CHECKOUT_ROUTE]: CHECKOUT,
   ...OVERVIEW_ANSWERS,
   ...RETURN_ANSWERS,
   ...DAMAGE_ANSWERS,
 }
 
-async function answerTheApi(route: Route): Promise<void> {
-  const request = route.request()
-  const key = `${request.method()} ${new URL(request.url()).pathname}`
-  const body = ANSWERS[key]
-  if (body === undefined) {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
-    return
+/** Answer the API from `ANSWERS`, with the answers a scan names in place of
+ *  the ones they share a route with. */
+function answerTheApi(instead: Record<string, unknown>): (route: Route) => Promise<void> {
+  return async (route) => {
+    const request = route.request()
+    const key = `${request.method()} ${new URL(request.url()).pathname}`
+    const body = instead[key] ?? ANSWERS[key]
+    if (body === undefined) {
+      await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
+      return
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
   }
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
 }
 
 /** A counter screen to open, and the heading that proves it has loaded. */
@@ -192,10 +201,19 @@ export const COUNTER_SCREENS: readonly CounterScreen[] = [
   { path: DAMAGE_PATH, heading: 'Record damage', loaded: 'TSH-D-26-00012' },
 ]
 
-/** Open a counter screen as a signed in assistant, with the API answered here. */
-export async function openCounterScreen(page: Page, screen: CounterScreen): Promise<void> {
+/**
+ * Open a counter screen as a signed in assistant, with the API answered here.
+ *
+ * @param instead Answers that take the place of the shared ones for this
+ *   screen, by method and path, such as the owner's session.
+ */
+export async function openCounterScreen(
+  page: Page,
+  screen: CounterScreen,
+  instead: Record<string, unknown> = {},
+): Promise<void> {
   await page.addInitScript(SESSION_HINT)
-  await page.route('**/api/**', answerTheApi)
+  await page.route('**/api/**', answerTheApi(instead))
   await page.goto(screen.path)
   await expect(page.getByRole('heading', { level: 1, name: screen.heading })).toBeVisible()
   await expect(page.getByText(screen.loaded).first()).toBeVisible()

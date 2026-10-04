@@ -35,6 +35,8 @@ from app.domain.policies.pricing import (
 # What a line subtotal carries until the pricing policy has priced the line.
 NOT_YET_PRICED: Final[Decimal] = Decimal("0.00")
 MAXIMUM_LINE_QUANTITY: Final[int] = 10
+# The shortfall of a line that holds every unit it asks for.
+NOTHING_SHORT: Final[int] = 0
 QUANTITY_OUT_OF_RANGE_MESSAGE: Final[str] = (
     f"You can hire between {MINIMUM_LINE_QUANTITY} and {MAXIMUM_LINE_QUANTITY} of one tool "
     "at a time."
@@ -121,6 +123,14 @@ class ReservationLine:
     def is_satisfied(self) -> bool:
         """Return True when the line holds exactly as many units as it asks for (BR-08)."""
         return len(self.active_allocations()) == self.quantity
+
+    def shortfall(self) -> int:
+        """Return how many more units the line needs to hold all it asks for.
+
+        A draft line holds nothing, so its shortfall is its quantity. A line
+        whose unit an administrator released by hand is short of that one.
+        """
+        return max(self.quantity - len(self.active_allocations()), NOTHING_SHORT)
 
     def snapshot(self) -> LineSnapshot:
         """Return the figures the pricing policy prices this line from."""
