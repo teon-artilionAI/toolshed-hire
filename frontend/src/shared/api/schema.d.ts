@@ -853,6 +853,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/reports/utilisation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the utilisation and gross contribution report
+         * @description Return one page of the report, after running the sweep.
+         *
+         *     Raises:
+         *         ValidationFailure: If the period ends before it starts or is longer
+         *             than 366 days, or the branch or the category is unknown. HTTP
+         *             422, naming the parameter.
+         */
+        get: operations["read_utilisation_report_api_admin_reports_utilisation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/reports/utilisation.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return every line of the report as a CSV file
+         * @description Return every line of the report as CSV, worked out first and then streamed a line at a time.
+         *
+         *     Raises:
+         *         ValidationFailure: As for the report. HTTP 422, naming the parameter.
+         */
+        get: operations["export_utilisation_report_api_admin_reports_utilisation_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the business across every branch today
+         * @description Return each branch, the totals, the month so far and what waits, after running the sweep.
+         */
+        get: operations["read_admin_dashboard_api_admin_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1027,6 +1095,27 @@ export interface components {
          */
         AccountStatus: "ACTIVE" | "ON_HOLD" | "BLACKLISTED";
         /**
+         * AdminDashboardResponse
+         * @description The business across every branch today.
+         */
+        AdminDashboardResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Branches */
+            branches: components["schemas"]["BranchPositionResponse"][];
+            totals: components["schemas"]["BranchCountsResponse"];
+            monthToDate: components["schemas"]["MonthToDateResponse"];
+            /** Opendamagereports */
+            openDamageReports: number;
+            /** Customersonhold */
+            customersOnHold: number;
+            /** Failednotifications */
+            failedNotifications: number;
+        };
+        /**
          * AssetLocationPageResponse
          * @description One page of the units a search found, in tag order.
          */
@@ -1124,12 +1213,56 @@ export interface components {
             available: boolean;
         };
         /**
+         * BranchCountsResponse
+         * @description What is due today and where the units stand, at a branch or across every branch.
+         */
+        BranchCountsResponse: {
+            /** Collectionsdue */
+            collectionsDue: number;
+            /** Returnsdue */
+            returnsDue: number;
+            /** Overdue */
+            overdue: number;
+            /** Onhire */
+            onHire: number;
+            /** Quarantined */
+            quarantined: number;
+            /** Underrepair */
+            underRepair: number;
+            /** Available */
+            available: number;
+        };
+        /**
          * BranchListResponse
          * @description The active branches, ordered by name.
          */
         BranchListResponse: {
             /** Items */
             items: components["schemas"]["BranchResponse"][];
+        };
+        /**
+         * BranchPositionResponse
+         * @description Where one trading branch stands today.
+         */
+        BranchPositionResponse: {
+            /** Collectionsdue */
+            collectionsDue: number;
+            /** Returnsdue */
+            returnsDue: number;
+            /** Overdue */
+            overdue: number;
+            /** Onhire */
+            onHire: number;
+            /** Quarantined */
+            quarantined: number;
+            /** Underrepair */
+            underRepair: number;
+            /** Available */
+            available: number;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
         };
         /**
          * BranchResponse
@@ -1705,6 +1838,12 @@ export interface components {
             /** Emaildeliverable */
             emailDeliverable: boolean;
         };
+        /**
+         * GroupBy
+         * @description What one line of the report stands for.
+         * @enum {string}
+         */
+        GroupBy: "asset" | "model" | "category" | "branch";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1881,6 +2020,26 @@ export interface components {
             maxHireDays: number;
             /** Imagepath */
             imagePath: string | null;
+        };
+        /**
+         * MonthToDateResponse
+         * @description Utilisation and gross contribution from the first of the month to the end of today.
+         */
+        MonthToDateResponse: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Utilisationpercent */
+            utilisationPercent: string | null;
+            /** Grosscontribution */
+            grossContribution: string;
         };
         /**
          * NoShowRequest
@@ -2251,6 +2410,81 @@ export interface components {
          */
         RentalStatus: "OPEN" | "OVERDUE" | "PARTIALLY_RETURNED" | "RETURNED" | "SETTLED";
         /**
+         * ReportDefinitionsResponse
+         * @description The two definitions every figure of the report is read by.
+         */
+        ReportDefinitionsResponse: {
+            /** Utilisation */
+            utilisation: string;
+            /** Grosscontribution */
+            grossContribution: string;
+        };
+        /**
+         * ReportFiguresResponse
+         * @description The figures of a line of the report, or of every line together.
+         */
+        ReportFiguresResponse: {
+            /** Assetcount */
+            assetCount: number;
+            /** Daysonhire */
+            daysOnHire: number;
+            /** Serviceabledays */
+            serviceableDays: number;
+            /** Utilisationpercent */
+            utilisationPercent: string | null;
+            /** Hirerevenueexvat */
+            hireRevenueExVat: string;
+            /** Latefeesexvat */
+            lateFeesExVat: string;
+            /** Damagerecoveryexvat */
+            damageRecoveryExVat: string;
+            /** Repaircosts */
+            repairCosts: string;
+            /** Grosscontribution */
+            grossContribution: string;
+        };
+        /**
+         * ReportLineResponse
+         * @description One line of the report, for an asset, a model, a category or a branch.
+         *
+         *     `assetTag` and `status` are set on a line for an asset. `branchCode` is set
+         *     on a line for an asset or a branch, `categoryName` on a line for an asset,
+         *     a model or a category, and `modelName` on a line for an asset or a model.
+         */
+        ReportLineResponse: {
+            /** Assetcount */
+            assetCount: number;
+            /** Daysonhire */
+            daysOnHire: number;
+            /** Serviceabledays */
+            serviceableDays: number;
+            /** Utilisationpercent */
+            utilisationPercent: string | null;
+            /** Hirerevenueexvat */
+            hireRevenueExVat: string;
+            /** Latefeesexvat */
+            lateFeesExVat: string;
+            /** Damagerecoveryexvat */
+            damageRecoveryExVat: string;
+            /** Repaircosts */
+            repairCosts: string;
+            /** Grosscontribution */
+            grossContribution: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Branchcode */
+            branchCode: string | null;
+            /** Categoryname */
+            categoryName: string | null;
+            /** Modelname */
+            modelName: string | null;
+            /** Assettag */
+            assetTag: string | null;
+            status: components["schemas"]["AssetStatus"] | null;
+        };
+        /**
          * ReservationLineRequest
          * @description One model and how many of it.
          */
@@ -2518,6 +2752,33 @@ export interface components {
             branchCode?: string | null;
             /** Emailverified */
             emailVerified: boolean;
+        };
+        /**
+         * UtilisationReportResponse
+         * @description One page of the report, highest gross contribution first, with the totals over every line.
+         */
+        UtilisationReportResponse: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            groupBy: components["schemas"]["GroupBy"];
+            definitions: components["schemas"]["ReportDefinitionsResponse"];
+            totals: components["schemas"]["ReportFiguresResponse"];
+            /** Items */
+            items: components["schemas"]["ReportLineResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -4295,6 +4556,137 @@ export interface operations {
             };
             /** @description A query parameter was refused. `errors.fields` names it. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_utilisation_report_api_admin_reports_utilisation_get: {
+        parameters: {
+            query: {
+                /** @description The first day of the period. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+                /** @description What each line stands for. */
+                groupBy?: components["schemas"]["GroupBy"];
+                /** @description Only the units held at this branch. */
+                branchCode?: string | null;
+                /** @description Only the units of models in this category and its children. */
+                categorySlug?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many lines a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisationReportResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_utilisation_report_api_admin_reports_utilisation_csv_get: {
+        parameters: {
+            query: {
+                /** @description The first day of the period. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+                /** @description What each line stands for. */
+                groupBy?: components["schemas"]["GroupBy"];
+                /** @description Only the units held at this branch. */
+                branchCode?: string | null;
+                /** @description Only the units of models in this category and its children. */
+                categorySlug?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_admin_dashboard_api_admin_dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

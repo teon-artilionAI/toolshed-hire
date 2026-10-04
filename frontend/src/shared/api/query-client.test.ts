@@ -18,12 +18,14 @@ import {
   RESERVATION_ID,
   pageOf,
 } from '../../test/reservation-samples'
+import { adminQueries } from './admin-queries'
 import { listBranches } from './catalogue'
 import { catalogueQueries } from './catalogue-queries'
 import { locatorQueries, overviewQueries } from './counter-queries'
 import {
   CATALOGUE_FRESH_MS,
   MAX_QUERY_RETRIES,
+  REPORT_FRESH_MS,
   RETRY_BASE_DELAY_MS,
   RETRY_MAX_DELAY_MS,
   createQueryClient,
@@ -122,6 +124,7 @@ describe('the freshness rules', () => {
     ["the counter's dashboard", overviewQueries.dashboard('BLV').queryKey],
     ['a day of the diary', overviewQueries.diary({ branchCode: 'BLV', from: '2026-03-12', days: 1 }).queryKey],
     ['a locator search', locatorQueries.search({ q: 'TSH', page: 1, pageSize: 20 }).queryKey],
+    ["the owner's dashboard", adminQueries.dashboard().queryKey],
   ])('never treat %s as fresh, and refetch it on every use', (_what, queryKey) => {
     const defaults = createQueryClient().getQueryDefaults(queryKey)
 
@@ -129,6 +132,14 @@ describe('the freshness rules', () => {
     expect(defaults.refetchOnMount).toBe('always')
     expect(defaults.refetchOnWindowFocus).toBe('always')
     expect(defaults.refetchOnReconnect).toBe('always')
+  })
+
+  it('treat a report as fresh for a minute, so a return to the window does not work it out again', () => {
+    const query = { from: '2026-09-01', to: '2026-10-01', groupBy: 'model', page: 1, pageSize: 20 } as const
+    const defaults = createQueryClient().getQueryDefaults(adminQueries.report(query).queryKey)
+
+    expect(defaults.staleTime).toBe(REPORT_FRESH_MS)
+    expect(defaults.refetchOnWindowFocus).toBeUndefined()
   })
 
   it('never retry a write', () => {

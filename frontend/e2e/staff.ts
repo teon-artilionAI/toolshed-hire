@@ -10,12 +10,14 @@
  * falls back to the password the development seed gives every account.
  *
  * The seed also makes one administrator, the owner, who resolves the damage
- * report the damage journey files, so the unit goes back on the shelf.
+ * report the damage journey files, so the unit goes back on the shelf, and who
+ * reads the dashboard and the report in the reporting spec.
  *
  * The API counts every sign in attempt for an email address and allows ten in
  * fifteen minutes. One run signs each assistant in four times, once for each
  * counter journey and once for each counter overview journey, and the owner
- * twice, once in each browser project.
+ * four times, once for the damage journey and once for the reporting spec in
+ * each browser project.
  */
 
 import { expect } from '@playwright/test'

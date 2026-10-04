@@ -2547,6 +2547,300 @@
         }
       }
     },
+    "/api/admin/reports/utilisation": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return one page of the utilisation and gross contribution report",
+        "description": "Return one page of the report, after running the sweep.\n\nRaises:\n    ValidationFailure: If the period ends before it starts or is longer\n        than 366 days, or the branch or the category is unknown. HTTP\n        422, naming the parameter.",
+        "operationId": "read_utilisation_report_api_admin_reports_utilisation_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The first day of the period.",
+              "title": "From"
+            },
+            "description": "The first day of the period."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The day after the last day, so the period is [from, to).",
+              "title": "To"
+            },
+            "description": "The day after the last day, so the period is [from, to)."
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GroupBy",
+              "description": "What each line stands for.",
+              "default": "asset"
+            },
+            "description": "What each line stands for."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units held at this branch.",
+              "title": "Branchcode"
+            },
+            "description": "Only the units held at this branch."
+          },
+          {
+            "name": "categorySlug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units of models in this category and its children.",
+              "title": "Categoryslug"
+            },
+            "description": "Only the units of models in this category and its children."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many lines a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many lines a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UtilisationReportResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/reports/utilisation.csv": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return every line of the report as a CSV file",
+        "description": "Return every line of the report as CSV, worked out first and then streamed a line at a time.\n\nRaises:\n    ValidationFailure: As for the report. HTTP 422, naming the parameter.",
+        "operationId": "export_utilisation_report_api_admin_reports_utilisation_csv_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The first day of the period.",
+              "title": "From"
+            },
+            "description": "The first day of the period."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The day after the last day, so the period is [from, to).",
+              "title": "To"
+            },
+            "description": "The day after the last day, so the period is [from, to)."
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GroupBy",
+              "description": "What each line stands for.",
+              "default": "asset"
+            },
+            "description": "What each line stands for."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units held at this branch.",
+              "title": "Branchcode"
+            },
+            "description": "Only the units held at this branch."
+          },
+          {
+            "name": "categorySlug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units of models in this category and its children.",
+              "title": "Categoryslug"
+            },
+            "description": "Only the units of models in this category and its children."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dashboard": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return the business across every branch today",
+        "description": "Return each branch, the totals, the month so far and what waits, after running the sweep.",
+        "operationId": "read_admin_dashboard_api_admin_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDashboardResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/branches": {
       "get": {
         "tags": [
@@ -3103,6 +3397,52 @@
         "title": "AccountStatus",
         "description": "Customer account standing. ON_HOLD is set by the no-show rule (BR-18)."
       },
+      "AdminDashboardResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "branches": {
+            "items": {
+              "$ref": "#/components/schemas/BranchPositionResponse"
+            },
+            "type": "array",
+            "title": "Branches"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/BranchCountsResponse"
+          },
+          "monthToDate": {
+            "$ref": "#/components/schemas/MonthToDateResponse"
+          },
+          "openDamageReports": {
+            "type": "integer",
+            "title": "Opendamagereports"
+          },
+          "customersOnHold": {
+            "type": "integer",
+            "title": "Customersonhold"
+          },
+          "failedNotifications": {
+            "type": "integer",
+            "title": "Failednotifications"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "branches",
+          "totals",
+          "monthToDate",
+          "openDamageReports",
+          "customersOnHold",
+          "failedNotifications"
+        ],
+        "title": "AdminDashboardResponse",
+        "description": "The business across every branch today."
+      },
       "AssetLocationPageResponse": {
         "properties": {
           "items": {
@@ -3311,6 +3651,50 @@
         "title": "BranchAvailabilityResponse",
         "description": "Whether one branch can supply a model for the whole period asked about."
       },
+      "BranchCountsResponse": {
+        "properties": {
+          "collectionsDue": {
+            "type": "integer",
+            "title": "Collectionsdue"
+          },
+          "returnsDue": {
+            "type": "integer",
+            "title": "Returnsdue"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          },
+          "onHire": {
+            "type": "integer",
+            "title": "Onhire"
+          },
+          "quarantined": {
+            "type": "integer",
+            "title": "Quarantined"
+          },
+          "underRepair": {
+            "type": "integer",
+            "title": "Underrepair"
+          },
+          "available": {
+            "type": "integer",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collectionsDue",
+          "returnsDue",
+          "overdue",
+          "onHire",
+          "quarantined",
+          "underRepair",
+          "available"
+        ],
+        "title": "BranchCountsResponse",
+        "description": "What is due today and where the units stand, at a branch or across every branch."
+      },
       "BranchListResponse": {
         "properties": {
           "items": {
@@ -3327,6 +3711,60 @@
         ],
         "title": "BranchListResponse",
         "description": "The active branches, ordered by name."
+      },
+      "BranchPositionResponse": {
+        "properties": {
+          "collectionsDue": {
+            "type": "integer",
+            "title": "Collectionsdue"
+          },
+          "returnsDue": {
+            "type": "integer",
+            "title": "Returnsdue"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          },
+          "onHire": {
+            "type": "integer",
+            "title": "Onhire"
+          },
+          "quarantined": {
+            "type": "integer",
+            "title": "Quarantined"
+          },
+          "underRepair": {
+            "type": "integer",
+            "title": "Underrepair"
+          },
+          "available": {
+            "type": "integer",
+            "title": "Available"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collectionsDue",
+          "returnsDue",
+          "overdue",
+          "onHire",
+          "quarantined",
+          "underRepair",
+          "available",
+          "branchCode",
+          "branchName"
+        ],
+        "title": "BranchPositionResponse",
+        "description": "Where one trading branch stands today."
       },
       "BranchResponse": {
         "properties": {
@@ -4639,6 +5077,17 @@
         "title": "EmailDeliverableResponse",
         "description": "Whether a message for the address would be delivered in this environment.\n\nFalse when the environment only delivers mail to one address and this is\nnot it. It never depends on whether the address has an account."
       },
+      "GroupBy": {
+        "type": "string",
+        "enum": [
+          "asset",
+          "model",
+          "category",
+          "branch"
+        ],
+        "title": "GroupBy",
+        "description": "What one line of the report stands for."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5008,6 +5457,44 @@
         ],
         "title": "ModelSummaryResponse",
         "description": "A published catalogue entry as it appears in a list."
+      },
+      "MonthToDateResponse": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "utilisationPercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisationpercent"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "utilisationPercent",
+          "grossContribution"
+        ],
+        "title": "MonthToDateResponse",
+        "description": "Utilisation and gross contribution from the first of the month to the end of today."
       },
       "NoShowRequest": {
         "properties": {
@@ -5928,6 +6415,216 @@
         "title": "RentalStatus",
         "description": "Rental lifecycle status, governed by BR-29, BR-52 and BR-53."
       },
+      "ReportDefinitionsResponse": {
+        "properties": {
+          "utilisation": {
+            "type": "string",
+            "title": "Utilisation"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "utilisation",
+          "grossContribution"
+        ],
+        "title": "ReportDefinitionsResponse",
+        "description": "The two definitions every figure of the report is read by."
+      },
+      "ReportFiguresResponse": {
+        "properties": {
+          "assetCount": {
+            "type": "integer",
+            "title": "Assetcount"
+          },
+          "daysOnHire": {
+            "type": "integer",
+            "title": "Daysonhire"
+          },
+          "serviceableDays": {
+            "type": "integer",
+            "title": "Serviceabledays"
+          },
+          "utilisationPercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisationpercent"
+          },
+          "hireRevenueExVat": {
+            "type": "string",
+            "title": "Hirerevenueexvat"
+          },
+          "lateFeesExVat": {
+            "type": "string",
+            "title": "Latefeesexvat"
+          },
+          "damageRecoveryExVat": {
+            "type": "string",
+            "title": "Damagerecoveryexvat"
+          },
+          "repairCosts": {
+            "type": "string",
+            "title": "Repaircosts"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assetCount",
+          "daysOnHire",
+          "serviceableDays",
+          "utilisationPercent",
+          "hireRevenueExVat",
+          "lateFeesExVat",
+          "damageRecoveryExVat",
+          "repairCosts",
+          "grossContribution"
+        ],
+        "title": "ReportFiguresResponse",
+        "description": "The figures of a line of the report, or of every line together."
+      },
+      "ReportLineResponse": {
+        "properties": {
+          "assetCount": {
+            "type": "integer",
+            "title": "Assetcount"
+          },
+          "daysOnHire": {
+            "type": "integer",
+            "title": "Daysonhire"
+          },
+          "serviceableDays": {
+            "type": "integer",
+            "title": "Serviceabledays"
+          },
+          "utilisationPercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisationpercent"
+          },
+          "hireRevenueExVat": {
+            "type": "string",
+            "title": "Hirerevenueexvat"
+          },
+          "lateFeesExVat": {
+            "type": "string",
+            "title": "Latefeesexvat"
+          },
+          "damageRecoveryExVat": {
+            "type": "string",
+            "title": "Damagerecoveryexvat"
+          },
+          "repairCosts": {
+            "type": "string",
+            "title": "Repaircosts"
+          },
+          "grossContribution": {
+            "type": "string",
+            "title": "Grosscontribution"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "branchCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcode"
+          },
+          "categoryName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryname"
+          },
+          "modelName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelname"
+          },
+          "assetTag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assettag"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "assetCount",
+          "daysOnHire",
+          "serviceableDays",
+          "utilisationPercent",
+          "hireRevenueExVat",
+          "lateFeesExVat",
+          "damageRecoveryExVat",
+          "repairCosts",
+          "grossContribution",
+          "key",
+          "label",
+          "branchCode",
+          "categoryName",
+          "modelName",
+          "assetTag",
+          "status"
+        ],
+        "title": "ReportLineResponse",
+        "description": "One line of the report, for an asset, a model, a category or a branch.\n\n`assetTag` and `status` are set on a line for an asset. `branchCode` is set\non a line for an asset or a branch, `categoryName` on a line for an asset,\na model or a category, and `modelName` on a line for an asset or a model."
+      },
       "ReservationLineRequest": {
         "properties": {
           "modelSlug": {
@@ -6525,6 +7222,62 @@
         ],
         "title": "UserResponse",
         "description": "The signed in account, as every session response and `/api/me` return it.\n\n`branchCode` is null unless the account is counter staff."
+      },
+      "UtilisationReportResponse": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "groupBy": {
+            "$ref": "#/components/schemas/GroupBy"
+          },
+          "definitions": {
+            "$ref": "#/components/schemas/ReportDefinitionsResponse"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReportFiguresResponse"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportLineResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "groupBy",
+          "definitions",
+          "totals",
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "UtilisationReportResponse",
+        "description": "One page of the report, highest gross contribution first, with the totals over every line."
       },
       "ValidationError": {
         "properties": {

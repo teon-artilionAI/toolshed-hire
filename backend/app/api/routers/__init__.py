@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from app.api.routers import (
     account,
+    admin_reports,
     assets,
     auth,
     availability,
@@ -47,6 +48,7 @@ api_router.include_router(rentals.router)
 api_router.include_router(damage_reports.router)
 api_router.include_router(counter.router)
 api_router.include_router(assets.router)
+api_router.include_router(admin_reports.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)

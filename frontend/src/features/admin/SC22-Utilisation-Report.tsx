@@ -1,172 +1,91 @@
 /**
  * SC-22, Utilisation and Gross Contribution.
  *
- * This is the screen that answers the client's third pain point: nobody can
- * say which units earn their keep. It reports days on hire against days
- * owned, and income against the repair cost the business carries, at four
- * levels of detail and over four periods, and it hands the whole thing over
- * as a spreadsheet.
+ * This is the screen that answers the client's third pain point. Nobody can
+ * say which units earn their keep. It reports days on hire against the days a
+ * unit could be hired, and what each unit brought in less what its repairs
+ * cost, for a period, at four levels of detail, and it hands every row over as
+ * a CSV.
  *
- * It is deliberately called gross contribution and never profitability. The
- * system holds no depreciation, no staff cost, no premises cost and no
- * finance cost, so a figure labelled profit would be a figure that is not
- * true. The wording of that limit is on the screen, not buried in a manual.
+ * It is called gross contribution and never profit. The system holds no
+ * depreciation, no staff cost, no premises cost and no finance cost, so a
+ * figure labelled profit would be a figure that is not true. The server sends
+ * the two definitions with every answer and the screen shows them in full
+ * beside the figures.
+ *
+ * Every figure is the server's, from `GET /api/admin/reports/utilisation`. The
+ * browser works out no figure, keeps the rows in the order the server sent
+ * them, and asks for one page at a time. The period, the grouping, the filters
+ * and the page live in the address, read and written by report-address.ts, so
+ * a reload or a shared link shows the same figures. An address that does not
+ * name a period is written out with the last full month, so a link copied
+ * from it names the period too.
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import { Download } from 'lucide-react'
-import { money } from '../../shared/format'
-import { Card, Notice, PageHeader, StatTile } from '../../shared/ui'
-import { DEFAULT_PERIOD_ID, assetMetrics, periodById } from './report-metrics'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { adminQueries } from '../../shared/api/admin-queries'
+import { catalogueQueries } from '../../shared/api/catalogue-queries'
+import { fieldErrorsFromProblem, otherFieldMessages } from '../../shared/api/problem-fields'
+import { todayInBranchTime } from '../../shared/today'
+import { PageHeader } from '../../shared/ui'
 import {
-  GROUP_COLUMN_HEADING,
-  downloadCsv,
-  groupMetrics,
-  idleUnits,
-  percent,
-  rowsToCsv,
-  sortRows,
-  totalsOf,
-} from './report-grouping'
+  FIRST_PAGE,
+  REPORT_FIELDS,
+  addressSays,
+  readReportFilters,
+  reportQueryFor,
+  writeReportFilters,
+} from './report-address'
+import type { ReportFilters as Filters } from './report-address'
 import ReportFilters from './ReportFilters'
-import type { ReportFilterState } from './ReportFilters'
-import ReportTable, { TableSkeleton } from './ReportTable'
-import ReportNotes from './ReportNotes'
-
-/** Long enough that the report visibly recalculates, short enough that it
- *  never feels like waiting. Real figures will come from an endpoint. */
-const RECALCULATE_MS = 220
-
-const INITIAL_FILTERS: ReportFilterState = {
-  periodId: DEFAULT_PERIOD_ID,
-  groupBy: 'model',
-  branchCode: 'ALL',
-  categoryId: 'ALL',
-  sortKey: 'grossContribution',
-}
+import ReportResults from './ReportResults'
 
 export default function UtilisationReport() {
-  const [filters, setFilters] = useState<ReportFilterState>(INITIAL_FILTERS)
-  const [calculating, setCalculating] = useState(false)
-  const [exported, setExported] = useState<string | null>(null)
+  const [params, setParams] = useSearchParams()
+  const [today] = useState(() => todayInBranchTime())
+  const filters = useMemo(() => readReportFilters(params, today), [params, today])
 
-  const period = periodById(filters.periodId)
-
-  const metrics = useMemo(() => {
-    return assetMetrics(period).filter(
-      (m) =>
-        (filters.branchCode === 'ALL' || m.branchCode === filters.branchCode) &&
-        (filters.categoryId === 'ALL' || m.categoryId === filters.categoryId),
-    )
-  }, [period, filters.branchCode, filters.categoryId])
-
-  const rows = useMemo(
-    () => sortRows(groupMetrics(metrics, filters.groupBy), filters.sortKey),
-    [metrics, filters.groupBy, filters.sortKey],
-  )
-  const total = useMemo(() => totalsOf(metrics), [metrics])
-  const idle = useMemo(() => idleUnits(metrics), [metrics])
-  const statusOf = useMemo(
-    () => new Map(metrics.map((m) => [m.assetId, m.status])),
-    [metrics],
-  )
-
+  // The address is written out in full whenever it does not already say what
+  // the report shows, in place of the entry and not as a new one.
   useEffect(() => {
-    setCalculating(true)
-    setExported(null)
-    const timer = window.setTimeout(() => setCalculating(false), RECALCULATE_MS)
-    return () => window.clearTimeout(timer)
-  }, [filters])
+    if (!addressSays(params, filters)) setParams(writeReportFilters(filters), { replace: true })
+  }, [params, filters, setParams])
 
-  const heading = GROUP_COLUMN_HEADING[filters.groupBy]
+  const update = useCallback(
+    (changes: Partial<Filters>) => {
+      // Any change to what is reported starts again from the first page.
+      setParams(writeReportFilters({ ...filters, page: FIRST_PAGE, ...changes }), { replace: true })
+    },
+    [filters, setParams],
+  )
 
-  function handleExport() {
-    const filename = `toolshed-hire-${filters.groupBy}-${period.start}-to-${period.end}.csv`
-    downloadCsv(filename, rowsToCsv(rows, filters.groupBy, period))
-    setExported(filename)
-  }
+  const branches = useQuery(catalogueQueries.branches())
+  const categories = useQuery(catalogueQueries.categories())
+  const report = useQuery(adminQueries.report(reportQueryFor(filters)))
+  const fieldErrors = fieldErrorsFromProblem(report.error)
 
   return (
     <>
       <PageHeader
         screenId="SC-22"
         title="Utilisation and gross contribution"
-        subtitle={`How hard the fleet worked and what it brought in, ${period.label.toLowerCase()}. Change the breakdown to move between a single unit, a model, a category and a branch.`}
-        actions={
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={rows.length === 0}
-            className="btn-primary px-md"
-          >
-            <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Export as CSV
-          </button>
-        }
+        subtitle="How hard the fleet worked over a period, and what it brought in less what its repairs cost. These figures are gross contribution and not profit."
       />
-
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile
-          label="Fleet utilisation"
-          value={percent(total.utilisation)}
-          hint={`${total.daysOnHire} days out of ${total.daysAvailable} owned`}
-        />
-        <StatTile
-          label="Hire income"
-          value={money(total.hireIncome)}
-          hint={`${total.units} units counted, retired units left out`}
-        />
-        <StatTile
-          label="Late fees"
-          value={money(total.lateFees)}
-          tone={total.lateFees > 0 ? 'warn' : 'default'}
-          hint="Charged at the model's late fee rate"
-        />
-        <StatTile
-          label="Gross contribution"
-          value={money(total.grossContribution)}
-          tone={total.grossContribution >= 0 ? 'good' : 'bad'}
-          hint={`After ${money(total.repairCostCarried)} of repairs we carried`}
-        />
-      </div>
-
-      <div className="mb-lg">
-        <Card title="Narrow the report down">
-          <ReportFilters value={filters} onChange={setFilters} />
-        </Card>
-      </div>
-
-      {exported && (
-        <div className="mb-lg">
-          <Notice tone="success" title="Spreadsheet saved to your downloads">
-            {exported} holds the {rows.length}{' '}
-            {rows.length === 1 ? 'row' : 'rows'} shown below, with figures as
-            plain numbers so they add up in a spreadsheet.
-          </Notice>
-        </div>
-      )}
-
-      <div className="mb-lg">
-        <Card title={`Broken down by ${heading.toLowerCase()}`}>
-          {calculating ? (
-            <TableSkeleton />
-          ) : (
-            <ReportTable
-              rows={rows}
-              total={total}
-              groupBy={filters.groupBy}
-              statusOf={statusOf}
-              periodLabel={period.label}
-              onReset={() => setFilters(INITIAL_FILTERS)}
-            />
-          )}
-        </Card>
-      </div>
-
-      <ReportNotes
-        idle={idle}
-        unitCount={metrics.length}
-        periodLabel={period.label}
+      <ReportFilters
+        filters={filters}
+        fieldErrors={fieldErrors}
+        branches={branches}
+        categories={categories}
+        onChange={update}
+      />
+      <ReportResults
+        report={report}
+        filters={filters}
+        otherMessages={otherFieldMessages(fieldErrors, REPORT_FIELDS)}
+        onPage={(page) => update({ page })}
+        onClearFilters={() => update({ branchCode: null, categorySlug: null })}
       />
     </>
   )

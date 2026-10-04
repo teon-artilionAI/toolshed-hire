@@ -8,10 +8,12 @@ itself.
 
 Three things are held.
 
-1. `Money.times`, `Money.percent_of` and `Money.before_percent_added` are
-   called only inside `app/domain/policies` and `app/domain/vat.py`. Those
-   methods are the only way an amount is multiplied or divided, so nothing
-   outside can scale a rate.
+1. `Money.times`, `Money.percent_of`, `Money.before_percent_added` and
+   `Money.in_proportion` are called only inside `app/domain/policies` and
+   `app/domain/vat.py`. Those methods are the only way an amount is
+   multiplied or divided, so nothing outside can scale a rate. The share of a
+   hire charge that the report gives each unit is the one use of the last,
+   and it lives among the policies for that reason.
 2. A rate is multiplied by a number of days in `StandardPricingPolicy`, and a
    late fee per day in `StandardLateFeePolicy`, and nowhere else. The late fee
    is its own rule (BR-30), and tests/unit/test_one_place_for_a_late_fee.py
@@ -36,7 +38,7 @@ LATE_FEE_MODULE: Final[str] = "domain/policies/standard_late_fee.py"
 VAT_MODULE: Final[str] = "domain/vat.py"
 MONEY_MODULE: Final[str] = "domain/money.py"
 SCALING_METHODS: Final[frozenset[str]] = frozenset(
-    {"times", "percent_of", "before_percent_added"}
+    {"times", "percent_of", "before_percent_added", "in_proportion"}
 )
 VAT_FUNCTION: Final[str] = "vat_on"
 # A multiplication whose operands are named with one of these words is pricing

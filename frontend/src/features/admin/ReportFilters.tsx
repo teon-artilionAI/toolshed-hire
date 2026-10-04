@@ -1,121 +1,211 @@
 /**
  * The controls above the SC-22 report.
  *
- * Kept out of the screen file because five selects with labels is a lot of
- * markup for very little thinking, and the report itself is the interesting
- * part. Every control is a real form control with a real label, so it works
- * on a keyboard and reads correctly to a screen reader.
+ * The period, the grouping, and the branch and category filters. Each change
+ * goes straight into the address and the report is asked for again, so there
+ * is no button to press. A date is only taken once it is a whole day, so a
+ * date half typed never asks the server anything. When the server refuses a
+ * value, its message is under the control it is about.
+ *
+ * The branches and the categories come from the catalogue routes. Each list
+ * has its own loading and failed state. While a list is missing, its filter
+ * still offers every branch or every category, which is the report as it
+ * stands, and a failed list offers to be read again.
  */
 
-import type { BranchCode } from '../../shared/types'
-import { branches, categories } from '../../shared/fixtures'
+import { useState } from 'react'
+import type { ChangeEvent } from 'react'
+import type { UseQueryResult } from '@tanstack/react-query'
+import { RotateCw, SlidersHorizontal } from 'lucide-react'
+import type { BranchList, Category, CategoryList, IsoDate, ReportGrouping } from '../../shared/api/contract'
+import type { FieldErrors } from '../../shared/api/problem-fields'
+import { queryPhase } from '../../shared/api/query-phase'
+import { REPORT_GROUPINGS } from '../../shared/api/reporting'
 import { Field } from '../../shared/ui'
-import { REPORT_PERIODS } from './report-metrics'
-import { GROUP_OPTIONS, SORT_OPTIONS } from './report-grouping'
-import type { GroupBy, SortKey } from './report-grouping'
+import { ANY_BRANCH, BranchSelect } from '../customer/catalogue-ui'
+import type { ReportFilters as Filters } from './report-address'
+import { GROUPING_LABEL } from './report-labels'
 
-const SELECT_CLASS = 'field-input cursor-pointer transition-colors duration-200'
+const EVERY_CATEGORY = ''
+const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/
+const SELECT_CLASS = 'field-input cursor-pointer'
 
-export interface ReportFilterState {
-  periodId: string
-  groupBy: GroupBy
-  branchCode: BranchCode | 'ALL'
-  categoryId: string | 'ALL'
-  sortKey: SortKey
+/** Said under a filter while its list is on its way. */
+const LOADING_HELP = {
+  branches: 'Loading the branches.',
+  categories: 'Loading the categories.',
+} as const
+
+/** A category with the name of its parent, so two of the same name read apart. */
+function categoryLabel(category: Category, all: readonly Category[]): string {
+  const parent = all.find((candidate) => candidate.code === category.parentCode)
+  return parent ? `${category.name}, in ${parent.name}` : category.name
+}
+
+function describedBy(...ids: (string | false)[]): string | undefined {
+  const joined = ids.filter((id): id is string => id !== false).join(' ')
+  return joined === '' ? undefined : joined
+}
+
+/** A line under a filter whose list could not be loaded, with the way to try again. */
+function ListFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div className="mt-xs flex flex-wrap items-center gap-sm text-sm text-slate-soft">
+      <span>We could not load the {what}, so only every one can be chosen.</span>
+      <button type="button" className="btn-ghost px-sm" onClick={onRetry}>
+        <RotateCw className="h-4 w-4 shrink-0" aria-hidden="true" />
+        Load the {what} again
+      </button>
+    </div>
+  )
+}
+
+/**
+ * One day of the period. It keeps what is being typed and passes on only a
+ * whole day, and it follows the address when the address changes.
+ */
+function DayField({
+  id,
+  label,
+  help,
+  value,
+  error,
+  onDay,
+}: {
+  id: string
+  label: string
+  help?: string
+  value: IsoDate
+  error?: string
+  onDay: (day: IsoDate) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  const [lastValue, setLastValue] = useState(value)
+  if (value !== lastValue) {
+    setLastValue(value)
+    setDraft(value)
+  }
+  function change(event: ChangeEvent<HTMLInputElement>) {
+    setDraft(event.target.value)
+    if (DATE_SHAPE.test(event.target.value) && event.target.value !== value) onDay(event.target.value)
+  }
+  return (
+    <Field label={label} htmlFor={id} help={help} error={error}>
+      <input
+        id={id}
+        type="date"
+        className={SELECT_CLASS}
+        value={draft}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(help !== undefined && `${id}-help`, error !== undefined && `${id}-error`)}
+        onChange={change}
+      />
+    </Field>
+  )
 }
 
 export default function ReportFilters({
-  value,
+  filters,
+  fieldErrors,
+  branches,
+  categories,
   onChange,
 }: {
-  value: ReportFilterState
-  onChange: (next: ReportFilterState) => void
+  filters: Filters
+  fieldErrors: FieldErrors
+  branches: UseQueryResult<BranchList>
+  categories: UseQueryResult<CategoryList>
+  onChange: (changes: Partial<Filters>) => void
 }) {
-  const set = <K extends keyof ReportFilterState>(
-    key: K,
-    next: ReportFilterState[K],
-  ) => onChange({ ...value, [key]: next })
+  const categoryItems = categories.data?.items ?? []
+  const chosenCategory = filters.categorySlug ?? EVERY_CATEGORY
+  const knownCategory =
+    chosenCategory === EVERY_CATEGORY || categoryItems.some((category) => category.slug === chosenCategory)
+  const categoryHelp = queryPhase(categories) === 'loading' ? LOADING_HELP.categories : undefined
 
   return (
-    <div className="grid gap-md sm:grid-cols-2 lg:grid-cols-3">
-      <Field label="Period" htmlFor="report-period">
-        <select
-          id="report-period"
-          className={SELECT_CLASS}
-          value={value.periodId}
-          onChange={(e) => set('periodId', e.target.value)}
-        >
-          {REPORT_PERIODS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="Break the figures down by" htmlFor="report-group">
-        <select
-          id="report-group"
-          className={SELECT_CLASS}
-          value={value.groupBy}
-          onChange={(e) => set('groupBy', e.target.value as GroupBy)}
-        >
-          {GROUP_OPTIONS.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="Branch" htmlFor="report-branch">
-        <select
-          id="report-branch"
-          className={SELECT_CLASS}
-          value={value.branchCode}
-          onChange={(e) =>
-            set('branchCode', e.target.value as BranchCode | 'ALL')
-          }
-        >
-          <option value="ALL">All three branches</option>
-          {branches.map((b) => (
-            <option key={b.code} value={b.code}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="Category" htmlFor="report-category">
-        <select
-          id="report-category"
-          className={SELECT_CLASS}
-          value={value.categoryId}
-          onChange={(e) => set('categoryId', e.target.value)}
-        >
-          <option value="ALL">Every category</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="Order by" htmlFor="report-sort">
-        <select
-          id="report-sort"
-          className={SELECT_CLASS}
-          value={value.sortKey}
-          onChange={(e) => set('sortKey', e.target.value as SortKey)}
-        >
-          {SORT_OPTIONS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-    </div>
+    <form className="card mb-lg p-lg" aria-label="Choose what the report shows" onSubmit={(e) => e.preventDefault()}>
+      <h2 className="mb-md flex items-center gap-sm text-sm font-semibold uppercase tracking-wide text-slate-soft">
+        <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+        Period and breakdown
+      </h2>
+      <div className="grid gap-md sm:grid-cols-2 lg:grid-cols-3">
+        <DayField
+          id="report-from"
+          label="From"
+          value={filters.from}
+          error={fieldErrors.from}
+          onDay={(from) => onChange({ from })}
+        />
+        <DayField
+          id="report-to"
+          label="To, not included"
+          help="Days are counted from the first date up to but not including this one, so 1 September to 1 October is the whole of September."
+          value={filters.to}
+          error={fieldErrors.to}
+          onDay={(to) => onChange({ to })}
+        />
+        <Field label="Break the figures down by" htmlFor="report-group" error={fieldErrors.groupBy}>
+          <select
+            id="report-group"
+            className={SELECT_CLASS}
+            value={filters.groupBy}
+            aria-invalid={fieldErrors.groupBy ? true : undefined}
+            aria-describedby={fieldErrors.groupBy ? 'report-group-error' : undefined}
+            onChange={(e) => {
+              const groupBy = REPORT_GROUPINGS.find((grouping: ReportGrouping) => grouping === e.target.value)
+              if (groupBy) onChange({ groupBy })
+            }}
+          >
+            {REPORT_GROUPINGS.map((grouping) => (
+              <option key={grouping} value={grouping}>
+                {GROUPING_LABEL[grouping]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div>
+          <BranchSelect
+            id="report-branch"
+            label="Branch"
+            branches={branches.data?.items ?? []}
+            value={filters.branchCode ?? ANY_BRANCH}
+            onChange={(code) => onChange({ branchCode: code === ANY_BRANCH ? null : code })}
+            allLabel="Every branch"
+            help={queryPhase(branches) === 'loading' ? LOADING_HELP.branches : undefined}
+            error={fieldErrors.branchCode}
+          />
+          {queryPhase(branches) === 'failed' && (
+            <ListFailed what="branches" onRetry={() => void branches.refetch()} />
+          )}
+        </div>
+        <div>
+          <Field label="Category" htmlFor="report-category" help={categoryHelp} error={fieldErrors.categorySlug}>
+            <select
+              id="report-category"
+              className={SELECT_CLASS}
+              value={chosenCategory}
+              aria-invalid={fieldErrors.categorySlug ? true : undefined}
+              aria-describedby={describedBy(
+                categoryHelp !== undefined && 'report-category-help',
+                fieldErrors.categorySlug !== undefined && 'report-category-error',
+              )}
+              onChange={(e) => onChange({ categorySlug: e.target.value === EVERY_CATEGORY ? null : e.target.value })}
+            >
+              <option value={EVERY_CATEGORY}>Every category</option>
+              {!knownCategory && <option value={chosenCategory}>Chosen category</option>}
+              {categoryItems.map((category) => (
+                <option key={category.code} value={category.slug}>
+                  {categoryLabel(category, categoryItems)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {queryPhase(categories) === 'failed' && (
+            <ListFailed what="categories" onRetry={() => void categories.refetch()} />
+          )}
+        </div>
+      </div>
+    </form>
   )
 }

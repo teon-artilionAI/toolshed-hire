@@ -129,6 +129,16 @@ export function readPercent(source: Record<string, unknown>, key: string, reques
   return value
 }
 
+/** Read a percentage the contract allows to be null, such as a utilisation over
+ *  no serviceable days. A missing field is not null. */
+export function readNullablePercent(
+  source: Record<string, unknown>,
+  key: string,
+  requestPath: string,
+): string | null {
+  return source[key] === null ? null : readPercent(source, key, requestPath)
+}
+
 /** Read a calendar date, and refuse anything that is not written `YYYY-MM-DD`
  *  or cannot be read as a date. A screen formats what this returns, and a date
  *  it cannot format would take the whole screen down. */
