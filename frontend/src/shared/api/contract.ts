@@ -23,8 +23,7 @@
  * contract-admin-catalogue.ts, the asset register types are in
  * contract-admin-assets.ts, and the staff account and customer hold types are
  * in contract-admin-users.ts. All twelve are passed on from here, and the
- * session types below stay here. The last of them is written by hand until
- * the generated schema describes its routes, and its header says why.
+ * session types below stay here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -191,11 +190,13 @@ export type {
   NewAssetRequest,
 } from './contract-admin-assets'
 export type {
+  AdminCustomerPage,
   AdminCustomerQuery,
   AdminUser,
   AdminUserPage,
   AdminUserQuery,
   CustomerStandingRequest,
+  CustomerWithStanding,
   DeactivationRequest,
   NewStaffAccountRequest,
   StaffAccountChangesRequest,

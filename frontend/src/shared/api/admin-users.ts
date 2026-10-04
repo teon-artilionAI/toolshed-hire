@@ -18,10 +18,12 @@
  * once for each press of a button and never repeated by the client, because a
  * request that timed out may still have reached the server.
  *
- * The contract does not say what a change, a deactivation or a reactivation
- * answers with. I read each as the account as it now stands, which is what
- * every other write of the owner's answers with, and the screen reads the list
- * again after each one either way.
+ * A change, a deactivation and a reactivation each answer with the account as
+ * it now stands, which is what every other write of the owner's answers with,
+ * and the screen reads the list again after each one either way. Asking for
+ * what the account already is writes nothing and answers with it as it is. A
+ * 409 carries the problem type `state-transition` and the server's sentence,
+ * and a caller who is no longer an active administrator is refused with a 403.
  */
 
 import { malformedResponse } from '../api-problem'
@@ -152,8 +154,8 @@ export function deactivateStaffAccount(id: string, body: DeactivationRequest): P
 /**
  * POST /api/admin/users/{id}/reactivation. Lets the account sign in again.
  *
- * @throws ApiError with status 409 when the server will not reactivate it, 404
- *   when no account has the key, and 403 for anyone but an administrator.
+ * @throws ApiError with status 404 when no account has the key, and 403 for
+ *   anyone but an administrator.
  */
 export function reactivateStaffAccount(id: string): Promise<AdminUser> {
   return api.post(`${accountPath(id)}/reactivation`, undefined, readAdminUser)

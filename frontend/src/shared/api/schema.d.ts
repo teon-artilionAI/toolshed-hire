@@ -1346,6 +1346,158 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the staff accounts, by name
+         * @description Return one page of the staff accounts that match, by name.
+         *
+         *     Raises:
+         *         ValidationFailure: If `role` is CUSTOMER. HTTP 422, naming `role`.
+         */
+        get: operations["read_users_api_admin_users_get"];
+        put?: never;
+        /**
+         * Open a staff account and send the person a link to choose their password
+         * @description Open the account and record it, in one transaction, then send the link.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the branch is unknown, or
+         *             another account holds the address. HTTP 422, naming the field.
+         *         AuthorisationFailure: If the caller stopped being an active
+         *             administrator. HTTP 403.
+         */
+        post: operations["post_user_api_admin_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the name, the phone, the role or the branch of a staff account
+         * @description Change the fields that were sent and record the change.
+         *
+         *     Raises:
+         *         NotFound: If no staff account has the key. HTTP 404.
+         *         ValidationFailure: If a field breaks a rule. HTTP 422, naming the field.
+         *         StateTransitionError: If the account is the last active administrator
+         *             and the edit gives it another role. HTTP 409.
+         */
+        patch: operations["patch_user_api_admin_users__id__patch"];
+        trace?: never;
+    };
+    "/api/admin/users/{id}/deactivation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a staff account signing in and revoke every session it holds
+         * @description Deactivate the account, revoke its sessions and record why, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If no staff account has the key. HTTP 404.
+         *         ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+         *         StateTransitionError: If it is the caller's own account or the last
+         *             active administrator. HTTP 409.
+         */
+        post: operations["post_deactivation_api_admin_users__id__deactivation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/reactivation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Let a deactivated staff account sign in again with its own password
+         * @description Reactivate the account and record it.
+         *
+         *     Raises:
+         *         NotFound: If no staff account has the key. HTTP 404.
+         */
+        post: operations["post_reactivation_api_admin_users__id__reactivation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the customers by name, narrowed by their standing
+         * @description Return one page of the customers that match, by name.
+         */
+        get: operations["read_customers_api_admin_customers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/customers/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set the standing of a customer, with the reason
+         * @description Set the standing and record it with the reason, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer with this key. HTTP 404.
+         *         ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+         */
+        post: operations["post_customer_status_api_admin_customers__id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1783,6 +1935,54 @@ export interface components {
             assetCount: number;
             /** Updatedat */
             updatedAt: string;
+        };
+        /**
+         * AdminUserPageResponse
+         * @description One page of the staff accounts, by name.
+         */
+        AdminUserPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminUserResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminUserResponse
+         * @description One staff account as the administrator sees it, never with anything about a password.
+         *
+         *     `branchCode` is null for an administrator. `lockedUntil` is when a lock
+         *     after failed sign ins ends, and null when there has been none since the
+         *     last success.
+         */
+        AdminUserResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Fullname */
+            fullName: string;
+            /** Phone */
+            phone: string | null;
+            role: components["schemas"]["UserRole"];
+            /** Branchcode */
+            branchCode: string | null;
+            /** Isactive */
+            isActive: boolean;
+            /** Emailverified */
+            emailVerified: boolean;
+            /** Lastloginat */
+            lastLoginAt: string | null;
+            /** Lockeduntil */
+            lockedUntil: string | null;
+            /** Createdat */
+            createdAt: string;
         };
         /**
          * AssetCreateRequest
@@ -2388,6 +2588,15 @@ export interface components {
             total: number;
         };
         /**
+         * CustomerStatusRequest
+         * @description The standing a customer is to have, and why. The audit event keeps the reason.
+         */
+        CustomerStatusRequest: {
+            accountStatus: components["schemas"]["AccountStatus"];
+            /** Reason */
+            reason: string;
+        };
+        /**
          * CustomerSummaryResponse
          * @description A customer as the counter sees one.
          *
@@ -2572,6 +2781,14 @@ export interface components {
             returnsDue: components["schemas"]["ReturnDueResponse"][];
             /** Overdue */
             overdue: components["schemas"]["OverdueRentalResponse"][];
+        };
+        /**
+         * DeactivationRequest
+         * @description Why an account is being stopped from signing in. The audit event keeps it.
+         */
+        DeactivationRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * DiaryCollectionResponse
@@ -3674,6 +3891,49 @@ export interface components {
          * @enum {string}
          */
         SettlementWait: "ITEMS_OUT" | "DAMAGE_ASSESSMENT" | "BALANCE_PAYMENT";
+        /**
+         * StaffCreateRequest
+         * @description A new staff account. The person chooses their own password through the link they are sent.
+         *
+         *     `branchCode` is required for counter staff and must be null for an administrator.
+         */
+        StaffCreateRequest: {
+            /** Email */
+            email: string;
+            /** Fullname */
+            fullName: string;
+            /** Phone */
+            phone?: string | null;
+            role: components["schemas"]["UserRole"];
+            /** Branchcode */
+            branchCode?: string | null;
+        };
+        /**
+         * StaffCreatedResponse
+         * @description A new staff account, and whether the email with the link to choose a password was taken.
+         *
+         *     `emailDeliverable` is false when the message could not be handed to the
+         *     email provider. The person then asks for a new link from the sign in page
+         *     once mail reaches them.
+         */
+        StaffCreatedResponse: {
+            user: components["schemas"]["AdminUserResponse"];
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
+        /**
+         * StaffUpdateRequest
+         * @description The fields of a staff account to change, any of them. Never the address or a password.
+         */
+        StaffUpdateRequest: {
+            /** Fullname */
+            fullName?: string | null;
+            /** Phone */
+            phone?: string | null;
+            role?: components["schemas"]["UserRole"] | null;
+            /** Branchcode */
+            branchCode?: string | null;
+        };
         /**
          * TokenRequest
          * @description The token of a verification link.
@@ -6794,6 +7054,374 @@ export interface operations {
             };
             /** @description The move is not one the unit may make from the status it is in, which `detail` names, or a booking or an open damage report still holds the unit and `detail` names it. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_users_api_admin_users_get: {
+        parameters: {
+            query?: {
+                /** @description Part of the name or the email address. */
+                q?: string | null;
+                /** @description COUNTER_STAFF or ADMIN. Both when left out. */
+                role?: components["schemas"]["UserRole"] | null;
+                /** @description True for active accounts, false for deactivated ones. */
+                active?: boolean | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many accounts a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_user_api_admin_users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffCreatedResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_user_api_admin_users__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the staff account. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No staff account has this key. A customer's account is not one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The account is the last active administrator, which can never be deactivated or given another role, or it is the caller's own account, which the caller cannot deactivate. `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_deactivation_api_admin_users__id__deactivation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the staff account. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeactivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No staff account has this key. A customer's account is not one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The account is the last active administrator, which can never be deactivated or given another role, or it is the caller's own account, which the caller cannot deactivate. `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_reactivation_api_admin_users__id__reactivation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the staff account. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No staff account has this key. A customer's account is not one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_customers_api_admin_customers_get: {
+        parameters: {
+            query?: {
+                /** @description Only the customers in this standing. */
+                status?: components["schemas"]["AccountStatus"] | null;
+                /** @description Part of a name, a phone number or an email address. */
+                q?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many customers a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_customer_status_api_admin_customers__id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

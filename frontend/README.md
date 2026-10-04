@@ -316,14 +316,14 @@ commits as `../backend/openapi.json`.
   a move each answer with the unit and its history, the way the unit's own
   read does, and the screen reads them that way.
 - The user management routes, which are the owner's staff accounts and the
-  customer holds, are not in the document yet, because their backend half is
-  being built at the same time. Their types are in
-  `api/contract-admin-users.ts`, written by hand from the contract, and the
-  readers in `api/admin-users.ts` and `api/admin-customers.ts` check every
-  member of every body. The two values other routes already use, the stored
-  roles and a customer's standing, come from the generated file. Once the
-  routes are in the document, each type there is replaced by one built from
-  the generated shapes the way the others are.
+  customer holds, are in the document too. Their types are in
+  `api/contract-admin-users.ts`, built from the generated file the same way.
+  The generated role is any stored role, and the server only ever lists or
+  moves a staff account, so the type is one of the two staff roles. The
+  generated body of a change allows null for the name and the role, and the
+  server refuses both, so the type does not. A customer on the holds is typed
+  from the owner's own routes and checked against the `CustomerSummary` the
+  counter reads, so the two can never drift apart.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -1421,15 +1421,18 @@ standing is held to the five to two hundred characters every reason of the
 owner's takes. The bodies are in `staff-form.ts` and the words in
 `staff-words.ts`.
 
-The contract does not say what a change, a deactivation or a reactivation
-answers with, so I read each as the account as it now stands, the way every
-other write of the owner's answers, and the list is read again after each
-write either way. The contract has no route that reads one account, so an
-account opened above the list is the one the list or the last write sent,
-whichever came last, and it is not kept in the address. A customer carries no
-list of the moves it may make, and the contract lets the owner move a customer
-between any two standings, so each customer offers the two standings they are
-not in, and the server's 409 is shown if it refuses one.
+A change, a deactivation and a reactivation each answer with the account as
+it now stands, the way every other write of the owner's answers, and the list
+is read again after each write either way. Asking for what an account already
+is writes nothing and answers with it as it is. Making somebody an
+administrator sends the branch as null, which the server also does by itself
+when no branch is named. Deactivating an account also withdraws a reset link
+the person has not used yet. The contract has no route that reads one account,
+so an account opened above the list is the one the list or the last write
+sent, whichever came last, and it is not kept in the address. A customer
+carries no list of the moves it may make, and the server lets the owner move a
+customer between any two standings, so each customer offers the two standings
+they are not in.
 
 #### `SC-23` User and Role Management
 

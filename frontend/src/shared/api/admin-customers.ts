@@ -8,13 +8,14 @@
  *
  * The standing is the one thing a move changes. A customer who is not in good
  * standing cannot make a new booking, and releasing a hold leaves the count of
- * bookings they did not collect as it is. Those rules are the server's, and a
- * move it will not make comes back as a 409 with its sentence. The write is
- * sent once for each press of a button and never repeated by the client.
+ * bookings they did not collect as it is. Those rules are the server's. Asking
+ * for the standing a customer already has changes nothing and answers with the
+ * customer as they are. The write is sent once for each press of a button and
+ * never repeated by the client.
  */
 
 import { api } from './client'
-import type { AdminCustomerQuery, CustomerPage, CustomerStandingRequest, CustomerSummary } from './contract'
+import type { AdminCustomerPage, AdminCustomerQuery, CustomerStandingRequest, CustomerWithStanding } from './contract'
 import { readCustomerSummary } from './customers'
 import { readCount, readList, readObject } from './read'
 
@@ -23,7 +24,7 @@ const CUSTOMERS_ENDPOINT = '/admin/customers'
 /** How many customers a page of the holds holds. */
 export const CUSTOMER_HOLD_PAGE_SIZE = 20
 
-function readHoldPage(value: unknown, path: string): CustomerPage {
+function readHoldPage(value: unknown, path: string): AdminCustomerPage {
   const record = readObject(value, path, 'a page of customers')
   return {
     items: readList(record, 'items', path, readCustomerSummary),
@@ -40,7 +41,7 @@ function readHoldPage(value: unknown, path: string): CustomerPage {
  * @throws ApiError with status 422 naming a filter the server refused, and
  *   403 for anyone but an administrator.
  */
-export function listCustomerHolds(query: AdminCustomerQuery, signal?: AbortSignal): Promise<CustomerPage> {
+export function listCustomerHolds(query: AdminCustomerQuery, signal?: AbortSignal): Promise<AdminCustomerPage> {
   return api.get(CUSTOMERS_ENDPOINT, readHoldPage, { query, signal })
 }
 
@@ -48,10 +49,9 @@ export function listCustomerHolds(query: AdminCustomerQuery, signal?: AbortSigna
  * POST /api/admin/customers/{id}/status. Moves the customer to the standing
  * named, with the reason, and answers with the customer as they now stand.
  *
- * @throws ApiError with status 409 when the server will not make the move, 422
- *   naming `accountStatus` or `reason`, 404 when no customer has the key, and
- *   403 for anyone but an administrator.
+ * @throws ApiError with status 422 naming `accountStatus` or `reason`, 404 when
+ *   no customer has the key, and 403 for anyone but an administrator.
  */
-export function setCustomerStanding(id: string, body: CustomerStandingRequest): Promise<CustomerSummary> {
+export function setCustomerStanding(id: string, body: CustomerStandingRequest): Promise<CustomerWithStanding> {
   return api.post(`${CUSTOMERS_ENDPOINT}/${encodeURIComponent(id)}/status`, body, readCustomerSummary)
 }
