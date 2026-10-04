@@ -51,6 +51,15 @@ function NotCancellable({ reservation }: { reservation: Reservation }) {
   )
 }
 
+/** A reason the customer typed that already ends a sentence. */
+const ENDS_A_SENTENCE = /[.!?]$/
+
+/** The reason inside quotation marks, ending the sentence once. A reason that
+ *  ends in a full stop of its own gets no second one after the quote. */
+function quotedReason(reason: string): string {
+  return ENDS_A_SENTENCE.test(reason) ? `"${reason}"` : `"${reason}".`
+}
+
 /** What the server recorded about a cancellation. */
 function CancelledNotice({ reservation }: { reservation: Reservation }) {
   return (
@@ -62,7 +71,7 @@ function CancelledNotice({ reservation }: { reservation: Reservation }) {
         The equipment is back in stock at {reservation.branchName}.
       </p>
       {reservation.cancellationReason !== null && (
-        <p className="mt-xs">The reason given was "{reservation.cancellationReason}".</p>
+        <p className="mt-xs">The reason given was {quotedReason(reservation.cancellationReason)}</p>
       )}
     </Notice>
   )

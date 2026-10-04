@@ -9,6 +9,17 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-04
+
+A fix found by testing 0.4.1 by hand on production, as a customer, a counter
+assistant and the owner. Every other journey passed.
+
+### Fixed
+
+- A cancellation reason that ends in a full stop, a question mark or an
+  exclamation mark no longer reads with a second full stop after the closing
+  quote.
+
 ## [0.4.1] - 2026-10-04
 
 Fixes found by walking the 0.4.0 release by hand in a browser, as a customer,
