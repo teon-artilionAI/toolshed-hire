@@ -3617,6 +3617,599 @@
         }
       }
     },
+    "/api/admin/categories": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return every category, active or not, each parent followed by its children",
+        "description": "Return one page of every category, each parent followed by its children.",
+        "operationId": "read_categories_api_admin_categories_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many categories a page holds. Every category fits the default.",
+              "default": 100,
+              "title": "Pagesize"
+            },
+            "description": "How many categories a page holds. Every category fits the default."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Create a category, active",
+        "description": "Create the category and record it, in one transaction.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the parent is unknown or\n        not at the top, or the code or slug is taken. HTTP 422, naming\n        the field.",
+        "operationId": "post_category_api_admin_categories_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/categories/{id}": {
+      "patch": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Change the fields of a category that are sent, or switch it off",
+        "description": "Change the fields that were sent and record what changed, in one transaction.\n\nRaises:\n    NotFound: If there is no such category. HTTP 404.\n    ValidationFailure: As for a creation, and when the category has\n        children and is to be put under another. HTTP 422, naming the field.",
+        "operationId": "patch_category_api_admin_categories__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the category.",
+              "title": "Id"
+            },
+            "description": "The key of the category."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such category.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/models": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one page of the product models, published or not, by name",
+        "description": "Return one page of the product models that match, by name.",
+        "operationId": "read_models_api_admin_models_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text matched against SKU, name, manufacturer and model number.",
+              "title": "Q"
+            },
+            "description": "Free text matched against SKU, name, manufacturer and model number."
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the models of this category.",
+              "title": "Categoryid"
+            },
+            "description": "Only the models of this category."
+          },
+          {
+            "name": "published",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True for the published models only, false for the hidden ones.",
+              "title": "Published"
+            },
+            "description": "True for the published models only, false for the hidden ones."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many models a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many models a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Create a product model, unpublished",
+        "description": "Create the model and record it, in one transaction.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the category is unknown\n        or switched off, or the SKU or slug is taken. HTTP 422, naming\n        the field.",
+        "operationId": "post_model_api_admin_models_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/models/{id}": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one product model, published or not",
+        "description": "Return the product model.\n\nRaises:\n    NotFound: If there is no such model. HTTP 404.",
+        "operationId": "read_model_api_admin_models__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the product model.",
+              "title": "Id"
+            },
+            "description": "The key of the product model."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such product model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Change the fields of a product model that are sent, never its SKU",
+        "description": "Change the fields that were sent and record the figures before and after.\n\nRaises:\n    NotFound: If there is no such model. HTTP 404.\n    ValidationFailure: As for a creation, and when the SKU is sent. HTTP\n        422, naming the field.",
+        "operationId": "patch_model_api_admin_models__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the product model.",
+              "title": "Id"
+            },
+            "description": "The key of the product model."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such product model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/models/{id}/publication": {
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Publish a product model, or take it out of the public catalogue",
+        "description": "Publish or hide the model and record it, in one transaction.\n\nRaises:\n    NotFound: If there is no such model. HTTP 404.",
+        "operationId": "post_publication_api_admin_models__id__publication_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the product model.",
+              "title": "Id"
+            },
+            "description": "The key of the product model."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModelResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such product model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/branches": {
       "get": {
         "tags": [
@@ -4196,6 +4789,120 @@
         "title": "AdjustmentRequest",
         "description": "An adjustment of a hire, VAT included, and the reason for it."
       },
+      "AdminCategoryPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCategoryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminCategoryPageResponse",
+        "description": "Every category, active or not, each parent followed by its children."
+      },
+      "AdminCategoryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parentCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentcategoryid"
+          },
+          "parentName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentname"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder"
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive"
+          },
+          "modelCount": {
+            "type": "integer",
+            "title": "Modelcount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "slug",
+          "description",
+          "parentCategoryId",
+          "parentName",
+          "sortOrder",
+          "isActive",
+          "modelCount"
+        ],
+        "title": "AdminCategoryResponse",
+        "description": "One category as the administrator sees it. `modelCount` counts its own models."
+      },
       "AdminDashboardResponse": {
         "properties": {
           "date": {
@@ -4241,6 +4948,156 @@
         ],
         "title": "AdminDashboardResponse",
         "description": "The business across every branch today."
+      },
+      "AdminModelPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminModelResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminModelPageResponse",
+        "description": "One page of the product models, by name."
+      },
+      "AdminModelResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoryid"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "manufacturer": {
+            "type": "string",
+            "title": "Manufacturer"
+          },
+          "modelNumber": {
+            "type": "string",
+            "title": "Modelnumber"
+          },
+          "shortDescription": {
+            "type": "string",
+            "title": "Shortdescription"
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longdescription"
+          },
+          "dailyRate": {
+            "type": "string",
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "type": "string",
+            "title": "Weeklyrate"
+          },
+          "depositAmount": {
+            "type": "string",
+            "title": "Depositamount"
+          },
+          "lateFeePerDay": {
+            "type": "string",
+            "title": "Latefeeperday"
+          },
+          "replacementValue": {
+            "type": "string",
+            "title": "Replacementvalue"
+          },
+          "minHireDays": {
+            "type": "integer",
+            "title": "Minhiredays"
+          },
+          "maxHireDays": {
+            "type": "integer",
+            "title": "Maxhiredays"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "title": "Ispublished"
+          },
+          "assetCount": {
+            "type": "integer",
+            "title": "Assetcount"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "slug",
+          "categoryId",
+          "categoryName",
+          "manufacturer",
+          "modelNumber",
+          "shortDescription",
+          "longDescription",
+          "dailyRate",
+          "weeklyRate",
+          "depositAmount",
+          "lateFeePerDay",
+          "replacementValue",
+          "minHireDays",
+          "maxHireDays",
+          "isPublished",
+          "assetCount",
+          "updatedAt"
+        ],
+        "title": "AdminModelResponse",
+        "description": "One product model as the administrator sees it, published or not.\n\n`assetCount` is every unit of the fleet that realises it, whatever its status."
       },
       "AssetLocationPageResponse": {
         "properties": {
@@ -4754,6 +5611,63 @@
         "title": "CancellationRequest",
         "description": "Why a reservation is being cancelled, when the caller wants to say."
       },
+      "CategoryCreateRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parentCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentcategoryid"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "slug"
+        ],
+        "title": "CategoryCreateRequest",
+        "description": "A new category. It starts active, at the top unless a parent is named."
+      },
       "CategoryListResponse": {
         "properties": {
           "items": {
@@ -4821,6 +5735,96 @@
         ],
         "title": "CategoryResponse",
         "description": "One active category. `parentCode` is null for a top level category."
+      },
+      "CategoryUpdateRequest": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parentCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentcategoryid"
+          },
+          "sortOrder": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortorder"
+          },
+          "isActive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isactive"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CategoryUpdateRequest",
+        "description": "The fields of a category to change, any of them, and whether it is active."
       },
       "ChargeResponse": {
         "properties": {
@@ -6182,6 +7186,115 @@
         "title": "ModelAvailabilityRowResponse",
         "description": "One model of an availability search, with an answer from every branch."
       },
+      "ModelCreateRequest": {
+        "properties": {
+          "sku": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Sku"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 140,
+            "title": "Slug"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoryid"
+          },
+          "manufacturer": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Manufacturer"
+          },
+          "modelNumber": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Modelnumber"
+          },
+          "shortDescription": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Shortdescription"
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longdescription"
+          },
+          "dailyRate": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Weeklyrate"
+          },
+          "depositAmount": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Depositamount"
+          },
+          "lateFeePerDay": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Latefeeperday"
+          },
+          "replacementValue": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Replacementvalue"
+          },
+          "minHireDays": {
+            "type": "integer",
+            "title": "Minhiredays"
+          },
+          "maxHireDays": {
+            "type": "integer",
+            "title": "Maxhiredays"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "title": "Ispublished",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sku",
+          "name",
+          "slug",
+          "categoryId",
+          "manufacturer",
+          "modelNumber",
+          "shortDescription",
+          "dailyRate",
+          "weeklyRate",
+          "depositAmount",
+          "lateFeePerDay",
+          "replacementValue",
+          "minHireDays",
+          "maxHireDays"
+        ],
+        "title": "ModelCreateRequest",
+        "description": "A new product model, with every figure a booking will copy. It starts unpublished."
+      },
       "ModelDetailResponse": {
         "properties": {
           "sku": {
@@ -6412,6 +7525,191 @@
         ],
         "title": "ModelSummaryResponse",
         "description": "A published catalogue entry as it appears in a list."
+      },
+      "ModelUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 140
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "categoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryid"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "modelNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelnumber"
+          },
+          "shortDescription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortdescription"
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longdescription"
+          },
+          "dailyRate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dailyrate"
+          },
+          "weeklyRate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weeklyrate"
+          },
+          "depositAmount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depositamount"
+          },
+          "lateFeePerDay": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latefeeperday"
+          },
+          "replacementValue": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacementvalue"
+          },
+          "minHireDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minhiredays"
+          },
+          "maxHireDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxhiredays"
+          },
+          "isPublished": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispublished"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModelUpdateRequest",
+        "description": "The fields of a product model to change, any of them but the SKU."
       },
       "MonthToDateResponse": {
         "properties": {
@@ -6981,6 +8279,21 @@
         "type": "object",
         "title": "ProfileUpdateRequest",
         "description": "The contact and billing fields a customer may change, each of them optional.\n\nA field that is left out is left alone. `companyName` and `vatNumber` may\nbe sent as null or as an empty string to clear them."
+      },
+      "PublicationRequest": {
+        "properties": {
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "published"
+        ],
+        "title": "PublicationRequest",
+        "description": "Whether the model is to be in the public catalogue."
       },
       "QuoteBasis": {
         "type": "string",

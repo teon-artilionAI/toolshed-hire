@@ -10,10 +10,12 @@
  * lookup, new booking, checkout, dashboard, diary, locator, return screen,
  * overdue worklist and damage screen are checked the same way, because an
  * assistant may hold a phone at the counter. My Account is checked with a hire in its history.
- * The owner's dashboard and report, by model and by unit, and the audit trail
- * and the notification log are checked too, with the answers in
- * admin-answers.ts. So are the return screen and the checkout as the owner
- * sees them, each with the owner's question open, from owner-answers.ts.
+ * The owner's dashboard and report, by model and by unit, the audit trail and
+ * the notification log, and the catalogue with its form closed and open, are
+ * checked too, with the answers in admin-answers.ts. The catalogue is checked
+ * again with every question it asks open. So are the return screen and the
+ * checkout as the owner sees them, each with the owner's question open, from
+ * owner-answers.ts.
  *
  * This spec does not use the real backend. The screens need a signed in person
  * with bookings and a profile, and a layout check should not depend on what a
@@ -28,7 +30,7 @@
 
 import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
-import { ADMIN_SCREENS, openAdminScreen } from './admin-answers.ts'
+import { ADMIN_SCREENS, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
 import { MY_RENTALS } from './return-answers.ts'
@@ -210,6 +212,26 @@ for (const adminScreen of ADMIN_SCREENS) {
     expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
   })
 }
+
+test('the catalogue fits 360 pixels with its questions and the category form open, with nothing to scroll sideways', async ({
+  page,
+}) => {
+  const formOpen = ADMIN_SCREENS.find((screen) => screen.heading === CATALOGUE_HEADING && screen.path.includes('model='))
+  if (formOpen === undefined) throw new Error('ADMIN_SCREENS has no catalogue with its form open.')
+  await openAdminScreen(page, formOpen)
+
+  const form = page.getByRole('form', { name: /^The details of / })
+  await form.getByLabel('Daily rate, in rand').fill('1300')
+  await form.getByRole('button', { name: 'Save the changes' }).click()
+  await expect(page.getByRole('heading', { level: 3, name: /^Save the changes to .+\?$/ })).toBeVisible()
+  await page.getByRole('button', { name: /^Hide / }).first().click()
+  await expect(page.getByRole('heading', { level: 3, name: /^Hide .+ from customers\?$/ })).toBeVisible()
+  await page.getByRole('region', { name: 'Categories' }).getByRole('button', { name: 'Add a category' }).click()
+  await page.getByRole('button', { name: /^Switch off / }).first().click()
+  await expect(page.getByRole('heading', { level: 3, name: /^Switch .+ off\?$/ })).toBeVisible()
+
+  expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
+})
 
 for (const owner of OWNER_COUNTER_SCREENS) {
   test(`${owner.name} fits 360 pixels, question and all, with nothing to scroll sideways`, async ({ page }) => {

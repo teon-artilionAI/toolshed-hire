@@ -12,7 +12,9 @@ from fastapi import APIRouter
 from app.api.routers import (
     account,
     admin_audit,
+    admin_categories,
     admin_corrections,
+    admin_models,
     admin_notifications,
     admin_reports,
     assets,
@@ -55,6 +57,8 @@ api_router.include_router(admin_reports.router)
 api_router.include_router(admin_audit.router)
 api_router.include_router(admin_notifications.router)
 api_router.include_router(admin_corrections.router)
+api_router.include_router(admin_categories.router)
+api_router.include_router(admin_models.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)
