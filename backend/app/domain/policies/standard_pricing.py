@@ -7,6 +7,8 @@ than a week has no complete week, so the two totals are the same figure.
 
 This class is the only place in the system that multiplies a rate by a number
 of days. A test reads the source of every other module to keep it that way.
+So the catalogue asks it what seven days at a daily rate come to, when it
+holds a weekly rate to the most the policy could ever charge for a week.
 """
 
 from __future__ import annotations
@@ -36,6 +38,15 @@ class StandardPricingPolicy:
     def name(self) -> str:
         """Return the name the policy is logged under."""
         return STANDARD_POLICY_NAME
+
+    @classmethod
+    def week_at_the_daily_rate(cls, daily_rate: Money) -> Money:
+        """Return one week charged day by day, the most a weekly rate is ever worth.
+
+        The policy charges the lower of the two totals, so a weekly rate above
+        this figure would never be charged (BR-21).
+        """
+        return daily_rate.times(cls.WEEK_LENGTH_DAYS)
 
     def quote(
         self, line: LineSnapshot, period: BookingPeriod, discount_percent: Decimal
