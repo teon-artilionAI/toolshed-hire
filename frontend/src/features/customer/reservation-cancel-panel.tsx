@@ -30,6 +30,27 @@ const REASON_ID = 'cancel-reason'
 const REASON_ROWS = 3
 const CARD_TITLE = 'Cancelling this booking'
 
+/**
+ * Why a booking the server will not let this person cancel cannot be
+ * cancelled, by where it stands. A booking still to go out can be changed by
+ * ringing the branch. One that has gone out, came back, ran out or was never
+ * collected has nothing left to cancel.
+ */
+function NotCancellable({ reservation }: { reservation: Reservation }) {
+  const why: Partial<Record<Reservation['status'], string>> = {
+    COLLECTED: `The equipment has been collected, so the booking can no longer be cancelled. Bring it back to ${reservation.branchName} by the return date.`,
+    RETURNED: 'The equipment has come back and the hire is finished, so there is nothing to cancel.',
+    EXPIRED: 'The hold ran out before the booking was confirmed, so there is nothing to cancel.',
+    NO_SHOW: 'The equipment was not collected on the day, so the booking was closed. There is nothing to cancel.',
+  }
+  return (
+    <p className="text-sm text-slate-soft">
+      {why[reservation.status] ??
+        `This booking cannot be cancelled online. If you need to change it, ring ${reservation.branchName}.`}
+    </p>
+  )
+}
+
 /** What the server recorded about a cancellation. */
 function CancelledNotice({ reservation }: { reservation: Reservation }) {
   return (
@@ -121,10 +142,7 @@ export function CancellationPanel({
           {reservation.status === 'CANCELLED' ? (
             <CancelledNotice reservation={reservation} />
           ) : (
-            <p className="text-sm text-slate-soft">
-              This booking cannot be cancelled online. If you need to change it, ring{' '}
-              {reservation.branchName}.
-            </p>
+            <NotCancellable reservation={reservation} />
           )}
         </div>
         {refusal?.kind === 'conflict' && refusalNotice}

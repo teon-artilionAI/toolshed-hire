@@ -81,6 +81,11 @@ fi
 # Secrets are mounted from Secret Manager into the revision, so no secret value
 # passes through this script or its log. The runtime service account is a
 # separate, least privileged identity from the one running this deployment.
+#
+# The service scales to zero, so the first visitor after a quiet spell waits
+# for an instance to start. Start up CPU boost gives the instance more CPU only
+# while it starts, which shortens that wait without paying for an idle
+# instance.
 gcloud run deploy "${SERVICE_NAME}" \
   --image="${IMAGE_DIGEST}" \
   --region="${REGION}" \
@@ -88,6 +93,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --service-account="${RUNTIME_SERVICE_ACCOUNT}" \
   --port="${CLOUD_RUN_PORT}" \
   --cpu="${CLOUD_RUN_CPU}" \
+  --cpu-boost \
   --memory="${CLOUD_RUN_MEMORY}" \
   --concurrency="${CLOUD_RUN_CONCURRENCY}" \
   --timeout="${CLOUD_RUN_REQUEST_TIMEOUT}" \

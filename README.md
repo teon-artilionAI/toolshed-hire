@@ -92,7 +92,10 @@ five minutes without a query, so both are asleep when nobody has used the site
 for a while. The first request after a quiet spell wakes them and takes about six
 seconds. I measured 5.9 seconds on production on the morning of 4 October 2026
 after the site had been idle overnight, and between 0.26 and 0.6 seconds for
-the requests that followed. A loading state shows while it waits.
+the requests that followed. A loading state shows while it waits. The browser
+waits up to fifteen seconds for an answer and tries a read again if the first
+try runs out of time, and the API starts with start up CPU boost to shorten
+the wait.
 
 ## What each task delivered
 

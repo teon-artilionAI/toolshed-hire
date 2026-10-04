@@ -194,7 +194,7 @@ test.describe('a booking against the real backend', () => {
     await expect(page).toHaveURL(new RegExp(`/reservations/${reference}$`))
     await expect(page.getByRole('table')).toContainText(name)
     await expect(figure(page, 'Total with VAT')).toHaveText(total)
-    await expect(page.getByText(/Charges appear here once the equipment has been collected/)).toBeVisible()
+    await expect(page.getByText(/Nothing has been charged on this booking\. The hire is charged once the equipment is collected/)).toBeVisible()
 
     await page.getByRole('button', { name: 'Cancel this booking' }).click()
     await expect(page.getByRole('heading', { name: `Cancel ${reference}?` })).toBeFocused()

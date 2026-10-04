@@ -124,14 +124,15 @@ describe('once the catalogue has loaded', () => {
     expect(network.requestsTo(MODELS_ROUTE)[0].query.get('pageSize')).toBe('6')
   })
 
-  it('shows the size of the catalogue and where the branches are', async () => {
+  it('shows the size of the catalogue and names the branches', async () => {
     mockApi(WORKING)
     openHome()
 
     expect(await screen.findByText('Models in the catalogue')).toBeVisible()
     expect(screen.getByText('120')).toBeVisible()
     expect(screen.getByText('Across 2 categories')).toBeVisible()
-    expect(screen.getByText('Woodstock, Stikland and Firgrove')).toBeVisible()
+    expect(screen.getByText('Cape Town CBD, Bellville and Somerset West')).toBeVisible()
+    expect(screen.queryByText(/Woodstock/)).not.toBeInTheDocument()
   })
 
   it('offers the branches the API sent, and any branch', async () => {
