@@ -114,6 +114,16 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
         "availability", API, "POST", f"/api/admin/allocations/{NOBODYS_KEY}/release", ADMIN_ONLY
     ),
     MatrixRow("booking", API, "POST", f"/api/reservations/{NOBODYS_KEY}/reallocation", STAFF),
+    MatrixRow("catalogue", API, "GET", "/api/admin/categories", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "POST", "/api/admin/categories", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "PATCH", f"/api/admin/categories/{NOBODYS_KEY}", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "GET", "/api/admin/models", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "GET", f"/api/admin/models/{NOBODYS_KEY}", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "POST", "/api/admin/models", ADMIN_ONLY),
+    MatrixRow("catalogue", API, "PATCH", f"/api/admin/models/{NOBODYS_KEY}", ADMIN_ONLY),
+    MatrixRow(
+        "catalogue", API, "POST", f"/api/admin/models/{NOBODYS_KEY}/publication", ADMIN_ONLY
+    ),
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
     MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
     MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),
