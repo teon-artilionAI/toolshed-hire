@@ -6,8 +6,9 @@
  * them again whenever the window comes back into focus. The report is fresh for
  * a minute, because it covers a period and the server works it out over the
  * whole fleet. The catalogue, its categories and its models, is fresh for a
- * minute like the customer's catalogue. Those rules live in query-client.ts,
- * and the key is all a query needs to get the right one.
+ * minute like the customer's catalogue. The asset register is never fresh,
+ * because a unit moves at a counter while the owner reads it. Those rules live
+ * in query-client.ts, and the key is all a query needs to get the right one.
  *
  * The CSV is not here. It is a file to save and not data to keep, so the
  * screen asks for it once for each press of the button.
@@ -15,10 +16,13 @@
 
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
+import { getAdminAsset, listAdminAssets } from './admin-assets'
 import { getAdminModel, listAdminCategories, listAdminModels } from './admin-catalogue'
 import { getAdminDashboard } from './admin-dashboard'
 import { listAuditEvents, listNotifications } from './audit-log'
 import type {
+  AdminAssetDetail,
+  AdminAssetQuery,
   AdminModel,
   AdminModelQuery,
   AuditEventQuery,
@@ -26,12 +30,14 @@ import type {
   UtilisationReportQuery,
 } from './contract'
 import {
+  ADMIN_ASSETS_SEGMENT,
   ADMIN_AUDIT_SEGMENT,
   ADMIN_CATALOGUE_SEGMENT,
   ADMIN_DASHBOARD_SEGMENT,
   ADMIN_KEY,
   ADMIN_NOTIFICATIONS_SEGMENT,
   ADMIN_REPORT_SEGMENT,
+  ASSETS_KEY,
   CATALOGUE_KEY,
 } from './query-client'
 import { getUtilisationReport } from './reporting'
@@ -85,6 +91,40 @@ export const adminQueries = {
       queryKey: [ADMIN_KEY, ADMIN_CATALOGUE_SEGMENT, 'model', id],
       queryFn: ({ signal }) => getAdminModel(id, signal),
     }),
+
+  /** One page of the units of the fleet, retired or not, in tag order. */
+  assets: (query: AdminAssetQuery) =>
+    queryOptions({
+      queryKey: [ADMIN_KEY, ADMIN_ASSETS_SEGMENT, 'page', query],
+      queryFn: ({ signal }) => listAdminAssets(query, signal),
+    }),
+
+  /** One unit with its history, by its tag. */
+  asset: (tag: string) =>
+    queryOptions({
+      queryKey: [ADMIN_KEY, ADMIN_ASSETS_SEGMENT, 'unit', tag],
+      queryFn: ({ signal }) => getAdminAsset(tag, signal),
+    }),
+}
+
+/**
+ * Keep the unit a write answered with under its tag, so the screen shows the
+ * unit as the server now has it at once, its moves and its history with it.
+ */
+export function rememberAdminAsset(client: QueryClient, unit: AdminAssetDetail): void {
+  client.setQueryData(adminQueries.asset(unit.assetTag).queryKey, unit)
+}
+
+/**
+ * Mark everything a write to the register changes as out of date. The pages
+ * of the register, the owner's dashboard and report, which count units by
+ * where they stand, the number of units each model holds in the catalogue,
+ * the trail, which gained an event, and the counter's locator, which says
+ * where each unit is.
+ */
+export function forgetTheRegister(client: QueryClient): void {
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY] })
+  void client.invalidateQueries({ queryKey: [ASSETS_KEY] })
 }
 
 /**

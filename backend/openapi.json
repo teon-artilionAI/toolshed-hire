@@ -4210,6 +4210,426 @@
         }
       }
     },
+    "/api/admin/assets": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one page of the units of the fleet, retired or not, in tag order",
+        "description": "Return one page of the units that match, in tag order.\n\nRaises:\n    ValidationFailure: If no branch has the code. HTTP 422, naming `branchCode`.",
+        "operationId": "read_assets_api_admin_assets_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the tag, the serial number or the model name.",
+              "title": "Q"
+            },
+            "description": "Part of the tag, the serial number or the model name."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A branch code. Only the units it holds.",
+              "title": "Branchcode"
+            },
+            "description": "A branch code. Only the units it holds."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AssetStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units in this status.",
+              "title": "Status"
+            },
+            "description": "Only the units in this status."
+          },
+          {
+            "name": "modelId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units of this product model.",
+              "title": "Modelid"
+            },
+            "description": "Only the units of this product model."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "The page, counted from 1.",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "The page, counted from 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "How many units a page holds.",
+              "default": 20,
+              "title": "Pagesize"
+            },
+            "description": "How many units a page holds."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetPageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Register a unit, at INTAKE",
+        "description": "Register the unit and record it, in one transaction.\n\nRaises:\n    ValidationFailure: If a field breaks a rule, the model or the branch\n        is unknown, or another unit carries the tag. HTTP 422, naming the\n        field.",
+        "operationId": "post_asset_api_admin_assets_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/assets/{tag}": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Return one unit with its history, the newest first",
+        "description": "Return the unit with its history.\n\nRaises:\n    NotFound: If no unit carries the tag. HTTP 404.",
+        "operationId": "read_asset_api_admin_assets__tag__get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag painted on the unit.",
+              "title": "Tag"
+            },
+            "description": "The tag painted on the unit."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No unit carries that tag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Change the paperwork of a unit, never its tag, model or branch",
+        "description": "Change the fields that were sent and record them before and after.\n\nRaises:\n    NotFound: If no unit carries the tag. HTTP 404.\n    ValidationFailure: If a field breaks a rule, or the tag, the model or\n        the branch is sent. HTTP 422, naming the field.",
+        "operationId": "patch_asset_api_admin_assets__tag__patch",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag painted on the unit.",
+              "title": "Tag"
+            },
+            "description": "The tag painted on the unit."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No unit carries that tag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/assets/{tag}/transitions": {
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Move a unit through its lifecycle by hand",
+        "description": "Move the unit and record the move, in one transaction.\n\nRaises:\n    NotFound: If no unit carries the tag. HTTP 404.\n    ValidationFailure: For ON_HIRE or LOST, naming `to`, or a move out of\n        service with no reason, naming `reason`. HTTP 422.\n    StateTransitionError: If the move is not permitted from the unit's\n        status, or a booking or an open damage report holds the unit.\n        HTTP 409.",
+        "operationId": "post_transition_api_admin_assets__tag__transitions_post",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag painted on the unit.",
+              "title": "Tag"
+            },
+            "description": "The tag painted on the unit."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetTransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAssetDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No unit carries that tag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move is not one the unit may make from the status it is in, which `detail` names, or a booking or an open damage report still holds the unit and `detail` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/branches": {
       "get": {
         "tags": [
@@ -4789,6 +5209,320 @@
         "title": "AdjustmentRequest",
         "description": "An adjustment of a hire, VAT included, and the reason for it."
       },
+      "AdminAssetDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Modelid"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "acquiredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquiredon"
+          },
+          "acquisitionCost": {
+            "type": "string",
+            "title": "Acquisitioncost"
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "retiredOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retiredon"
+          },
+          "activeAllocationCount": {
+            "type": "integer",
+            "title": "Activeallocationcount"
+          },
+          "openDamageReports": {
+            "type": "integer",
+            "title": "Opendamagereports"
+          },
+          "allowedTransitions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetStatus"
+            },
+            "type": "array",
+            "title": "Allowedtransitions"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/AssetHistoryEntryResponse"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "assetTag",
+          "modelId",
+          "modelName",
+          "modelSlug",
+          "categoryName",
+          "branchCode",
+          "branchName",
+          "serialNumber",
+          "status",
+          "conditionGrade",
+          "acquiredOn",
+          "acquisitionCost",
+          "hourMeterReading",
+          "notes",
+          "retiredOn",
+          "activeAllocationCount",
+          "openDamageReports",
+          "allowedTransitions",
+          "history"
+        ],
+        "title": "AdminAssetDetailResponse",
+        "description": "One unit with its history, the newest first, at most fifty entries."
+      },
+      "AdminAssetPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminAssetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "AdminAssetPageResponse",
+        "description": "One page of the units, in tag order."
+      },
+      "AdminAssetResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "assetTag": {
+            "type": "string",
+            "title": "Assettag"
+          },
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Modelid"
+          },
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "modelSlug": {
+            "type": "string",
+            "title": "Modelslug"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "acquiredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquiredon"
+          },
+          "acquisitionCost": {
+            "type": "string",
+            "title": "Acquisitioncost"
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "retiredOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retiredon"
+          },
+          "activeAllocationCount": {
+            "type": "integer",
+            "title": "Activeallocationcount"
+          },
+          "openDamageReports": {
+            "type": "integer",
+            "title": "Opendamagereports"
+          },
+          "allowedTransitions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetStatus"
+            },
+            "type": "array",
+            "title": "Allowedtransitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "assetTag",
+          "modelId",
+          "modelName",
+          "modelSlug",
+          "categoryName",
+          "branchCode",
+          "branchName",
+          "serialNumber",
+          "status",
+          "conditionGrade",
+          "acquiredOn",
+          "acquisitionCost",
+          "hourMeterReading",
+          "notes",
+          "retiredOn",
+          "activeAllocationCount",
+          "openDamageReports",
+          "allowedTransitions"
+        ],
+        "title": "AdminAssetResponse",
+        "description": "One unit as the register shows it, retired or not.\n\n`allowedTransitions` lists the statuses an administrator may move it to by\nhand, from the asset state model. `activeAllocationCount` counts the\nbookings that hold it now and `openDamageReports` its reports that are\nopen or under repair."
+      },
       "AdminCategoryPageResponse": {
         "properties": {
           "items": {
@@ -5099,6 +5833,132 @@
         "title": "AdminModelResponse",
         "description": "One product model as the administrator sees it, published or not.\n\n`assetCount` is every unit of the fleet that realises it, whatever its status."
       },
+      "AssetCreateRequest": {
+        "properties": {
+          "assetTag": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Assettag"
+          },
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Modelid"
+          },
+          "branchCode": {
+            "type": "string",
+            "maxLength": 4,
+            "minLength": 1,
+            "title": "Branchcode"
+          },
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "conditionGrade": {
+            "$ref": "#/components/schemas/ConditionGrade"
+          },
+          "acquiredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquiredon"
+          },
+          "acquisitionCost": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+            "title": "Acquisitioncost"
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "assetTag",
+          "modelId",
+          "branchCode",
+          "conditionGrade",
+          "acquiredOn",
+          "acquisitionCost"
+        ],
+        "title": "AssetCreateRequest",
+        "description": "A new unit. It starts at INTAKE, and its tag, model and branch never change."
+      },
+      "AssetHistoryEntryResponse": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AssetHistoryKind"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "kind",
+          "summary",
+          "reference"
+        ],
+        "title": "AssetHistoryEntryResponse",
+        "description": "One line of a unit's history. `reference` is the booking, rental or report, or null."
+      },
+      "AssetHistoryKind": {
+        "type": "string",
+        "enum": [
+          "ALLOCATION",
+          "RENTAL",
+          "DAMAGE_REPORT",
+          "AUDIT_EVENT"
+        ],
+        "title": "AssetHistoryKind",
+        "description": "Where an entry of a unit's history comes from."
+      },
       "AssetLocationPageResponse": {
         "properties": {
           "items": {
@@ -5216,6 +6076,85 @@
         ],
         "title": "AssetStatus",
         "description": "Asset lifecycle status. There is deliberately no RESERVED member.\n\nFuture occupancy is derived from AssetAllocation rows. A RESERVED status\nwould be a second source of truth able to disagree with the exclusion\nconstraint."
+      },
+      "AssetTransitionRequest": {
+        "properties": {
+          "to": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "to"
+        ],
+        "title": "AssetTransitionRequest",
+        "description": "The status to move a unit to by hand, and why."
+      },
+      "AssetUpdateRequest": {
+        "properties": {
+          "serialNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialnumber"
+          },
+          "conditionGrade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConditionGrade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hourMeterReading": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourmeterreading"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AssetUpdateRequest",
+        "description": "The paperwork of a unit to change, any of it. Never the tag, the model or the branch."
       },
       "AuditEventPageResponse": {
         "properties": {

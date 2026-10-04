@@ -52,6 +52,12 @@ first pass at the whole application.
    publishes or hides a model. A rate raised from R280 to R310 reaches the next
    quote and booking, while a booking already made, its lines and the rental
    checked out from it stay at R280.
+14. Every physical unit is in a register the owner can search by tag, serial
+   number or model name. A unit is registered at INTAKE with a tag that never
+   changes, moves through its lifecycle by hand along the moves the asset state
+   model permits, and is never retired while a booking holds it. A retired
+   unit keeps its row, its history and its figures in the report, and is never
+   offered for hire again.
 
 ## Layout
 
@@ -64,7 +70,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, `admin_asset_deps.py` wires the reads and writes of the asset register, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -84,7 +90,7 @@ keeps the same name in every layer it appears in.
 |---|---|---|---|
 | `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
 | `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle`, `DamageReport`, the quarantine rule in `quarantine`, `file_damage_report`, the corrections in `charge_corrections` and their rework in `resettlement` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview`, `DamageReportRepository`, `FileDamageReportUseCase`, `SendForRepairUseCase`, `CloseDamageReportUseCase`, `ReadDamageReports`, `WaiveChargeUseCase`, `ReverseChargeUseCase`, `AdjustRentalUseCase` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview`, `SqlDamageReportRepository`, `SqlDamageReportReads` |
-| `catalogue` | `ProductModel`, `Asset`, the forms of a code and a slug in `catalogue_forms`, `CategoryTerms` and `CatalogueCategory` with the nesting rule in `category_rules`, `ModelTerms` and `CatalogueEntry` with the money and hire day rules in `catalogue_entry_rules` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets`, `CategoryRepository`, `CatalogueEntryRepository`, `AdminCatalogueQuery`, `ReadAdminCatalogue`, `CreateCategoryUseCase`, `EditCategoryUseCase`, `CreateModelUseCase`, `EditModelUseCase`, `PublishModelUseCase` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator`, `SqlCategoryRepository`, `SqlCatalogueEntryRepository`, `SqlAdminCatalogue` |
+| `catalogue` | `ProductModel`, `Asset`, the forms of a code and a slug in `catalogue_forms`, `CategoryTerms` and `CatalogueCategory` with the nesting rule in `category_rules`, `ModelTerms` and `CatalogueEntry` with the money and hire day rules in `catalogue_entry_rules`, `RegisteredUnit` and `UnitDetails` with the rules of a tag and its paperwork in `asset_register`, the moves by hand in `asset_transitions` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets`, `CategoryRepository`, `CatalogueEntryRepository`, `AdminCatalogueQuery`, `ReadAdminCatalogue`, `CreateCategoryUseCase`, `EditCategoryUseCase`, `CreateModelUseCase`, `EditModelUseCase`, `PublishModelUseCase`, `AssetRegisterRepository`, `AssetRegisterQuery`, `ReadAssetRegister`, `RegisterUnitUseCase`, `EditUnitUseCase`, `MoveUnitUseCase` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator`, `SqlCategoryRepository`, `SqlCatalogueEntryRepository`, `SqlAdminCatalogue`, `SqlAssetRegisterRepository`, `SqlAssetRegister` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show`, the force release and the top up in `reallocation` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations`, `ForceReleaseUseCase`, `ReallocateUseCase` | `SqlReservationRepository`, `SqlReservationReads` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher`, `NotificationLogQuery`, `ReadNotificationLog`, `ResendNotificationUseCase` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway`, `SqlNotificationLog` |
@@ -282,7 +288,9 @@ them. Checkout calls `collect`, the no show sweep and the counter call
 A tagged unit has a state model of its own, the asset states of the design
 document. `PERMITTED_ASSET_MOVES` in `app/domain/asset_lifecycle.py` is its
 table, and `moved` refuses any move the table does not hold with
-`StateTransitionError`. Checkout moves every unit to `ON_HIRE` through it.
+`StateTransitionError`. Checkout moves every unit to `ON_HIRE` through it, and
+an administrator's move by hand goes through it as well, with the guards of
+`app/domain/asset_transitions.py` on top.
 
 ### The clock
 
@@ -486,8 +494,9 @@ The role dependencies read the role from the `user_account` row on every
 request and not from the token. That is stricter than the fifteen minutes the
 design document allows a claim to be trusted for.
 
-The charge corrections, the re-send, the force release and the five writes of
-the admin catalogue depend on `FreshAdminUser` from
+The charge corrections, the re-send, the force release, the five writes of
+the admin catalogue and the three writes of the asset register depend on
+`FreshAdminUser` from
 `app/api/identity_deps.py`, and user and role management will when it is
 added. It reads the account again under a shared row lock, so
 the role that is checked is the role that holds until the action commits.
@@ -1630,6 +1639,136 @@ is one index probe for each row of the page, so it is bounded by the hundred a
 page may hold. A write locks one row, so two administrators only ever wait for
 each other on the same model or category.
 
+## The asset register
+
+Every physical unit is tagged and moves through a fixed lifecycle from intake
+to retirement, and the owner keeps the register of them (FR-23, US-31, US-32,
+BR-34, BR-37, BR-38). There is no new table and no new column. Revision
+`0010` adds two indexes. Every route is for an administrator alone, and every
+write reads the account again under a row lock (`FreshAdminUser`). Each write
+is a use case on the unit of work that commits the change with its audit
+event, and answers the unit with its history, read once it has committed, so
+the screen shows the move it has just made.
+
+**Registering and editing (BR-34).** `app/domain/asset_register.py` holds a
+unit to its rules, each a 422 naming its field. A tag is capital letters and
+digits in words joined by single hyphens, the form of a code, in sixteen
+characters at most, for example `TSH-DR-0042`. A tag another unit carries is
+refused naming `assetTag`, whether the check finds it or the unique constraint
+`asset_asset_tag_key` does when two administrators race, which
+`app/infrastructure/catalogue_uniques.py` recognises the way it recognises a
+SKU. The model has to exist, published or not, because stock arrives before a
+model is put in the catalogue, and the branch has to be trading. A unit is
+acquired on or before today, because that day is where its days in the fleet
+begin for the report, and its cost is zero or more in whole cents. A new unit
+starts at INTAKE. An edit changes the serial number, the grade, the meter
+reading and the notes it names, and `UnitDetails` holds exactly those four,
+so nothing an edit carries can reach the tag, the model or the branch. A body
+that sends any of the three is refused naming it, the way an edit that sends a
+SKU is. An edit that changes nothing writes nothing. A meter reading may go
+down here, because correcting a misread meter is what an edit is for, and the
+event records it before and after.
+
+**Moving a unit by hand.** `app/domain/asset_transitions.py` adds the guards of
+the route to the one table of moves in `app/domain/asset_lifecycle.py`, and
+every move goes through its `moved`. I made five decisions there that the
+contract does not settle.
+
+1. ON_HIRE and LOST are never set here, because only checkout and the loss
+   route set them. Asking for either is a 422 naming `to`, since no status of
+   the unit would ever make it acceptable.
+2. A unit on hire has no move by hand. The table lets it go back to the shelf
+   or to quarantine, but those moves belong to the return, which closes the
+   rental item and lets the allocation go with it. Doing either by hand would
+   leave a rental item out and a booking holding a unit on the shelf. It is a
+   409 that says the unit comes off hire through its return or its loss.
+3. A move to QUARANTINED, UNDER_REPAIR or RETIRED takes a reason of 5 to 200
+   characters, the rule of an administrator's override. A move to AVAILABLE
+   may carry one and is held to the same bounds when it does.
+4. A unit with a damage report still open goes back on the shelf when the
+   report is resolved, and a move to AVAILABLE by hand is a 409 naming the
+   report. Resolving the report records the repair cost and ends its span in
+   the report, so putting the unit back by hand would leave it counted out of
+   service while it is on the shelf.
+5. `allowedTransitions` comes from the same table and the first two rules, so
+   it is what the route accepts. It does not leave out RETIRED for a unit a
+   booking holds, because the refusal names the booking, which is what the
+   administrator needs to act on.
+
+A move the table does not hold is a 409 whose sentence names where the unit
+stands and whose `errors` carries `from_status` and `to_status`. A retirement
+is refused with 409 while a booking holds the unit, and the sentence names the
+booking's reference (BR-37). The booking is found through the GiST index of
+the exclusion constraint, after the unit is locked with `FOR UPDATE`, and
+`lock_allocatable` takes the same row lock with `SKIP LOCKED`, so a hold racing
+the retirement either skips the unit or waits and finds it retired. A
+retirement stamps `retired_on` with the business day and keeps the row (BR-38),
+so the unit stays in the register, in its history and in the report, and the
+availability search, which offers AVAILABLE units only, never offers it again.
+
+**The audit events.** `asset.registered` records every field of the new unit
+with the code of its branch. `asset.updated` records the fields that changed,
+each before and after. A move writes `asset.status_changed`, the action
+checkout, a return, a loss and a damage report already write, with the status
+before, and after it the status, the tag and `retired_on`, which is the shape
+the report reads, and the reason beside them. The move is written through
+`save_units` of the asset repository, where every other change of a unit's
+status is written. The utilisation report rebuilds a unit's days out of
+service from these events, so a unit quarantined by hand is out of service
+from the day it was moved and not from the day it was acquired.
+
+**The history.** `GET /api/admin/assets/{tag}` adds `history`, at most fifty
+entries, the newest first, each `at`, `kind`, `summary` and `reference`. `kind`
+is where the entry comes from, `ALLOCATION`, `RENTAL`, `DAMAGE_REPORT` or
+`AUDIT_EVENT`. An allocation is the hold and, once let go, the release with
+why. A rental item is the handover and, once it ended, the return with its
+grade or the loss. A damage report is the filing and, once closed, how it
+ended. An audit event is the registration, an edit naming the fields it
+changed, or a move with its reason. A checkout therefore shows the handover
+and the move it made, because both happened. Each source is one statement of
+at most fifty rows ordered by the latest instant a row carries, so the fifty
+newest entries are always among what is read, and
+`app/application/catalogue/asset_history.py` puts them in one list and says
+what each means.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/assets` | `q` of 2 to 80 characters, `branchCode`, `status`, `modelId`, `page`, `pageSize` | 200 with `items` of `AdminAsset`, in tag order. 422 naming the parameter, and `query.branchCode` for a code no branch has. |
+| `GET /api/admin/assets/{tag}` | none | 200 with `AdminAsset` and `history`. 404. |
+| `POST /api/admin/assets` | `assetTag`, `modelId`, `branchCode`, `serialNumber`, `conditionGrade`, `acquiredOn`, `acquisitionCost`, `hourMeterReading`, `notes` | 201 with the unit and its history, at INTAKE. 422 naming the field. |
+| `PATCH /api/admin/assets/{tag}` | any of `serialNumber`, `conditionGrade`, `hourMeterReading`, `notes` | 200 with the unit and its history. 404. 422 naming the field, and `assetTag`, `modelId` or `branchCode` when one is sent. |
+| `POST /api/admin/assets/{tag}/transitions` | `to`, `reason` | 200 with the unit and its history. 404. 409 `state-transition` naming the status, the booking or the report. 422 naming `to` or `reason`. |
+
+Every route answers 403 to counter staff and customers. A tag in a path is
+read in capitals, the way it is painted on the unit. The branch filter takes
+any branch, trading or not, because units of a closed branch are still in the
+register.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| A page | 2, the count and the page, and 3 with `branchCode`, which is looked up first. Each row carries two correlated counts | `asset_asset_tag_key` for the order, `ix_asset_branch_status` for a branch, `ix_asset_product_model` for a model, `ix_asset_tag_trgm`, `ix_asset_serial_trgm` and a read of `product_model` for `q`, the GiST index of `asset_allocation_no_overlap` and `ix_damage_report_asset` for the counts |
+| One unit | 1, and 4 more for its history | `asset_asset_tag_key`, then `ix_asset_allocation_released` and the GiST index of the exclusion constraint for the released and the active allocations, `ix_rental_item_asset`, `ix_damage_report_asset` and `ix_audit_event_entity_id` |
+| Register | the model, the branch, the check of the tag, the insert, the audit event, then the read of the answer | the primary key, `branch_code_key`, `asset_asset_tag_key` |
+| Edit | the unit under its lock, the update, the audit event, the read | `asset_asset_tag_key` |
+| Move | the unit under its lock, the booking that holds it for a retirement or the open report for a move to the shelf, the update, the audit event, the read | `asset_asset_tag_key`, the GiST index of the exclusion constraint, `ix_damage_report_asset` |
+
+The route adds the account to each, and a write reads it again under its lock.
+
+**What degrades first as the data grows.** The page narrowed by `status`
+alone. No index leads with the status, so the planner walks the tag index and
+keeps the units in that status, which is quick for a status many units hold
+and reads most of the fleet to fill a page of one few hold, such as LOST. At
+four hundred units that is nothing. At a hundred times the fleet a partial
+index on the tag for each rare status, or one on `(status, asset_tag)`, would
+serve it. After that comes the count of every page, which counts every unit
+that matches, and OFFSET, which reads every unit before a deep page, as the
+other lists do. A search of two characters reads the whole trigram index, so
+the screen should ask for three. A unit's history reads at most fifty rows of
+each of its four sources, and each source is sorted inside the statement,
+which is a few hundred rows over a unit's life. The audit events grow fastest
+and are read off the end of their index, so the history stays four short
+statements however long the unit has been in the fleet.
+
 ## The schema
 
 Migration `0001` is the baseline. It creates seventeen tables with singular
@@ -1727,6 +1866,23 @@ indexes a foreign key by itself. `product_model` is the catalogue, 120 rows
 that change by hand, so building it inside the migration's transaction blocks
 writes to the table for a moment. A table a hundred times larger would want
 `CREATE INDEX CONCURRENTLY` outside a transaction instead.
+
+Revision `0010` adds two indexes and nothing else, both read by the asset
+register. `ix_asset_serial_trgm` is a trigram index on `asset.serial_number`,
+through which the register finds part of a serial number the way it finds
+part of a tag through `ix_asset_tag_trgm`. `ix_asset_allocation_released` is a
+btree on `asset_allocation (asset_id, released_at)`, partial on a released
+allocation, through which the history of a unit reads every booking it was
+released from. The GiST index of the exclusion constraint already holds the
+active ones, and `asset_allocation` is the table that grows with every
+booking. The index is partial on purpose. A plain index on the unit was my
+first version, and on a small table the planner then preferred it to the
+GiST index for the availability search, which
+`tests/integration/test_availability_list.py` caught. An index that holds
+released allocations only can never answer a question about active ones, so
+the search keeps the index it was written for. Both are built inside the
+migration's transaction, with the same caution as the revisions before it for
+a table a hundred times larger.
 
 ## The seed and the two database roles
 
@@ -1860,6 +2016,11 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/admin/models` | An administrator, read again under a lock. |
 | PATCH | `/api/admin/models/{id}` | An administrator, read again under a lock. |
 | POST | `/api/admin/models/{id}/publication` | An administrator, read again under a lock. |
+| GET | `/api/admin/assets` | An administrator. |
+| GET | `/api/admin/assets/{tag}` | An administrator. |
+| POST | `/api/admin/assets` | An administrator, read again under a lock. |
+| PATCH | `/api/admin/assets/{tag}` | An administrator, read again under a lock. |
+| POST | `/api/admin/assets/{tag}/transitions` | An administrator, read again under a lock. |
 | GET | `/api/customers` | Counter staff and administrators. |
 | POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
 | GET | `/api/customers/{id}` | Counter staff and administrators. |
@@ -2430,6 +2591,25 @@ availability search and still checks out a booking made before,
 stages a race for one code, and `test_admin_catalogue_reads.py` counts the
 statements of each read with few rows and many and asks the planner to prove
 each filter and each count stands on its index.
+
+The asset register is tested the same way. `tests/unit` holds the form of a
+tag, the day a unit is acquired, its cost, its meter reading and its text,
+every move by hand the table offers and every one it refuses, ON_HIRE and
+LOST asked for from every status, the reason, a unit a booking holds and a
+unit with a report open, the three use cases against the in memory unit of
+work in `tests/support/memory_register.py`, which can be made to lose the tag
+to the unique constraint or to fail at its audit event, and the history put
+together from facts built by hand. `tests/api` lists, searches, registers,
+edits and moves through the routes, reads the history of a unit checked out at
+the counter, and asks every route for every refusal with the field or the
+status it names. On PostgreSQL, `test_asset_register_transaction.py` makes
+each write fail at its audit event, refuses to retire a unit a booking holds,
+shows a retired unit kept, never offered again and still in the report for
+the days it was in the fleet, and a unit quarantined by hand out of service
+from the day it moved. `test_asset_register_race.py` stages a race for one
+tag. `test_asset_register_reads.py` counts the statements of a page, a unit
+and its history with few rows and many, and `test_asset_register_indexes.py`
+asks the planner to prove each condition stands on its index.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

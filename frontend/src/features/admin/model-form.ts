@@ -240,10 +240,24 @@ export function plainMoneyMessages(fields: FieldErrors, sent: NewModelRequest | 
   const plain: Record<string, string> = { ...fields }
   for (const field of MONEY_FIELDS) {
     const value = sent[field]
-    if (plain[field] === undefined || value === undefined || MONEY_THE_API_READS.test(value)) continue
-    plain[field] = amountForTheWire(value) === null ? NOT_AN_AMOUNT : TOO_LARGE_AN_AMOUNT
+    if (plain[field] === undefined || value === undefined) continue
+    const words = plainAmountWords(value)
+    if (words !== null) plain[field] = words
   }
   return plain
+}
+
+/**
+ * The plain sentence for an amount that was sent and refused, or null when
+ * the server could read it as an amount and its own message stands. One the
+ * browser could not read either is not an amount at all, and one it could is
+ * too large. SC-21 says the cost of a unit the same way.
+ *
+ * @param sent The amount as it was sent.
+ */
+export function plainAmountWords(sent: string): string | null {
+  if (MONEY_THE_API_READS.test(sent)) return null
+  return amountForTheWire(sent) === null ? NOT_AN_AMOUNT : TOO_LARGE_AN_AMOUNT
 }
 
 /** Whether a change moves any figure. */

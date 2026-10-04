@@ -35,7 +35,7 @@ from app.domain.category_rules import CatalogueCategory
 
 
 class DuplicateCatalogueValue(Exception):
-    """A unique constraint refused a value another category or model already holds.
+    """A unique constraint refused a value another category, model or unit already holds.
 
     Attributes:
         field: The field whose value was taken, named the way the domain names

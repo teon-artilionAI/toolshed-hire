@@ -14,7 +14,8 @@ import { FIRST_PAGE, writeReportFilters } from './report-address'
 /** SC-22, the utilisation and gross contribution report. */
 export const REPORT_PATH = '/admin/reports'
 
-/** SC-21, the asset register, where a unit with a damage report is dealt with. */
+/** SC-21, the asset register, where each unit's open damage reports are
+ *  listed with a link to the damage screen that resolves them. */
 export const ASSET_REGISTER_PATH = '/admin/assets'
 
 /** SC-23, where the customer holds are lifted. */

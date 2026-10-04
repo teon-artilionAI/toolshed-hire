@@ -1,5 +1,6 @@
 /**
- * The question SC-20 asks before every write.
+ * The question SC-20 asks before every write. SC-21 asks its questions about
+ * a unit's paperwork with it too.
  *
  * It says in words what is about to happen, and one press of the answer sends
  * one request. Both buttons are disabled while it is in flight, and a polite
@@ -30,9 +31,12 @@ export function WriteQuestion({
   failure,
   onAnswer,
   onCancel,
+  headingLevel = 3,
 }: {
   /** Unique on the page. The heading and the consequence are named from it. */
   id: string
+  /** The level of the question's heading, one below the section it opens in. */
+  headingLevel?: 3 | 4
   /** The question itself, for example "Hide the CP 100 from customers?". */
   heading: string
   /** What will happen, in words. */
@@ -53,6 +57,7 @@ export function WriteQuestion({
   const headingRef = useRef<HTMLHeadingElement>(null)
   const headingId = `${id}-heading`
   const consequenceId = `${id}-consequence`
+  const Heading = headingLevel === 4 ? 'h4' : 'h3'
 
   // The question opens in place of what was pressed, so focus goes to it.
   useEffect(() => {
@@ -61,9 +66,9 @@ export function WriteQuestion({
 
   return (
     <section aria-labelledby={headingId} className="min-w-0 rounded-lg border-2 border-ink bg-surface p-md">
-      <h3 id={headingId} ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold text-ink">
+      <Heading id={headingId} ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold text-ink">
         {heading}
-      </h3>
+      </Heading>
       <div id={consequenceId} className="mt-xs flex flex-col gap-xs break-words text-sm text-ink">
         {children}
       </div>

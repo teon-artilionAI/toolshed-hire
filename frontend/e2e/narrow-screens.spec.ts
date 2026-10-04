@@ -13,9 +13,11 @@
  * The owner's dashboard and report, by model and by unit, the audit trail and
  * the notification log, and the catalogue with its form closed and open, are
  * checked too, with the answers in admin-answers.ts. The catalogue is checked
- * again with every question it asks open. So are the return screen and the
- * checkout as the owner sees them, each with the owner's question open, from
- * owner-answers.ts.
+ * again with every question it asks open. The asset register is checked
+ * with no unit open and with one open, and again with the unit's question,
+ * its paperwork form and the registration form open. So are the return
+ * screen and the checkout as the owner sees them, each with the owner's
+ * question open, from owner-answers.ts.
  *
  * This spec does not use the real backend. The screens need a signed in person
  * with bookings and a profile, and a layout check should not depend on what a
@@ -30,7 +32,7 @@
 
 import { expect, test } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
-import { ADMIN_SCREENS, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
+import { ADMIN_SCREENS, ASSET_REGISTER_HEADING, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
 import { MY_RENTALS } from './return-answers.ts'
@@ -230,6 +232,26 @@ test('the catalogue fits 360 pixels with its questions and the category form ope
   await page.getByRole('button', { name: /^Switch off / }).first().click()
   await expect(page.getByRole('heading', { level: 3, name: /^Switch .+ off\?$/ })).toBeVisible()
 
+  expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
+})
+
+test('the asset register fits 360 pixels with a unit, its question, its form and the registration open, with nothing to scroll sideways', async ({
+  page,
+}) => {
+  const unitOpen = ADMIN_SCREENS.find((screen) => screen.heading === ASSET_REGISTER_HEADING && screen.path.includes('asset='))
+  if (unitOpen === undefined) throw new Error('ADMIN_SCREENS has no asset register with a unit open.')
+  await openAdminScreen(page, unitOpen)
+
+  await page.getByRole('region', { name: 'Move it through its life' }).getByRole('button', { name: 'Retire it' }).click()
+  await expect(page.getByRole('heading', { level: 4, name: /^Retire .+\?$/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Change the serial number, grade, meter reading or notes' }).click()
+  await expect(page.getByRole('form', { name: /^The details of / })).toBeVisible()
+  expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
+
+  await page.getByRole('button', { name: 'Register a unit' }).first().click()
+  const form = page.getByRole('form', { name: 'The new unit' })
+  await form.getByRole('button', { name: 'Register the unit' }).click()
+  await expect(page.getByText(/Nothing has been saved yet\. 3 answers need fixing\./)).toBeVisible()
   expect(await page.evaluate<number>(SIDEWAYS_OVERFLOW)).toBeLessThanOrEqual(ROUNDING_PIXELS)
 })
 
