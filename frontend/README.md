@@ -20,16 +20,18 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-16` Damage Report Capture | The API, through the routes described under Damage and quarantine |
 | `SC-19` Admin Dashboard, `SC-22` Utilisation and Gross Contribution Report | The API, through the routes described under Reporting |
 | `SC-24` Audit and Notification Log, and the owner's corrections on `SC-14` and `SC-15` | The API, through the routes described under Admin operations |
-| `SC-20`, `SC-21` and `SC-23` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-20` Catalogue and Pricing Management | The API, through the routes described under Admin catalogue |
+| `SC-21` and `SC-23` | The typed sample data in `src/shared/fixtures.ts` |
 
 No customer or counter screen reads `src/shared/fixtures.ts` any more, and
-neither do `SC-19`, `SC-22` and `SC-24`. The modules that still do are the
-three other administration screens and their helpers in
+neither do `SC-19`, `SC-20`, `SC-22` and `SC-24`. The modules that still do
+are the two other administration screens and their helpers in
 `src/features/admin/`. The `reservations`, `rentals`, `charges`, `auditEvents`
 and `notifications` exports of the fixture file are now imported by nothing,
 and nor are the `AuditEvent` and `NotificationRecord` types in
-`src/shared/types.ts`. They go with the file once the last of those screens is
-connected.
+`src/shared/types.ts`. The `categories`, `productModels` and `assets` exports
+are still read by `SC-21`. They all go with the file once the last of those
+screens is connected.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
@@ -294,6 +296,17 @@ commits as `../backend/openapi.json`.
   `afterState` are always objects, empty when nothing was kept on that side.
   The trail is narrowed to one record by its key only, so the screen sends
   `entityId` as a key and never as a reference.
+- The admin catalogue routes, which are the owner's list of categories and of
+  models, adding and changing each, and publishing or hiding a model, are in
+  the document too. Their types are in `api/contract-admin-catalogue.ts`,
+  built from the generated file the same way. The generated bodies of an edit
+  allow null in every field, and the server refuses null in all but a
+  category's `description` and `parentCategoryId` and a model's
+  `longDescription`, so the types allow it in those three only. The generated
+  body of a new model requires `isPublished`, because the server gives it a
+  default, and the server refuses true there, so the type leaves it out. The
+  categories come as one page of a hundred, the largest the API serves, and
+  the publication route answers with the model, which the screen reads.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -368,6 +381,12 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   as out of date as well. A release or a reallocation marks the reservations,
   the locator, the counter's day and the `admin` segment as out of date, so
   the checkout on the screen is read again.
+- The owner's catalogue, the categories and the models under the `admin`
+  segment, is catalogue data and is fresh for a minute like the customer's
+  catalogue. The owner's own writes mark it out of date at once, together
+  with the catalogue customers browse and the audit trail, so a change shows
+  as soon as it is saved. A model a write answered with is kept under its key,
+  so its form opens with the server's figures.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -1137,6 +1156,102 @@ what a write did is said in a notice that takes focus. Every status carries
 words beside its colour, every target is at least 44 pixels, and every screen
 fits a phone 360 pixels wide with nothing to scroll sideways, questions open.
 
+### Admin catalogue
+
+The owner keeps the categories and the models on `SC-20`, with the daily and
+weekly rates, the deposit, the late fee and the replacement value of each
+model, and decides which models customers see. The figures are set once for
+all three branches. The routes are in `api/admin-catalogue.ts` and the cached
+reads in `api/admin-queries.ts`. Every route is for an administrator, and the
+API answers anyone else with a 403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-20` | `GET /api/admin/models?q=&categoryId=&published=&page=&pageSize=` | One page of twenty models, published or not |
+| `SC-20` | `GET /api/admin/models/{id}` | The model, read by its own route when its form opens |
+| `SC-20` | `POST /api/admin/models` and `PATCH /api/admin/models/{id}` | The model the server answered with, and the list read again |
+| `SC-20` | `POST /api/admin/models/{id}/publication` | The model the server answered with, and the list read again |
+| `SC-20` | `GET /api/admin/categories?page=1&pageSize=100` | Every category, switched on or off, each parent before its children |
+| `SC-20` | `POST /api/admin/categories` and `PATCH /api/admin/categories/{id}` | The categories read again with the change in them |
+
+#### The rules are the server's
+
+The browser holds no copy of the rules about money, codes or nesting. Money
+below zero, a weekly rate above seven days at the daily rate, a shortest hire
+longer than the longest, a stock code, a code or a slug already in use, a
+category that is switched off and a parent that is not at the top level are
+all refused by the server, with a 422 that the form puts under the field it
+names. The forms only check what they need to write a body at all, which is
+that a model has a category and that a number of days or a place in the list
+is a whole number. An amount typed as rand and cents is sent with two
+decimals, written out by its digits and never through a float. Anything else
+is sent as it was typed, so the server says what is wrong with it. The server
+refuses money it cannot read as an amount in its framework's words, which
+quote a pattern, so the form says it in a plain sentence under the same field
+instead. Whether that happened is told from what was sent and never from the
+server's words. The browser works out no figure.
+
+#### `SC-20` Catalogue and Pricing Management
+
+- The search, the category, whether a model is published and the page live in
+  the address under the names the API takes, so a reload or a shared link
+  shows the same models. The search asks a moment after the last key and the
+  two menus apply as they are chosen. The model open in the form is in the
+  address too, as `model`, with `new` for one being added. The rules are in
+  `src/features/admin/catalogue-address.ts`.
+- Each model shows its name and stock code, its category, how many units the
+  fleet holds, the daily rate with the weekly rate under it, the deposit, the
+  late fee and the replacement value, and whether customers see it in words
+  beside its colour. Below the `lg` width each model is drawn as a block with
+  every value beside the name of its column, and it is the same table either
+  way.
+- "Edit" opens the form after reading the model by its own route. The stock
+  code is shown read only, because it never changes once the model exists.
+  "Save the changes" sends only the fields that differ from what the server
+  holds, and
+  first asks a question that names every figure that moves, from what it is
+  to what it will be. When a figure moves, the question says before anything
+  is saved that bookings already made keep the rate they were booked at and
+  only new bookings take the new one. Every booking and hire keeps its own copy
+  of the figures, which is the server's rule as well. The bodies are in
+  `model-form.ts`.
+- "Add a model" sends every field the route takes and asks first, saying that
+  the model starts hidden from customers and that its stock code cannot be
+  changed afterwards. Once added, the list shows it by its stock code.
+- "Publish" and "Hide" ask first in a row of their own under the model. Hiding
+  says that bookings already made still stand. The route answers with the
+  model as it now stands, and the notice says what that is. Asking for what
+  the model already is changes nothing on the server.
+- A model key in the address that the server does not know, or refuses as not
+  a key at all, opens a section that says the model is not in the catalogue.
+- The categories are listed with what each sits under, its place in the list,
+  how many models it holds and whether it is switched on. A category is added
+  or changed in a form above the list, and its parent is chosen from the top
+  level categories only, never the category itself, because nesting stops at
+  two levels. A category is switched off or on from its row, after a question
+  that says it leaves or rejoins the catalogue customers browse and that
+  nothing is deleted. The bodies are in `category-form.ts`.
+- Every write asks first, sends one request for each press, disables its
+  answer while it is in flight, shows the server's sentence on a 409 or a
+  403, puts each 422 under its field and lists any message about a field the
+  form has no box for. Once the server has answered, a notice says what was
+  done and takes focus, and the lists are read again. The writes share
+  `use-catalogue-write.ts`.
+- Both lists have the shared loading, failed and empty states. When the
+  categories cannot be read, the category menu above the models offers every
+  category, says why and offers to read them again.
+
+#### Accessibility of this screen
+
+Every section and every question has a real heading, both lists are tables
+with headers at every width, and every control has its label with its help
+and its error tied to it. Each group of the model form is a fieldset with a
+legend. A form and a question take focus when they open, and closing one
+unanswered gives focus back to the button that opened it. Moving to another
+page moves focus to the top of the models. Every status carries words beside
+its colour, every target is at least 44 pixels, and the screen fits a phone
+360 pixels wide with nothing to scroll sideways, its questions and forms open.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -1260,17 +1375,21 @@ scanned loaded too, with a signed in owner, three branches and rows from
 `e2e/admin-answers.ts`. The report is scanned by model, by unit, and with a
 refusal of its period under the field. The audit trail and the notification
 log are scanned loaded from `e2e/audit-answers.ts`, and the log again with the
-question before a failed email is sent again. The owner's corrections only
-show for an administrator, so the return screen is scanned again as the owner
-with a reversal asked, and the checkout as the owner on a booking short of a
-unit with a release asked, from `e2e/owner-answers.ts`.
+question before a failed email is sent again. The catalogue is scanned loaded
+from `e2e/catalogue-answers.ts` with its form closed and open, again with the
+question before a new figure is saved, and again with the question before a
+model is hidden and then with the category form open. The owner's corrections
+only show for an administrator, so the return screen is scanned again as the
+owner with a reversal asked, and the checkout as the owner on a booking short
+of a unit with a release asked, from `e2e/owner-answers.ts`.
 
 `e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
 My Hires, My Account with a hire in its history, the nine counter screens, the
 owner's dashboard, the report by model and by unit, the audit trail, the
-notification log, and the return and the checkout as the owner sees them with
-a question open, at 360 pixels wide and checks that nothing has to be scrolled
-sideways. It answers the API itself,
+notification log, the catalogue with its form closed and open and then with
+every question it asks and the category form open, and the return and the
+checkout as the owner sees them with a question open, at 360 pixels wide and
+checks that nothing has to be scrolled sideways. It answers the API itself,
 like the counter scans, because a layout check should not depend on what a
 database holds.
 
@@ -1420,6 +1539,21 @@ no token first, through `e2e/operations-backend.ts`, after the returns routes.
 A 404 or a 405 from either means the routes are not there, and the spec skips
 itself.
 
+`e2e/admin-catalogue.spec.ts` needs the admin catalogue routes. The owner signs
+in and opens the catalogue, searches for a seeded model by its stock code,
+opens it, raises its late fee by one rand, sees the question say that
+bookings already made keep their rate, saves, and sees the new fee in the
+list. Then they put the fee back to exactly what it was, the same way. The
+desktop project changes `DR-BOSCH-GBH226` and the phone project
+`BR-HILTI-TE1000AVR`, so the two never change the same fee at once. Last, the
+owner adds a model with a stock code built from the time, which no run has
+used, in the first category that is switched on, then publishes it and hides
+it again. A model the spec adds is left in the catalogue hidden, because
+nothing is ever deleted. The spec asks for the categories and the models with
+no token first, through `e2e/admin-catalogue-backend.ts`, after the session
+routes. A 404 or a 405 from either means the routes are not there, and the
+spec skips itself.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1447,11 +1581,12 @@ pipeline does.
 
 The two counter journeys, the two counter overview journeys and the admin
 operations journey each sign the two counter assistants in once, so each
-assistant five times in a run. The damage journey, the reporting spec and the
-admin operations spec each sign the owner in once in each browser project, so
-the owner six times in a run, which counts against their own address.
+assistant five times in a run. The damage journey, the reporting spec, the
+admin operations spec and the admin catalogue spec each sign the owner in
+once in each browser project, so the owner eight times in a run, which counts
+against their own address.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all ten skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn all eleven skips into failures. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 

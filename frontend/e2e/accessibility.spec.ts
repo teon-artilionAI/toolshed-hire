@@ -30,7 +30,10 @@
  * time, the report once by model and once by unit, and again with a refusal of
  * its period under the field. The audit trail and the notification log are
  * scanned loaded the same way, from audit-answers.ts, and the log again with
- * the question before a failed email is sent again.
+ * the question before a failed email is sent again. The catalogue is scanned
+ * loaded from catalogue-answers.ts, with its form closed and open, then again
+ * with the question before a new figure is saved, and with the question
+ * before a model is hidden and the category form open.
  *
  * The owner's corrections only show for an administrator, so the return
  * screen is scanned again as the owner with a reversal asked, and the checkout
@@ -39,7 +42,7 @@
  */
 
 import { expect, test } from '@playwright/test'
-import { ADMIN_SCREENS, AUDIT_LOG_HEADING, openAdminScreen } from './admin-answers.ts'
+import { ADMIN_SCREENS, AUDIT_LOG_HEADING, CATALOGUE_HEADING, openAdminScreen } from './admin-answers.ts'
 import { blockingViolations } from './axe.ts'
 import { COUNTER_SCREENS, openCounterScreen } from './counter-answers.ts'
 import { OWNER_COUNTER_SCREENS } from './owner-answers.ts'
@@ -114,6 +117,40 @@ test('the notification log with the question before sending again has no serious
   await page.getByRole('button', { name: /^Send again / }).click()
   await expect(page.getByRole('heading', { level: 4, name: /^Send the booking confirmation for .+ again\?$/ })).toBeFocused()
 
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+/** The catalogue from the list the scans share, with its form open or closed. */
+function catalogueScreen(formOpen: boolean) {
+  const found = ADMIN_SCREENS.find((screen) => screen.heading === CATALOGUE_HEADING && screen.path.includes('model=') === formOpen)
+  if (found === undefined) throw new Error('ADMIN_SCREENS has no catalogue to open.')
+  return found
+}
+
+test('the catalogue with the question before a new figure is saved has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  await openAdminScreen(page, catalogueScreen(true))
+  const form = page.getByRole('form', { name: /^The details of / })
+
+  await form.getByLabel('Late fee per day, in rand').fill('988.65')
+  await form.getByRole('button', { name: 'Save the changes' }).click()
+  await expect(page.getByRole('heading', { level: 3, name: /^Save the changes to .+\?$/ })).toBeFocused()
+
+  expect(await blockingViolations(page)).toEqual([])
+})
+
+test('the catalogue with a model being hidden and a category being added has no serious or critical accessibility violations', async ({
+  page,
+}) => {
+  await openAdminScreen(page, catalogueScreen(false))
+
+  await page.getByRole('button', { name: /^Hide / }).first().click()
+  await expect(page.getByRole('heading', { level: 3, name: /^Hide .+ from customers\?$/ })).toBeFocused()
+  expect(await blockingViolations(page)).toEqual([])
+
+  await page.getByRole('region', { name: 'Categories' }).getByRole('button', { name: 'Add a category' }).click()
+  await expect(page.getByRole('heading', { level: 3, name: 'Add a category' })).toBeFocused()
   expect(await blockingViolations(page)).toEqual([])
 })
 

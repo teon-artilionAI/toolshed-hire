@@ -47,6 +47,11 @@ first pass at the whole application.
    failure, waives, reverses or adjusts a charge without editing a settled
    row, and releases a unit of a booking by hand, after which the booking
    cannot be collected until it is given a replacement.
+13. The owner keeps the categories and the product models once for all three
+   branches, sets each rate, deposit, late fee and replacement value, and
+   publishes or hides a model. A rate raised from R280 to R310 reaches the next
+   quote and booking, while a booking already made, its lines and the rental
+   checked out from it stay at R280.
 
 ## Layout
 
@@ -59,7 +64,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -79,7 +84,7 @@ keeps the same name in every layer it appears in.
 |---|---|---|---|
 | `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
 | `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle`, `DamageReport`, the quarantine rule in `quarantine`, `file_damage_report`, the corrections in `charge_corrections` and their rework in `resettlement` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview`, `DamageReportRepository`, `FileDamageReportUseCase`, `SendForRepairUseCase`, `CloseDamageReportUseCase`, `ReadDamageReports`, `WaiveChargeUseCase`, `ReverseChargeUseCase`, `AdjustRentalUseCase` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview`, `SqlDamageReportRepository`, `SqlDamageReportReads` |
-| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator` |
+| `catalogue` | `ProductModel`, `Asset`, the forms of a code and a slug in `catalogue_forms`, `CategoryTerms` and `CatalogueCategory` with the nesting rule in `category_rules`, `ModelTerms` and `CatalogueEntry` with the money and hire day rules in `catalogue_entry_rules` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets`, `CategoryRepository`, `CatalogueEntryRepository`, `AdminCatalogueQuery`, `ReadAdminCatalogue`, `CreateCategoryUseCase`, `EditCategoryUseCase`, `CreateModelUseCase`, `EditModelUseCase`, `PublishModelUseCase` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator`, `SqlCategoryRepository`, `SqlCatalogueEntryRepository`, `SqlAdminCatalogue` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
 | `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show`, the force release and the top up in `reallocation` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations`, `ForceReleaseUseCase`, `ReallocateUseCase` | `SqlReservationRepository`, `SqlReservationReads` |
 | `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher`, `NotificationLogQuery`, `ReadNotificationLog`, `ResendNotificationUseCase` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway`, `SqlNotificationLog` |
@@ -203,9 +208,11 @@ policy.
 
 Three things live in exactly one place because of it.
 
-- `StandardPricingPolicy.quote` is the only place a rate is multiplied by a
-  number of days. `tests/unit/test_one_place_for_a_price.py` parses every
-  module of `app` to keep it so.
+- `StandardPricingPolicy` is the only class that multiplies a rate by a
+  number of days. `quote` prices a hire, and `week_at_the_daily_rate` tells
+  the admin catalogue what seven days at a daily rate come to, which is the
+  most a weekly rate may be. `tests/unit/test_one_place_for_a_price.py` parses
+  every module of `app` to keep it so.
 - `VAT_RATE_PERCENT` in `app/domain/vat.py` is the only place the VAT rate is
   written, as `Decimal("15.00")`. Hire rates exclude VAT. A deposit carries
   none (BR-23).
@@ -479,9 +486,10 @@ The role dependencies read the role from the `user_account` row on every
 request and not from the token. That is stricter than the fifteen minutes the
 design document allows a claim to be trusted for.
 
-The charge corrections, the re-send and the force release depend on
-`FreshAdminUser` from `app/api/identity_deps.py`, and user and role management
-will when it is added. It reads the account again under a shared row lock, so
+The charge corrections, the re-send, the force release and the five writes of
+the admin catalogue depend on `FreshAdminUser` from
+`app/api/identity_deps.py`, and user and role management will when it is
+added. It reads the account again under a shared row lock, so
 the role that is checked is the role that holds until the action commits.
 
 ### Ownership and branch scope
@@ -1497,6 +1505,131 @@ stays small. A correction is linear in the charges of one hire. The
 reallocation takes one locking query a short line, bounded by the twenty lines
 a booking can carry.
 
+## The admin catalogue
+
+The owner keeps the categories and the product models once for all three
+branches, and sets each rate, deposit, late fee and replacement value there
+(FR-22, US-30, BR-44). There is no new table and no new column. Revision
+`0009` adds one index. Every route is for an administrator alone, and every
+write reads the account again under a row lock (`FreshAdminUser`). Each write
+is a use case on the unit of work that commits the change with its audit
+event, and answers what it wrote as the list shows it, read once it has
+committed.
+
+**Categories.** `app/domain/category_rules.py` holds a category to its forms
+and to the cap of two levels. A code is capital letters and digits and a slug
+small letters and digits, each in words joined by single hyphens, for example
+`BREAK-DRILL` and `breaking-drilling`, which is the form every seeded category
+already has. A parent has to be a top level category, a category is never its
+own parent, and a category that has children cannot be put under another one,
+because they would end up three levels down. Each is a 422 naming
+`parentCategoryId`, and so is a parent nobody can find. A category leaves the
+catalogue by being switched off with `isActive`, because nothing is deleted
+(BR-51). The list answers every category, switched off or not, each top level
+category followed by its children by sort order and then name, on one page of
+up to a hundred unless another page is asked for. `modelCount` counts the
+models the category classifies itself, published or not. The visitor's list
+rolls a child's models up into its parent, and this one does not, so the
+counts of a parent and its children never count one model twice. I allow a
+parent that is switched off, and switching off a category that still holds
+models, because the contract refuses neither. The visitor's list already
+shows such a child at the top level.
+
+**Product models.** `app/domain/catalogue_entry_rules.py` holds the rules of
+the contract, each a 422 naming its field. Every amount is zero or more, in
+whole cents and within its NUMERIC(12,2) column (BR-22). The weekly rate is
+at most seven days at the daily rate, because the pricing policy charges the
+lower of the two totals (BR-21) and would never charge a weekly rate above
+that. What seven days cost is asked of `StandardPricingPolicy`, which stays
+the one place a rate is multiplied by days. The shortest hire is at least one
+day, the longest at most 28, and the shortest never longer than the longest
+(BR-03). The SKU takes the form of a code, as the design document's
+`DR-BOSCH-GBH226` does, and the slug the form of a slug. A model is only
+classified under an active category, which is checked when a model is created
+and when its category changes, so the rate of a model whose category was
+switched off since can still be changed. A new model starts unpublished, and a
+creation that asks to be published is refused naming `isPublished`. An edit
+never changes the SKU, so an edit that sends one is refused naming `sku`. The
+contract lets an edit carry every other field, `isPublished` among them, and a
+change of it there is recorded with the other changed fields.
+
+**Duplicates.** A code, a SKU or a slug that another row holds is looked for
+first, in one statement through the unique indexes, so the answer is a
+sentence naming the field. Two administrators can still pass that check at
+once. The unique constraints `category_code_key`, `category_slug_key`,
+`product_model_sku_key` and `product_model_slug_key` then refuse the second
+row, and `app/infrastructure/catalogue_uniques.py` recognises each by SQLSTATE
+`23505` and its name, read from the driver and never from the message. The
+answer is the same 422 the check would have given.
+`tests/integration/test_admin_catalogue_race.py` stages that race for real.
+
+**The snapshot.** A reservation line copies the rates, the deposit, the late
+fee and the replacement value when it is made, and the rental is checked out
+from the line (BR-20). Nothing in the admin catalogue reads or writes either
+table, so a change reaches the next quote and the next booking and nothing
+else. `tests/integration/test_rate_change_snapshot.py` books a hammer at R280
+a day through HTTP, raises the rate to R310, and shows the booking, its line
+and the rental checked out from it after the raise all at R280, while a new
+quote and a new booking take R310.
+
+**Publishing.** `POST /api/admin/models/{id}/publication` writes
+`product_model.published` or `product_model.unpublished`, and asking for the
+state a model is already in writes nothing. A hidden model leaves the
+catalogue, the availability search and the quote the moment the change
+commits, because each asks for published models only. The counter books
+through the path a customer books through, and `models_of` in
+`app/application/booking/reservation_request.py` asks for a published model,
+so a hidden model cannot be booked at the counter either, which is a 422
+naming `lines.0.modelSlug`. That was already decided in the code and I kept
+it. A booking made before the model was hidden reads its model by key when it
+is held, confirmed and checked out, so it carries on as it was.
+
+**The audit events.** `category.created`, `category.updated`,
+`product_model.created`, `product_model.updated`, `product_model.published`
+and `product_model.unpublished`. A creation records every field as it became.
+An edit records only the fields that changed, each before and after, so a
+rate change reads `{"daily_rate": "280.00"}` and `{"daily_rate": "310.00"}`.
+An edit that changes nothing writes nothing. `updatedAt` is stamped from the
+clock the use case is handed.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/categories` | `page`, `pageSize` (default 100) | 200 with `items` of `AdminCategory`, `page`, `pageSize` and `total`. 422 naming the parameter. |
+| `POST /api/admin/categories` | `code`, `name`, `slug`, `description`, `parentCategoryId`, `sortOrder` | 201 with the `AdminCategory`. 422 naming the field. |
+| `PATCH /api/admin/categories/{id}` | any of those and `isActive` | 200 with the `AdminCategory`. 404. 422 naming the field. |
+| `GET /api/admin/models` | `q`, `categoryId`, `published`, `page`, `pageSize` | 200 with `items` of `AdminModel`. 422 naming the parameter. |
+| `GET /api/admin/models/{id}` | none | 200 with the `AdminModel`. 404. |
+| `POST /api/admin/models` | every member of `AdminModel` but `id`, `categoryName`, `assetCount` and `updatedAt` | 201 with the `AdminModel`, unpublished. 422 naming the field. |
+| `PATCH /api/admin/models/{id}` | any of those but `sku` | 200 with the `AdminModel`. 404. 422 naming the field. |
+| `POST /api/admin/models/{id}/publication` | `published` | 200 with the `AdminModel`. 404. 422 naming `published`. |
+
+Every route answers 403 to counter staff and customers.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| Category list | 2, the count and the page, with a correlated count of models a row | `category_pkey` for the parent, `ix_product_model_category` for each count |
+| Model list by category | 2, with a correlated count of units a row | `ix_product_model_category`, or `ix_product_model_published` when narrowed to published models, and `ix_asset_product_model` for each count |
+| Model list unfiltered, by publication alone, or by text | 2 | none, it reads `product_model` from end to end |
+| One category or one model | 1 | the primary key |
+| Create a category | the check of code and slug, the parent, the insert, the audit event, the read | `category_code_key`, `category_slug_key`, `category_pkey` |
+| Edit a category | the row under its lock, the parent and whether it has children when the parent changes, the check, the update, the audit event, the read | `category_pkey`, the unique indexes, and a scan of `category` for its children |
+| Create a model | the check of SKU and slug, the category, the insert, the audit event, the read | `product_model_sku_key`, `product_model_slug_key`, `category_pkey` |
+| Edit or publish a model | the row under its lock, the category or the slug check when they change, the update, the audit event, the read | `product_model_pkey`, `product_model_slug_key`, `category_pkey` |
+
+**What degrades first as the data grows.** The model list that is not narrowed
+by category. Its count and its page read `product_model` from end to end, and
+a text search is a contains match on four columns that no btree can serve,
+the same as a visitor's search. The catalogue is 120 models kept by hand, so
+that is nothing, and at a hundred times as many it is still a few
+milliseconds. Past that I would put a trigram index on the four columns,
+because `pg_trgm` is installed, and page by name and SKU rather than OFFSET.
+The category list orders the whole table in the statement, which is fine for
+the hundreds of categories a hire business could ever hold, and whether a
+category has children is a scan of the same small table. Each correlated count
+is one index probe for each row of the page, so it is bounded by the hundred a
+page may hold. A write locks one row, so two administrators only ever wait for
+each other on the same model or category.
+
 ## The schema
 
 Migration `0001` is the baseline. It creates seventeen tables with singular
@@ -1584,6 +1717,16 @@ log newest first. Each ends in the column its log is ordered by, so a page is
 read off the end of its index. They are built inside the migration's
 transaction like those of `0007`, with the same caution for a table a hundred
 times larger.
+
+Revision `0009` adds one index and nothing else, `ix_product_model_category`
+on `product_model (category_id, name)` with no predicate. The admin catalogue
+finds the models of one category through it, published or not, in the order
+it lists them, and counts the models of each category through it. The partial
+index of the baseline holds the published models only, and PostgreSQL never
+indexes a foreign key by itself. `product_model` is the catalogue, 120 rows
+that change by hand, so building it inside the migration's transaction blocks
+writes to the table for a moment. A table a hundred times larger would want
+`CREATE INDEX CONCURRENTLY` outside a transaction instead.
 
 ## The seed and the two database roles
 
@@ -1709,6 +1852,14 @@ uvicorn app.main:app --reload --port 8000
 | POST | `/api/admin/rentals/{id}/adjustments` | An administrator, read again under a lock. |
 | POST | `/api/admin/allocations/{id}/release` | An administrator, read again under a lock. |
 | POST | `/api/reservations/{id}/reallocation` | Counter staff of the collection branch, and administrators. |
+| GET | `/api/admin/categories` | An administrator. |
+| POST | `/api/admin/categories` | An administrator, read again under a lock. |
+| PATCH | `/api/admin/categories/{id}` | An administrator, read again under a lock. |
+| GET | `/api/admin/models` | An administrator. |
+| GET | `/api/admin/models/{id}` | An administrator. |
+| POST | `/api/admin/models` | An administrator, read again under a lock. |
+| PATCH | `/api/admin/models/{id}` | An administrator, read again under a lock. |
+| POST | `/api/admin/models/{id}/publication` | An administrator, read again under a lock. |
 | GET | `/api/customers` | Counter staff and administrators. |
 | POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
 | GET | `/api/customers/{id}` | Counter staff and administrators. |
@@ -2262,6 +2413,23 @@ the exclusion constraint, `test_admin_log_reads.py` counts the statements of
 both logs with few rows and many and asks the planner to prove each filter
 stands on its index, and `test_application_role.py` proves the restricted role
 reads both logs and cannot change or remove one event.
+
+The admin catalogue is tested the same way. `tests/unit` holds the forms of a
+code and a slug, the amounts, the cap of two levels, the weekly rate and the
+hire days and every refusal of each, and the five writes and the reads
+against the in memory unit of work in `tests/support/memory_catalogue.py`,
+which can be made to lose a race to a unique constraint or to fail at its
+audit event. `tests/api` lists, creates, edits and publishes through the
+routes, asks for every refusal with the field it names, and proves a hidden
+model leaves the public catalogue. On PostgreSQL,
+`test_rate_change_snapshot.py` raises a rate from R280 to R310 between a
+booking and its checkout, `test_unpublished_model.py` hides a model from the
+availability search and still checks out a booking made before,
+`test_admin_catalogue_transaction.py` makes each write fail at its audit event,
+`test_admin_catalogue_race.py` names the field of each unique constraint and
+stages a race for one code, and `test_admin_catalogue_reads.py` counts the
+statements of each read with few rows and many and asks the planner to prove
+each filter and each count stands on its index.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as

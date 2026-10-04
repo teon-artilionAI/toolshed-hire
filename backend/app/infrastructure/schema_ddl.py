@@ -160,6 +160,22 @@ NOTIFICATION_FAILED_INDEX: Final[str] = "ix_notification_failed"
 # The action the partial index of the report holds and that of the log leaves out.
 STATUS_CHANGE_ACTION: Final[str] = "asset.status_changed"
 
+# The four unique constraints of the catalogue. Each column is declared unique
+# in the baseline, and these are the names PostgreSQL gives the constraints.
+# The two catalogue repositories recognise them when two administrators race
+# for one code, SKU or slug, and answer the field each one guards.
+CATEGORY_CODE_CONSTRAINT_NAME: Final[str] = "category_code_key"
+CATEGORY_SLUG_CONSTRAINT_NAME: Final[str] = "category_slug_key"
+PRODUCT_MODEL_SKU_CONSTRAINT_NAME: Final[str] = "product_model_sku_key"
+PRODUCT_MODEL_SLUG_CONSTRAINT_NAME: Final[str] = "product_model_slug_key"
+
+# The index of revision 0009, through which the administrator's list finds the
+# models of one category, published or not, by name. The partial index of the
+# baseline holds the published ones only. The units of a model are counted
+# through `ix_asset_product_model` of revision 0004.
+PRODUCT_MODEL_CATEGORY_INDEX: Final[str] = "ix_product_model_category"
+PRODUCT_MODEL_PUBLISHED_INDEX: Final[str] = "ix_product_model_published"
+
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006
 # adds the counter's damage flag to `rental_item`. It is NOT NULL and defaults

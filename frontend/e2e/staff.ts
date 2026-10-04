@@ -11,14 +11,16 @@
  *
  * The seed also makes one administrator, the owner, who resolves the damage
  * report the damage journey files, so the unit goes back on the shelf, who
- * reads the dashboard and the report in the reporting spec, and who reads the
- * audit trail and reverses a charge in the admin operations spec.
+ * reads the dashboard and the report in the reporting spec, who reads the
+ * audit trail and reverses a charge in the admin operations spec, and who
+ * changes a late fee and adds a model in the admin catalogue spec.
  *
  * The API counts every sign in attempt for an email address and allows ten in
  * fifteen minutes. One run signs each assistant in five times, once for each
  * counter journey, each counter overview journey and the admin operations
- * journey, and the owner six times, once for the damage journey, the reporting
- * spec and the admin operations spec in each browser project.
+ * journey, and the owner eight times, once for the damage journey, the
+ * reporting spec, the admin operations spec and the admin catalogue spec in
+ * each browser project.
  */
 
 import { expect } from '@playwright/test'
