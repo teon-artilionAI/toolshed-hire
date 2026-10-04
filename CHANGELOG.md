@@ -9,6 +9,62 @@ the whole design document.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-04
+
+The Admin console and the release checks. The owner can see which equipment
+earns its keep, read the audit trail, correct a charge without editing
+history, and maintain the catalogue, the asset register and the staff
+accounts. This is the release Task 2 is assessed on.
+
+### Added
+
+- A utilisation and gross contribution report per unit, model, category and
+  branch for any period, with both definitions shown in full, a streamed CSV
+  export and a hand worked dataset that every grouping is tested against.
+- An admin dashboard of the whole business today across the three branches.
+- The audit trail, filtered by record, action, person and dates, and the
+  notification log, where a failed confirmation can be sent again.
+- Charge corrections for the owner. A pending charge can be waived, a settled
+  one reversed with a new charge that points at it, and a hire adjusted, each
+  with a written reason. A settled hire only takes a correction that gives
+  money back.
+- Releasing a unit from a booking with a reason, and finding a replacement
+  unit for a booking that is short.
+- Catalogue and pricing management. A price change never touches a booking
+  that already exists.
+- The asset register, with registration, editing and moves through the
+  documented lifecycle. A unit with a booking cannot be retired, and a retired
+  unit keeps its history.
+- Staff accounts, roles and branch assignment, deactivation that signs a person
+  out everywhere, and customer holds. The last admin can never be removed.
+- A season of trading history in the seed, June to September 2026, so the
+  report has something to report.
+- The customer, counter and admin journeys run in a browser against staging
+  after every staging deployment.
+- A check of the security headers and the TLS floor of the deployed site after
+  every deployment.
+
+### Changed
+
+- The screens promise an email only when this environment can deliver it,
+  because the session now says whether the address can be reached.
+- A customer on hold is refused a booking with the same neutral message,
+  whatever put the account on hold.
+- Completing a password reset also verifies the email address.
+- Old throttle counters are pruned by the lazy sweep in one bounded statement
+  instead of by an unbounded delete on the sign in path.
+- TypeScript strict mode is stated in every config, and the linter refuses an
+  explicit any.
+- setuptools 84.0.0, postcss 8.5.28, and react-dom with its types 19.3.0.
+
+### Fixed
+
+- The asset register no longer offers to put a unit back into service while
+  one of its damage reports is still open.
+- A query plan test that passed or failed depending on the planner's choice
+  on a nearly empty table now proves what matters, that the read never walks
+  the whole table.
+
 ## [0.3.0] - 2026-10-03
 
 Registration and the counter journey. A new customer can open an account, and
