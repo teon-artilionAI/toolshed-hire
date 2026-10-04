@@ -144,6 +144,17 @@ describe('the freshness rules', () => {
     expect(defaults.refetchOnWindowFocus).toBeUndefined()
   })
 
+  it.each([
+    ["the owner's categories", adminQueries.categories().queryKey],
+    ["a page of the owner's models", adminQueries.models({ page: 1, pageSize: 20 }).queryKey],
+    ["one of the owner's models", adminQueries.model('a0de1000-0000-4000-8000-000000000001').queryKey],
+  ])('treat %s as catalogue data, fresh for a minute', (_what, queryKey) => {
+    const defaults = createQueryClient().getQueryDefaults(queryKey)
+
+    expect(defaults.staleTime).toBe(CATALOGUE_FRESH_MS)
+    expect(defaults.refetchOnWindowFocus).toBeUndefined()
+  })
+
   it('never retry a write', () => {
     expect(createQueryClient().getDefaultOptions().mutations?.retry).toBe(false)
   })

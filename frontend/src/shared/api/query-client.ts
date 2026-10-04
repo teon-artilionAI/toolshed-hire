@@ -75,6 +75,12 @@
  * moment after it was listed, so the owner reading either to answer a customer
  * must see it as it stands. Each read is one page of twenty, so asking again
  * on focus costs one small indexed query and not the whole log.
+ *
+ * The owner's catalogue, the categories and the models with their figures, is
+ * catalogue data and runs under the catalogue rule. It is fresh for a minute.
+ * The owner's own writes mark it out of date at once, so a change shows as
+ * soon as it is saved, and a change made at another desk shows within the
+ * minute.
  */
 
 import { QueryClient } from '@tanstack/react-query'
@@ -141,6 +147,9 @@ export const ADMIN_AUDIT_SEGMENT = 'audit'
 /** The second segment of the notification log. */
 export const ADMIN_NOTIFICATIONS_SEGMENT = 'notifications'
 
+/** The second segment of the owner's catalogue, its categories and its models. */
+export const ADMIN_CATALOGUE_SEGMENT = 'catalogue'
+
 /** How long a report counts as fresh. */
 export const REPORT_FRESH_MS = 60_000
 
@@ -206,5 +215,6 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([ADMIN_KEY, ADMIN_REPORT_SEGMENT], { staleTime: REPORT_FRESH_MS })
   client.setQueryDefaults([ADMIN_KEY, ADMIN_AUDIT_SEGMENT], NEVER_FRESH)
   client.setQueryDefaults([ADMIN_KEY, ADMIN_NOTIFICATIONS_SEGMENT], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_CATALOGUE_SEGMENT], { staleTime: CATALOGUE_FRESH_MS })
   return client
 }

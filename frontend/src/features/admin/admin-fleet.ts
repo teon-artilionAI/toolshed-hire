@@ -1,11 +1,11 @@
 /**
- * The groups of unit states the admin screens on sample data still use.
+ * The groups of unit states the asset register on sample data still uses.
  *
- * SC-20 and SC-21 read the fixtures until a later change connects them, and
- * they sort units by these two groups. The fleet arithmetic that used to live
- * here, the positions, the utilisation and the overdue exposure of each
- * branch, is gone. SC-19 now shows the figures the server sends and works
- * none out.
+ * SC-21 reads the fixtures until a later change connects it, and it sorts
+ * units by these two groups. The fleet arithmetic that used to live here, the
+ * positions, the utilisation and the overdue exposure of each branch, is
+ * gone. SC-19 now shows the figures the server sends and works none out, and
+ * SC-20 shows the count of units the server sends for each model.
  */
 
 import type { AssetStatus } from '../../shared/types'
