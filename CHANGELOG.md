@@ -33,6 +33,9 @@ person something wrong or made the first visit slower than it had to be.
 - The diary says when a booking is due back, instead of a date that read like
   the day it came back.
 - A failed journey on staging keeps its screenshots.
+- The customer release journey in the pipeline starts the browser's clock
+  where the API's pinned clock is. Run after half past ten it saw every hold
+  as already lapsed.
 
 ### Security
 
