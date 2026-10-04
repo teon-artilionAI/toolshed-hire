@@ -54,14 +54,14 @@ ITEM_MEMBERS: Final[frozenset[str]] = frozenset(
 CHARGE_MEMBERS: Final[frozenset[str]] = frozenset(
     {
         "id", "type", "description", "amountExVat", "vatRate", "vatAmount", "amountIncVat",
-        "status", "raisedAt", "rentalItemId",
+        "status", "raisedAt", "rentalItemId", "reversesChargeId", "reason",
     }
 )  # fmt: skip
 CHECKOUT_MEMBERS: Final[frozenset[str]] = frozenset(
     {
         "reservationId", "reference", "status", "branchCode", "branchName", "customer", "from",
         "to", "hireDays", "units", "hireTotalIncVat", "depositTotal", "canCheckOut", "refusal",
-        "rentalId",
+        "rentalId", "unitsShort",
     }
 )  # fmt: skip
 # The business day of the still clock.

@@ -10,11 +10,12 @@ themselves, one for every item and one for every charge.
 Writing a rental back changes three things. The rental row takes the status,
 the return and the three figures of the deposit. An item that came back or
 was recorded as lost takes what the counter recorded. A charge that is new is
-inserted, and a charge the domain settled is moved from PENDING to SETTLED.
-Nothing else about a charge is ever written. A charge whose stored status is
-no longer PENDING is never touched, and an attempt to change one is refused
-here as well as in the domain, so there is no path in the application that
-edits a settled charge (BR-24).
+inserted, with the charge a reversal undoes and the reason of a correction,
+and a charge the domain settled or waived is moved from PENDING to SETTLED or
+WAIVED, with the reason of a waiver. Nothing else about a charge is ever
+written. A charge whose stored status is no longer PENDING is never touched,
+and an attempt to change one is refused here as well as in the domain, so
+there is no path in the application that edits a settled charge (BR-24).
 """
 
 from __future__ import annotations
@@ -142,10 +143,10 @@ def _write_items(session: Session, rental: domain.Rental) -> None:
 
 
 def _write_charges(session: Session, rental: domain.Rental) -> tuple[int, int]:
-    """Insert the new charges and settle the pending ones the domain settled.
+    """Insert the new charges, and move on the pending ones the domain settled or waived.
 
     Returns:
-        How many charges were inserted and how many were settled.
+        How many charges were inserted and how many were moved on.
 
     Raises:
         StateTransitionError: If a stored charge that is no longer pending
@@ -163,16 +164,17 @@ def _write_charges(session: Session, rental: domain.Rental) -> tuple[int, int]:
             session.add(charge_row(charge))
             inserted += 1
         elif row.status is not charge.status:
-            _ensure_still_pending(row, rental.reference)
+            _ensure_still_pending(row, rental.reference, charge.status)
             row.status = charge.status
             row.settled_at = charge.settled_at
             row.payment_reference = charge.payment_reference
+            row.waiver_reason = charge.reason
             session.add(row)
             settled += 1
     return inserted, settled
 
 
-def _ensure_still_pending(row: Charge, rental_reference: str) -> None:
+def _ensure_still_pending(row: Charge, rental_reference: str, to_status: ChargeStatus) -> None:
     """Refuse to write over a stored charge that is no longer pending (BR-24).
 
     Raises:
@@ -185,7 +187,7 @@ def _ensure_still_pending(row: Charge, rental_reference: str) -> None:
         f"Attempted to change {row.status.value} charge {row.id} on rental {rental_reference}. "
         "A charge that is no longer pending is never edited.",
         from_status=row.status.value,
-        to_status=ChargeStatus.SETTLED.value,
+        to_status=to_status.value,
         rule=SETTLED_CHARGE_RULE,
     )
 
@@ -208,6 +210,8 @@ def charge_row(charge: domain_charge.Charge) -> Charge:
         settled_at=charge.settled_at,
         payment_reference=charge.payment_reference,
         damage_report_id=charge.damage_report_id,
+        reverses_charge_id=charge.reverses_charge_id,
+        waiver_reason=charge.reason,
     )
 
 
@@ -280,6 +284,8 @@ def _charges_by_rental(
                 settled_at=in_utc(row.settled_at),
                 payment_reference=row.payment_reference,
                 damage_report_id=row.damage_report_id,
+                reverses_charge_id=row.reverses_charge_id,
+                reason=row.waiver_reason,
             )
         )
     return grouped

@@ -33,6 +33,12 @@ const LIVE_SCREEN_IDS = [
   'SC-16',
   'SC-17',
   'SC-18',
+  'SC-19',
+  'SC-20',
+  'SC-21',
+  'SC-22',
+  'SC-23',
+  'SC-24',
   'INFO-01',
   'DEV-01',
 ]

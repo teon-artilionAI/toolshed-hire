@@ -139,6 +139,8 @@ export const SETTLED_AFTER_DAMAGE: Rental = {
       status: 'SETTLED',
       raisedAt: '2026-03-12T10:20:00+02:00',
       rentalItemId: DAMAGED_ITEM.id,
+      reversesChargeId: null,
+      reason: null,
     },
   ],
   depositWithheld: '765.53',

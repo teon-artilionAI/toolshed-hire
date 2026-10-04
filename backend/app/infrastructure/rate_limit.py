@@ -12,7 +12,13 @@ offers for it are not. Nothing is placed in the text. The three values are
 bound.
 
 Deleting old windows is the one delete the application role is allowed, and
-this table is the only one it is allowed on.
+this table is the only one it is allowed on. The lazy sweep asks for it with a
+bound, so it is one statement that picks at most that many rows, oldest
+window first, through `ix_rate_limit_counter_window_started_at` of revision
+0012. When nothing is due that reads one index entry. The rows are picked
+with `FOR UPDATE SKIP LOCKED`, so two sweeps at once each delete what the
+other has not taken and neither waits. SQLite has no row locks and leaves the
+clause out.
 
 `total_since` adds up the counters of one bucket from a moment onwards. The
 sign in lockout counts each failure in the second it happened in and asks for
@@ -27,7 +33,17 @@ import logging
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import CursorResult, DateTime, String, bindparam, delete, func, select, text
+from sqlalchemy import (
+    CursorResult,
+    DateTime,
+    Delete,
+    String,
+    bindparam,
+    delete,
+    func,
+    select,
+    text,
+)
 from sqlmodel import Session, col
 
 from app.infrastructure.models import RateLimitCounter
@@ -47,6 +63,24 @@ _COUNT_ATTEMPT = text(
     bindparam("bucket_key_hash", type_=String()),
     bindparam("window_started_at", type_=DateTime(timezone=True)),
 )
+
+
+def pruning_statement(cutoff: datetime, limit: int) -> Delete:
+    """Return the one statement that deletes at most `limit` counters begun before `cutoff`.
+
+    The rows are picked by a subquery in the order of the index on the start of
+    the window, so the planner reads that index from its start and stops at the
+    limit or at the cutoff, whichever comes first. A row another transaction
+    holds is skipped, not waited for.
+    """
+    due = (
+        select(col(RateLimitCounter.id))
+        .where(col(RateLimitCounter.window_started_at) < cutoff)
+        .order_by(col(RateLimitCounter.window_started_at))
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    )
+    return delete(RateLimitCounter).where(col(RateLimitCounter.id).in_(due))
 
 
 class SqlRateLimitStore:
@@ -69,12 +103,18 @@ class SqlRateLimitStore:
         logger.debug("rate_limit.attempt_counted", extra={"request_count": int(count)})
         return int(count)
 
-    def delete_windows_before(self, cutoff: datetime) -> int:
-        """Delete every counter whose window began before `cutoff`, and return how many."""
-        statement = delete(RateLimitCounter).where(
-            col(RateLimitCounter.window_started_at) < cutoff
+    def delete_windows_before(self, cutoff: datetime, limit: int) -> int:
+        """Delete at most `limit` counters whose window began before `cutoff`, oldest first.
+
+        Returns:
+            How many counters were deleted.
+
+        """
+        logger.debug(
+            "rate_limit.windows_delete_started",
+            extra={"cutoff": cutoff.isoformat(), "limit": limit},
         )
-        result = self._session.execute(statement)
+        result = self._session.execute(pruning_statement(cutoff, limit))
         deleted_count = result.rowcount if isinstance(result, CursorResult) else 0
         logger.debug(
             "rate_limit.windows_deleted",

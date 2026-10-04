@@ -1,11 +1,10 @@
 /** Formatting helpers. Money and dates appear on nearly every screen, so
  *  they are formatted in one place rather than inline at each call site.
  *
- *  The fixture `TODAY` below is the default "as at" date for the overdue
- *  helpers, which only the screens still on fixtures use. A screen that reads
- *  from the API takes today from today.ts. */
-
-import { TODAY } from './fixtures'
+ *  Nothing here reads the sample data. The two overdue helpers that counted
+ *  from the fixture day went with the admin dashboard's own arithmetic,
+ *  because the server now sends every figure that screen shows. A screen
+ *  takes today from today.ts. */
 
 const RAND = new Intl.NumberFormat('en-ZA', {
   style: 'currency',
@@ -163,15 +162,6 @@ export function formatDateTime(iso: string): string {
 export function daysBetween(startIso: string, endIso: string): number {
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime()
   return Math.max(0, Math.round(ms / 86_400_000))
-}
-
-/** Days a rental is past its due date, relative to the fixture "today". */
-export function daysOverdue(dueBackOn: string, asAt: string = TODAY): number {
-  return daysBetween(dueBackOn, asAt)
-}
-
-export function isOverdue(dueBackOn: string, asAt: string = TODAY): boolean {
-  return new Date(asAt) > new Date(dueBackOn)
 }
 
 /** Title case a SCREAMING_SNAKE enum for display. */

@@ -4,7 +4,7 @@ A counter assistant marks a confirmed booking for today as a no show, with a
 reason. These pin the reservation that comes back, the unit that is free again,
 the audit event, the count on the customer and the third strike that puts the
 customer on hold, after which a booking is refused with a sentence that says
-why.
+the account is on hold and to contact a branch.
 
 The refusals of the route, with their statuses and their words, are cases in
 tests/api/reservation_no_show_refusals.py. These run against the in memory
@@ -36,9 +36,8 @@ from tests.support.http import problem_code, problem_of
 
 STRIKES: Final[int] = 3
 ON_HOLD_SENTENCE: Final[str] = (
-    "This customer account is on hold because three bookings in the last twelve months "
-    "were not collected. It cannot make a reservation until an administrator lifts the "
-    "hold. Please speak to the branch."
+    "This customer account is on hold, so it cannot make a reservation. "
+    "Please contact a branch."
 )
 
 
@@ -133,7 +132,7 @@ class TestMarkingANoShow:
 class TestTheThirdStrike:
     """Three no shows inside twelve months put the customer on hold, and booking is refused."""
 
-    def test_the_third_no_show_puts_the_customer_on_hold_and_says_why_a_booking_is_refused(
+    def test_the_third_no_show_puts_the_customer_on_hold_and_a_booking_is_refused_plainly(
         self, booking: BookingClient, world: BookingWorld, assistant: UserAccount
     ) -> None:
         for _ in range(STRIKES):

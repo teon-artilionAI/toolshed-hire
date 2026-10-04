@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 # the verification of its account, and the code of its branch. The join to the
 # account is an outer one, so for a walk-in the two account columns are null,
 # whatever the column types say.
-type _Found = tuple[CustomerProfile, str, datetime | None, str]
+type SummaryRow = tuple[CustomerProfile, str, datetime | None, str]
 
 # The two LIKE wildcards and the escape character, which a search text loses.
 LIKE_SPECIALS: Final[dict[int, int | None]] = str.maketrans("", "", "%_\\")
@@ -201,7 +201,7 @@ class SqlCustomerDirectory:
             return CustomerPage(items=(), page=search.page, page_size=search.page_size, total=0)
         count_statement = select(func.count()).select_from(CustomerProfile).where(condition)
         page_statement = (
-            _summary_statement()
+            summary_statement()
             .where(condition)
             .order_by(
                 _rank(terms),
@@ -216,7 +216,7 @@ class SqlCustomerDirectory:
             found = self._session.exec(page_statement).all()
             outcome.row_count = len(found)
         return CustomerPage(
-            items=tuple(_summary_of(row) for row in found),
+            items=tuple(summary_of(row) for row in found),
             page=search.page,
             page_size=search.page_size,
             total=total,
@@ -224,16 +224,16 @@ class SqlCustomerDirectory:
 
     def summary(self, customer_profile_id: UUID) -> CustomerSummary | None:
         """Return one customer, or None when there is no profile with this key."""
-        statement = _summary_statement().where(col(CustomerProfile.id) == customer_profile_id)
+        statement = summary_statement().where(col(CustomerProfile.id) == customer_profile_id)
         with logged_query(
             logger, "identity.customer_summary", {"customer_profile_id": str(customer_profile_id)}
         ) as outcome:
             found = self._session.exec(statement).first()
             outcome.row_count = 0 if found is None else 1
-        return _summary_of(found) if found is not None else None
+        return summary_of(found) if found is not None else None
 
 
-def _summary_statement() -> Select[_Found]:
+def summary_statement() -> Select[SummaryRow]:
     """Return the statement every summary is read with, before it is narrowed.
 
     The join to the account is an outer one, because a walk-in has a profile
@@ -251,7 +251,7 @@ def _summary_statement() -> Select[_Found]:
     )
 
 
-def _summary_of(found: _Found) -> CustomerSummary:
+def summary_of(found: SummaryRow) -> CustomerSummary:
     """Return the summary of one found profile."""
     profile, email, email_verified_at, branch_code = found
     has_login = profile.user_account_id is not None

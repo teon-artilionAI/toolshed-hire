@@ -190,6 +190,8 @@ class SqlRentalReads:
                     status=charge.status,
                     raised_at=required_utc(charge.raised_at, RAISED_AT_COLUMN),
                     rental_item_id=charge.rental_item_id,
+                    reverses_charge_id=charge.reverses_charge_id,
+                    reason=charge.waiver_reason,
                 )
             )
         return grouped

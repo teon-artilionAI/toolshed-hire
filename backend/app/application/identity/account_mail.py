@@ -1,7 +1,8 @@
 """Sending the account security messages, after the commit (C-18).
 
-A verification link, a reset link and the note for an address that somebody
-tried to register twice all leave through here. They go straight to the email
+A verification link, a reset link, the invitation of a new member of staff
+and the note for an address that somebody tried to register twice all leave
+through here. They go straight to the email
 gateway, and none of them has a `notification` row, because that table is the
 record of the booking confirmation and of nothing else.
 
@@ -30,6 +31,7 @@ from app.application.notification.ports import NotificationGateway
 from app.domain.account_messages import (
     already_registered_message,
     password_reset_message,
+    staff_invitation_message,
     verification_message,
 )
 from app.domain.notification import EmailMessage
@@ -39,6 +41,7 @@ logger = logging.getLogger(__name__)
 VERIFICATION_KIND: Final[str] = "email-verification"
 RESET_KIND: Final[str] = "account-reset"
 ALREADY_REGISTERED_KIND: Final[str] = "already-registered"
+INVITATION_KIND: Final[str] = "staff-invitation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +92,19 @@ class AccountMailer:
             password_reset_message(to=to, frontend_origin=self._frontend_origin, token=token),
         )
 
+    def send_staff_invitation(self, *, to: str, token: str) -> bool:
+        """Send a new member of staff the reset link they choose their first password with.
+
+        Returns:
+            True when the gateway accepted the message, so the link is on its
+            way, and False when it could not be handed over.
+
+        """
+        return self._send(
+            INVITATION_KIND,
+            staff_invitation_message(to=to, frontend_origin=self._frontend_origin, token=token),
+        )
+
     def send_already_registered(self, *, to: str) -> None:
         """Tell the holder of an account that somebody tried to register with its address."""
         self._send(
@@ -96,8 +112,12 @@ class AccountMailer:
             already_registered_message(to=to, frontend_origin=self._frontend_origin),
         )
 
-    def _send(self, kind: str, message: EmailMessage) -> None:
-        """Hand one message to the gateway and log what became of it. Never raises."""
+    def _send(self, kind: str, message: EmailMessage) -> bool:
+        """Hand one message to the gateway, log what became of it and say whether it was taken.
+
+        Never raises. A gateway that broke its contract counts as a message
+        that was not taken.
+        """
         logger.info("account_mail.send_started", extra={"kind": kind, "recipient_count": 1})
         try:
             receipt = self._gateway.send(message)
@@ -109,7 +129,7 @@ class AccountMailer:
                 "account_mail.gateway_fault",
                 extra={"kind": kind, "attempted": "send an account message through the gateway"},
             )
-            return
+            return False
         log = logger.info if receipt.accepted else logger.warning
         log(
             "account_mail.send_finished",
@@ -120,3 +140,4 @@ class AccountMailer:
                 "failure_reason": receipt.error,
             },
         )
+        return receipt.accepted

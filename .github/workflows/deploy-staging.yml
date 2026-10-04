@@ -165,6 +165,13 @@ jobs:
           SERVICE_URL: ${{ env.FRONTEND_ORIGIN }}
         run: bash infra/scripts/smoke-test.sh
 
+      # The headers come from vercel.json and from the API, and either could
+      # lose one without a test noticing, so the deployed domain is checked.
+      - name: Check the security headers and TLS of the deployed site
+        env:
+          SITE_URL: ${{ env.FRONTEND_ORIGIN }}
+        run: bash infra/scripts/check-security-headers.sh
+
       - name: Record the deployment in the run summary
         if: always()
         env:
@@ -182,3 +189,51 @@ jobs:
             echo "| Frontend | ${FRONTEND_ORIGIN} |"
             echo "| Vercel deployment | ${DEPLOYMENT_URL:-not deployed} |"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  # The three role journeys, run in a real browser against the staging site
+  # that was just deployed. The specs tagged @staging book, check out and take
+  # back real units on staging, so they run only after the deployment passed.
+  journeys:
+    name: Customer, counter and admin journeys on staging
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The demonstration passwords for staging are secrets of this environment.
+    environment:
+      name: staging
+      url: ${{ vars.FRONTEND_ORIGIN }}
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install the browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the journeys against staging
+        working-directory: frontend
+        env:
+          STAGING_URL: ${{ vars.FRONTEND_ORIGIN }}
+          E2E_CUSTOMER_PASSWORD: ${{ secrets.E2E_CUSTOMER_PASSWORD }}
+          E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
+        run: npx playwright test --project=staging
+
+      - name: Keep the report when a journey fails
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: staging-journeys-report
+          path: frontend/playwright-report
+          retention-days: 7

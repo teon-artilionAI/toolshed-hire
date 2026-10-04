@@ -19,6 +19,8 @@ from typing import Protocol, Self
 from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
+from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
+from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
@@ -29,6 +31,7 @@ from app.application.identity.ports import (
     CustomerRepository,
     SessionRepository,
 )
+from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
 
@@ -72,6 +75,21 @@ class UnitOfWork(Protocol):
         ...
 
     @property
+    def categories(self) -> CategoryRepository:
+        """Return the category repository the administrator writes through."""
+        ...
+
+    @property
+    def catalogue_entries(self) -> CatalogueEntryRepository:
+        """Return the product model repository the administrator writes through."""
+        ...
+
+    @property
+    def asset_register(self) -> AssetRegisterRepository:
+        """Return the units of the fleet the administrator registers, edits and moves."""
+        ...
+
+    @property
     def customers(self) -> CustomerRepository:
         """Return the customer repository of this transaction."""
         ...
@@ -84,6 +102,11 @@ class UnitOfWork(Protocol):
     @property
     def accounts(self) -> AccountRepository:
         """Return the account repository of this transaction."""
+        ...
+
+    @property
+    def staff(self) -> StaffRepository:
+        """Return the staff accounts the administrator writes through."""
         ...
 
     @property

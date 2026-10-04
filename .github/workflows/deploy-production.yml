@@ -186,6 +186,11 @@ jobs:
           SERVICE_URL: ${{ env.FRONTEND_ORIGIN }}
         run: bash infra/scripts/smoke-test.sh
 
+      - name: Check the security headers and TLS of the deployed site
+        env:
+          SITE_URL: ${{ env.FRONTEND_ORIGIN }}
+        run: bash infra/scripts/check-security-headers.sh
+
       - name: Record the deployment in the run summary
         if: always()
         env:

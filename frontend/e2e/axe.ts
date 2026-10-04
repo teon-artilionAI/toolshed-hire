@@ -8,6 +8,7 @@
  */
 
 import { AxeBuilder } from '@axe-core/playwright'
+import { test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 /** WCAG 2.2 AA includes every A and AA criterion from 2.0 and 2.1, and axe
@@ -25,15 +26,16 @@ export interface BlockingViolation {
   elements: string[]
 }
 
-/**
- * Scan the page as it stands and return the violations that fail the run.
- *
- * @returns An empty list when the page is clean. I reduce each violation to the
- *   rule, its impact and the elements it names, so a failure prints something
- *   a person can act on.
- */
-export async function blockingViolations(page: Page): Promise<BlockingViolation[]> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA_TAGS).analyze()
+/** Every impact axe rates a violation at, from the worst. */
+const IMPACTS = ['critical', 'serious', 'moderate', 'minor'] as const
+
+type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>
+
+function scan(page: Page): Promise<AxeResults> {
+  return new AxeBuilder({ page }).withTags(WCAG_22_AA_TAGS).analyze()
+}
+
+function blockingOf(results: AxeResults): BlockingViolation[] {
   return results.violations
     .filter((violation) => BLOCKING_IMPACTS.includes(violation.impact ?? ''))
     .map((violation) => ({
@@ -42,4 +44,39 @@ export async function blockingViolations(page: Page): Promise<BlockingViolation[
       help: violation.help,
       elements: violation.nodes.map((node) => node.target.join(' ')),
     }))
+}
+
+/**
+ * Scan the page as it stands and return the violations that fail the run.
+ *
+ * @returns An empty list when the page is clean. I reduce each violation to the
+ *   rule, its impact and the elements it names, so a failure prints something
+ *   a person can act on.
+ */
+export async function blockingViolations(page: Page): Promise<BlockingViolation[]> {
+  return blockingOf(await scan(page))
+}
+
+/**
+ * Scan the page, say how many findings of each impact it has, and return the
+ * violations that fail the run.
+ *
+ * The counts go to the output of the run as one line per scan, and onto the
+ * test in the report, so a run shows that each screen was scanned and how it
+ * stood and not only that nothing failed. A count is of affected elements, so
+ * one rule broken in three places counts three.
+ *
+ * @param what The screen and the state it was scanned in, for example
+ *   "SC-07 /reservations".
+ */
+export async function reportedViolations(page: Page, what: string): Promise<BlockingViolation[]> {
+  const results = await scan(page)
+  const counts = IMPACTS.map((impact) => {
+    const found = results.violations.filter((violation) => violation.impact === impact)
+    return `${found.reduce((sum, violation) => sum + violation.nodes.length, 0)} ${impact}`
+  })
+  const line = `axe ${what}: ${counts.join(', ')}, ${results.passes.length} rules passed`
+  test.info().annotations.push({ type: 'axe', description: line })
+  process.stdout.write(`${line}\n`)
+  return blockingOf(results)
 }

@@ -1,277 +1,98 @@
 /**
  * SC-23, User and role management.
  *
- * Two jobs on one screen because they are the same job: deciding who may do
- * what. Staff accounts carry a role and a branch and can be switched off,
- * and customer accounts can be put on hold after a no show without losing
- * their history.
+ * Two jobs on one screen because they are the same job, deciding who may do
+ * what. Staff accounts carry a role and, for counter staff, a branch, and can
+ * be deactivated and reactivated. Customers can be put on hold or blacklisted
+ * and released again without losing their history.
  *
- * The interesting part is the rules that refuse. You cannot switch off your
- * own account, and you cannot leave the business with no active admin,
- * because either would lock everybody out of this very screen. Both refusals
- * say what happened and what to do instead.
+ * Both are read from the API one page at a time. The view on the screen, its
+ * filters and its page are in the address, read and written by
+ * users-address.ts, so a reload or a shared link opens the same page. The
+ * views are two links, each marked as the current page when it is, and moving
+ * from one to the other moves focus to the heading of the new one.
+ *
+ * The rules that refuse are the server's. It will not deactivate or demote the
+ * last active administrator, and it will not let an administrator deactivate
+ * their own account, because either would lock everybody out of this very
+ * screen. The browser does not guess at either. It asks, and shows the
+ * server's sentence. No password is ever shown or asked for here. A new member
+ * of staff chooses their own from a link.
  */
 
-import { useMemo, useState } from 'react'
-import { UserPlus, X } from 'lucide-react'
-import { branches, customers, users } from '../../shared/fixtures'
-import type {
-  BranchCode,
-  CustomerProfile,
-  Role,
-  UserAccount,
-} from '../../shared/types'
-import { Card, Field, Notice, PageHeader, StatTile } from '../../shared/ui'
-import { useSession } from '../../shared/use-session'
-import StaffAccountForm from './StaffAccountForm'
-import StaffAccountsTable from './StaffAccountsTable'
-import CustomerHolds from './CustomerHolds'
-import type { HoldChange } from './CustomerHolds'
+import { useEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ShieldCheck, Users } from 'lucide-react'
+import { PageHeader } from '../../shared/ui'
+import { USERS_PATH } from './admin-links'
+import CustomerHolds from './SC23-Customer-Holds'
+import StaffAccounts from './SC23-Staff-Accounts'
+import { readView, usersViewHref } from './users-address'
+import type { UsersView } from './users-address'
 
-const ROLE_TEXT: Record<Role, string> = {
-  customer: 'Customer',
-  counter: 'Counter staff',
-  admin: 'Admin and owner',
+const VIEW_HEADING: Record<UsersView, string> = {
+  staff: 'Staff accounts',
+  customers: 'Customer holds',
 }
 
-/** The branch a demoted admin lands at until somebody says otherwise. */
-const FALLBACK_BRANCH: BranchCode = 'CBD'
+const VIEW_HEADING_ID = 'users-view-heading'
 
-interface Feedback {
-  tone: 'success' | 'error'
-  title: string
-  body: string
+function ViewLink({ view, current, children }: { view: UsersView; current: UsersView; children: ReactNode }) {
+  const here = view === current
+  return (
+    <Link
+      to={usersViewHref(USERS_PATH, view)}
+      aria-current={here ? 'page' : undefined}
+      className={here ? 'btn border-2 border-ink bg-surface px-md font-semibold text-ink' : 'btn-secondary px-md'}
+    >
+      {children}
+    </Link>
+  )
 }
 
 export default function UserManagement() {
-  const { user: signedInUser } = useSession()
-  const [accounts, setAccounts] = useState<UserAccount[]>(users)
-  // The staff list is still sample data, and the signed in account is real.
-  // The email address is the one thing both have, so that is how I find the
-  // row that stands for the person using the screen.
-  const signedInEmail = signedInUser?.email.toLowerCase()
-  const signedInAccountId = accounts.find(
-    (account) => account.email.toLowerCase() === signedInEmail,
-  )?.id
-  const [customerList, setCustomerList] = useState<CustomerProfile[]>(customers)
-  const [customerQuery, setCustomerQuery] = useState('')
-  const [formOpen, setFormOpen] = useState(false)
-  const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [params] = useSearchParams()
+  const view = readView(params)
 
-  const staff = useMemo(
-    () => accounts.filter((a) => a.role !== 'customer'),
-    [accounts],
-  )
-  const activeAdmins = staff.filter((a) => a.role === 'admin' && a.active)
-  const onHoldCount = customerList.filter((c) => c.onHold).length
-
-  /** The one account that must never be switched off or demoted. */
-  function isLastActiveAdmin(account: UserAccount): boolean {
-    return (
-      account.role === 'admin' &&
-      account.active &&
-      activeAdmins.length === 1 &&
-      activeAdmins[0].id === account.id
-    )
-  }
-
-  function update(id: string, change: Partial<UserAccount>) {
-    setAccounts((current) =>
-      current.map((a) => (a.id === id ? { ...a, ...change } : a)),
-    )
-  }
-
-  function refuse(title: string, body: string) {
-    setFeedback({ tone: 'error', title, body })
-  }
-
-  function changeRole(account: UserAccount, role: Role) {
-    if (role !== 'admin' && isLastActiveAdmin(account)) {
-      refuse(
-        'That would leave nobody in charge',
-        `${account.name} is the only active admin. Make somebody else an admin first, then change this account.`,
-      )
-      return
-    }
-    update(account.id, {
-      role,
-      branchCode:
-        role === 'admin' ? undefined : (account.branchCode ?? FALLBACK_BRANCH),
-    })
-    setFeedback({
-      tone: 'success',
-      title: 'Role changed',
-      body: `${account.name} is now ${ROLE_TEXT[role].toLowerCase()}. The change applies the next time they sign in.`,
-    })
-  }
-
-  function changeBranch(account: UserAccount, branchCode?: BranchCode) {
-    update(account.id, { branchCode })
-    const where = branchCode
-      ? branches.find((b) => b.code === branchCode)?.name
-      : 'all three branches'
-    setFeedback({
-      tone: 'success',
-      title: 'Branch changed',
-      body: `${account.name} now works at ${where}.`,
-    })
-  }
-
-  function toggleActive(account: UserAccount) {
-    if (account.active && account.id === signedInAccountId) {
-      refuse(
-        'You cannot switch off your own account',
-        'Ask another admin to do it, so nobody locks themselves out of this screen by accident.',
-      )
-      return
-    }
-    if (account.active && isLastActiveAdmin(account)) {
-      refuse(
-        'That would leave nobody in charge',
-        `${account.name} is the only active admin. Make somebody else an admin first, then switch this account off.`,
-      )
-      return
-    }
-    update(account.id, { active: !account.active })
-    setFeedback({
-      tone: 'success',
-      title: account.active ? 'Account switched off' : 'Account switched back on',
-      body: account.active
-        ? `${account.name} can no longer sign in. Their history and past bookings are untouched.`
-        : `${account.name} can sign in again from now.`,
-    })
-  }
-
-  function createAccount(draft: Omit<UserAccount, 'id'>) {
-    const account: UserAccount = { ...draft, id: `us-${accounts.length + 1}` }
-    setAccounts((current) => [...current, account])
-    setFormOpen(false)
-    setFeedback({
-      tone: 'success',
-      title: 'Staff account created',
-      body: `${account.name} can sign in as ${ROLE_TEXT[account.role].toLowerCase()}. Send them the sign-in address and they set their own password.`,
-    })
-  }
-
-  function changeHold({ customerId, onHold, reason }: HoldChange) {
-    const customer = customerList.find((c) => c.id === customerId)
-    setCustomerList((current) =>
-      current.map((c) => (c.id === customerId ? { ...c, onHold } : c)),
-    )
-    setFeedback({
-      tone: 'success',
-      title: onHold ? 'Account placed on hold' : 'Hold lifted',
-      body: onHold
-        ? `${customer?.name} cannot make a new booking until the hold is lifted. Reason recorded: ${reason}.`
-        : `${customer?.name} can book again from now.`,
-    })
-  }
+  // The address is where the screen opens, and the router has already put
+  // focus on the page. Only a change of view moves it, to the new heading.
+  const heading = useRef<HTMLHeadingElement>(null)
+  const viewBefore = useRef(view)
+  useEffect(() => {
+    if (viewBefore.current === view) return
+    viewBefore.current = view
+    heading.current?.focus()
+  }, [view])
 
   return (
     <>
       <PageHeader
         screenId="SC-23"
         title="Users, roles and account holds"
-        subtitle="Who works here, what they may do, which branch they stand in, and which customers are not allowed to book right now."
-        actions={
-          <button
-            type="button"
-            className={formOpen ? 'btn-secondary px-md' : 'btn-primary px-md'}
-            onClick={() => setFormOpen(!formOpen)}
-            aria-expanded={formOpen}
-            aria-controls="new-staff-account"
-          >
-            {formOpen ? (
-              <X className="h-4 w-4 shrink-0" aria-hidden="true" />
-            ) : (
-              <UserPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
-            )}
-            {formOpen ? 'Close the form' : 'Add a staff account'}
-          </button>
-        }
+        subtitle="Who works here, what they may do, which branch they work at, and which customers may not book right now. Nobody's password is ever shown here."
       />
-
-      <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile
-          label="Staff who can sign in"
-          value={staff.filter((a) => a.active).length}
-          hint={`Out of ${staff.length} accounts on file`}
-        />
-        <StatTile
-          label="Switched off"
-          value={staff.filter((a) => !a.active).length}
-          tone={staff.some((a) => !a.active) ? 'warn' : 'default'}
-          hint="Kept for the audit trail, cannot sign in"
-        />
-        <StatTile
-          label="Admins"
-          value={activeAdmins.length}
-          hint="At least one must stay active at all times"
-        />
-        <StatTile
-          label="Customers on hold"
-          value={onHoldCount}
-          tone={onHoldCount > 0 ? 'bad' : 'good'}
-          hint="Blocked from making a new booking"
-        />
-      </div>
-
-      {feedback && (
-        <div className="mb-lg">
-          <Notice tone={feedback.tone} title={feedback.title}>
-            {feedback.body}
-          </Notice>
-        </div>
-      )}
-
-      {formOpen && (
-        <div className="mb-lg" id="new-staff-account">
-          <Card title="New staff account">
-            <StaffAccountForm
-              takenEmails={accounts.map((a) => a.email.toLowerCase())}
-              onCreate={createAccount}
-              onCancel={() => setFormOpen(false)}
-            />
-          </Card>
-        </div>
-      )}
-
-      <div className="mb-lg">
-        <Card title="Staff accounts">
-          <StaffAccountsTable
-            staff={staff}
-            signedInUserId={signedInAccountId}
-            onChangeRole={changeRole}
-            onChangeBranch={changeBranch}
-            onToggleActive={toggleActive}
-          />
-        </Card>
-      </div>
-
-      <Card title="Customer accounts and holds">
-        <div className="mb-lg max-w-md">
-          <Field
-            label="Search customers"
-            htmlFor="customer-search"
-            help="A hold blocks new bookings. It leaves the customer's history and open hires alone."
-          >
-            <input
-              id="customer-search"
-              type="search"
-              className="field-input"
-              placeholder="Riaan, or riaan@"
-              value={customerQuery}
-              aria-describedby="customer-search-help"
-              onChange={(e) => setCustomerQuery(e.target.value)}
-            />
-          </Field>
-        </div>
-        <CustomerHolds
-          customers={customerList}
-          query={customerQuery}
-          onChange={changeHold}
-        />
-      </Card>
+      <nav aria-label="Parts of the screen" className="mb-lg">
+        <ul className="flex flex-wrap gap-sm">
+          <li>
+            <ViewLink view="staff" current={view}>
+              <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Staff accounts
+            </ViewLink>
+          </li>
+          <li>
+            <ViewLink view="customers" current={view}>
+              <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Customer holds
+            </ViewLink>
+          </li>
+        </ul>
+      </nav>
+      <h2 id={VIEW_HEADING_ID} ref={heading} tabIndex={-1} className="mb-md text-lg font-semibold text-ink">
+        {VIEW_HEADING[view]}
+      </h2>
+      {/* The key starts each view afresh, so nothing typed into one is left in the other. */}
+      <div key={view}>{view === 'staff' ? <StaffAccounts /> : <CustomerHolds />}</div>
     </>
   )
 }

@@ -29,6 +29,7 @@ from app.domain.customer_account import CustomerDetails
 from app.domain.enums import RevokeReason, UserRole
 from app.domain.session import RefreshSession
 from tests.support.memory import InMemoryUnitOfWork, MemoryStore
+from tests.support.memory_counters import CounterKey, MemoryRateLimits
 from tests.support.memory_crypto import (
     FAKE_ACCESS_LIFETIME_SECONDS,
     CountingPasswordVerifier,
@@ -47,7 +48,7 @@ class IdentityRecords:
 
     accounts: dict[UUID, Account] = field(default_factory=dict)
     sessions: dict[UUID, RefreshSession] = field(default_factory=dict)
-    counters: dict[tuple[str, datetime], int] = field(default_factory=dict)
+    counters: dict[CounterKey, int] = field(default_factory=dict)
     details: dict[UUID, CustomerDetails] = field(default_factory=dict)
 
 
@@ -216,41 +217,11 @@ class _Sessions:
         return len(live)
 
 
-class _RateLimits:
-    """The throttle counters over the working copy."""
-
-    def __init__(self, working: IdentityRecords) -> None:
-        """Bind to the working copy of one transaction."""
-        self._working = working
-
-    def increment(self, bucket_key_hash: str, window_started_at: datetime) -> int:
-        """Add one to a counter and return the new count."""
-        key = (bucket_key_hash, window_started_at)
-        self._working.counters[key] = self._working.counters.get(key, 0) + 1
-        return self._working.counters[key]
-
-    def delete_windows_before(self, cutoff: datetime) -> int:
-        """Delete every counter whose window began before the cutoff."""
-        expired = [key for key in self._working.counters if key[1] < cutoff]
-        for key in expired:
-            del self._working.counters[key]
-        return len(expired)
-
-    def total_since(self, bucket_key_hash: str, since: datetime) -> int:
-        """Return the sum of the counters of a bucket whose windows began at or after `since`."""
-        return sum(
-            count
-            for (bucket, window_started_at), count in self._working.counters.items()
-            if bucket == bucket_key_hash and window_started_at >= since
-        )
-
-
 class IdentityMemoryUnitOfWork(InMemoryUnitOfWork):
     """The in memory unit of work, with accounts, sessions, counters and details as well."""
 
     accounts: _Accounts
     sessions: _Sessions
-    rate_limits: _RateLimits
     customers: AccountCustomers
 
     def __init__(self, store: MemoryStore, identity: IdentityStore) -> None:
@@ -282,7 +253,7 @@ class IdentityMemoryUnitOfWork(InMemoryUnitOfWork):
         self._identity_working = working
         self.accounts = _Accounts(self.identity, working)
         self.sessions = _Sessions(working)
-        self.rate_limits = _RateLimits(working)
+        self.rate_limits = MemoryRateLimits(working.counters)
         self.customers = AccountCustomers(self.store, self.working_records(), working)
 
 

@@ -6,6 +6,11 @@
  * reference, names the branch and the day, says what to bring, and repeats
  * the server's figures. A confirmation that only says "thank you" leaves the
  * customer ringing the branch to ask what happens next.
+ *
+ * The email is promised only when the session says this environment can
+ * deliver to the customer's address. A demonstration delivers to one address
+ * only, and then the screen says plainly that the email will not arrive and
+ * that the reference on the screen is the booking, so nobody waits for it.
  */
 
 import type { RefObject } from 'react'
@@ -13,9 +18,24 @@ import { Link } from 'react-router-dom'
 import type { Reservation } from '../../shared/api/contract'
 import { formatDate } from '../../shared/format'
 import { Card, Notice } from '../../shared/ui'
+import { useSession } from '../../shared/use-session'
 import { StepHeading } from './booking-steps'
 import { MY_RESERVATIONS_PATH, reservationHref } from './reservation-links'
 import { ReservationLines, ReservationTermsCard, ReservationTotals } from './reservation-figures'
+
+/** What the confirmation says about its email when the email can arrive. */
+const CONFIRMATION_EMAIL_ON_ITS_WAY = 'A confirmation email is on its way to you.'
+
+/** What it says instead when this environment cannot deliver to the customer. */
+const CONFIRMATION_EMAIL_WILL_NOT_ARRIVE =
+  'This demonstration delivers email to one address only, so the confirmation email will not arrive.'
+
+/** The sentence about the email, which depends on whether it can arrive. */
+function emailSentence(deliverable: boolean, reference: string): string {
+  return deliverable
+    ? CONFIRMATION_EMAIL_ON_ITS_WAY
+    : `${CONFIRMATION_EMAIL_WILL_NOT_ARRIVE} The reference ${reference} on this screen is your booking.`
+}
 
 export default function BasketConfirmed({
   reservation,
@@ -24,6 +44,7 @@ export default function BasketConfirmed({
   reservation: Reservation
   headingRef: RefObject<HTMLHeadingElement | null>
 }) {
+  const { user } = useSession()
   const confirmed = reservation.status === 'CONFIRMED'
   return (
     <>
@@ -31,8 +52,9 @@ export default function BasketConfirmed({
       {confirmed && (
         <Notice tone="success" title={`Booking ${reservation.reference} is confirmed`}>
           <p>
-            A confirmation email is on its way to you. Collect from {reservation.branchName} on{' '}
-            {formatDate(reservation.from)}, and bring your ID and the card you are paying with.
+            {emailSentence(user?.emailDeliverable === true, reservation.reference)} Collect from{' '}
+            {reservation.branchName} on {formatDate(reservation.from)}, and bring your ID and the card
+            you are paying with.
           </p>
         </Notice>
       )}

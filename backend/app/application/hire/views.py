@@ -12,7 +12,7 @@ A checkout is answered as a `CheckoutView`, which says whether the caller may
 hand the equipment over right now and, when not, why, in the sentence the
 checkout itself would answer with. The refusals are tried in the order the
 checkout tries them. The branch comes first, then a rental that already
-exists, then the status and the date.
+exists, then the status, the date and any unit the reservation is short of.
 
 A customer is never shown an asset tag (US-07). Counter staff and
 administrators are, because they hand the units over. Staff are also shown the
@@ -179,7 +179,7 @@ def _checkout_refusal(actor: Actor, detail: CheckoutDetail, today: date) -> str 
         return BRANCH_SCOPE_MESSAGE
     if detail.rental_id is not None:
         return ALREADY_CHECKED_OUT_MESSAGE
-    return collection_refusal(detail.status, detail.start_date, today)
+    return collection_refusal(detail.status, detail.start_date, today, detail.units_short)
 
 
 def _item_view(

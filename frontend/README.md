@@ -18,19 +18,27 @@ The screens are moving from sample data to the API one group at a time.
 | `SC-10` Counter Dashboard, `SC-11` Branch Diary, `SC-17` Asset Locator | The API, through the routes described under The counter's day |
 | `SC-15` Return and Condition Inspection, `SC-18` Overdue and Late Fee Worklist, and the hire history of `SC-09` | The API, through the routes described under Returns and settlement |
 | `SC-16` Damage Report Capture | The API, through the routes described under Damage and quarantine |
-| `SC-19` to `SC-24` | The typed sample data in `src/shared/fixtures.ts` |
+| `SC-19` Admin Dashboard, `SC-22` Utilisation and Gross Contribution Report | The API, through the routes described under Reporting |
+| `SC-24` Audit and Notification Log, and the owner's corrections on `SC-14` and `SC-15` | The API, through the routes described under Admin operations |
+| `SC-20` Catalogue and Pricing Management | The API, through the routes described under Admin catalogue |
+| `SC-21` Asset Register and Lifecycle | The API, through the routes described under Asset register |
+| `SC-23` User and Role Management | The API, through the routes described under User management |
 
-No customer or counter screen reads `src/shared/fixtures.ts` any more. The
-modules that still do are the administration screens and their helpers in
-`src/features/admin/`, and `src/shared/format.ts`, whose two overdue helpers
-take the fixture date as their default and are used only by those screens.
+Every numbered screen reads from the API now. The sample data file
+`src/shared/fixtures.ts` went with the last screen that read it, `SC-23`, and
+so did that screen's old helpers, `StaffAccountForm.tsx`,
+`StaffAccountsTable.tsx` and `CustomerHolds.tsx`, and every entity type in
+`src/shared/types.ts` that only described the sample data. What is left in
+`types.ts` is the `Role` the inventory, the guards and the session speak of,
+and the four status unions the status pill accepts.
 
 Every screen has a `live` flag in `src/shared/navigation.ts`. It is true for
 the screens that read from the API and false for the rest. While it is false
 the shell puts a notice above the screen that says it still shows sample data
 and that nothing changed there is saved. The notice is
 `src/shared/sample-data-notice.tsx`, and the flag is the only thing that
-decides whether it shows. Connecting a screen means changing its flag to true.
+decides whether it shows. Every flag is true now, so the notice shows nowhere.
+It stays for a screen added later, which must say so until it is connected.
 
 The privacy notice at `/privacy` is `INFO-01`. It is a supporting page and not
 one of the numbered screens. It is routed and guarded from the same inventory,
@@ -60,7 +68,9 @@ session routes are `POST /api/auth/login`, `POST /api/auth/refresh` and
   The basket is described under Hire basket below. It holds dates, a branch
   code, model slugs, quantities and the id of a booking that is under way, and
   no name, address or token. The chosen branch is one branch code and nothing
-  else, and counter staff never write it. `src/shared/basket-storage.ts` and
+  else, and counter staff never write it. An administrator chooses it at the
+  counter, or by opening a branch's diary from the owner's dashboard.
+  `src/shared/basket-storage.ts` and
   `src/features/counter/work-branch-storage.ts` are the only files that touch
   `sessionStorage`, one key each.
 - `src/shared/web-storage.test.ts` runs every path that handles a token with a
@@ -145,6 +155,14 @@ The session types in `src/shared/api/contract.ts` come from the generated
 file, like every other wire type. The role and the token type are narrowed
 there, because the OpenAPI document types both as a plain `string`.
 
+The account also carries `emailDeliverable`, which says whether this
+environment can deliver email to the account's own address. A demonstration
+delivers to one address only. The generated file requires the member, so
+`SessionUser` takes it from there like the rest, and the reader in
+`api/auth.ts` refuses an account that leaves it out or sends anything but true
+or false, like any other broken contract. A screen promises an email only when
+it is true.
+
 Refresh and logout are authenticated by the cookie alone, so the API checks
 the `Origin` of those two requests against its `CORS_ORIGINS` setting and
 answers 403 for any other. The backend default lists `http://localhost:5173`
@@ -176,9 +194,11 @@ live in `src/shared/api/`, with the error model beside them in
 
 ### The client
 
-`api/client.ts` is the only file that calls `fetch`. It offers `api.get`,
-`api.post`, `api.put` and `api.patch`. There is no delete, because this system
-never deletes a record.
+`api/client.ts` is where every call is made. It offers `api.get`, `api.post`,
+`api.put` and `api.patch`, and `api.getFile` for a GET whose answer is a file.
+There is no delete, because this system never deletes a record. The request
+itself goes out in `api/transport.ts`, which is the only file that calls
+`fetch`.
 
 - The base path stays relative as `/api`. An absolute API origin would recreate
   the cross-origin session problem this setup avoids, and the Content Security
@@ -188,6 +208,12 @@ never deletes a record.
 - `buildQueryString` in `api/query-string.ts` writes a typed query object as a
   query string and leaves out anything undefined, null or empty.
 - A request is abandoned after eight seconds, and cookies are always sent.
+- `api.getFile` sends the same token and renews the session the same way, and
+  answers with the bytes exactly as they came and the name the server gave the
+  file in `Content-Disposition`. `api/content-disposition.ts` reads that name
+  and refuses one that would be a path. An answer that names no file is a
+  malformed answer. A plain link could not fetch such a file, because a link
+  goes out with no token.
 - The bearer token comes from the session through `api/session-seam.ts`. A
   request refused for want of a good token is repeated once after one refresh.
   The Session section above has the rule.
@@ -261,6 +287,51 @@ commits as `../backend/openapi.json`.
   `MINOR`, `MAJOR` and `WRITE_OFF`, and a severity retires nothing on its own.
   Each unit of a hire also carries `replacementValue` for staff, which is null
   for a customer, as its tag is.
+- The reporting routes, which are the owner's dashboard, the utilisation and
+  gross contribution report and its CSV, are in the document too. Their types
+  are in `api/contract-reporting.ts`, built from the generated file the same
+  way. Every row of the report carries `branchCode`, `categoryName`,
+  `modelName`, `assetTag` and `status`, null where they do not apply, and a
+  utilisation over no serviceable days is null, on a row, in the totals and in
+  the month so far on the dashboard.
+- The admin operations routes, which are the audit trail, the notification
+  log and its re-send, the charge corrections, the release of a unit and the
+  reallocation, are in the document too. Their types are in
+  `api/contract-operations.ts`, built from the generated file the same way.
+  Every charge on a hire carries `reversesChargeId` and `reason`, and the
+  checkout carries `unitsShort`, in the generated shapes
+  `api/contract-counter.ts` already reads. An audit event's `beforeState` and
+  `afterState` are always objects, empty when nothing was kept on that side.
+  The trail is narrowed to one record by its key only, so the screen sends
+  `entityId` as a key and never as a reference.
+- The admin catalogue routes, which are the owner's list of categories and of
+  models, adding and changing each, and publishing or hiding a model, are in
+  the document too. Their types are in `api/contract-admin-catalogue.ts`,
+  built from the generated file the same way. The generated bodies of an edit
+  allow null in every field, and the server refuses null in all but a
+  category's `description` and `parentCategoryId` and a model's
+  `longDescription`, so the types allow it in those three only. The generated
+  body of a new model requires `isPublished`, because the server gives it a
+  default, and the server refuses true there, so the type leaves it out. The
+  categories come as one page of a hundred, the largest the API serves, and
+  the publication route answers with the model, which the screen reads.
+- The asset register routes, which are the owner's register of units, a
+  unit with its history, registering a unit, changing its paperwork and
+  moving it through its lifecycle, are in the document too. Their types are
+  in `api/contract-admin-assets.ts`, built from the generated file the same
+  way. The generated body of an edit allows null for the grade, and the server
+  refuses it, so the type does not. A registration, a change of paperwork and
+  a move each answer with the unit and its history, the way the unit's own
+  read does, and the screen reads them that way.
+- The user management routes, which are the owner's staff accounts and the
+  customer holds, are in the document too. Their types are in
+  `api/contract-admin-users.ts`, built from the generated file the same way.
+  The generated role is any stored role, and the server only ever lists or
+  moves a staff account, so the type is one of the two staff roles. The
+  generated body of a change allows null for the name and the role, and the
+  server refuses both, so the type does not. A customer on the holds is typed
+  from the owner's own routes and checked against the `CustomerSummary` the
+  counter reads, so the two can never drift apart.
 
 ```bash
 npm run api:types          # write api/schema.d.ts from ../backend/openapi.json
@@ -317,6 +388,47 @@ I use `@tanstack/react-query` for server state. `main.tsx` makes one
   date. Filing a report against a hire drops that hire from the cache
   altogether, so the return screen reads it afresh and never shows the deposit
   still waiting while it does.
+- The owner's dashboard, under the `admin` segment, is never fresh. It is left
+  open like the counter's and is read again whenever the window comes back into
+  focus.
+- The report, under the `admin` segment as well, is fresh for a minute. It
+  covers a period, most often a month that has ended, and the server works it
+  out over the whole fleet, so asking again on every return to the window
+  would cost that whole sum each time for figures that have not moved. The CSV
+  is not cached at all. Each press of its button is one request.
+- The audit trail and the notification log, under the `admin` segment too, are
+  never fresh. Every write in the system adds to the trail, and an email moves
+  from queued to sent or failed a moment after it is listed. Each read is one
+  page of twenty, so reading it again on focus costs one small query. A
+  re-send marks the log, the trail and the dashboard as out of date. An
+  owner's correction of a hire puts the hire the server answered with into the
+  cache the way a return does, and marks everything under the `admin` segment
+  as out of date as well. A release or a reallocation marks the reservations,
+  the locator, the counter's day and the `admin` segment as out of date, so
+  the checkout on the screen is read again.
+- The owner's catalogue, the categories and the models under the `admin`
+  segment, is catalogue data and is fresh for a minute like the customer's
+  catalogue. The owner's own writes mark it out of date at once, together
+  with the catalogue customers browse and the audit trail, so a change shows
+  as soon as it is saved. A model a write answered with is kept under its key,
+  so its form opens with the server's figures.
+- The asset register, its pages and its units under the `admin` segment, is
+  never fresh. A unit goes out on hire or into quarantine at a counter while
+  the owner has it open, and the moves it offers depend on where it stands
+  now. Each read is one page of twenty or one unit with its history, so
+  reading it again on focus costs one small query. A write keeps the unit the
+  server answered with under its tag, and marks everything under the `admin`
+  segment and the locator as out of date, because the dashboard, the report,
+  the count of units on each model and the trail all move with it.
+- The staff accounts and the customer holds, under the `admin` segment, are
+  never fresh. A lock after failed sign ins and the last sign in change by
+  themselves, another administrator can change a role at another desk, and
+  the counter's no show rule puts a customer on hold the moment a third
+  booking is missed. Each read is one page of twenty. A write to an account
+  marks the staff accounts and the trail as out of date. A move of a
+  customer's standing marks the holds, the dashboard, which counts the
+  customers on hold, the trail and the customers the counter looks up as out
+  of date.
 
 `api/catalogue.ts` has one function per catalogue route, and
 `api/catalogue-queries.ts` wraps each one as a query for `useQuery`. A screen
@@ -389,7 +501,7 @@ Each step is one request, and the screen shows what the server answered.
 |---|---|---|
 | Review | `POST /api/reservations` | The draft the server priced. Every line, the subtotal, the VAT and the total, and the deposit apart from them with the sentence that it is held at collection and returned |
 | Hold | `POST /api/reservations/{id}/hold` | That the equipment is held and until when, with a countdown |
-| Confirm | `POST /api/reservations/{id}/confirm` | The reference, and that a confirmation email is on its way, only when the answer says the reservation is confirmed |
+| Confirm | `POST /api/reservations/{id}/confirm` | The reference, only when the answer says the reservation is confirmed. That a confirmation email is on its way, only when the session says email can reach the customer. Otherwise that this demonstration delivers email to one address only, so the confirmation will not arrive, and that the reference on the screen is the booking |
 
 The rules of a reservation are the server's. Every answer carries `canHold`,
 `canConfirm` and `canCancel`, and a button is offered from its flag and from
@@ -506,6 +618,9 @@ a screen reader hears a table at every width.
   the person, and what they can still do. That note is
   `email-delivery-note.tsx`, and registration, the reset request and the
   resend all use it.
+- On `SC-09` the notice about an unconfirmed address asks the person to open
+  the link only when the session says email can reach them. Otherwise it says
+  the link cannot reach them and what they can still do.
 - A 422 puts each message under the field it names, through
   `api/problem-fields.ts`, and lists any message about a field the form has no
   input for. A 429 says how long to wait, from `Retry-After`. Anything else is
@@ -635,6 +750,9 @@ it. The dashboard and the diary take their branch from the same place.
   it is due back, and links to the return of the hire by its key. A 409 or a
   403 shows the server's message and offers to read the booking again. A 422
   goes back to the form with each message under its control.
+- An administrator can release a unit the booking holds, and any member of
+  staff can find a replacement for a booking short of one. Both are described
+  under Admin operations.
 
 #### Accessibility of these screens
 
@@ -771,6 +889,11 @@ out a late fee, a settlement or a balance, and never adds money up.
 - A 409 or a 403 shows the server's message and offers to read the hire again.
   A 422 goes back to the form with each message under its control. The writes
   share `use-rental-write.ts`, which sends each one once.
+- Under everything is every charge on the hire, in the order the server sent
+  them, with what each is for, the server's sentence, its amount in words that
+  say which way it runs, where it stands and when it was raised. Counter staff
+  read the sentence that only the owner can waive a charge. The owner's
+  corrections there are described under Admin operations.
 
 #### `SC-18` Overdue and Late Fee Worklist
 
@@ -880,6 +1003,502 @@ focus. Every status carries words beside its colour, every target is at least
 44 pixels, and the screen fits a phone 360 pixels wide with nothing to scroll
 sideways.
 
+### Reporting
+
+The owner's dashboard on `SC-19` says where the whole business stands today,
+and the report on `SC-22` says which equipment earns its keep over a period.
+The reads are in `api/admin-dashboard.ts` and `api/reporting.ts`, the cached
+queries in `api/admin-queries.ts`, and the CSV goes through `api.getFile`.
+Every figure is the server's. The browser adds up, divides and rounds nothing,
+and keeps the rows in the order the server sent them.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-19` | `GET /api/admin/dashboard` | Today across every branch, the month so far, what waits on the owner, and a card for each branch |
+| `SC-22` | `GET /api/admin/reports/utilisation?from=&to=&groupBy=&branchCode=&categorySlug=&page=&pageSize=` | The totals, the two definitions, one page of rows and a chart of them |
+| `SC-22` | `GET /api/admin/reports/utilisation.csv?from=&to=&groupBy=&branchCode=&categorySlug=` | Every row as a file, saved under the name the server gave it |
+
+#### The two definitions
+
+The server sends both with every answer of the report, and the screen shows
+them in full beside the figures. They are these.
+
+- **Utilisation, per asset, for a period.** The days the asset was on an
+  active allocation within the period, divided by the days it was in the fleet
+  and serviceable within the period. Days quarantined, under repair, lost or
+  retired are left out of the denominator. Days are half open, `[from, to)`.
+- **Gross contribution, per asset, for a period.** Hire revenue excluding VAT
+  attributed to that asset, plus late fees and damage recovery charged on it
+  (excluding VAT), less the actual repair costs recorded against it. It
+  excludes acquisition cost, depreciation, finance, staff and premises costs
+  and all overheads. It is labelled gross contribution everywhere, never
+  profit.
+
+#### `SC-19` Admin Dashboard
+
+- One request. The totals are the server's totals and not a sum of the
+  branches, and the month's utilisation and gross contribution are the
+  server's too. A utilisation the server sends as null reads as "No
+  serviceable days", and a gross contribution below zero says so in words.
+- The figures link to where the owner goes next. The month opens the report
+  for the same period, from the dates the server sent. The open damage reports
+  open the asset register, the customers on hold open the customer holds on
+  `SC-23` showing only the customers on hold, and the failed notifications
+  open the notification log on `SC-24` showing only the emails that failed.
+  What is due at a branch opens the diary on `SC-11` at that branch. The link
+  chooses the branch for the tab through `chooseWorkBranch` in
+  `src/features/counter/work-branch.ts` first, so the diary does not ask.
+- It is read again when the window comes back into focus and on the refresh
+  button, and the line above the figures says when they were read. It has the
+  loading and failed states, and says so when the server lists no branch.
+
+#### `SC-22` Utilisation and Gross Contribution Report
+
+- The period, the grouping, the branch and category filters and the page live
+  in the address under the names the API takes, so a reload or a shared link
+  shows the same figures. The period starts at the last full calendar month at
+  the branches, and the grouping at the model. An address that does not name a
+  period is written out with that month in place of itself, so a link copied
+  from it names the period too. A period in the address that is not two days
+  on the calendar falls back to that month as a whole. The rules are in
+  `report-address.ts`.
+- The second date is not counted, the way the server counts it, and the field
+  says so. Whether a period is the right way round or too long is the
+  server's rule. Its 422 lands under the field it names, and a message about a
+  value with no control is listed above the figures.
+- The branches and categories come from the catalogue routes, each with its
+  own loading and failed state. A failed list offers to be read again, and
+  until then the filter offers every branch or every category. A category
+  takes in the categories directly under it, because that is how the server
+  filters.
+- The totals come first and are over every row of the report, then the two
+  definitions, then one page of twenty rows. Below the `lg` width each row is
+  drawn as a block with every figure beside its name, so nothing is scrolled
+  sideways. A row for one unit says its state in words.
+- The chart under the table draws the utilisation of the rows on the page,
+  one SVG bar each, from the server's percentages. It needs no charting
+  library. It is hidden from assistive technology, and a sentence that reads
+  every row with its utilisation stands in for it.
+- "Download CSV" fetches every row for the period and filters on the screen
+  through `api.getFile`, with the token, and hands the bytes to the browser
+  through `src/shared/save-file.ts` under the server's name. It is disabled
+  while it runs, says what it did in a polite status, and shows the shared
+  error state with the reference and a way to try again when it fails.
+
+#### Accessibility of these screens
+
+Every section has a real heading, the report is one table with headers at
+every width, and every control has its label. Moving to another page of the
+report moves focus to the top of the figures. Every status carries words
+beside its colour, every target is at least 44 pixels, and both screens fit a
+phone 360 pixels wide with nothing to scroll sideways.
+
+### Admin operations
+
+The owner reads the audit trail and the email log on `SC-24`, sends a failed
+confirmation again, corrects a charge on the return screen `SC-15`, and frees
+a unit a booking holds on the checkout `SC-14`. The reads and the re-send are
+in `api/audit-log.ts`, the corrections and the release in `api/corrections.ts`,
+the reallocation in `api/reservations.ts`, and the cached reads in
+`api/admin-queries.ts`. Every route under `/api/admin/` is for an
+administrator, and the API answers anyone else with a 403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-24` | `GET /api/admin/audit-events?entityType=&entityId=&action=&actorUserId=&from=&to=&page=&pageSize=` | One page of events, newest first |
+| `SC-24` | `GET /api/admin/notifications?status=&page=&pageSize=` | One page of emails, newest first |
+| `SC-24` | `POST /api/admin/notifications/{id}/resend` | The new email, and the log read again with it on |
+| `SC-15` | `POST /api/admin/charges/{id}/waiver` and `/reversal` | The hire as the server now has it |
+| `SC-15` | `POST /api/admin/rentals/{id}/adjustments` | The hire with the new adjustment among its charges |
+| `SC-14` | `POST /api/admin/allocations/{id}/release` | The booking read again, now short a unit |
+| `SC-14` | `POST /api/reservations/{id}/reallocation` | The booking's new units, and the booking read again |
+
+#### `SC-24` Audit and Notification Log
+
+- Two views, the audit trail and the notification log, as two links with the
+  current one marked. The view is in the address as `?view=notifications`,
+  and the plain address is the trail. Moving from one to the other moves focus
+  to the heading of the new one and starts it with no filter. The rules are
+  in `src/features/admin/audit-address.ts`.
+- The trail is narrowed by the kind of record, the record by its key, the
+  action, the person who acted and a range of days, all in the address under
+  the names the API takes. The kinds of record offered are the ones the
+  backend writes, and a unit released from a booking is recorded against the
+  booking. The server takes a record by its key only, so a reference typed in
+  the box is not sent and the box says so. The text boxes would ask the server
+  on every key, so the filters apply together with one button. The person who
+  acted is narrowed from an event, "Only what this person did", because the
+  server filters by the key of the account. "Only this booking" on an event
+  narrows to its record the same way. A refusal puts each message under its
+  filter and lists any other.
+- Each event says what happened in words, when, who and in what role, or that
+  the system did it with no person behind it, and the record it is about. The
+  fields that changed are a small definition list, each with how it read
+  before and after, in words and never as raw JSON. An instant reads as a day
+  and a time at the branches. The words are in `audit-words.ts`, the known
+  actions by hand and any other from its name.
+- The screen says that nobody can change the trail, the owner included, and
+  offers nothing that would.
+- The log is narrowed by status, as it is chosen, and paged. A failed email
+  says what the mail provider said and offers "Send again". That asks first,
+  saying a new email goes out and the failed one stays in the log, then posts
+  the re-send once. The answer says where the new attempt stands, and the log
+  is read again with it on, marked as sending a failed one again. A 409 or a 403
+  shows the server's sentence. The request is in `use-resend.ts`.
+- Both views have the shared loading, failed and empty states, and page
+  controls. Moving to another page moves focus to the top of the list.
+
+#### Charge corrections on `SC-15`
+
+- For a signed in administrator and nobody else, each charge offers what the
+  server allows for where it stands. "Waive" on a pending charge, and
+  "Reverse" on a settled one that no other charge on the hire reverses. A
+  movement of the deposit and a reversal are never reversed. The server sends
+  no flag for any of this, so the offer follows the type, the status and the
+  `reversesChargeId` it sends, and its 409 is the last word.
+- Each asks first, in words that say what will happen, and asks for a reason
+  of five to two hundred characters. A waiver keeps the charge on the hire as
+  waived. A reversal leaves the charge as it is and adds one for the same
+  amount the other way. Either way the server works the deposit and the
+  balance out again, and the screen shows the hire it answered with, with a
+  notice that takes focus.
+- "Adjust the hire" takes an amount including VAT, positive or negative and
+  never zero, and a reason, and says in words what will be added as the
+  amount is typed. The amount is the owner's own figure, sent with two
+  decimals, and nothing is worked out from it. A settled hire is never charged
+  more, so on one only an amount that gives money back is taken, and the
+  server refunds it at once and the hire stays settled.
+- A reversal says which charge it reverses, the charge it reverses says so,
+  and a charge the owner waived, reversed or added shows their reason.
+- A refused reason or amount lands under its box, and a 409 or a 403 shows the
+  server's sentence. The rules are in `correction-model.ts` and the writes go
+  through `use-rental-write.ts`.
+
+#### Force release and reallocation on `SC-14`
+
+- Each unit of the checkout carries the key of its allocation, so an
+  administrator gets "Release this unit" on each, on the handover form or,
+  when the booking cannot go out yet, in a list of the units set aside. It
+  asks for a reason and says the unit goes back on the shelf and the booking
+  is then short a unit until it is reallocated. The route answers with the
+  booking, which the screen does not read. The checkout is read again and
+  shows the booking as the server now has it.
+- While `unitsShort` is above zero the screen says how many units are missing
+  and offers any member of staff "Find a replacement unit", with a sentence
+  beside it saying what it does. One press posts the reallocation, which goes
+  through the same path as a hold, shows the booking's new units and reads the
+  checkout again. When nothing is free the server's 409 names the model and
+  the dates, and the screen shows it. The writes share
+  `use-allocation-write.ts`.
+
+#### Accessibility of these screens
+
+Every view and every question has a real heading, every event, email and
+charge is an article named by its heading, and every control has its label.
+Each question takes focus when it opens and gives it back when it closes, and
+what a write did is said in a notice that takes focus. Every status carries
+words beside its colour, every target is at least 44 pixels, and every screen
+fits a phone 360 pixels wide with nothing to scroll sideways, questions open.
+
+### Admin catalogue
+
+The owner keeps the categories and the models on `SC-20`, with the daily and
+weekly rates, the deposit, the late fee and the replacement value of each
+model, and decides which models customers see. The figures are set once for
+all three branches. The routes are in `api/admin-catalogue.ts` and the cached
+reads in `api/admin-queries.ts`. Every route is for an administrator, and the
+API answers anyone else with a 403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-20` | `GET /api/admin/models?q=&categoryId=&published=&page=&pageSize=` | One page of twenty models, published or not |
+| `SC-20` | `GET /api/admin/models/{id}` | The model, read by its own route when its form opens |
+| `SC-20` | `POST /api/admin/models` and `PATCH /api/admin/models/{id}` | The model the server answered with, and the list read again |
+| `SC-20` | `POST /api/admin/models/{id}/publication` | The model the server answered with, and the list read again |
+| `SC-20` | `GET /api/admin/categories?page=1&pageSize=100` | Every category, switched on or off, each parent before its children |
+| `SC-20` | `POST /api/admin/categories` and `PATCH /api/admin/categories/{id}` | The categories read again with the change in them |
+
+#### The rules are the server's
+
+The browser holds no copy of the rules about money, codes or nesting. Money
+below zero, a weekly rate above seven days at the daily rate, a shortest hire
+longer than the longest, a stock code, a code or a slug already in use, a
+category that is switched off and a parent that is not at the top level are
+all refused by the server, with a 422 that the form puts under the field it
+names. The forms only check what they need to write a body at all, which is
+that a model has a category and that a number of days or a place in the list
+is a whole number. An amount typed as rand and cents is sent with two
+decimals, written out by its digits and never through a float. Anything else
+is sent as it was typed, so the server says what is wrong with it. The server
+refuses money it cannot read as an amount in its framework's words, which
+quote a pattern, so the form says it in a plain sentence under the same field
+instead. Whether that happened is told from what was sent and never from the
+server's words. The browser works out no figure.
+
+#### `SC-20` Catalogue and Pricing Management
+
+- The search, the category, whether a model is published and the page live in
+  the address under the names the API takes, so a reload or a shared link
+  shows the same models. The search asks a moment after the last key and the
+  two menus apply as they are chosen. The model open in the form is in the
+  address too, as `model`, with `new` for one being added. The rules are in
+  `src/features/admin/catalogue-address.ts`.
+- Each model shows its name and stock code, its category, how many units the
+  fleet holds, the daily rate with the weekly rate under it, the deposit, the
+  late fee and the replacement value, and whether customers see it in words
+  beside its colour. Below the `lg` width each model is drawn as a block with
+  every value beside the name of its column, and it is the same table either
+  way.
+- "Edit" opens the form after reading the model by its own route. The stock
+  code is shown read only, because it never changes once the model exists.
+  "Save the changes" sends only the fields that differ from what the server
+  holds, and
+  first asks a question that names every figure that moves, from what it is
+  to what it will be. When a figure moves, the question says before anything
+  is saved that bookings already made keep the rate they were booked at and
+  only new bookings take the new one. Every booking and hire keeps its own copy
+  of the figures, which is the server's rule as well. The bodies are in
+  `model-form.ts`.
+- "Add a model" sends every field the route takes and asks first, saying that
+  the model starts hidden from customers and that its stock code cannot be
+  changed afterwards. Once added, the list shows it by its stock code.
+- "Publish" and "Hide" ask first in a row of their own under the model. Hiding
+  says that bookings already made still stand. The route answers with the
+  model as it now stands, and the notice says what that is. Asking for what
+  the model already is changes nothing on the server.
+- A model key in the address that the server does not know, or refuses as not
+  a key at all, opens a section that says the model is not in the catalogue.
+- The categories are listed with what each sits under, its place in the list,
+  how many models it holds and whether it is switched on. A category is added
+  or changed in a form above the list, and its parent is chosen from the top
+  level categories only, never the category itself, because nesting stops at
+  two levels. A category is switched off or on from its row, after a question
+  that says it leaves or rejoins the catalogue customers browse and that
+  nothing is deleted. The bodies are in `category-form.ts`.
+- Every write asks first, sends one request for each press, disables its
+  answer while it is in flight, shows the server's sentence on a 409 or a
+  403, puts each 422 under its field and lists any message about a field the
+  form has no box for. Once the server has answered, a notice says what was
+  done and takes focus, and the lists are read again. The writes share
+  `use-catalogue-write.ts`.
+- Both lists have the shared loading, failed and empty states. When the
+  categories cannot be read, the category menu above the models offers every
+  category, says why and offers to read them again.
+
+#### Accessibility of this screen
+
+Every section and every question has a real heading, both lists are tables
+with headers at every width, and every control has its label with its help
+and its error tied to it. Each group of the model form is a fieldset with a
+legend. A form and a question take focus when they open, and closing one
+unanswered gives focus back to the button that opened it. Moving to another
+page moves focus to the top of the models. Every status carries words beside
+its colour, every target is at least 44 pixels, and the screen fits a phone
+360 pixels wide with nothing to scroll sideways, its questions and forms open.
+
+### Asset register
+
+The owner keeps the register of every unit on `SC-21`, retired units included,
+and moves units through their lifecycle there. The routes are in
+`api/admin-assets.ts` and the cached reads in `api/admin-queries.ts`. Every
+route is for an administrator, and the API answers anyone else with a 403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-21` | `GET /api/admin/assets?q=&branchCode=&status=&modelId=&page=&pageSize=` | One page of twenty units, in tag order |
+| `SC-21` | `GET /api/admin/assets/{tag}` | The unit with its history, read by its own route when it opens |
+| `SC-21` | `POST /api/admin/assets` | The new unit at intake, opened beside the register |
+| `SC-21` | `PATCH /api/admin/assets/{tag}` | The unit the server answered with, and the register read again |
+| `SC-21` | `POST /api/admin/assets/{tag}/transitions` | The unit the server answered with, and the register read again |
+| `SC-21` | `GET /api/admin/models?q=&page=1&pageSize=20` and `GET /api/admin/models/{id}` | The models that match a search, for the model filter and the registration |
+| `SC-21` | `GET /api/branches` | The branches, for the branch filter and the registration |
+
+#### The rules are the server's
+
+The browser holds no copy of the lifecycle. Each unit carries
+`allowedTransitions`, which the server works out from the asset lifecycle
+rules, and the screen offers exactly those moves and no other. The words of
+each move are in `src/features/admin/asset-words.ts`. "Commission it" puts a
+unit on the shelf, "Send it for repair" sends it to the workshop, "Quarantine
+it" holds it back and "Retire it" takes it out of the fleet for good. A status
+the server offers that has no words of its own is still offered, named by
+where the unit would then stand. The contract asks for a reason before a unit
+is sent for repair, quarantined or retired, so those three ask why, and the
+reason is held to the five to two hundred characters every reason of the
+owner's takes. A tag in the wrong form or carried by another unit, a cost
+below zero, a day after today and a meter reading below zero are all refused
+by the server, with a 422 that the form puts under the field it names. The
+forms only check what they need to write a body at all, which is that a model
+and a branch are chosen, the day is given, and a meter reading is a whole
+number or left empty. The cost is sent with two decimals and reworded in plain
+words when the server cannot read it, the way `SC-20` does for a figure. The
+bodies are in `asset-form.ts`.
+
+#### `SC-21` Asset Register and Lifecycle
+
+- The search, the branch, the status, the model and the page live in the
+  address under the names the API takes, and so do the unit open, as `asset`
+  with its tag, and the registration form, as `add=unit`. A reload or a shared
+  link shows the same view. The rules are in `asset-address.ts`.
+- Each unit shows its tag and serial number, its model and category, its
+  branch, where it stands in words beside its colour with the day it was
+  retired, its grade, and its open damage reports, each count a link to the
+  damage screen of the unit at `/counter/damage/<tag>`. Below the `lg` width
+  each unit is drawn as a block with every value beside the name of its
+  column, and it is the same table either way.
+- The model is found by searching for it. The catalogue holds more models than
+  one page of the largest size the API serves, and it grows, so the owner
+  types part of the name or the stock code, and the menu lists the first
+  twenty that match. A model already chosen stays in the menu by its own read.
+  This is in `SC21-Model-Picker.tsx`.
+- "Open" shows the unit above the register, read by its own route, with every
+  field, the bookings that hold it now, its open damage reports linked to the
+  damage screen where the owner resolves them, and its history, newest first.
+  A booking in the history links to its checkout, a hire to its return and a
+  damage report to the damage screen, and the events of the unit can be read
+  in full in the audit trail. A tag the server does not know says so plainly.
+- "Register a unit" opens a form with exactly the fields of the route. It asks
+  first, saying the unit starts at intake where nobody can book it, and that
+  its tag, model and branch never change once it is registered. Once it is
+  registered the new unit opens.
+- "Change the serial number, grade, meter reading or notes" opens a form inside
+  the unit, with the tag, the model and the branch shown read only. It sends
+  only what changed and asks first, naming what changes.
+- Each move asks first in a question of its own, saying what it does. Retiring
+  says plainly that the unit leaves the fleet for good and that its row and its
+  whole history are kept. A 409 shows the server's sentence, and a booking it
+  names, such as the one still holding a unit being retired, is a link to its
+  checkout, where the owner can release the unit from it. The server also
+  refuses to put a unit back on the shelf by hand while one of its damage
+  reports is open, because resolving the report does that, and the question
+  shows its sentence the same way.
+- Every write sends one request for each press, disables its answer while it
+  is in flight, shows the server's sentence on a 409 or a 403, puts each 422
+  under its field and lists any message about a field the form has no box
+  for. Once the server has answered, a notice says what was done and takes
+  focus, and the register is read again. The writes share `use-asset-write.ts`.
+- The register and the unit have the shared loading, failed and empty states.
+
+The lifecycle helper and the asset filters the screen kept while it showed
+sample data, `admin-lifecycle.ts`, `admin-asset-filters.ts` and
+`admin-fleet.ts`, are gone, and so are the old status and damage panels.
+
+#### Accessibility of this screen
+
+Every section, every part of a unit and every question has a real heading,
+the register is a table with headers at every width, the history is an
+ordered list, and every control has its label with its help and its error tied
+to it. The model search and its menu sit in a fieldset with a legend, and the
+menu's description says what the search found. A unit, the registration form
+and a question take focus when they open. Closing a unit gives focus back to
+its link in the register, closing the form gives it back to the button that
+opened it, and putting a question away gives it back to its move. Moving to
+another page moves focus to the top of the units. Every status carries words
+beside its colour, every target is at least 44 pixels, and the screen fits a
+phone 360 pixels wide with nothing to scroll sideways, a unit, its question,
+its form and the registration open.
+
+### User management
+
+The owner manages the staff accounts and the customer holds on `SC-23`. The
+staff routes are in `api/admin-users.ts`, the customer routes in
+`api/admin-customers.ts`, and the cached reads in `api/admin-queries.ts`.
+Every route is for an administrator, and the API answers anyone else with a
+403.
+
+| Screen | Request | What the screen shows |
+|---|---|---|
+| `SC-23` | `GET /api/admin/users?q=&role=&active=&page=&pageSize=` | One page of twenty staff and admin accounts |
+| `SC-23` | `POST /api/admin/users` | A notice that the account is open and how the person chooses a password, and the list read again |
+| `SC-23` | `PATCH /api/admin/users/{id}` | The account the server answered with, and the list read again |
+| `SC-23` | `POST /api/admin/users/{id}/deactivation` and `/reactivation` | The account the server answered with, and the list read again |
+| `SC-23` | `GET /api/admin/customers?status=&q=&page=&pageSize=` | One page of twenty customers, by standing |
+| `SC-23` | `POST /api/admin/customers/{id}/status` | A notice of the new standing, and the holds read again |
+| `SC-23` | `GET /api/branches` | The branches, to name each account's branch and for the form |
+
+#### The rules are the server's
+
+No route reads or sets a password, and the screen never shows or asks for
+one. A new member of staff gets a link through the reset flow the customers
+already use and chooses their own. The server will not deactivate or demote
+the last active administrator, and will not let an administrator deactivate
+their own account. The browser does not guess at either. It sends the request
+and shows the server's sentence from the 409. An address another account has
+and every other refused field come back as a 422 that the form puts under the
+field. The forms only check what they need to write a body at all, which is a
+branch for counter staff. An administrator has no branch, so the form hides
+the menu and sends null. A reason for a deactivation or a move of a customer's
+standing is held to the five to two hundred characters every reason of the
+owner's takes. The bodies are in `staff-form.ts` and the words in
+`staff-words.ts`.
+
+A change, a deactivation and a reactivation each answer with the account as
+it now stands, the way every other write of the owner's answers, and the list
+is read again after each write either way. Asking for what an account already
+is writes nothing and answers with it as it is. Making somebody an
+administrator sends the branch as null, which the server also does by itself
+when no branch is named. Deactivating an account also withdraws a reset link
+the person has not used yet. The contract has no route that reads one account,
+so an account opened above the list is the one the list or the last write
+sent, whichever came last, and it is not kept in the address. A customer
+carries no list of the moves it may make, and the server lets the owner move a
+customer between any two standings, so each customer offers the two standings
+they are not in.
+
+#### `SC-23` User and Role Management
+
+- Two views, the staff accounts and the customer holds, are two links, and the
+  one on the screen is in the address as `view`. The search, the role, whether
+  an account can sign in, the standing and the page live in the address under
+  the names the API takes. The customer holds open on the customers who are on
+  hold, and so does the dashboard's link to them. The rules are in
+  `users-address.ts`.
+- Each staff account shows the name and the address, the role in words, the
+  branch, whether it can sign in beside its colour, whether the address is
+  confirmed, whether a lock after failed sign ins still holds, and when the
+  person last signed in. The owner's own row says "(you)". Below the `lg`
+  width each account is drawn as a block with every value beside the name of
+  its column, and it is the same table either way.
+- "Add a staff account" opens a form with exactly the fields of the route. It
+  asks first, saying the person chooses their own password from a link sent
+  to the address, and that the answer says whether the link can reach them,
+  because this demonstration delivers email to one address only. Once the
+  server has answered, a notice says the link was sent only when
+  `emailDeliverable` is true. When it is false the notice says plainly that
+  the link will not arrive, and that the person cannot sign in until a link
+  reaches them.
+- "Open" shows the account above the list with every field. "Change the name,
+  phone, role or branch" opens a form with the address read only, sends only
+  what changed and asks first, saying what changes. "Deactivate the account"
+  asks why and says the person is signed out everywhere at once.
+  "Reactivate the account" asks first too.
+- Each customer shows where they stand in words beside its colour, how many
+  bookings they did not collect, their type, how to reach them and their home
+  branch. "Release the hold", "Put on hold", "Blacklist" and, for a
+  blacklisted customer, "Lift the blacklisting" each ask why and say what the
+  move does to the customer's bookings. Releasing a hold says the count of
+  bookings not collected is kept, with the server's count.
+- Every write sends one request for each press, disables its answer while it
+  is in flight, shows the server's sentence on a 409 or a 403, puts each 422
+  under its field, and says what it did in a notice that takes focus. What it
+  changed is read again. The writes share `use-user-write.ts`.
+- Both lists have the shared loading, failed and empty states, and the server
+  pages them.
+
+#### Accessibility of this screen
+
+Every view, form, account, customer and question has a real heading, the
+staff accounts are a table with headers at every width, the customers are an
+ordered list of articles, and every control has its label with its help and
+its error tied to it. A change of view moves focus to the heading of the new
+view. The form, an account and a question take focus when they open. Closing
+an account gives focus back to its button in the list, closing the form gives
+it back to the button that opened it, and putting a question away gives it
+back to its button. Moving to another page moves focus to the top of the
+list. Every status carries words beside its colour, every target is at least
+44 pixels, and the screen fits a phone 360 pixels wide with nothing to scroll
+sideways, an account, its form, its question and the new account form open.
+
 ### Model pictures
 
 A model may have no photograph, and every seeded one has none. In place of an
@@ -917,6 +1536,9 @@ throws while rendering shows the error state and the navigation stays up.
   as released or returned instead of with a minus sign. None of them does a
   sum.
 - `src/shared/pagination.tsx` is the page control for a list the server pages.
+- `src/shared/save-file.ts` hands the browser a file to save under a given
+  name, through a temporary address it releases a while later. It is the one
+  file that does, and the report's CSV goes through it.
 
 ## Commands
 
@@ -929,6 +1551,11 @@ npm run build
 npm run api:types
 npm run api:types:check
 ```
+
+Every `tsconfig*.json` that compiles code sets `"strict": true`. TypeScript 6
+turns it on by default, so the setting documents it rather than changes it.
+`npm run lint` runs oxlint with `.oxlintrc.json`, which makes
+`typescript/no-explicit-any` an error, so an `any` anywhere fails the lint.
 
 ## Tests
 
@@ -982,26 +1609,79 @@ npx playwright install chromium
 ```
 
 `e2e/smoke.spec.ts` and `e2e/accessibility.spec.ts` run with or without the
-backend. With no backend, the catalogue home and the search are scanned in
-their failed state, and the registration form with its branch menu in its
-failed state. The privacy notice is scanned too. The counter's customer
-lookup, new booking, checkout, dashboard, diary, locator, return screen,
-overdue worklist and damage screen are scanned loaded, with a signed in
-assistant, a customer, a booking, a day, units, hires and damage reports whose
-answers the spec gives itself, from `e2e/counter-answers.ts`,
+backend. The accessibility spec scans every numbered screen, `SC-01` to
+`SC-24`, and the privacy notice, each opened as the role it belongs to and
+loaded, from the one list in `e2e/screens.ts`. A first test checks that the
+list leaves no screen out. The API is answered by the spec itself, so a scan
+never depends on what a database holds. The customer's screens are answered
+from `e2e/customer-answers.ts` and `e2e/public-answers.ts`, with a signed in
+customer whose address email cannot reach, bookings, a profile, a hire and a
+basket. The counter's are answered from `e2e/counter-answers.ts`,
 `e2e/overview-answers.ts`, `e2e/return-answers.ts` and
-`e2e/damage-answers.ts`. The new booking is scanned again with a tool on it,
-the checkout again with every problem of its form on the screen, the diary
-again with the no show question open, the return again with its question
-open, the worklist again with the question about a lost unit open, and the
-damage screen again with every problem of its form showing, then with the
-amount to recover and its question open.
+`e2e/damage-answers.ts`. The owner's are answered from `e2e/admin-answers.ts`,
+`e2e/audit-answers.ts`, `e2e/catalogue-answers.ts`, `e2e/asset-answers.ts`
+and `e2e/user-answers.ts`, and the report, the trail, the catalogue, the
+asset register and user management are each visited in both of their views.
+How an answer is sent, with its own status where it needs one, is in
+`e2e/answered.ts`. On top of the screens the spec scans the new booking with
+a tool on it, the checkout with every problem of its form on the screen, the
+diary with the no show question open, the return with its question open, the
+worklist with the question about a lost unit open, the damage screen with
+every problem of its form showing and then with the amount to recover and its
+question open, the report with a refusal of its period under the field, the
+notification log with the question before a failed email is sent again, the
+catalogue with the question before a new figure is saved, with a model being
+hidden and with the category form open, the asset register with a unit being
+retired and its reason held back and with the registration form showing every
+problem it holds back, and, as the owner, the return with a reversal asked and
+the checkout short of a unit with a release asked, from
+`e2e/owner-answers.ts`.
 
-`e2e/narrow-screens.spec.ts` also runs with or without the backend. It opens
-My Hires, My Account with a hire in its history, and the nine counter screens
-at 360 pixels wide and checks that nothing has to be scrolled sideways. It answers the API itself,
-like the counter scans, because a layout check should not depend on what a
-database holds.
+`e2e/accessibility-states.spec.ts` scans the states a screen moves into. On
+`SC-06` a refused sign in, a reset link asked for and the answer that it
+cannot reach the address, and a new password from a link with its problems
+showing. On `SC-05` the form holding back every problem, the answer that the
+link cannot reach the address, and an address confirmed from its link. On
+`SC-04` the basket, the review, the hold and the confirmation, which says that
+the confirmation email will not arrive. Then the empty and failed states, the
+catalogue with the API down, a search with nothing free, My Hires with no
+bookings, a booking that cannot be found, My Account with no hires, a new
+booking with no customer chosen, the overdue worklist with nothing overdue,
+the audit trail with nothing recorded and the report with the API down.
+
+Every scan writes one line to the output of the run, through
+`reportedViolations` in `e2e/axe.ts`, with how many affected elements it found
+at each impact and how many rules passed, for example
+`axe SC-07 /reservations: 0 critical, 0 serious, 0 moderate, 0 minor, 30 rules passed`.
+The same line is put on the test in the report.
+
+`e2e/narrow-screens.spec.ts` also runs with or without the backend. It lays
+every visit in `e2e/screens.ts` out at 360, 768 and 1440 pixels wide, so every
+numbered screen and the privacy notice at each width. At every width the page
+may be no wider than the window, measured as
+`document.documentElement.scrollWidth`, and the page heading has to be on the
+screen. At 360 pixels no box inside the screen may need scrolling sideways
+either. Then it looks closely at My Hires and My Account on a phone, the
+catalogue with every question it asks and the category form open, the asset
+register with a unit's question, its paperwork form and the registration form
+open, and the return and the checkout as the owner sees them with a question
+open. The measures and the three widths are in `e2e/overflow.ts`.
+
+`e2e/user-management.spec.ts` runs with or without the backend too. It opens
+the staff accounts and the customer holds with the answers from
+`e2e/user-answers.ts`, scans them with the new account form holding back its
+problem, an account open with its deactivation asking why, and the question
+before a customer's hold is released, and measures them at 360 pixels wide
+with an account, its form, its question, the new account form and the
+question before a customer is blacklisted open. It is a file of its own so
+the accessibility and narrow screen specs stay a size that can be read in one
+sitting.
+
+`e2e/report-download.spec.ts` runs with or without the backend too. It presses
+"Download CSV" on the report with the API answered from
+`e2e/admin-answers.ts`, and checks that the browser saved the file under the
+name the server gave it, byte for byte, that the request carried the token,
+and that the Content Security Policy did not stop it.
 
 `e2e/catalogue.spec.ts` needs the real backend with seeded data on port 8000.
 It follows a visitor from picking dates on the home screen, through the search
@@ -1063,7 +1743,11 @@ there means the routes are not there, and both journeys skip themselves. Each
 run registers an account of its own in each browser project, with an address
 built from the time, and touches no seeded account. It follows no link from an
 email, because the address is not one this system delivers to. The component
-tests cover where the links land.
+tests cover where the links land. Each screen promises an email only when the
+API said it can reach the address, so the spec reads `emailDeliverable` out of
+the register, sign in and reset answers and expects the one sentence each
+decides. An API with no email provider, as in these tests, says false every
+time, and the screens use the demonstration wording.
 
 `e2e/counter.spec.ts` needs the customer, checkout and returns routes. A
 seeded counter assistant signs in, registers a walk in with a name and a number
@@ -1115,6 +1799,131 @@ run means the strike lands on nobody else. The spec asks the three routes with
 no token first. A 404 or a 405 from any of them means the routes are not
 there, and both journeys skip themselves.
 
+`e2e/reporting.spec.ts` needs the reporting routes. The seeded owner,
+`marius@toolshedhire.co.za`, signs in and lands on the dashboard, which shows
+the three branches. They open the report, which starts at the last full month
+by model with the period in the address, and see rows, the gross contribution
+figure and the definitions. They break it down by branch, which gives one row
+for each branch, and download the CSV. The spec checks the name the browser
+saved the file under, that its first line says the figures are gross
+contribution and not profit, and that it has a header row naming utilisation
+and gross contribution. The figures are checked for their shape and not for
+particular values, because the other journeys book and return units during the
+run. The password comes from `E2E_STAFF_PASSWORD`, like the assistants'. The
+spec asks the dashboard, the report and the CSV with no token first, through
+`e2e/reporting-backend.ts`. A 404 or a 405 from any of them means the routes
+are not there, and the spec skips itself.
+
+`e2e/admin-operations.spec.ts` needs the admin operations routes. A counter
+assistant books one unit for a new walk in through `e2e/counter-booking.ts`,
+which takes the fourth last model free at the branch, checks it out and takes
+it back as it went. Then the owner signs in on a browser of their own, narrows
+the audit trail to bookings with the filter in the address, opens the
+notification log, and on the return screen of that hire reverses the hire
+charge with a written reason and sees the reversal row with the reason and
+the original marked as reversed. The trail and the log are checked for their
+shape and not for particular entries. The spec asks the trail and the log with
+no token first, through `e2e/operations-backend.ts`, after the returns routes.
+A 404 or a 405 from either means the routes are not there, and the spec skips
+itself.
+
+`e2e/admin-catalogue.spec.ts` needs the admin catalogue routes. The owner signs
+in and opens the catalogue, searches for a seeded model by its stock code,
+opens it, raises its late fee by one rand, sees the question say that
+bookings already made keep their rate, saves, and sees the new fee in the
+list. Then they put the fee back to exactly what it was, the same way. The
+desktop project changes `DR-BOSCH-GBH226` and the phone project
+`BR-HILTI-TE1000AVR`, so the two never change the same fee at once. Last, the
+owner adds a model with a stock code built from the time, which no run has
+used, in the first category that is switched on, then publishes it and hides
+it again. A model the spec adds is left in the catalogue hidden, because
+nothing is ever deleted. The spec asks for the categories and the models with
+no token first, through `e2e/admin-catalogue-backend.ts`, after the session
+routes. A 404 or a 405 from either means the routes are not there, and the
+spec skips itself.
+
+`e2e/admin-assets.spec.ts` needs the asset register routes. The owner signs in
+and opens the register, registers a unit with a tag built from the time, which
+no run has used, choosing its model by searching for the seeded
+`DR-BOSCH-GBH226`, commissions it, sends it for repair with a reason,
+commissions it again, and retires it with a reason after the question says
+that its row and its history are kept. Then they find it in the register by
+its tag, standing as retired, and open it to read the registration and the
+four moves in its history. The desktop project registers its unit at Cape
+Town CBD and the phone project at Bellville. The unit is left on the register
+retired, because nothing is ever deleted. The spec asks for the register and
+the models with no token first, through `e2e/admin-assets-backend.ts`, after
+the session routes. A 404 or a 405 from either means the routes are not there,
+and the spec skips itself.
+
+`e2e/admin-users.spec.ts` needs the user management routes. The owner signs in
+and opens user management, opens a counter staff account with a name and an
+address built from the time, which no run has used, after the question says
+the person chooses their own password from a link, and finds it in the list
+by its address. Then they open it, deactivate it with a reason after the
+question says the person is signed out everywhere at once, see it listed as
+deactivated, reactivate it, and open the customer holds. The desktop project
+opens its account at Cape Town CBD and the phone project at Bellville. The
+address is at `example.com`, so the link goes nowhere. The spec reads
+`emailDeliverable` out of the answer that opened the account and expects the
+outcome it decides, which here says the link could not be sent and will not
+arrive. The account is left on
+file and active, because nothing is ever deleted, and nobody signs in with it.
+The spec asks for the staff accounts and the customer holds with no token
+first, through `e2e/admin-users-backend.ts`, after the session routes. A 404
+or a 405 from either means the routes are not there, and the spec skips
+itself.
+
+`e2e/release-journeys.spec.ts` holds the three role journeys of the release,
+each tagged `@staging`. The seeded customer books one unit at the first branch
+the API lists, reviews the cost, holds it, confirms it, finds it under My
+Hires and cancels it, five weeks or more ahead so the cancellation is never a
+late one. The counter assistant finds the seeded trade customer,
+`w.adonis@buildright.co.za`, by their address on `SC-12`, books one unit for
+today, checks it out and takes it straight back with the deposit released in
+full. The owner opens the dashboard, the report for the last full month, the
+asset register and the audit trail, and changes nothing. The counter steps are
+in `e2e/release-counter.ts`. It takes the fifth last model free at the branch,
+so it never takes a unit another counter journey of the run takes, and it
+registers nobody. On a local project the journeys skip themselves when the
+routes they need are not there, like the other backend specs. The
+confirmation's words about its email are checked by `e2e/reservation.spec.ts`,
+against what the sign in said about the address, and not here, because
+staging may still run an earlier build of the screens.
+
+The same three journeys run against the deployed staging site on the
+`staging` project, which the pipeline runs after each staging deploy. The
+three variables have to be in the environment of the command.
+
+```bash
+npx playwright test --project=staging
+```
+
+- The project exists only when `STAGING_URL` is set, its `baseURL` is that
+  address, and it runs only the tests tagged `@staging`. Asked for alone it
+  starts no preview server. The names are in `e2e/staging-run.ts`.
+- It needs `STAGING_URL`, `E2E_CUSTOMER_PASSWORD` and `E2E_STAFF_PASSWORD` in
+  the environment. Asking for it without any of them stops the run before a
+  test starts, naming what is missing and never a value. There is no fallback
+  to the development password on this project, see `e2e/staging.ts`.
+- Playwright names each step with what it typed, so the staging project
+  records no trace and no video, and a run that includes it writes no HTML
+  report. A password box in a screenshot of a failure shows only dots.
+- Staging runs on the real clock and nothing pins it. A branch refuses a
+  booking for today once it has closed at 17:00. Then the counter journey
+  books two days ahead, confirms it, and the customer cancels it from their
+  own `SC-08`, because the counter screens offer no cancellation of a
+  confirmed booking. It is two days and not one, because a confirmed booking
+  cancelled after 17:00 on the day before collection is counted against the
+  customer as a late cancellation. The journey says in the output which way
+  it went.
+- The journeys leave staging as they found it apart from the booking history.
+  What the customer books is cancelled, what the counter checks out comes
+  back, nobody is registered, and the owner only reads.
+- On staging each journey signs the customer in once, or twice when the
+  branch has closed, the assistant at Cape Town CBD once and the owner once.
+  Each journey may take four minutes, because the site may be waking up.
+
 The API refuses a booking that starts today once the branch has closed for the
 day. The pipeline runs the API for the browser tests with a clock pinned
 inside business hours, so the counter journey books for today, checks out and
@@ -1126,8 +1935,12 @@ The customers, the password rule and the sign in are in `e2e/customer.ts`, the
 counter assistants in `e2e/staff.ts`, and the dates are counted at the
 branches by `e2e/hire-dates.ts`.
 
-One run makes fourteen sign ins. `session.spec.ts` signs the first customer in
-four times, twice in each browser project, and the booking journey twice more.
+One run makes sixteen customer sign ins. `session.spec.ts` signs the first
+customer in four times, twice in each browser project, the booking journey
+twice more, and the customer journey of the release twice more. When the
+branch has closed, the counter journey of the release signs the first
+customer in once in each project to cancel, which makes ten for that address,
+the most the window allows.
 The second customer is signed in six times, twice by each reservation spec and
 twice by the hire history journey.
 `account.spec.ts` signs in each of the two accounts it registers once, and
@@ -1140,12 +1953,18 @@ ten, is answered 429 and fails. Wait for the next quarter hour, or raise
 `LOGIN_ATTEMPTS_PER_EMAIL` on the backend you test against, which is what the
 pipeline does.
 
-The two counter journeys and the two counter overview journeys each sign the
-two counter assistants in once, so each assistant four times in a run, and the
-damage journey signs the owner in once in each browser project, which counts
-against their own addresses.
+The two counter journeys, the two counter overview journeys, the admin
+operations journey and the counter journey of the release each sign the two
+counter assistants in once, so each assistant six times in a run. The damage
+journey, the reporting spec, the admin operations spec, the admin catalogue
+spec, the asset register spec, the user management spec and the owner's
+journey of the release each sign the owner in once in each browser project,
+so the owner fourteen times in a run. That is more than the allowance for one
+email address, so against a local backend the owner's eleventh sign in is
+refused unless `LOGIN_ATTEMPTS_PER_EMAIL` is raised the way the pipeline
+raises it.
 
-Set `E2E_REQUIRE_BACKEND=1` to turn all eight skips into failures. The pipeline
+Set `E2E_REQUIRE_BACKEND=1` to turn every one of these skips into a failure. The pipeline
 sets it, because there the backend is started for these tests and a skipped
 spec would hide that it did not come up.
 
@@ -1153,5 +1972,6 @@ The scans use axe against the WCAG 2.2 level AA rules and fail on any serious
 or critical violation. An automated scan cannot judge everything, so it
 supports manual keyboard and screen reader checks and does not replace them.
 
-After a run, the HTML report is in `playwright-report/`. It does not open by
-itself. To read it, run `npx playwright show-report`.
+After a run, the HTML report is in `playwright-report/`, except after a run
+that includes the staging project. It does not open by itself. To read it,
+run `npx playwright show-report`.

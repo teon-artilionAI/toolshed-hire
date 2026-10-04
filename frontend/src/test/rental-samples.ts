@@ -67,6 +67,8 @@ function charge(id: string, overrides: Partial<RentalCharge>): RentalCharge {
     status: 'SETTLED',
     raisedAt: RETURNED_AT,
     rentalItemId: null,
+    reversesChargeId: null,
+    reason: null,
     ...overrides,
   }
 }

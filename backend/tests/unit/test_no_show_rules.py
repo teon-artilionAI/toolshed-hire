@@ -186,22 +186,29 @@ class TestTheButtonOfTheDiary:
         assert refusal.endswith("so it cannot be marked as not collected.")
 
 
-class TestACustomerOnHoldIsToldWhy:
-    """The refusal of an account on hold says it is three bookings that were not collected."""
+class TestACustomerOnHoldIsToldPlainly:
+    """The refusal says the account is on hold and to contact a branch, and never why.
 
-    def test_the_refusal_names_the_three_bookings_and_who_lifts_the_hold(self) -> None:
+    A hold by hand and a hold for three bookings not collected look the same to
+    a booking, so a sentence about the three bookings would be false for the
+    first. A blacklisted account is told the same.
+    """
+
+    @pytest.mark.parametrize("standing", [AccountStatus.ON_HOLD, AccountStatus.BLACKLISTED])
+    def test_the_refusal_says_on_hold_and_contact_a_branch(self, standing: AccountStatus) -> None:
         profile = CustomerProfile(
             id=uuid4(),
             user_account_id=uuid4(),
             display_name="Nomsa Dlamini",
-            account_status=AccountStatus.ON_HOLD,
+            account_status=standing,
             email=None,
         )
         with pytest.raises(AccountOnHoldError) as refused:
             profile.ensure_may_book()
-        assert "three bookings in the last twelve months were not collected" in (
-            refused.value.message
+        assert refused.value.message == (
+            "This customer account is on hold, so it cannot make a reservation. "
+            "Please contact a branch."
         )
-        assert "administrator" in refused.value.message
-        assert refused.value.detail == {"account_status": "ON_HOLD"}
+        assert "not collected" not in refused.value.message
+        assert refused.value.detail == {"account_status": standing.value}
 

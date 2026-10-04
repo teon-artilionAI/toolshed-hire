@@ -1,4 +1,8 @@
-"""Seed a database with the Toolshed Hire catalogue, fleet, people and one closed hire.
+"""Seed a database with the Toolshed Hire catalogue, fleet, people and closed hires.
+
+The closed hires are the worked example of the design document and a season
+of trading history from June to September 2026, which gives the utilisation
+report something to read.
 
 Run it from this directory as `python seed.py`, after `alembic upgrade head`.
 It is safe to run as often as you like. Every row is matched on its natural

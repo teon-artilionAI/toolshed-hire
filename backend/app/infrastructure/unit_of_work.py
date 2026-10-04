@@ -25,6 +25,8 @@ from sqlmodel import Session
 from app.application.audit import AuditLog
 from app.application.availability.ports import AssetRepository
 from app.application.booking.ports import ReservationRepository
+from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
+from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
@@ -35,8 +37,12 @@ from app.application.identity.ports import (
     CustomerRepository,
     SessionRepository,
 )
+from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
+from app.infrastructure.admin_catalogue_entries import SqlCatalogueEntryRepository
+from app.infrastructure.admin_categories import SqlCategoryRepository
+from app.infrastructure.asset_register import SqlAssetRegisterRepository
 from app.infrastructure.audit import SqlAuditLog
 from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
@@ -50,6 +56,7 @@ from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
 from app.infrastructure.rate_limit import SqlRateLimitStore
 from app.infrastructure.rentals import SqlRentalRepository
+from app.infrastructure.staff_accounts import SqlStaffRepository
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +70,13 @@ class SqlAlchemyUnitOfWork:
     damage_reports: DamageReportRepository
     branches: BranchRepository
     product_models: ProductModelRepository
+    categories: CategoryRepository
+    catalogue_entries: CatalogueEntryRepository
+    asset_register: AssetRegisterRepository
     customers: CustomerRepository
     customer_directory: CustomerDirectory
     accounts: AccountRepository
+    staff: StaffRepository
     sessions: SessionRepository
     rate_limits: RateLimitStore
     notifications: NotificationOutbox
@@ -108,9 +119,13 @@ class SqlAlchemyUnitOfWork:
         self.damage_reports = SqlDamageReportRepository(session)
         self.branches = SqlBranchRepository(session)
         self.product_models = SqlProductModelRepository(session)
+        self.categories = SqlCategoryRepository(session)
+        self.catalogue_entries = SqlCatalogueEntryRepository(session)
+        self.asset_register = SqlAssetRegisterRepository(session)
         self.customers = SqlCustomerRepository(session)
         self.customer_directory = SqlCustomerDirectory(session)
         self.accounts = SqlAccountRepository(session)
+        self.staff = SqlStaffRepository(session)
         self.sessions = SqlSessionRepository(session)
         self.rate_limits = SqlRateLimitStore(session)
         self.notifications = SqlNotificationOutbox(session)

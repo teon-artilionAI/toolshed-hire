@@ -16,7 +16,9 @@ the outbox fail at the moment it wants to and then look at what was kept.
 
 The reservation repository is in `memory_booking`, with the read models it
 builds, the part of the rental repository the sweep needs is in
-`memory_hire`, and the repositories of the reference data are in
+`memory_hire`, the asset repository is in `memory_assets`, the outbox is in
+`memory_outbox`, the throttle counters the sweep prunes are in
+`memory_counters`, and the repositories of the reference data are in
 `memory_reference`.
 """
 
@@ -24,9 +26,8 @@ from __future__ import annotations
 
 import copy
 import itertools
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import time
 from types import TracebackType
 from typing import Final, Self
 from uuid import UUID
@@ -35,14 +36,15 @@ from app.domain.audit import AuditEvent
 from app.domain.availability import AssetAllocation
 from app.domain.booking import Reservation
 from app.domain.catalogue import Asset, ProductModel
-from app.domain.enums import AccountStatus, NotificationStatus
-from app.domain.errors import AllocationConflictError
+from app.domain.enums import AccountStatus
 from app.domain.identity import Branch, CustomerProfile
 from app.domain.notification import Notification
-from app.domain.period import BookingPeriod
 from app.domain.rental import Rental
+from tests.support.memory_assets import MemoryAssets
 from tests.support.memory_booking import MemoryReservations
+from tests.support.memory_counters import CounterKey, MemoryRateLimits
 from tests.support.memory_hire import MemoryRentals
+from tests.support.memory_outbox import MemoryOutbox, StoreFault
 from tests.support.memory_reference import (
     MemoryBranches,
     MemoryCustomers,
@@ -53,10 +55,6 @@ FIRST_REFERENCE_NUMBER: Final[int] = 124
 CONSTRAINT_NAME: Final[str] = "asset_allocation_no_overlap"
 COMMIT: Final[str] = "commit"
 ROLLBACK: Final[str] = "rollback"
-
-
-class StoreFault(RuntimeError):
-    """Raised by the in memory store when a test has switched a fault on."""
 
 
 @dataclass
@@ -71,6 +69,7 @@ class Records:
     no_shows: dict[UUID, int] = field(default_factory=dict)
     account_statuses: dict[UUID, AccountStatus] = field(default_factory=dict)
     rentals: list[Rental] = field(default_factory=list)
+    counters: dict[CounterKey, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -139,87 +138,6 @@ class MemoryStore:
         raise LookupError(f"Attempted to read the tag of asset {asset_id}, which is not stored.")
 
 
-class _Assets:
-    """The asset repository over the working copy."""
-
-    def __init__(self, store: MemoryStore, working: Records) -> None:
-        """Bind to the store and to the working copy of one transaction."""
-        self._store = store
-        self._working = working
-
-    def lock_allocatable(
-        self, product_model_id: UUID, branch_id: UUID, period: BookingPeriod, wanted: int
-    ) -> list[Asset]:
-        """Return up to `wanted` free units in asset tag order."""
-        free = [
-            asset
-            for asset in self._store.assets
-            if asset.product_model_id == product_model_id
-            and asset.branch_id == branch_id
-            and asset.is_allocatable()
-            and not self._is_held(asset.id, period)
-        ]
-        return sorted(free, key=lambda asset: asset.asset_tag)[:wanted]
-
-    def save_allocations(self, allocations: Sequence[AssetAllocation]) -> None:
-        """Keep the allocations, refusing one that overlaps an active allocation."""
-        for allocation in allocations:
-            if any(allocation.conflicts_with(existing) for existing in self._working.allocations):
-                raise AllocationConflictError(
-                    "The in memory store refused an overlapping allocation.",
-                    constraint_name=CONSTRAINT_NAME,
-                )
-            self._working.allocations.append(allocation)
-
-    def _is_held(self, asset_id: UUID, period: BookingPeriod) -> bool:
-        """Return True when an active allocation of the asset overlaps the period."""
-        return any(
-            allocation.asset_id == asset_id
-            and allocation.is_active()
-            and allocation.period.overlaps(period)
-            for allocation in self._working.allocations
-        )
-
-
-class _Outbox:
-    """The notification outbox over the working copy."""
-
-    def __init__(self, store: MemoryStore, working: Records) -> None:
-        """Bind to the store and to the working copy of one transaction."""
-        self._store = store
-        self._working = working
-
-    def enqueue(self, notification: Notification) -> None:
-        """Keep a copy of the queued notification."""
-        self._working.notifications[notification.id] = copy.deepcopy(notification)
-
-    def due(self, limit: int) -> list[Notification]:
-        """Return copies of the queued notifications, oldest first."""
-        if self._store.fail_outbox_read:
-            raise StoreFault("The outbox could not be read.")
-        queued = [
-            notification
-            for notification in self._working.notifications.values()
-            if notification.status is NotificationStatus.QUEUED
-        ]
-        queued.sort(key=lambda notification: (notification.queued_at, str(notification.id)))
-        return copy.deepcopy(queued[:limit])
-
-    def mark_sent(
-        self, notification_id: UUID, provider_message_id: str, sent_at: datetime
-    ) -> None:
-        """Record a successful send."""
-        if self._store.fail_outbox_write:
-            raise StoreFault("The outcome could not be written.")
-        self._working.notifications[notification_id].mark_sent(provider_message_id, sent_at)
-
-    def mark_failed(self, notification_id: UUID, reason: str) -> None:
-        """Record a failed send."""
-        if self._store.fail_outbox_write:
-            raise StoreFault("The outcome could not be written.")
-        self._working.notifications[notification_id].mark_failed(reason)
-
-
 class _AuditLog:
     """The audit log over the working copy."""
 
@@ -240,11 +158,12 @@ class InMemoryUnitOfWork:
 
     reservations: MemoryReservations
     rentals: MemoryRentals
-    assets: _Assets
+    assets: MemoryAssets
     branches: MemoryBranches
     product_models: MemoryProductModels
     customers: MemoryCustomers
-    notifications: _Outbox
+    rate_limits: MemoryRateLimits
+    notifications: MemoryOutbox
     audit: _AuditLog
 
     def __init__(self, store: MemoryStore) -> None:
@@ -296,11 +215,12 @@ class InMemoryUnitOfWork:
         self._working = working
         self.reservations = MemoryReservations(self.store, working)
         self.rentals = MemoryRentals(self.store, working)
-        self.assets = _Assets(self.store, working)
+        self.assets = MemoryAssets(self.store, working)
         self.branches = MemoryBranches(self.store)
         self.product_models = MemoryProductModels(self.store)
         self.customers = MemoryCustomers(self.store, working)
-        self.notifications = _Outbox(self.store, working)
+        self.rate_limits = MemoryRateLimits(working.counters)
+        self.notifications = MemoryOutbox(self.store, working)
         self.audit = _AuditLog(self.store, working)
 
 

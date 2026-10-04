@@ -27,6 +27,7 @@ export const CUSTOMER: SessionUser = {
   role: 'customer',
   branchCode: null,
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 export const COUNTER_STAFF: SessionUser = {
@@ -36,6 +37,7 @@ export const COUNTER_STAFF: SessionUser = {
   role: 'counter',
   branchCode: 'BLV',
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 export const ADMIN: SessionUser = {
@@ -45,6 +47,7 @@ export const ADMIN: SessionUser = {
   role: 'admin',
   branchCode: null,
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 /** The token the samples issue, unless a test names another. It is long and

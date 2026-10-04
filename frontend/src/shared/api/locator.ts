@@ -28,8 +28,9 @@ export const MIN_LOCATOR_SEARCH_LENGTH = 2
 /** The longest search the API accepts. */
 export const MAX_LOCATOR_SEARCH_LENGTH = 80
 
-/** Every state a unit can be in, in the order a unit usually moves through them. */
-const ASSET_STATUSES: readonly AssetStatus[] = [
+/** Every state a unit can be in, in the order a unit usually moves through them.
+ *  The report reader checks the state of a unit against the same list. */
+export const ASSET_STATUSES: readonly AssetStatus[] = [
   'INTAKE',
   'AVAILABLE',
   'ON_HIRE',

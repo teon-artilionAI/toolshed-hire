@@ -254,7 +254,7 @@ class TestThreeStrikes:
 
         with pytest.raises(AccountOnHoldError) as refused:
             desk.drafted()
-        assert "three bookings in the last twelve months" in refused.value.message
+        assert refused.value.message.startswith("This customer account is on hold")
 
 
 class TestTheRecheckUnderTheLock:

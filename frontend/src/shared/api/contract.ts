@@ -16,8 +16,13 @@
  * contract-booking.ts, the registration and account types are in
  * contract-account.ts, the counter types are in contract-counter.ts, the
  * counter overview types are in contract-overview.ts, the returns and
- * settlement types are in contract-returns.ts, and the damage and quarantine
- * types are in contract-damage.ts. All seven are passed on from here, and the
+ * settlement types are in contract-returns.ts, the damage and quarantine
+ * types are in contract-damage.ts, the reporting types are in
+ * contract-reporting.ts, the admin operations types are in
+ * contract-operations.ts, the admin catalogue types are in
+ * contract-admin-catalogue.ts, the asset register types are in
+ * contract-admin-assets.ts, and the staff account and customer hold types are
+ * in contract-admin-users.ts. All twelve are passed on from here, and the
  * session types below stay here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
@@ -132,6 +137,72 @@ export type {
   ReturnItemRequest,
   ReturnRequest,
 } from './contract-returns'
+export type {
+  AdminDashboard,
+  DashboardBranch,
+  FleetCounts,
+  MonthToDate,
+  Percent,
+  ReportDefinitions,
+  ReportFigures,
+  ReportGrouping,
+  ReportRow,
+  UtilisationCsvQuery,
+  UtilisationReport,
+  UtilisationReportQuery,
+} from './contract-reporting'
+export type {
+  AuditActorRole,
+  AuditEvent,
+  AuditEventPage,
+  AuditEventQuery,
+  AuditState,
+  CorrectionReasonRequest,
+  EmailNotification,
+  EmailNotificationPage,
+  EmailNotificationQuery,
+  HireAdjustmentRequest,
+  NotificationStatus,
+  NotificationType,
+} from './contract-operations'
+export type {
+  AdminCategory,
+  AdminCategoryList,
+  AdminCategoryQuery,
+  AdminModel,
+  AdminModelPage,
+  AdminModelQuery,
+  CategoryChangesRequest,
+  ModelChangesRequest,
+  NewCategoryRequest,
+  NewModelRequest,
+  PublicationRequest,
+} from './contract-admin-catalogue'
+export type {
+  AdminAsset,
+  AdminAssetDetail,
+  AdminAssetPage,
+  AdminAssetQuery,
+  AssetChangesRequest,
+  AssetHistoryEntry,
+  AssetHistoryKind,
+  AssetTransitionRequest,
+  NewAssetRequest,
+} from './contract-admin-assets'
+export type {
+  AdminCustomerPage,
+  AdminCustomerQuery,
+  AdminUser,
+  AdminUserPage,
+  AdminUserQuery,
+  CustomerStandingRequest,
+  CustomerWithStanding,
+  DeactivationRequest,
+  NewStaffAccountRequest,
+  StaffAccountChangesRequest,
+  StaffAccountCreated,
+  StaffRole,
+} from './contract-admin-users'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.
@@ -172,6 +243,11 @@ export type HealthReport = JsonOf<Paths['/api/health']['get']>
  * about the role and not missing data. The generated type also lets the member
  * be left out. The reader in auth.ts turns a missing one into null, so here it
  * is always present.
+ *
+ * `emailDeliverable` says whether this environment can deliver email to the
+ * account's own address. A demonstration delivers to one address only, so a
+ * screen promises an email only when it is true. The generated type requires
+ * it, so the reader in auth.ts refuses an account that leaves it out.
  */
 export type SessionUser = Refine<
   JsonOf<Paths['/api/me']['get']>,

@@ -9,12 +9,16 @@ email provider takes to answer. I accept that difference. Sending a message
 to an address that has no account would mean writing to strangers.
 
 `CompletePasswordResetUseCase` redeems the token. In one transaction it sets
-the new hash, clears the token, lifts any lock and revokes every refresh
-session of the account, so a browser that was signed in with the old password
-is signed out. The sessions are revoked with the reason `LOGOUT`. The holder
-of the account ended them, no administrator did, and the audit event of the
-reset says exactly why. A token that is unknown, already used or out of time
-is refused with one sentence.
+the new hash, clears the token, lifts any lock, marks the email address as
+verified when it was not yet and revokes every refresh session of the
+account, so a browser that was signed in with the old password is signed out.
+The link only ever went to that address, so using it proves the person reads
+mail there, and a new member of staff, who chooses a first password through
+this link, ends verified. The sessions are revoked with the reason `LOGOUT`.
+The holder of the account ended them, no administrator did, and the audit
+event of the reset says exactly why, with the lock and the verification
+before and after. A token that is unknown, already used or out of time is
+refused with one sentence.
 
 Both are counted before they do anything, and a new password is hashed before
 the transaction opens, so no row is held while the work factor runs.
@@ -228,6 +232,7 @@ class CompletePasswordResetUseCase(UseCase[CompletePasswordResetCommand, None]):
         if account is None:
             return UNKNOWN_LINK
         was_locked = account.is_locked(now)
+        was_verified = account.email_verified
         if not account.reset_password(token, new_hash, now):
             return EXPIRED_LINK
         uow.accounts.save_security_state(account)
@@ -241,9 +246,10 @@ class CompletePasswordResetUseCase(UseCase[CompletePasswordResetCommand, None]):
                 entity_id=account.id,
                 action=RESET_COMPLETED_ACTION,
                 occurred_at=now,
-                before_state={"locked": was_locked},
+                before_state={"locked": was_locked, "email_verified": was_verified},
                 after_state={
                     "locked": False,
+                    "email_verified": account.email_verified,
                     "revoked_session_count": revoked_count,
                     "revoke_reason": RESET_REVOKE_REASON.value,
                 },
@@ -251,6 +257,10 @@ class CompletePasswordResetUseCase(UseCase[CompletePasswordResetCommand, None]):
         )
         logger.info(
             "auth.reset_completion_written",
-            extra={"user_id": str(account.id), "revoked_session_count": revoked_count},
+            extra={
+                "user_id": str(account.id),
+                "revoked_session_count": revoked_count,
+                "email_verified_now": not was_verified,
+            },
         )
         return None

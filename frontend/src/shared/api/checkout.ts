@@ -81,6 +81,7 @@ function readCheckout(value: unknown, path: string): ReservationCheckout {
     canCheckOut: readFlag(record, 'canCheckOut', path),
     refusal: readNullableText(record, 'refusal', path),
     rentalId: readNullableText(record, 'rentalId', path),
+    unitsShort: readCount(record, 'unitsShort', path),
   }
 }
 

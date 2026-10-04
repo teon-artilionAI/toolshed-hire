@@ -114,6 +114,13 @@ class UserResponse(CamelModel):
     """The signed in account, as every session response and `/api/me` return it.
 
     `branchCode` is null unless the account is counter staff.
+
+    `emailDeliverable` is false when this environment would not hand a message
+    for the account's address to the email provider, because email is off or
+    because mail goes to one approved address and this is not it. It is the
+    same rule the account routes answer with, and it depends on the
+    configuration and the address alone. A screen reads it so that it never
+    promises a confirmation email that cannot arrive.
     """
 
     id: UUID
@@ -122,6 +129,7 @@ class UserResponse(CamelModel):
     role: str
     branch_code: str | None = Field(default=None, serialization_alias="branchCode")
     email_verified: bool = Field(serialization_alias="emailVerified")
+    email_deliverable: bool = Field(serialization_alias="emailDeliverable")
 
 
 class TokenResponse(CamelModel):

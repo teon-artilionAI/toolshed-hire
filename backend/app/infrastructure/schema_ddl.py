@@ -91,6 +91,13 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ux_user_account_email_verification_token_hash",
     "ux_user_account_password_reset_token_hash",
     "ix_damage_report_rental_item",
+    "ix_rental_item_lost",
+    "ix_audit_event_asset_status",
+    "ix_audit_event_actor",
+    "ix_audit_event_action",
+    "ix_asset_allocation_released",
+    "ix_user_account_staff",
+    "ix_customer_profile_standing",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -130,6 +137,83 @@ RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
 # through the second.
 DAMAGE_REPORT_RENTAL_ITEM_INDEX: Final[str] = "ix_damage_report_rental_item"
 DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
+
+# The five indexes of revision 0007, which the utilisation report reads a
+# period through. The charges raised in a period, the hires still out or back
+# since it began, the losses recorded, the damage reports open or resolved in
+# it, and the changes of each unit's status, partial on that one action.
+CHARGE_RAISED_INDEX: Final[str] = "ix_charge_raised_at"
+RENTAL_ITEM_RETURNED_INDEX: Final[str] = "ix_rental_item_returned_at"
+RENTAL_ITEM_LOST_INDEX: Final[str] = "ix_rental_item_lost"
+DAMAGE_REPORT_RESOLVED_INDEX: Final[str] = "ix_damage_report_resolved_at"
+AUDIT_STATUS_CHANGE_INDEX: Final[str] = "ix_audit_event_asset_status"
+
+# The indexes the two logs of the admin console are read through. The first
+# two are of the baseline. The other four are revision 0008, which finds the
+# history of one record by its key, every event of one action but a change of
+# status, everything one account did, partial on an event that has an actor,
+# and every notification newest first.
+AUDIT_ENTITY_INDEX: Final[str] = "ix_audit_event_entity"
+AUDIT_OCCURRED_INDEX: Final[str] = "ix_audit_event_occurred_at"
+AUDIT_ENTITY_ID_INDEX: Final[str] = "ix_audit_event_entity_id"
+AUDIT_ACTION_INDEX: Final[str] = "ix_audit_event_action"
+AUDIT_ACTOR_INDEX: Final[str] = "ix_audit_event_actor"
+NOTIFICATION_QUEUED_INDEX: Final[str] = "ix_notification_queued_at"
+NOTIFICATION_FAILED_INDEX: Final[str] = "ix_notification_failed"
+# The action the partial index of the report holds and that of the log leaves out.
+STATUS_CHANGE_ACTION: Final[str] = "asset.status_changed"
+
+# The four unique constraints of the catalogue. Each column is declared unique
+# in the baseline, and these are the names PostgreSQL gives the constraints.
+# The two catalogue repositories recognise them when two administrators race
+# for one code, SKU or slug, and answer the field each one guards.
+CATEGORY_CODE_CONSTRAINT_NAME: Final[str] = "category_code_key"
+CATEGORY_SLUG_CONSTRAINT_NAME: Final[str] = "category_slug_key"
+PRODUCT_MODEL_SKU_CONSTRAINT_NAME: Final[str] = "product_model_sku_key"
+PRODUCT_MODEL_SLUG_CONSTRAINT_NAME: Final[str] = "product_model_slug_key"
+
+# The index of revision 0009, through which the administrator's list finds the
+# models of one category, published or not, by name. The partial index of the
+# baseline holds the published ones only. The units of a model are counted
+# through `ix_asset_product_model` of revision 0004.
+PRODUCT_MODEL_CATEGORY_INDEX: Final[str] = "ix_product_model_category"
+PRODUCT_MODEL_PUBLISHED_INDEX: Final[str] = "ix_product_model_published"
+
+# The unique constraint on the tag painted on a unit (BR-34). The column is
+# declared unique in the baseline, and this is the name PostgreSQL gives the
+# constraint. The register recognises it when two administrators race to
+# register one tag.
+ASSET_TAG_CONSTRAINT_NAME: Final[str] = "asset_asset_tag_key"
+
+# The two indexes of revision 0010, which the asset register reads through. The
+# search of the register matches part of a serial number through the first, a
+# trigram index like the one on the tag. The history of one unit reads the
+# allocations it was released from through the second, which is partial on a
+# released allocation, and the active ones through the GiST index of the
+# exclusion constraint, which holds those and nothing else.
+ASSET_SERIAL_SEARCH_INDEX: Final[str] = "ix_asset_serial_trgm"
+ALLOCATION_RELEASED_INDEX: Final[str] = "ix_asset_allocation_released"
+# The index of the exclusion constraint, through which the register counts the
+# active allocations of a unit and finds the booking that holds it.
+OVERLAP_CONSTRAINT_INDEX: Final[str] = OVERLAP_CONSTRAINT_NAME
+
+# The three indexes of revision 0011, which the administrator's lists of people
+# read through. The first holds the staff accounts and no customer's, by name,
+# and the lock on every active administrator reads it too. The second puts the
+# customers in name order, and the third holds the customers on hold or
+# blacklisted, by name. Each predicate is written into a statement as the
+# literal the index was built with, so the planner matches it whatever plan
+# the server caches.
+STAFF_ACCOUNT_INDEX: Final[str] = "ix_user_account_staff"
+CUSTOMER_NAME_ORDER_INDEX: Final[str] = "ix_customer_profile_name"
+CUSTOMER_STANDING_INDEX: Final[str] = "ix_customer_profile_standing"
+CUSTOMER_ROLE_LITERAL: Final[str] = "'CUSTOMER'"
+GOOD_STANDING_LITERAL: Final[str] = "'ACTIVE'"
+
+# The index of revision 0012, a btree on the start of a throttle counter's
+# window. The fourth part of the sweep finds the counters whose window ended
+# long ago through it, oldest first, and stops at its batch or its cutoff.
+RATE_LIMIT_WINDOW_INDEX: Final[str] = "ix_rate_limit_counter_window_started_at"
 
 # The columns a revision after the baseline added to one of its tables, each
 # with its table and the default PostgreSQL prints back for it. Revision 0006

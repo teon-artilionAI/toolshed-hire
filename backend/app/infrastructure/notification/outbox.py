@@ -80,6 +80,23 @@ class SqlNotificationOutbox:
         logger.debug("notification.due_query_finished", extra={"due_count": len(found)})
         return [_notification_of(row, reference) for row, reference in found]
 
+    def find(self, notification_id: UUID) -> domain.Notification | None:
+        """Return one notification, whatever its status, with its booking reference."""
+        statement = (
+            select(Notification, col(Reservation.reference))
+            .join(Reservation, col(Reservation.id) == col(Notification.reservation_id))
+            .where(col(Notification.id) == notification_id)
+        )
+        found = self._session.exec(statement).first()
+        logger.debug(
+            "notification.lookup",
+            extra={"notification_id": str(notification_id), "found": found is not None},
+        )
+        if found is None:
+            return None
+        row, reference = found
+        return _notification_of(row, reference)
+
     def mark_sent(
         self, notification_id: UUID, provider_message_id: str, sent_at: datetime
     ) -> None:

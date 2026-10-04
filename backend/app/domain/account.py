@@ -14,7 +14,8 @@ counted again, even while the fifteen minutes it belongs to are still running.
 
 A token is redeemed here and nowhere else. Redeeming one clears it, which is
 what makes it single use, and a token that is unknown, used or out of time is
-refused in the same way.
+refused in the same way. Either token proves the address, because each was
+sent to it and nowhere else.
 
 Nothing here knows how a password is hashed or how an account is stored.
 """
@@ -163,7 +164,13 @@ class Account:
         self.password_reset = pending
 
     def reset_password(self, presented_token: str, new_password_hash: str, now: datetime) -> bool:
-        """Redeem a reset token, take the new hash and lift any lock.
+        """Redeem a reset token, take the new hash, lift any lock and prove the address.
+
+        The link was only ever sent to the address of the account, so whoever
+        uses it reads mail there, which is all a verification link proves. An
+        address not yet verified is marked verified now, and one that already
+        was keeps the instant it was first proved. A verification link still
+        pending is left as it is.
 
         Returns:
             True when the token was the pending one and still in time. The
@@ -177,6 +184,8 @@ class Account:
         self.password_reset = None
         self.password_hash = new_password_hash
         self.clear_lockout()
+        if self.email_verified_at is None:
+            self.email_verified_at = now
         return True
 
     def as_actor(self) -> Actor:

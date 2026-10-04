@@ -82,6 +82,10 @@ class NotificationOutbox(Protocol):
         """Return up to `limit` queued notifications, oldest first."""
         ...
 
+    def find(self, notification_id: UUID) -> Notification | None:
+        """Return one notification, whatever its status, or None when there is none."""
+        ...
+
     def mark_sent(
         self, notification_id: UUID, provider_message_id: str, sent_at: datetime
     ) -> None:

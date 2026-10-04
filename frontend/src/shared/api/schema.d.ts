@@ -233,6 +233,7 @@ export interface paths {
          *     Args:
          *         user: The active account, resolved by the layered auth dependencies.
          *         session: The request scoped session, used to resolve the branch code.
+         *         gateway: The email gateway, asked whether mail to the address would go.
          *
          *     Returns:
          *         The account, in the shape every session response carries it in.
@@ -481,6 +482,33 @@ export interface paths {
          *             started. HTTP 409.
          */
         post: operations["post_no_show_api_reservations__id__no_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}/reallocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give a booking on hold or confirmed replacements for the units it is short of
+         * @description Top up every short line through the allocation path of a hold, all or nothing.
+         *
+         *     Raises:
+         *         NotFound: If there is no such reservation. HTTP 404.
+         *         BranchScopeError: If counter staff act at another branch. HTTP 403.
+         *         StateTransitionError: If it is neither on hold nor confirmed. HTTP 409.
+         *         AllocationConflictError: If no unit is free for a line, naming the
+         *             model and the dates. HTTP 409.
+         */
+        post: operations["post_reallocation_api_reservations__id__reallocation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -853,6 +881,624 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/reports/utilisation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the utilisation and gross contribution report
+         * @description Return one page of the report, after running the sweep.
+         *
+         *     Raises:
+         *         ValidationFailure: If the period ends before it starts or is longer
+         *             than 366 days, or the branch or the category is unknown. HTTP
+         *             422, naming the parameter.
+         */
+        get: operations["read_utilisation_report_api_admin_reports_utilisation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/reports/utilisation.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return every line of the report as a CSV file
+         * @description Return every line of the report as CSV, worked out first and then streamed a line at a time.
+         *
+         *     Raises:
+         *         ValidationFailure: As for the report. HTTP 422, naming the parameter.
+         */
+        get: operations["export_utilisation_report_api_admin_reports_utilisation_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the business across every branch today
+         * @description Return each branch, the totals, the month so far and what waits, after running the sweep.
+         */
+        get: operations["read_admin_dashboard_api_admin_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the audit log, newest first
+         * @description Return one page of the audit log, newest first.
+         *
+         *     Raises:
+         *         ValidationFailure: If `to` is before `from`. HTTP 422, naming `to`.
+         */
+        get: operations["read_audit_events_api_admin_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the notification log, newest first
+         * @description Return one page of the notification log, newest first.
+         */
+        get: operations["read_notifications_api_admin_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications/{id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a failed notification again, as a new notification
+         * @description Queue the notification again, commit, send it and return the new one.
+         *
+         *     Raises:
+         *         NotFound: If there is no such notification. HTTP 404.
+         *         StateTransitionError: If it has not failed. HTTP 409.
+         */
+        post: operations["post_resend_api_admin_notifications__id__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/charges/{id}/waiver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Waive a charge still owed, with a reason
+         * @description Waive the charge and work the rental out again, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such charge. HTTP 404.
+         *         StateTransitionError: If the charge is not pending. HTTP 409.
+         */
+        post: operations["post_waiver_api_admin_charges__id__waiver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/charges/{id}/reversal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reverse a settled charge with a new negated charge, with a reason
+         * @description Reverse the charge and work the rental out again, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such charge. HTTP 404.
+         *         StateTransitionError: If the charge is not settled, is a deposit
+         *             movement, is itself a reversal or was reversed already. HTTP 409.
+         */
+        post: operations["post_reversal_api_admin_charges__id__reversal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/rentals/{id}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adjust a hire by an amount that includes VAT, with a reason
+         * @description Add the adjustment and work the rental out again, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such rental. HTTP 404.
+         *         ValidationFailure: If the amount is nothing. HTTP 422, naming
+         *             `body.amountIncVat`.
+         *         StateTransitionError: If the amount is owed and the hire is
+         *             SETTLED. HTTP 409.
+         */
+        post: operations["post_adjustment_api_admin_rentals__id__adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/allocations/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release one active allocation by hand, with a reason
+         * @description Release the allocation with the reason REALLOCATED, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such allocation. HTTP 404.
+         *         StateTransitionError: If it is not active, or its unit is out on hire
+         *             on its booking. HTTP 409.
+         */
+        post: operations["post_release_api_admin_allocations__id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return every category, active or not, each parent followed by its children
+         * @description Return one page of every category, each parent followed by its children.
+         */
+        get: operations["read_categories_api_admin_categories_get"];
+        put?: never;
+        /**
+         * Create a category, active
+         * @description Create the category and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the parent is unknown or
+         *             not at the top, or the code or slug is taken. HTTP 422, naming
+         *             the field.
+         */
+        post: operations["post_category_api_admin_categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the fields of a category that are sent, or switch it off
+         * @description Change the fields that were sent and record what changed, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such category. HTTP 404.
+         *         ValidationFailure: As for a creation, and when the category has
+         *             children and is to be put under another. HTTP 422, naming the field.
+         */
+        patch: operations["patch_category_api_admin_categories__id__patch"];
+        trace?: never;
+    };
+    "/api/admin/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the product models, published or not, by name
+         * @description Return one page of the product models that match, by name.
+         */
+        get: operations["read_models_api_admin_models_get"];
+        put?: never;
+        /**
+         * Create a product model, unpublished
+         * @description Create the model and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the category is unknown
+         *             or switched off, or the SKU or slug is taken. HTTP 422, naming
+         *             the field.
+         */
+        post: operations["post_model_api_admin_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/models/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one product model, published or not
+         * @description Return the product model.
+         *
+         *     Raises:
+         *         NotFound: If there is no such model. HTTP 404.
+         */
+        get: operations["read_model_api_admin_models__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the fields of a product model that are sent, never its SKU
+         * @description Change the fields that were sent and record the figures before and after.
+         *
+         *     Raises:
+         *         NotFound: If there is no such model. HTTP 404.
+         *         ValidationFailure: As for a creation, and when the SKU is sent. HTTP
+         *             422, naming the field.
+         */
+        patch: operations["patch_model_api_admin_models__id__patch"];
+        trace?: never;
+    };
+    "/api/admin/models/{id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a product model, or take it out of the public catalogue
+         * @description Publish or hide the model and record it, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such model. HTTP 404.
+         */
+        post: operations["post_publication_api_admin_models__id__publication_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the units of the fleet, retired or not, in tag order
+         * @description Return one page of the units that match, in tag order.
+         *
+         *     Raises:
+         *         ValidationFailure: If no branch has the code. HTTP 422, naming `branchCode`.
+         */
+        get: operations["read_assets_api_admin_assets_get"];
+        put?: never;
+        /**
+         * Register a unit, at INTAKE
+         * @description Register the unit and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the model or the branch
+         *             is unknown, or another unit carries the tag. HTTP 422, naming the
+         *             field.
+         */
+        post: operations["post_asset_api_admin_assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/assets/{tag}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one unit with its history, the newest first
+         * @description Return the unit with its history.
+         *
+         *     Raises:
+         *         NotFound: If no unit carries the tag. HTTP 404.
+         */
+        get: operations["read_asset_api_admin_assets__tag__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the paperwork of a unit, never its tag, model or branch
+         * @description Change the fields that were sent and record them before and after.
+         *
+         *     Raises:
+         *         NotFound: If no unit carries the tag. HTTP 404.
+         *         ValidationFailure: If a field breaks a rule, or the tag, the model or
+         *             the branch is sent. HTTP 422, naming the field.
+         */
+        patch: operations["patch_asset_api_admin_assets__tag__patch"];
+        trace?: never;
+    };
+    "/api/admin/assets/{tag}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a unit through its lifecycle by hand
+         * @description Move the unit and record the move, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If no unit carries the tag. HTTP 404.
+         *         ValidationFailure: For ON_HIRE or LOST, naming `to`, or a move out of
+         *             service with no reason, naming `reason`. HTTP 422.
+         *         StateTransitionError: If the move is not permitted from the unit's
+         *             status, or a booking or an open damage report holds the unit.
+         *             HTTP 409.
+         */
+        post: operations["post_transition_api_admin_assets__tag__transitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the staff accounts, by name
+         * @description Return one page of the staff accounts that match, by name.
+         *
+         *     Raises:
+         *         ValidationFailure: If `role` is CUSTOMER. HTTP 422, naming `role`.
+         */
+        get: operations["read_users_api_admin_users_get"];
+        put?: never;
+        /**
+         * Open a staff account and send the person a link to choose their password
+         * @description Open the account and record it, in one transaction, then send the link.
+         *
+         *     Raises:
+         *         ValidationFailure: If a field breaks a rule, the branch is unknown, or
+         *             another account holds the address. HTTP 422, naming the field.
+         *         AuthorisationFailure: If the caller stopped being an active
+         *             administrator. HTTP 403.
+         */
+        post: operations["post_user_api_admin_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the name, the phone, the role or the branch of a staff account
+         * @description Change the fields that were sent and record the change.
+         *
+         *     Raises:
+         *         NotFound: If no staff account has the key. HTTP 404.
+         *         ValidationFailure: If a field breaks a rule. HTTP 422, naming the field.
+         *         StateTransitionError: If the account is the last active administrator
+         *             and the edit gives it another role. HTTP 409.
+         */
+        patch: operations["patch_user_api_admin_users__id__patch"];
+        trace?: never;
+    };
+    "/api/admin/users/{id}/deactivation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a staff account signing in and revoke every session it holds
+         * @description Deactivate the account, revoke its sessions and record why, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If no staff account has the key. HTTP 404.
+         *         ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+         *         StateTransitionError: If it is the caller's own account or the last
+         *             active administrator. HTTP 409.
+         */
+        post: operations["post_deactivation_api_admin_users__id__deactivation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/reactivation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Let a deactivated staff account sign in again with its own password
+         * @description Reactivate the account and record it.
+         *
+         *     Raises:
+         *         NotFound: If no staff account has the key. HTTP 404.
+         */
+        post: operations["post_reactivation_api_admin_users__id__reactivation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one page of the customers by name, narrowed by their standing
+         * @description Return one page of the customers that match, by name.
+         */
+        get: operations["read_customers_api_admin_customers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/customers/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set the standing of a customer, with the reason
+         * @description Set the standing and record it with the reason, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer with this key. HTTP 404.
+         *         ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+         */
+        post: operations["post_customer_status_api_admin_customers__id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1027,6 +1673,367 @@ export interface components {
          */
         AccountStatus: "ACTIVE" | "ON_HOLD" | "BLACKLISTED";
         /**
+         * AdjustmentRequest
+         * @description An adjustment of a hire, VAT included, and the reason for it.
+         */
+        AdjustmentRequest: {
+            /** Amountincvat */
+            amountIncVat: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * AdminAssetDetailResponse
+         * @description One unit with its history, the newest first, at most fifty entries.
+         */
+        AdminAssetDetailResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assettag */
+            assetTag: string;
+            /**
+             * Modelid
+             * Format: uuid
+             */
+            modelId: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /** Serialnumber */
+            serialNumber: string | null;
+            status: components["schemas"]["AssetStatus"];
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /**
+             * Acquiredon
+             * Format: date
+             */
+            acquiredOn: string;
+            /** Acquisitioncost */
+            acquisitionCost: string;
+            /** Hourmeterreading */
+            hourMeterReading: number | null;
+            /** Notes */
+            notes: string | null;
+            /** Retiredon */
+            retiredOn: string | null;
+            /** Activeallocationcount */
+            activeAllocationCount: number;
+            /** Opendamagereports */
+            openDamageReports: number;
+            /** Allowedtransitions */
+            allowedTransitions: components["schemas"]["AssetStatus"][];
+            /** History */
+            history: components["schemas"]["AssetHistoryEntryResponse"][];
+        };
+        /**
+         * AdminAssetPageResponse
+         * @description One page of the units, in tag order.
+         */
+        AdminAssetPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminAssetResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminAssetResponse
+         * @description One unit as the register shows it, retired or not.
+         *
+         *     `allowedTransitions` lists the statuses an administrator may move it to by
+         *     hand, from the asset state model. `activeAllocationCount` counts the
+         *     bookings that hold it now and `openDamageReports` its reports that are
+         *     open or under repair.
+         */
+        AdminAssetResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assettag */
+            assetTag: string;
+            /**
+             * Modelid
+             * Format: uuid
+             */
+            modelId: string;
+            /** Modelname */
+            modelName: string;
+            /** Modelslug */
+            modelSlug: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            /** Serialnumber */
+            serialNumber: string | null;
+            status: components["schemas"]["AssetStatus"];
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /**
+             * Acquiredon
+             * Format: date
+             */
+            acquiredOn: string;
+            /** Acquisitioncost */
+            acquisitionCost: string;
+            /** Hourmeterreading */
+            hourMeterReading: number | null;
+            /** Notes */
+            notes: string | null;
+            /** Retiredon */
+            retiredOn: string | null;
+            /** Activeallocationcount */
+            activeAllocationCount: number;
+            /** Opendamagereports */
+            openDamageReports: number;
+            /** Allowedtransitions */
+            allowedTransitions: components["schemas"]["AssetStatus"][];
+        };
+        /**
+         * AdminCategoryPageResponse
+         * @description Every category, active or not, each parent followed by its children.
+         */
+        AdminCategoryPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminCategoryResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminCategoryResponse
+         * @description One category as the administrator sees it. `modelCount` counts its own models.
+         */
+        AdminCategoryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Description */
+            description: string | null;
+            /** Parentcategoryid */
+            parentCategoryId: string | null;
+            /** Parentname */
+            parentName: string | null;
+            /** Sortorder */
+            sortOrder: number;
+            /** Isactive */
+            isActive: boolean;
+            /** Modelcount */
+            modelCount: number;
+        };
+        /**
+         * AdminDashboardResponse
+         * @description The business across every branch today.
+         */
+        AdminDashboardResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Branches */
+            branches: components["schemas"]["BranchPositionResponse"][];
+            totals: components["schemas"]["BranchCountsResponse"];
+            monthToDate: components["schemas"]["MonthToDateResponse"];
+            /** Opendamagereports */
+            openDamageReports: number;
+            /** Customersonhold */
+            customersOnHold: number;
+            /** Failednotifications */
+            failedNotifications: number;
+        };
+        /**
+         * AdminModelPageResponse
+         * @description One page of the product models, by name.
+         */
+        AdminModelPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminModelResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminModelResponse
+         * @description One product model as the administrator sees it, published or not.
+         *
+         *     `assetCount` is every unit of the fleet that realises it, whatever its status.
+         */
+        AdminModelResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sku */
+            sku: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Categoryid
+             * Format: uuid
+             */
+            categoryId: string;
+            /** Categoryname */
+            categoryName: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Modelnumber */
+            modelNumber: string;
+            /** Shortdescription */
+            shortDescription: string;
+            /** Longdescription */
+            longDescription: string | null;
+            /** Dailyrate */
+            dailyRate: string;
+            /** Weeklyrate */
+            weeklyRate: string;
+            /** Depositamount */
+            depositAmount: string;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+            /** Replacementvalue */
+            replacementValue: string;
+            /** Minhiredays */
+            minHireDays: number;
+            /** Maxhiredays */
+            maxHireDays: number;
+            /** Ispublished */
+            isPublished: boolean;
+            /** Assetcount */
+            assetCount: number;
+            /** Updatedat */
+            updatedAt: string;
+        };
+        /**
+         * AdminUserPageResponse
+         * @description One page of the staff accounts, by name.
+         */
+        AdminUserPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdminUserResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminUserResponse
+         * @description One staff account as the administrator sees it, never with anything about a password.
+         *
+         *     `branchCode` is null for an administrator. `lockedUntil` is when a lock
+         *     after failed sign ins ends, and null when there has been none since the
+         *     last success.
+         */
+        AdminUserResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Fullname */
+            fullName: string;
+            /** Phone */
+            phone: string | null;
+            role: components["schemas"]["UserRole"];
+            /** Branchcode */
+            branchCode: string | null;
+            /** Isactive */
+            isActive: boolean;
+            /** Emailverified */
+            emailVerified: boolean;
+            /** Lastloginat */
+            lastLoginAt: string | null;
+            /** Lockeduntil */
+            lockedUntil: string | null;
+            /** Createdat */
+            createdAt: string;
+        };
+        /**
+         * AssetCreateRequest
+         * @description A new unit. It starts at INTAKE, and its tag, model and branch never change.
+         */
+        AssetCreateRequest: {
+            /** Assettag */
+            assetTag: string;
+            /**
+             * Modelid
+             * Format: uuid
+             */
+            modelId: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Serialnumber */
+            serialNumber?: string | null;
+            conditionGrade: components["schemas"]["ConditionGrade"];
+            /**
+             * Acquiredon
+             * Format: date
+             */
+            acquiredOn: string;
+            /** Acquisitioncost */
+            acquisitionCost: string;
+            /** Hourmeterreading */
+            hourMeterReading?: number | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * AssetHistoryEntryResponse
+         * @description One line of a unit's history. `reference` is the booking, rental or report, or null.
+         */
+        AssetHistoryEntryResponse: {
+            /** At */
+            at: string;
+            kind: components["schemas"]["AssetHistoryKind"];
+            /** Summary */
+            summary: string;
+            /** Reference */
+            reference: string | null;
+        };
+        /**
+         * AssetHistoryKind
+         * @description Where an entry of a unit's history comes from.
+         * @enum {string}
+         */
+        AssetHistoryKind: "ALLOCATION" | "RENTAL" | "DAMAGE_REPORT" | "AUDIT_EVENT";
+        /**
          * AssetLocationPageResponse
          * @description One page of the units a search found, in tag order.
          */
@@ -1074,6 +2081,72 @@ export interface components {
          * @enum {string}
          */
         AssetStatus: "INTAKE" | "AVAILABLE" | "ON_HIRE" | "QUARANTINED" | "UNDER_REPAIR" | "LOST" | "RETIRED";
+        /**
+         * AssetTransitionRequest
+         * @description The status to move a unit to by hand, and why.
+         */
+        AssetTransitionRequest: {
+            to: components["schemas"]["AssetStatus"];
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AssetUpdateRequest
+         * @description The paperwork of a unit to change, any of it. Never the tag, the model or the branch.
+         */
+        AssetUpdateRequest: {
+            /** Serialnumber */
+            serialNumber?: string | null;
+            conditionGrade?: components["schemas"]["ConditionGrade"] | null;
+            /** Hourmeterreading */
+            hourMeterReading?: number | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * AuditEventPageResponse
+         * @description One page of the audit log, newest first.
+         */
+        AuditEventPageResponse: {
+            /** Items */
+            items: components["schemas"]["AuditEventResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AuditEventResponse
+         * @description One audit event, as the log shows it.
+         */
+        AuditEventResponse: {
+            /** Id */
+            id: number;
+            /** Occurredat */
+            occurredAt: string;
+            /** Actoruserid */
+            actorUserId: string | null;
+            /** Actorname */
+            actorName: string | null;
+            actorRole: components["schemas"]["UserRole"] | null;
+            /** Entitytype */
+            entityType: string;
+            /**
+             * Entityid
+             * Format: uuid
+             */
+            entityId: string;
+            /** Action */
+            action: string;
+            /** Beforestate */
+            beforeState: Record<string, unknown>;
+            /** Afterstate */
+            afterState: Record<string, unknown>;
+            /** Requestid */
+            requestId: string | null;
+        };
         /**
          * AvailabilityPageResponse
          * @description One page of an availability search.
@@ -1124,12 +2197,56 @@ export interface components {
             available: boolean;
         };
         /**
+         * BranchCountsResponse
+         * @description What is due today and where the units stand, at a branch or across every branch.
+         */
+        BranchCountsResponse: {
+            /** Collectionsdue */
+            collectionsDue: number;
+            /** Returnsdue */
+            returnsDue: number;
+            /** Overdue */
+            overdue: number;
+            /** Onhire */
+            onHire: number;
+            /** Quarantined */
+            quarantined: number;
+            /** Underrepair */
+            underRepair: number;
+            /** Available */
+            available: number;
+        };
+        /**
          * BranchListResponse
          * @description The active branches, ordered by name.
          */
         BranchListResponse: {
             /** Items */
             items: components["schemas"]["BranchResponse"][];
+        };
+        /**
+         * BranchPositionResponse
+         * @description Where one trading branch stands today.
+         */
+        BranchPositionResponse: {
+            /** Collectionsdue */
+            collectionsDue: number;
+            /** Returnsdue */
+            returnsDue: number;
+            /** Overdue */
+            overdue: number;
+            /** Onhire */
+            onHire: number;
+            /** Quarantined */
+            quarantined: number;
+            /** Underrepair */
+            underRepair: number;
+            /** Available */
+            available: number;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
         };
         /**
          * BranchResponse
@@ -1160,6 +2277,27 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * CategoryCreateRequest
+         * @description A new category. It starts active, at the top unless a parent is named.
+         */
+        CategoryCreateRequest: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Description */
+            description?: string | null;
+            /** Parentcategoryid */
+            parentCategoryId?: string | null;
+            /**
+             * Sortorder
+             * @default 0
+             */
+            sortOrder: number;
+        };
+        /**
          * CategoryListResponse
          * @description The active categories, each parent followed by its children.
          */
@@ -1188,8 +2326,32 @@ export interface components {
             modelCount: number;
         };
         /**
+         * CategoryUpdateRequest
+         * @description The fields of a category to change, any of them, and whether it is active.
+         */
+        CategoryUpdateRequest: {
+            /** Code */
+            code?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Parentcategoryid */
+            parentCategoryId?: string | null;
+            /** Sortorder */
+            sortOrder?: number | null;
+            /** Isactive */
+            isActive?: boolean | null;
+        };
+        /**
          * ChargeResponse
          * @description One money line on a rental. A deposit release is a negative amount.
+         *
+         *     `reversesChargeId` names the charge a reversal undoes. `reason` is the
+         *     reason an administrator gave for waiving it, or the reason written on a
+         *     reversal or an adjustment, and null on a charge nobody corrected.
          */
         ChargeResponse: {
             /**
@@ -1213,6 +2375,10 @@ export interface components {
             raisedAt: string;
             /** Rentalitemid */
             rentalItemId: string | null;
+            /** Reverseschargeid */
+            reversesChargeId: string | null;
+            /** Reason */
+            reason: string | null;
         };
         /**
          * ChargeStatus
@@ -1266,7 +2432,9 @@ export interface components {
          * @description What the counter needs to hand the equipment of a reservation over.
          *
          *     `refusal` is a sentence when `canCheckOut` is false. `rentalId` is set once
-         *     the reservation has been collected.
+         *     the reservation has been collected. `unitsShort` is how many units the
+         *     reservation still needs after one was released by hand, and while it is
+         *     above zero `canCheckOut` is false and the checkout answers 409.
          */
         CheckoutPreviewResponse: {
             /**
@@ -1306,6 +2474,8 @@ export interface components {
             refusal: string | null;
             /** Rentalid */
             rentalId: string | null;
+            /** Unitsshort */
+            unitsShort: number;
         };
         /**
          * CheckoutRequest
@@ -1417,6 +2587,15 @@ export interface components {
             pageSize: number;
             /** Total */
             total: number;
+        };
+        /**
+         * CustomerStatusRequest
+         * @description The standing a customer is to have, and why. The audit event keeps the reason.
+         */
+        CustomerStatusRequest: {
+            accountStatus: components["schemas"]["AccountStatus"];
+            /** Reason */
+            reason: string;
         };
         /**
          * CustomerSummaryResponse
@@ -1605,6 +2784,14 @@ export interface components {
             overdue: components["schemas"]["OverdueRentalResponse"][];
         };
         /**
+         * DeactivationRequest
+         * @description Why an account is being stopped from signing in. The audit event keeps it.
+         */
+        DeactivationRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
          * DiaryCollectionResponse
          * @description A reservation starting on a day of the diary.
          */
@@ -1705,6 +2892,12 @@ export interface components {
             /** Emaildeliverable */
             emailDeliverable: boolean;
         };
+        /**
+         * GroupBy
+         * @description What one line of the report stands for.
+         * @enum {string}
+         */
+        GroupBy: "asset" | "model" | "category" | "branch";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1789,6 +2982,50 @@ export interface components {
             model: components["schemas"]["ModelSummaryResponse"];
             /** Branches */
             branches: components["schemas"]["BranchAvailabilityResponse"][];
+        };
+        /**
+         * ModelCreateRequest
+         * @description A new product model, with every figure a booking will copy. It starts unpublished.
+         */
+        ModelCreateRequest: {
+            /** Sku */
+            sku: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Categoryid
+             * Format: uuid
+             */
+            categoryId: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Modelnumber */
+            modelNumber: string;
+            /** Shortdescription */
+            shortDescription: string;
+            /** Longdescription */
+            longDescription?: string | null;
+            /** Dailyrate */
+            dailyRate: string;
+            /** Weeklyrate */
+            weeklyRate: string;
+            /** Depositamount */
+            depositAmount: string;
+            /** Latefeeperday */
+            lateFeePerDay: string;
+            /** Replacementvalue */
+            replacementValue: string;
+            /** Minhiredays */
+            minHireDays: number;
+            /** Maxhiredays */
+            maxHireDays: number;
+            /**
+             * Ispublished
+             * @default false
+             */
+            isPublished: boolean;
         };
         /**
          * ModelDetailResponse
@@ -1883,6 +3120,62 @@ export interface components {
             imagePath: string | null;
         };
         /**
+         * ModelUpdateRequest
+         * @description The fields of a product model to change, any of them but the SKU.
+         */
+        ModelUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Categoryid */
+            categoryId?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Modelnumber */
+            modelNumber?: string | null;
+            /** Shortdescription */
+            shortDescription?: string | null;
+            /** Longdescription */
+            longDescription?: string | null;
+            /** Dailyrate */
+            dailyRate?: string | null;
+            /** Weeklyrate */
+            weeklyRate?: string | null;
+            /** Depositamount */
+            depositAmount?: string | null;
+            /** Latefeeperday */
+            lateFeePerDay?: string | null;
+            /** Replacementvalue */
+            replacementValue?: string | null;
+            /** Minhiredays */
+            minHireDays?: number | null;
+            /** Maxhiredays */
+            maxHireDays?: number | null;
+            /** Ispublished */
+            isPublished?: boolean | null;
+        };
+        /**
+         * MonthToDateResponse
+         * @description Utilisation and gross contribution from the first of the month to the end of today.
+         */
+        MonthToDateResponse: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /** Utilisationpercent */
+            utilisationPercent: string | null;
+            /** Grosscontribution */
+            grossContribution: string;
+        };
+        /**
          * NoShowRequest
          * @description Why nobody collected the reservation, which staff always say.
          */
@@ -1890,6 +3183,66 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /**
+         * NotificationPageResponse
+         * @description One page of the notification log, newest first.
+         */
+        NotificationPageResponse: {
+            /** Items */
+            items: components["schemas"]["NotificationResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * NotificationResponse
+         * @description One notification, as the log shows it.
+         */
+        NotificationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Reservationid
+             * Format: uuid
+             */
+            reservationId: string;
+            /** Reservationreference */
+            reservationReference: string;
+            type: components["schemas"]["NotificationType"];
+            /** Recipientemail */
+            recipientEmail: string;
+            /** Subject */
+            subject: string;
+            status: components["schemas"]["NotificationStatus"];
+            /** Attempts */
+            attempts: number;
+            /** Lasterror */
+            lastError: string | null;
+            /** Queuedat */
+            queuedAt: string;
+            /** Sentat */
+            sentAt: string | null;
+            /** Resendof */
+            resendOf: string | null;
+        };
+        /**
+         * NotificationStatus
+         * @description Delivery outcome of a notification. A FAILED row can be sent again.
+         * @enum {string}
+         */
+        NotificationStatus: "QUEUED" | "SENT" | "FAILED";
+        /**
+         * NotificationType
+         * @description What an outbound message is about. Phase one sends one kind only.
+         * @enum {string}
+         */
+        NotificationType: "BOOKING_CONFIRMATION";
         /**
          * OverdueRentalResponse
          * @description A rental past its due date with a unit still out, and the late fee it has run up.
@@ -2035,6 +3388,14 @@ export interface components {
             vatNumber?: string | null;
         };
         /**
+         * PublicationRequest
+         * @description Whether the model is to be in the public catalogue.
+         */
+        PublicationRequest: {
+            /** Published */
+            published: boolean;
+        };
+        /**
          * QuoteBasis
          * @description Which of the two totals a quote charged for one unit, as a response spells it.
          * @enum {string}
@@ -2082,6 +3443,14 @@ export interface components {
             depositTotal: string;
             /** Latefeeperday */
             lateFeePerDay: string;
+        };
+        /**
+         * ReasonRequest
+         * @description The reason an administrator gives for an override.
+         */
+        ReasonRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * RegisterRequest
@@ -2250,6 +3619,81 @@ export interface components {
          * @enum {string}
          */
         RentalStatus: "OPEN" | "OVERDUE" | "PARTIALLY_RETURNED" | "RETURNED" | "SETTLED";
+        /**
+         * ReportDefinitionsResponse
+         * @description The two definitions every figure of the report is read by.
+         */
+        ReportDefinitionsResponse: {
+            /** Utilisation */
+            utilisation: string;
+            /** Grosscontribution */
+            grossContribution: string;
+        };
+        /**
+         * ReportFiguresResponse
+         * @description The figures of a line of the report, or of every line together.
+         */
+        ReportFiguresResponse: {
+            /** Assetcount */
+            assetCount: number;
+            /** Daysonhire */
+            daysOnHire: number;
+            /** Serviceabledays */
+            serviceableDays: number;
+            /** Utilisationpercent */
+            utilisationPercent: string | null;
+            /** Hirerevenueexvat */
+            hireRevenueExVat: string;
+            /** Latefeesexvat */
+            lateFeesExVat: string;
+            /** Damagerecoveryexvat */
+            damageRecoveryExVat: string;
+            /** Repaircosts */
+            repairCosts: string;
+            /** Grosscontribution */
+            grossContribution: string;
+        };
+        /**
+         * ReportLineResponse
+         * @description One line of the report, for an asset, a model, a category or a branch.
+         *
+         *     `assetTag` and `status` are set on a line for an asset. `branchCode` is set
+         *     on a line for an asset or a branch, `categoryName` on a line for an asset,
+         *     a model or a category, and `modelName` on a line for an asset or a model.
+         */
+        ReportLineResponse: {
+            /** Assetcount */
+            assetCount: number;
+            /** Daysonhire */
+            daysOnHire: number;
+            /** Serviceabledays */
+            serviceableDays: number;
+            /** Utilisationpercent */
+            utilisationPercent: string | null;
+            /** Hirerevenueexvat */
+            hireRevenueExVat: string;
+            /** Latefeesexvat */
+            lateFeesExVat: string;
+            /** Damagerecoveryexvat */
+            damageRecoveryExVat: string;
+            /** Repaircosts */
+            repairCosts: string;
+            /** Grosscontribution */
+            grossContribution: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Branchcode */
+            branchCode: string | null;
+            /** Categoryname */
+            categoryName: string | null;
+            /** Modelname */
+            modelName: string | null;
+            /** Assettag */
+            assetTag: string | null;
+            status: components["schemas"]["AssetStatus"] | null;
+        };
         /**
          * ReservationLineRequest
          * @description One model and how many of it.
@@ -2449,6 +3893,49 @@ export interface components {
          */
         SettlementWait: "ITEMS_OUT" | "DAMAGE_ASSESSMENT" | "BALANCE_PAYMENT";
         /**
+         * StaffCreateRequest
+         * @description A new staff account. The person chooses their own password through the link they are sent.
+         *
+         *     `branchCode` is required for counter staff and must be null for an administrator.
+         */
+        StaffCreateRequest: {
+            /** Email */
+            email: string;
+            /** Fullname */
+            fullName: string;
+            /** Phone */
+            phone?: string | null;
+            role: components["schemas"]["UserRole"];
+            /** Branchcode */
+            branchCode?: string | null;
+        };
+        /**
+         * StaffCreatedResponse
+         * @description A new staff account, and whether the email with the link to choose a password was taken.
+         *
+         *     `emailDeliverable` is false when the message could not be handed to the
+         *     email provider. The person then asks for a new link from the sign in page
+         *     once mail reaches them.
+         */
+        StaffCreatedResponse: {
+            user: components["schemas"]["AdminUserResponse"];
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
+        /**
+         * StaffUpdateRequest
+         * @description The fields of a staff account to change, any of them. Never the address or a password.
+         */
+        StaffUpdateRequest: {
+            /** Fullname */
+            fullName?: string | null;
+            /** Phone */
+            phone?: string | null;
+            role?: components["schemas"]["UserRole"] | null;
+            /** Branchcode */
+            branchCode?: string | null;
+        };
+        /**
          * TokenRequest
          * @description The token of a verification link.
          */
@@ -2501,6 +3988,13 @@ export interface components {
          * @description The signed in account, as every session response and `/api/me` return it.
          *
          *     `branchCode` is null unless the account is counter staff.
+         *
+         *     `emailDeliverable` is false when this environment would not hand a message
+         *     for the account's address to the email provider, because email is off or
+         *     because mail goes to one approved address and this is not it. It is the
+         *     same rule the account routes answer with, and it depends on the
+         *     configuration and the address alone. A screen reads it so that it never
+         *     promises a confirmation email that cannot arrive.
          */
         UserResponse: {
             /**
@@ -2518,6 +4012,41 @@ export interface components {
             branchCode?: string | null;
             /** Emailverified */
             emailVerified: boolean;
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
+        /**
+         * UserRole
+         * @description The single role carried by a UserAccount. A role is never a set.
+         * @enum {string}
+         */
+        UserRole: "CUSTOMER" | "COUNTER_STAFF" | "ADMIN";
+        /**
+         * UtilisationReportResponse
+         * @description One page of the report, highest gross contribution first, with the totals over every line.
+         */
+        UtilisationReportResponse: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            groupBy: components["schemas"]["GroupBy"];
+            definitions: components["schemas"]["ReportDefinitionsResponse"];
+            totals: components["schemas"]["ReportFiguresResponse"];
+            /** Items */
+            items: components["schemas"]["ReportLineResponse"][];
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
+            /** Total */
+            total: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -3504,6 +5033,65 @@ export interface operations {
             };
         };
     };
+    post_reallocation_api_reservations__id__reallocation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not permitted from the status the reservation is in, or a unit could not be held for the period. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_reservation_api_reservations__id__get: {
         parameters: {
             query?: never;
@@ -3638,7 +5226,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description The reservation is not confirmed or its hire has not started, and `detail` says which, or a unit cannot go out on hire. */
+            /** @description The reservation is not confirmed, its hire has not started or it is short of a unit, and `detail` says which, or a unit cannot go out on hire. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4294,6 +5882,1564 @@ export interface operations {
                 };
             };
             /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_utilisation_report_api_admin_reports_utilisation_get: {
+        parameters: {
+            query: {
+                /** @description The first day of the period. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+                /** @description What each line stands for. */
+                groupBy?: components["schemas"]["GroupBy"];
+                /** @description Only the units held at this branch. */
+                branchCode?: string | null;
+                /** @description Only the units of models in this category and its children. */
+                categorySlug?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many lines a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisationReportResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_utilisation_report_api_admin_reports_utilisation_csv_get: {
+        parameters: {
+            query: {
+                /** @description The first day of the period. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+                /** @description What each line stands for. */
+                groupBy?: components["schemas"]["GroupBy"];
+                /** @description Only the units held at this branch. */
+                branchCode?: string | null;
+                /** @description Only the units of models in this category and its children. */
+                categorySlug?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_admin_dashboard_api_admin_dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_audit_events_api_admin_audit_events_get: {
+        parameters: {
+            query?: {
+                /** @description Only events about this kind of record, for example `reservation`. */
+                entityType?: string | null;
+                /** @description Only events about this record. */
+                entityId?: string | null;
+                /** @description Only events of this action, for example `charge.waived`. */
+                action?: string | null;
+                /** @description Only events this account made. */
+                actorUserId?: string | null;
+                /** @description The first business day, which is included. */
+                from?: string | null;
+                /** @description The last business day, which is included. */
+                to?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many events a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_notifications_api_admin_notifications_get: {
+        parameters: {
+            query?: {
+                /** @description Only notifications in this status. */
+                status?: components["schemas"]["NotificationStatus"] | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many notifications a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_resend_api_admin_notifications__id__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the notification. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such notification. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The notification has not failed, so there is nothing to send again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_waiver_api_admin_charges__id__waiver_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the charge. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such charge. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The charge is not pending. A settled charge is reversed instead. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_reversal_api_admin_charges__id__reversal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the charge. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such charge. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The charge is not settled, is a deposit movement, is itself a reversal or has been reversed already, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_adjustment_api_admin_rentals__id__adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the rental, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such rental. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The hire is settled, so only a correction that gives money back can be made to it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_release_api_admin_allocations__id__release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the allocation. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such allocation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The allocation is no longer active, or its unit is out on hire on the booking, and `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_categories_api_admin_categories_get: {
+        parameters: {
+            query?: {
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many categories a page holds. Every category fits the default. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_category_api_admin_categories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_category_api_admin_categories__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the category. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such category. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_models_api_admin_models_get: {
+        parameters: {
+            query?: {
+                /** @description Free text matched against SKU, name, manufacturer and model number. */
+                q?: string | null;
+                /** @description Only the models of this category. */
+                categoryId?: string | null;
+                /** @description True for the published models only, false for the hidden ones. */
+                published?: boolean | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many models a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_model_api_admin_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_model_api_admin_models__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the product model. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such product model. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_model_api_admin_models__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the product model. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such product model. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_publication_api_admin_models__id__publication_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the product model. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminModelResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such product model. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_assets_api_admin_assets_get: {
+        parameters: {
+            query?: {
+                /** @description Part of the tag, the serial number or the model name. */
+                q?: string | null;
+                /** @description A branch code. Only the units it holds. */
+                branchCode?: string | null;
+                /** @description Only the units in this status. */
+                status?: components["schemas"]["AssetStatus"] | null;
+                /** @description Only the units of this product model. */
+                modelId?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many units a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_asset_api_admin_assets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_asset_api_admin_assets__tag__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tag painted on the unit. */
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No unit carries that tag. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_asset_api_admin_assets__tag__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tag painted on the unit. */
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No unit carries that tag. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_transition_api_admin_assets__tag__transitions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tag painted on the unit. */
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAssetDetailResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No unit carries that tag. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The move is not one the unit may make from the status it is in, which `detail` names, or a booking or an open damage report still holds the unit and `detail` names it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_users_api_admin_users_get: {
+        parameters: {
+            query?: {
+                /** @description Part of the name or the email address. */
+                q?: string | null;
+                /** @description COUNTER_STAFF or ADMIN. Both when left out. */
+                role?: components["schemas"]["UserRole"] | null;
+                /** @description True for active accounts, false for deactivated ones. */
+                active?: boolean | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many accounts a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_user_api_admin_users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffCreatedResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_user_api_admin_users__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the staff account. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No staff account has this key. A customer's account is not one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The account is the last active administrator, which can never be deactivated or given another role, or it is the caller's own account, which the caller cannot deactivate. `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_deactivation_api_admin_users__id__deactivation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the staff account. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeactivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No staff account has this key. A customer's account is not one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The account is the last active administrator, which can never be deactivated or given another role, or it is the caller's own account, which the caller cannot deactivate. `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_reactivation_api_admin_users__id__reactivation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the staff account. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponse"];
+                };
+            };
+            /** @description The caller is not an administrator, or stopped being an active one before the change could be made. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No staff account has this key. A customer's account is not one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_customers_api_admin_customers_get: {
+        parameters: {
+            query?: {
+                /** @description Only the customers in this standing. */
+                status?: components["schemas"]["AccountStatus"] | null;
+                /** @description Part of a name, a phone number or an email address. */
+                q?: string | null;
+                /** @description The page, counted from 1. */
+                page?: number;
+                /** @description How many customers a page holds. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerPageResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_customer_status_api_admin_customers__id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
             422: {
                 headers: {
                     [name: string]: unknown;

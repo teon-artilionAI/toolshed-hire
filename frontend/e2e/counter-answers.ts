@@ -15,6 +15,7 @@
 
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { fulfil } from './answered.ts'
 import { DAMAGE_ANSWERS, DAMAGE_PATH } from './damage-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
 import { OVERVIEW_ANSWERS } from './overview-answers.ts'
@@ -39,6 +40,7 @@ const ASSISTANT = {
   role: 'counter',
   branchCode: 'CBD',
   emailVerified: true,
+  emailDeliverable: true,
 }
 
 const BRANCHES = {
@@ -117,7 +119,11 @@ const RESERVATION = {
   createdAt: `${TODAY}T08:00:00+02:00`,
 }
 
-const CHECKOUT = {
+/** What the checkout of the booking answers, by its route. owner-answers.ts
+ *  answers the same route with the booking short of a unit. */
+export const CHECKOUT_ROUTE = `GET /api/reservations/${REFERENCE}/checkout`
+
+export const CHECKOUT = {
   reservationId: RESERVATION_ID,
   reference: REFERENCE,
   status: 'CONFIRMED',
@@ -136,6 +142,7 @@ const CHECKOUT = {
   canCheckOut: true,
   refusal: null,
   rentalId: null,
+  unitsShort: 0,
 }
 
 /** What each route answers. Anything else is a 404, as from a backend without it. */
@@ -155,25 +162,26 @@ const ANSWERS: Record<string, unknown> = {
     total: 1,
   },
   [`GET /api/catalogue/models/${MODEL_SLUG}/availability`]: { from: TODAY, to: TOMORROW, hireDays: 1, quantity: 1, branches: ANSWERS_FROM },
-  [`GET /api/reservations/${REFERENCE}/checkout`]: CHECKOUT,
+  [CHECKOUT_ROUTE]: CHECKOUT,
   ...OVERVIEW_ANSWERS,
   ...RETURN_ANSWERS,
   ...DAMAGE_ANSWERS,
 }
 
-async function answerTheApi(route: Route): Promise<void> {
-  const request = route.request()
-  const key = `${request.method()} ${new URL(request.url()).pathname}`
-  const body = ANSWERS[key]
-  if (body === undefined) {
-    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
-    return
+/** Answer the API from `ANSWERS`, with the answers a scan names in place of
+ *  the ones they share a route with. */
+function answerTheApi(instead: Record<string, unknown>): (route: Route) => Promise<void> {
+  return async (route) => {
+    const request = route.request()
+    const key = `${request.method()} ${new URL(request.url()).pathname}`
+    await fulfil(route, instead[key] ?? ANSWERS[key])
   }
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
 }
 
 /** A counter screen to open, and the heading that proves it has loaded. */
 export interface CounterScreen {
+  /** The identifier in navigation.ts. */
+  id: string
   path: string
   heading: string
   /** Something that is only on the page once the screen has its data. */
@@ -181,21 +189,30 @@ export interface CounterScreen {
 }
 
 export const COUNTER_SCREENS: readonly CounterScreen[] = [
-  { path: `/counter/customers?q=thandi&customer=${CUSTOMER_ID}`, heading: 'Find a customer', loaded: 'Their bookings' },
-  { path: `/counter/booking?customer=${CUSTOMER_ID}`, heading: 'New booking', loaded: /1 model is free at Cape Town CBD/ },
-  { path: `/counter/checkout/${REFERENCE}`, heading: 'Checkout and deposit', loaded: 'Deposit to take now' },
-  { path: '/counter', heading: 'Today at the counter', loaded: 'Late fee so far' },
-  { path: '/counter/diary', heading: 'Branch diary', loaded: 'Booked, not collected yet' },
-  { path: '/counter/locator?q=TSH', heading: 'Where is it', loaded: 'Quarantined until inspected' },
-  { path: `/counter/return/${RETURN_RENTAL_ID}`, heading: 'Return and condition inspection', loaded: 'Units still out' },
-  { path: '/counter/overdue', heading: 'Overdue and late fees', loaded: 'Escalation queue, more than 14 days late' },
-  { path: DAMAGE_PATH, heading: 'Record damage', loaded: 'TSH-D-26-00012' },
+  { id: 'SC-12', path: `/counter/customers?q=thandi&customer=${CUSTOMER_ID}`, heading: 'Find a customer', loaded: 'Their bookings' },
+  { id: 'SC-13', path: `/counter/booking?customer=${CUSTOMER_ID}`, heading: 'New booking', loaded: /1 model is free at Cape Town CBD/ },
+  { id: 'SC-14', path: `/counter/checkout/${REFERENCE}`, heading: 'Checkout and deposit', loaded: 'Deposit to take now' },
+  { id: 'SC-10', path: '/counter', heading: 'Today at the counter', loaded: 'Late fee so far' },
+  { id: 'SC-11', path: '/counter/diary', heading: 'Branch diary', loaded: 'Booked, not collected yet' },
+  { id: 'SC-17', path: '/counter/locator?q=TSH', heading: 'Where is it', loaded: 'Quarantined until inspected' },
+  { id: 'SC-15', path: `/counter/return/${RETURN_RENTAL_ID}`, heading: 'Return and condition inspection', loaded: 'Units still out' },
+  { id: 'SC-18', path: '/counter/overdue', heading: 'Overdue and late fees', loaded: 'Escalation queue, more than 14 days late' },
+  { id: 'SC-16', path: DAMAGE_PATH, heading: 'Record damage', loaded: 'TSH-D-26-00012' },
 ]
 
-/** Open a counter screen as a signed in assistant, with the API answered here. */
-export async function openCounterScreen(page: Page, screen: CounterScreen): Promise<void> {
+/**
+ * Open a counter screen as a signed in assistant, with the API answered here.
+ *
+ * @param instead Answers that take the place of the shared ones for this
+ *   screen, by method and path, such as the owner's session.
+ */
+export async function openCounterScreen(
+  page: Page,
+  screen: CounterScreen,
+  instead: Record<string, unknown> = {},
+): Promise<void> {
   await page.addInitScript(SESSION_HINT)
-  await page.route('**/api/**', answerTheApi)
+  await page.route('**/api/**', answerTheApi(instead))
   await page.goto(screen.path)
   await expect(page.getByRole('heading', { level: 1, name: screen.heading })).toBeVisible()
   await expect(page.getByText(screen.loaded).first()).toBeVisible()

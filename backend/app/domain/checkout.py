@@ -2,9 +2,11 @@
 
 A rental may only be opened from a confirmed reservation, on or after the
 first day of its hire, by staff at the collection branch (BR-26). The branch
-is the caller's to check, because it is about who is asking. The status and
-the date are checked here, and each refusal is a `StateTransitionError`, which
-the API answers with 409 and a sentence that says which of the two it was.
+is the caller's to check, because it is about who is asking. The status, the
+date and the units are checked here. A booking short of a unit an
+administrator released by hand is refused too (BR-08), until it is given a
+replacement. Each refusal is a `StateTransitionError`, which the API answers
+with 409 and a sentence that says which of the three it was.
 
 The counter lists every unit it hands over, by its allocation, with the
 condition it went out in, what went with it and the meter reading. Every
@@ -32,12 +34,13 @@ from uuid import UUID
 from app.domain.asset_lifecycle import moved
 from app.domain.availability import AssetAllocation
 from app.domain.booking import Reservation
-from app.domain.booking_line import ReservationLine
+from app.domain.booking_line import NOTHING_SHORT, ReservationLine
 from app.domain.catalogue import Asset
 from app.domain.checkout_charges import deposit_hold_charge, deposit_to_hold, hire_charge
 from app.domain.customer_account import REFUSED_FIELD
 from app.domain.enums import AssetStatus, ConditionGrade, ReservationStatus
 from app.domain.errors import StateTransitionError, ValidationFailure
+from app.domain.reallocation import units_missing_message, units_short_of
 from app.domain.rental import Rental, RentalItem, UnitTerms
 from app.domain.states import state_for
 from app.domain.states.base import COLLECT_MOVE, COLLECTED, refusal_sentence
@@ -105,35 +108,43 @@ class Checkout:
     units: tuple[Asset, ...]
 
 
-def collection_refusal(status: ReservationStatus, start_date: date, today: date) -> str | None:
-    """Return why a reservation cannot be collected today, or None when it can (BR-26).
+def collection_refusal(
+    status: ReservationStatus, start_date: date, today: date, units_short: int = NOTHING_SHORT
+) -> str | None:
+    """Return why a reservation cannot be collected today, or None when it can (BR-26, BR-08).
 
     Args:
         status: Where the reservation stands.
         start_date: The first day of its hire.
         today: The current business day, from the clock.
+        units_short: How many units its lines still need, after a unit was
+            released by hand.
 
     Returns:
-        The sentence of the first refusal, which is the status before the
-        date, or None.
+        The sentence of the first refusal, which is the status, then the
+        date, then the missing units, or None.
 
     """
     if not state_for(status).permits(COLLECT_MOVE):
         return refusal_sentence(status, COLLECTED)
     if today < start_date:
         return TOO_EARLY_TO_COLLECT_MESSAGE
+    if units_short > NOTHING_SHORT:
+        return units_missing_message(units_short)
     return None
 
 
 def ensure_collectable(reservation: Reservation, today: date) -> None:
-    """Refuse a checkout of a reservation that is not confirmed or whose hire has not started.
+    """Refuse a checkout of a reservation that is not confirmed, not started or short of units.
 
     Raises:
         StateTransitionError: Naming the status held and COLLECTED, with the
             sentence of `collection_refusal`.
 
     """
-    refusal = collection_refusal(reservation.status, reservation.period.start, today)
+    refusal = collection_refusal(
+        reservation.status, reservation.period.start, today, units_short_of(reservation)
+    )
     if refusal is not None:
         raise StateTransitionError(
             refusal,

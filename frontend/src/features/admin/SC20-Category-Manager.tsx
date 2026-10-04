@@ -1,99 +1,153 @@
 /**
- * The category list on SC-20.
+ * The categories on SC-20, from `GET /api/admin/categories`.
  *
- * Categories are how customers narrow a catalogue of a hundred and twenty
- * tools down to the four they might want, so an empty one is worse than
- * none. A category can only be removed once nothing sits in it, and the
- * screen says so before you reach for the button rather than after.
+ * Every category is listed, switched on or off, each parent before its
+ * children the way the server sends them. The owner adds one or changes one
+ * in the form above the list, and switches one off or on from its row. A
+ * category is never deleted. Each write asks first, and the list is read again
+ * once the server has answered.
+ *
+ * It has the shared loading, failed and empty states. The form's heading
+ * takes focus when it opens, and closing it unsaved gives focus back to the
+ * button that opened it.
  */
 
-import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
-import type { Category } from '../../shared/types'
-import { Field } from '../../shared/ui'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Plus } from 'lucide-react'
+import type { AdminCategory, AdminCategoryList } from '../../shared/api/contract'
+import type { QueryPhase } from '../../shared/api/query-phase'
+import { ErrorState, LoadingState } from '../../shared/async-states'
+import { EmptyState } from '../../shared/ui'
+import { countOf } from '../counter/counter-labels'
+import { CategoryForm } from './SC20-Category-Form'
+import CategoryTable from './SC20-Category-Table'
+
+/** What the screen says once a category write has worked. */
+export interface CategoryOutcome {
+  title: string
+  body: string
+}
+
+/** Which category the form has open. */
+type Editing = { kind: 'new' } | { kind: 'change'; category: AdminCategory }
+
+const FORM_HEADING_ID = 'category-form-heading'
+const SKELETON_ROWS = 2
+
+function FormFrame({ title, children }: { title: string; children: ReactNode }) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    heading.current?.focus()
+  }, [])
+  return (
+    <section aria-labelledby={FORM_HEADING_ID} className="mb-lg min-w-0 rounded-lg border border-line p-md">
+      <h3 id={FORM_HEADING_ID} ref={heading} tabIndex={-1} className="mb-md break-words text-base font-semibold text-ink">
+        {title}
+      </h3>
+      {children}
+    </section>
+  )
+}
 
 export default function CategoryManager({
-  categories, countFor, onAdd, onRemove,
+  list,
+  phase,
+  error,
+  onRetry,
+  onDone,
 }: {
-  categories: Category[]
-  /** How many catalogue entries sit in a category. */
-  countFor: (categoryId: string) => number
-  /** Adds the category, or returns a message explaining why it cannot. */
-  onAdd: (name: string) => string | null
-  onRemove: (category: Category) => void
+  /** The categories once they have been read. */
+  list: AdminCategoryList | undefined
+  /** Where the read of the categories stands. */
+  phase: QueryPhase
+  /** Why the last read failed, when it did. */
+  error: unknown
+  onRetry: () => void
+  onDone: (outcome: CategoryOutcome) => void
 }) {
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
+  const [editing, setEditing] = useState<Editing | null>(null)
+  const [askingId, setAskingId] = useState<string | null>(null)
+  const addButton = useRef<HTMLButtonElement>(null)
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault()
-    const trimmed = name.trim()
-    if (!trimmed) {
-      setError('Give the category a name, for example Breaking and Drilling.')
-      return
-    }
-    const problem = onAdd(trimmed)
-    if (problem) {
-      setError(problem)
-      return
-    }
-    setName('')
-    setError('')
+  function closeForm() {
+    setEditing(null)
+    addButton.current?.focus()
+  }
+
+  function saved(category: AdminCategory, wasNew: boolean) {
+    setEditing(null)
+    onDone({
+      title: wasNew ? `${category.name} is added to the categories` : `${category.name} is saved`,
+      body: category.parentName === null ? 'It sits at the top level.' : `It sits under ${category.parentName}.`,
+    })
+  }
+
+  function switched(category: AdminCategory) {
+    setAskingId(null)
+    onDone({
+      title: category.isActive ? `${category.name} is switched on` : `${category.name} is switched off`,
+      body: category.isActive
+        ? 'It is back in the catalogue customers browse.'
+        : 'It has left the catalogue customers browse. Nothing in it was deleted.',
+    })
   }
 
   return (
-    <>
-      <ul className="mb-md flex flex-wrap gap-sm">
-        {categories.map((category) => {
-          const count = countFor(category.id)
-          return (
-            <li
-              key={category.id}
-              className="flex items-center gap-sm rounded border border-line bg-muted py-xs pl-md pr-xs"
-            >
-              <span className="text-sm text-ink">
-                {category.name} <span className="tabular text-slate-soft">({count})</span>
-              </span>
-              <button
-                type="button"
-                disabled={count > 0}
-                onClick={() => onRemove(category)}
-                className="btn px-sm text-slate-soft hover:bg-surface hover:text-status-overdue"
-              >
-                <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="sr-only">
-                  {count > 0
-                    ? `${category.name} cannot be removed, it holds ${count} tools`
-                    : `Remove the ${category.name} category`}
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-      <p className="mb-md text-sm text-slate-soft">
-        A category can only be removed once it holds no tools. Move the tools to another category
-        first.
-      </p>
-      <form onSubmit={submit} noValidate className="flex flex-wrap items-end gap-sm">
-        <div className="min-w-[14rem] flex-1">
-          <Field label="Add a category" htmlFor="new-category" error={error}>
-            <input
-              id="new-category"
-              className="field-input"
-              value={name}
-              placeholder="Welding and Fabrication"
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? 'new-category-error' : undefined}
-              onChange={(e) => { setName(e.target.value); setError('') }}
-            />
-          </Field>
-        </div>
-        <button type="submit" className="btn-secondary px-md">
+    <section aria-labelledby="categories-heading" className="card min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-md border-b border-line px-lg py-md">
+        <h2 id="categories-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-soft">
+          Categories
+        </h2>
+        <button ref={addButton} type="button" className="btn-secondary px-md" onClick={() => setEditing({ kind: 'new' })}>
           <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Add category
+          Add a category
         </button>
-      </form>
-    </>
+      </div>
+      <div className="p-lg">
+        {editing !== null && list !== undefined && (
+          <FormFrame title={editing.kind === 'new' ? 'Add a category' : `Change the category ${editing.category.name}`}>
+            <CategoryForm
+              key={editing.kind === 'new' ? 'new' : editing.category.id}
+              category={editing.kind === 'new' ? null : editing.category}
+              categories={list.items}
+              onSaved={(category) => saved(category, editing.kind === 'new')}
+              onClose={closeForm}
+            />
+          </FormFrame>
+        )}
+        <p role="status" className="mb-md text-sm text-slate-soft">
+          {phase === 'ready' && list !== undefined
+            ? `${countOf(list.total, 'category', 'categories')}, switched on or off. Customers see only the ones switched on.`
+            : phase === 'loading'
+              ? 'Loading the categories.'
+              : ''}
+        </p>
+        {phase === 'failed' ? (
+          <ErrorState what="the categories" error={error} onRetry={onRetry} />
+        ) : list === undefined ? (
+          <LoadingState shape="rows" count={SKELETON_ROWS} />
+        ) : list.items.length === 0 ? (
+          <EmptyState
+            title="There are no categories yet"
+            body="Add the first category, then put models in it."
+            action={
+              <button type="button" className="btn-secondary px-md" onClick={() => setEditing({ kind: 'new' })}>
+                Add a category
+              </button>
+            }
+          />
+        ) : (
+          <CategoryTable
+            categories={list.items}
+            askingId={askingId}
+            onEdit={(category) => setEditing({ kind: 'change', category })}
+            onAsk={(category) => setAskingId(category.id)}
+            onCancel={() => setAskingId(null)}
+            onSwitched={switched}
+          />
+        )}
+      </div>
+    </section>
   )
 }

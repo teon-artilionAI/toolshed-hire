@@ -1,8 +1,10 @@
 """The throttle component, with a dictionary where the database would be (C-17).
 
-A window is fixed, a bucket is a salted hash and an old window is deleted.
-These prove the three with no database. The same counting is proved against
-SQL through the sign in tests, and against PostgreSQL in tests/integration.
+A window is fixed, a bucket is a salted hash, and counting never deletes
+anything, because the lazy sweep prunes old counters, which
+tests/unit/test_throttle_pruning.py proves. These prove the three with no
+database. The same counting is proved against SQL through the sign in tests,
+and against PostgreSQL in tests/integration.
 """
 
 from __future__ import annotations
@@ -15,8 +17,8 @@ from typing import Final
 import pytest
 
 from app.application.throttle import (
-    SWEEP_INTERVAL,
-    SWEEP_RETENTION,
+    LONGEST_THROTTLE_WINDOW,
+    SlidingWindow,
     Throttle,
     ThrottleRule,
 )
@@ -36,22 +38,26 @@ SECONDS_LEFT_IN_WINDOW: Final[int] = 450
 
 @dataclass
 class DictionaryStore:
-    """Counters in a dictionary, and a note of every sweep it was asked for."""
+    """Counters in a dictionary, and a note of every delete it was asked for."""
 
     counters: dict[tuple[str, datetime], int] = field(default_factory=dict)
-    sweeps: list[datetime] = field(default_factory=list)
+    deletes: list[datetime] = field(default_factory=list)
 
     def increment(self, bucket_key_hash: str, window_started_at: datetime) -> int:
         key = (bucket_key_hash, window_started_at)
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
 
-    def delete_windows_before(self, cutoff: datetime) -> int:
-        self.sweeps.append(cutoff)
-        expired = [key for key in self.counters if key[1] < cutoff]
-        for key in expired:
-            del self.counters[key]
-        return len(expired)
+    def delete_windows_before(self, cutoff: datetime, limit: int) -> int:
+        self.deletes.append(cutoff)
+        return 0
+
+    def total_since(self, bucket_key_hash: str, since: datetime) -> int:
+        return sum(
+            count
+            for (bucket, window_started_at), count in self.counters.items()
+            if bucket == bucket_key_hash and window_started_at >= since
+        )
 
 
 class TestTheFixedWindow:
@@ -119,29 +125,19 @@ class TestTheBucketKey:
             Throttle("")
 
 
-class TestSweepingOldWindows:
-    """Old windows are deleted, at most once per interval in one process."""
+class TestCountingDeletesNothing:
+    """Old counters are left for the sweep, so an attempt never pays for a delete."""
 
-    def test_the_first_check_sweeps_windows_older_than_the_retention(self) -> None:
+    def test_a_check_and_a_sliding_count_never_ask_for_a_delete(self) -> None:
         throttle, store = Throttle(SALT), DictionaryStore()
-        store.counters[("an-old-bucket", NOW - SWEEP_RETENTION - WINDOW)] = 7
-        store.counters[("a-recent-bucket", NOW - WINDOW)] = 2
-        throttle.check(store, RULE, EMAIL, NOW)
-        assert store.sweeps == [NOW - SWEEP_RETENTION]
-        assert ("an-old-bucket", NOW - SWEEP_RETENTION - WINDOW) not in store.counters
-        assert ("a-recent-bucket", NOW - WINDOW) in store.counters
-
-    def test_a_second_check_inside_the_interval_does_not_sweep_again(self) -> None:
-        throttle, store = Throttle(SALT), DictionaryStore()
-        throttle.check(store, RULE, EMAIL, NOW)
-        throttle.check(store, RULE, EMAIL, NOW + SWEEP_INTERVAL - timedelta(seconds=1))
-        assert len(store.sweeps) == 1
-
-    def test_a_check_after_the_interval_sweeps_again(self) -> None:
-        throttle, store = Throttle(SALT), DictionaryStore()
-        throttle.check(store, RULE, EMAIL, NOW)
-        throttle.check(store, RULE, EMAIL, NOW + SWEEP_INTERVAL)
-        assert len(store.sweeps) == 2
+        an_old_window = ("an-old-bucket", NOW - timedelta(days=3))
+        store.counters[an_old_window] = 7
+        failures = SlidingWindow(name="login-failure", span=WINDOW)
+        for later in (timedelta(0), timedelta(hours=1), timedelta(days=2)):
+            throttle.check(store, RULE, EMAIL, NOW + later)
+            throttle.count_in_span(store, failures, EMAIL, NOW + later)
+        assert store.deletes == []
+        assert store.counters[an_old_window] == 7
 
 
 class TestARuleThatMakesNoSense:
@@ -154,9 +150,13 @@ class TestARuleThatMakesNoSense:
             ("login-email", 0, WINDOW),
             ("login-email", 10, timedelta(0)),
             ("login-email", 10, timedelta(seconds=1.5)),
-            ("login-email", 10, SWEEP_RETENTION + timedelta(seconds=1)),
+            ("login-email", 10, LONGEST_THROTTLE_WINDOW + timedelta(seconds=1)),
         ],
     )
     def test_it_is_refused(self, name: str, limit: int, window: timedelta) -> None:
         with pytest.raises(ValueError, match="Attempted to build the throttle rule"):
             ThrottleRule(name=name, limit=limit, window=window)
+
+    def test_a_window_as_long_as_the_longest_is_allowed(self) -> None:
+        rule = ThrottleRule(name="register-email", limit=5, window=LONGEST_THROTTLE_WINDOW)
+        assert rule.window == LONGEST_THROTTLE_WINDOW

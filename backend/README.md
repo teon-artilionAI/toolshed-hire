@@ -1,8 +1,9 @@
 # Toolshed Hire backend
 
-FastAPI and PostgreSQL. This directory is the walking skeleton, which means it
-proves the load bearing decisions end to end and nothing else. It is not a
-first pass at the whole application.
+FastAPI and PostgreSQL. This directory began as the walking skeleton, which
+proved the load bearing decisions end to end and nothing else. Every module of
+the design document has been built on it since, and each section below
+describes one of them as it stands.
 
 ## What it proves
 
@@ -42,6 +43,28 @@ first pass at the whole application.
    explicit decision on the charge, recovers at most the replacement value, and
    settles the deposit when it was the last thing waiting. An administrator
    repairs, resolves or writes the unit off, and a written off unit keeps its row.
+12. The owner sees who did what in the audit log and every confirmation in the
+   notification log, sends a failed confirmation again without changing the
+   failure, waives, reverses or adjusts a charge without editing a settled
+   row, and releases a unit of a booking by hand, after which the booking
+   cannot be collected until it is given a replacement.
+13. The owner keeps the categories and the product models once for all three
+   branches, sets each rate, deposit, late fee and replacement value, and
+   publishes or hides a model. A rate raised from R280 to R310 reaches the next
+   quote and booking, while a booking already made, its lines and the rental
+   checked out from it stay at R280.
+14. Every physical unit is in a register the owner can search by tag, serial
+   number or model name. A unit is registered at INTAKE with a tag that never
+   changes, moves through its lifecycle by hand along the moves the asset state
+   model permits, and is never retired while a booking holds it. A retired
+   unit keeps its row, its history and its figures in the report, and is never
+   offered for hire again.
+15. Only the owner opens a staff account, changes a role or releases a
+   customer from hold, and access follows the people who work here. A new
+   account chooses its own password through the reset link it is sent, a
+   deactivated one is stopped on its next request with every refresh session
+   revoked, a role change reaches the next request, and two administrators
+   demoting each other at once cannot leave the business without one.
 
 ## Layout
 
@@ -54,7 +77,7 @@ first pass at the whole application.
 | `app/infrastructure` | Infrastructure | Engine, SQL repositories, the SQL unit of work, the system clock, hashing, tokens. |
 | `app/infrastructure/models` | Infrastructure | One SQLModel class per table, one module per subject area. |
 | `app/infrastructure/notification` | Infrastructure | The SQL outbox, the Resend adapter and the two gateways that are not Resend. |
-| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, and `sweep_deps.py` wires the sweep that lapses expired holds and marks no shows. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
+| `app/api` | API | Routers, dependencies, middleware, problem responses. `deps.py` is the composition root, `catalogue_deps.py` is its read side half, `identity_deps.py` wires the session use cases, `account_deps.py` wires registration, the two account links and the profile, `pricing_deps.py` chooses the pricing policy, `booking_deps.py` wires the reservation use cases, `customer_deps.py` wires the counter's customer lookup and the walk-in, `hire_deps.py` wires checkout and the rental read, `damage_deps.py` wires the damage reports, `counter_deps.py` wires the dashboard, the diary and the asset locator, `report_deps.py` wires the utilisation report and the admin dashboard, `late_fee_deps.py` chooses the late fee policy, `admin_deps.py` wires the two logs, the re-send, the charge corrections and the force release, `admin_catalogue_deps.py` wires the categories and product models of the admin catalogue, `admin_asset_deps.py` wires the reads and writes of the asset register, `admin_user_deps.py` wires the staff accounts and the customer holds, and `sweep_deps.py` wires the lazy sweep of its four parts. `user_presenter.py` shapes the signed in account that signing in, refreshing and `GET /api/me` return. `access_policy.py` is the deny by default check. `field_messages.py` holds the sentences shown for a query parameter the framework refused. |
 | `alembic/versions` | Migrations | Hand written, because autogenerate cannot invent an exclusion constraint. |
 | `alembic/baseline` | Migrations | The frozen definitions behind migration `0001`, one module per subject area. |
 | `alembic/role_grants.py` | Migrations | What the restricted application role may do, behind migration `0002`. |
@@ -67,23 +90,27 @@ layers, the application layer imports the domain and nothing else, and the API
 layer is the only one that imports everything, because it is where the pieces
 are put together.
 
-The design document describes eight modules. Seven have code so far, and each
+The design document describes eight modules. All eight have code now, and each
 keeps the same name in every layer it appears in.
 
 | Module | Domain | Application | Infrastructure |
 |---|---|---|---|
-| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher` |
-| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle`, `DamageReport`, the quarantine rule in `quarantine`, `file_damage_report` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview`, `DamageReportRepository`, `FileDamageReportUseCase`, `SendForRepairUseCase`, `CloseDamageReportUseCase`, `ReadDamageReports` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview`, `SqlDamageReportRepository`, `SqlDamageReportReads` |
-| `catalogue` | `ProductModel`, `Asset` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator` |
+| `identity` | `Actor`, `Branch`, `CustomerProfile`, `Account`, `RefreshSession`, `PendingToken`, `NewCustomer`, `CustomerDetails`, `WalkInCustomer`, `StaffDetails` and the rules of a staff account in `staff_account`, `StandingChange` in `customer_standing` | `BranchRepository`, `CustomerRepository`, `BranchDirectory`, `CustomerDirectory`, `AccountRepository`, `SessionRepository`, `PasswordHasher`, `SignInUseCase`, `RefreshSessionUseCase`, `SignOutUseCase`, `RegisterCustomerUseCase`, `VerifyEmailUseCase`, `ResendVerificationUseCase`, `RequestPasswordResetUseCase`, `CompletePasswordResetUseCase`, `ReadProfileUseCase`, `UpdateProfileUseCase`, `LookUpCustomers`, `RegisterWalkInUseCase`, `AccountMailer`, `StaffRepository`, `StaffDirectory`, `ReadStaff`, `OpenStaffAccountUseCase`, `EditStaffAccountUseCase`, `DeactivateStaffAccountUseCase`, `ReactivateStaffAccountUseCase`, `CustomerListing`, `ReadCustomerList`, `ChangeCustomerStandingUseCase` | `SqlBranchRepository`, `SqlCustomerRepository`, `SqlBranchDirectory`, `SqlCustomerDirectory`, `SqlAccountRepository`, `SqlSessionRepository`, `BcryptPasswordHasher`, `SqlStaffRepository`, `SqlStaffDirectory`, `SqlCustomerListing` |
+| `hire` | `Rental`, `RentalItem`, `Charge`, `check_out`, the asset state model in `asset_lifecycle`, `DamageReport`, the quarantine rule in `quarantine`, `file_damage_report`, the corrections in `charge_corrections` and their rework in `resettlement` | `RentalRepository`, `CheckoutRentalUseCase`, `ReadRentals`, `CounterOverviewQuery`, `ReadCounterOverview`, `DamageReportRepository`, `FileDamageReportUseCase`, `SendForRepairUseCase`, `CloseDamageReportUseCase`, `ReadDamageReports`, `WaiveChargeUseCase`, `ReverseChargeUseCase`, `AdjustRentalUseCase` | `SqlRentalRepository`, `SqlRentalReads`, `SqlCheckoutReads`, `SqlCounterOverview`, `SqlDamageReportRepository`, `SqlDamageReportReads` |
+| `catalogue` | `ProductModel`, `Asset`, the forms of a code and a slug in `catalogue_forms`, `CategoryTerms` and `CatalogueCategory` with the nesting rule in `category_rules`, `ModelTerms` and `CatalogueEntry` with the money and hire day rules in `catalogue_entry_rules`, `RegisteredUnit` and `UnitDetails` with the rules of a tag and its paperwork in `asset_register`, the moves by hand in `asset_transitions` | `ProductModelRepository`, `CatalogueQuery`, `BrowseCatalogue`, `AssetLocatorQuery`, `LocateAssets`, `CategoryRepository`, `CatalogueEntryRepository`, `AdminCatalogueQuery`, `ReadAdminCatalogue`, `CreateCategoryUseCase`, `EditCategoryUseCase`, `CreateModelUseCase`, `EditModelUseCase`, `PublishModelUseCase`, `AssetRegisterRepository`, `AssetRegisterQuery`, `ReadAssetRegister`, `RegisterUnitUseCase`, `EditUnitUseCase`, `MoveUnitUseCase` | `SqlProductModelRepository`, `SqlCatalogueQuery`, `SqlAssetLocator`, `SqlCategoryRepository`, `SqlCatalogueEntryRepository`, `SqlAdminCatalogue`, `SqlAssetRegisterRepository`, `SqlAssetRegister` |
 | `availability` | `AssetAllocation` | `AssetRepository`, `allocate_assets`, `AvailabilityQuery`, `SearchAvailability` | `SqlAssetRepository`, `SearchAvailabilityQuery` |
-| `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations` | `SqlReservationRepository`, `SqlReservationReads` |
-| `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway` |
+| `booking` | `Reservation`, `ReservationLine`, `ReservationState` and its eight states, the no show rules in `no_show`, the force release and the top up in `reallocation` | `ReservationRepository`, `CreateReservationUseCase`, `HoldReservationUseCase`, `ConfirmReservationUseCase`, `CancelReservationUseCase`, `MarkNoShowUseCase`, `ExpireHoldsAndNoShowsUseCase`, `ReadReservations`, `ForceReleaseUseCase`, `ReallocateUseCase` | `SqlReservationRepository`, `SqlReservationReads` |
+| `notification` | `Notification`, `EmailMessage` | `NotificationOutbox`, `NotificationGateway`, `NotificationDispatcher`, `NotificationLogQuery`, `ReadNotificationLog`, `ResendNotificationUseCase` | `SqlNotificationOutbox`, `ResendEmailAdapter`, `FakeEmailGateway`, `SqlNotificationLog` |
 | `money` | `Money`, `PricingPolicy`, `StandardPricingPolicy`, `FixedRatePricingPolicy`, `LineSnapshot`, `HireQuote`, `HireTotals` | `QuoteHire` | none yet, a quote writes nothing |
+| `reporting` | The day counting in `report_days` and `unit_days`, `utilisation_percent`, `Contribution`, `shares_of_hire_charge` | `FleetReportQuery`, `AdminDashboardQuery`, `FleetFigures`, `ReadUtilisationReport`, `ReadAdminDashboard` | `SqlFleetReport`, `SqlAdminDashboard` |
 
-`reporting` gains its package when its first use case is built.
 The audit trail belongs to no module, because every module writes to
-it, so it has a file of its own in each layer. The throttle in
-`app/application/throttle.py` and the ownership scope in
+it, so it has a file of its own in each layer. Its read is a port of its own,
+`AuditEventQuery` in `app/application/audit_reads.py` behind `ReadAuditLog`,
+with `SqlAuditEventReads` in `app/infrastructure/audit_query.py`, so nothing
+that writes the log can read it and nothing that reads it can write it. The throttle in
+`app/application/throttle.py`, its pruning in `app/application/throttle_pruning.py`
+and the ownership scope in
 `app/application/ownership.py` belong to no module for the same reason.
 
 ## The four patterns in place
@@ -159,9 +186,11 @@ left for a background thread might never run. Every message carries an
 dispatched twice is delivered once.
 
 Only a booking confirmation writes a notification row, and
-`ConfirmReservationUseCase` is the one place that queues it. Creating a draft
-and holding it write none, so nobody is sent a confirmation of a hold they
-never confirmed.
+`ConfirmReservationUseCase` is the one place that queues one for a booking.
+`ResendNotificationUseCase` queues a new row when an administrator sends a
+failed one again, through the same outbox and the same dispatcher. Creating a
+draft and holding it write none, so nobody is sent a confirmation of a hold
+they never confirmed.
 
 ### Strategy
 
@@ -193,9 +222,11 @@ policy.
 
 Three things live in exactly one place because of it.
 
-- `StandardPricingPolicy.quote` is the only place a rate is multiplied by a
-  number of days. `tests/unit/test_one_place_for_a_price.py` parses every
-  module of `app` to keep it so.
+- `StandardPricingPolicy` is the only class that multiplies a rate by a
+  number of days. `quote` prices a hire, and `week_at_the_daily_rate` tells
+  the admin catalogue what seven days at a daily rate come to, which is the
+  most a weekly rate may be. `tests/unit/test_one_place_for_a_price.py` parses
+  every module of `app` to keep it so.
 - `VAT_RATE_PERCENT` in `app/domain/vat.py` is the only place the VAT rate is
   written, as `Decimal("15.00")`. Hire rates exclude VAT. A deposit carries
   none (BR-23).
@@ -265,7 +296,9 @@ them. Checkout calls `collect`, the no show sweep and the counter call
 A tagged unit has a state model of its own, the asset states of the design
 document. `PERMITTED_ASSET_MOVES` in `app/domain/asset_lifecycle.py` is its
 table, and `moved` refuses any move the table does not hold with
-`StateTransitionError`. Checkout moves every unit to `ON_HIRE` through it.
+`StateTransitionError`. Checkout moves every unit to `ON_HIRE` through it, and
+an administrator's move by hand goes through it as well, with the guards of
+`app/domain/asset_transitions.py` on top.
 
 ### The clock
 
@@ -436,8 +469,46 @@ The counters are rows in `rate_limit_counter`, because the instances share no
 memory. A bucket is keyed by a salted SHA-256 and never by the address. The
 salt is derived from `JWT_SECRET`. Counting is one atomic statement, and it is
 committed before the password check starts, so the lock on a counter row lasts
-one statement and not one bcrypt. Windows older than a day are deleted, at
-most once every fifteen minutes by each process.
+one statement and not one bcrypt.
+
+No window is longer than an hour, `LONGEST_THROTTLE_WINDOW` in
+`app/application/throttle.py`, and a rule with a longer window is refused when
+it is built. A counter is kept for a day after its window has ended,
+`COUNTER_KEPT_AFTER_WINDOW` in `app/application/throttle_pruning.py`. The lazy
+sweep deletes the counters whose window ended more than a day ago, as its
+fourth part, in one statement a call that takes at most
+`COUNTER_PRUNE_BATCH_SIZE`, which is 500, oldest first. It logs how many went
+as `throttle.counters_pruned`. The statement finds its rows through
+`ix_rate_limit_counter_window_started_at`, revision `0012`, so when nothing is
+due it reads one index entry, and it skips a row another sweep has locked, so
+two sweeps at once never wait for each other. Sign in and the account routes
+delete nothing themselves.
+
+What degrades first is the pruning falling behind. It keeps up while fewer
+than 500 counters are written between two sweeps, which holds easily, because
+every availability search and every list of bookings or hires runs the sweep
+and an attempt writes two or three counters. A burst of attempts, such as an
+attack on sign in from many addresses, can write counters faster than that,
+and the table then holds more than a day until the sweeps catch up a batch at
+a time. Every read of the table goes through its unique key or the index of
+revision `0012`, so that costs disk and never time. At a hundred times today's
+traffic the pruning belongs with the rest of the sweep in a scheduled job.
+
+`refresh_session` is not pruned. A session row stays once it is rotated,
+revoked or out of time, because the application role holds no DELETE on that
+table and nothing in the domain is ever hard deleted (BR-51). It grows by a row
+for every sign in and every refresh. A refresh finds its row through the
+unique index on the token hash, and the revocations of one account go through
+`ix_refresh_session_live`, which holds the sessions nobody revoked. A session
+left to run out without a sign out stays in that index, so an account that
+signs in every day and never signs out gathers a row there a day, and a reset
+or a deactivation revokes them all in one statement. So the table costs disk
+long before it costs a request. When it matters, the job is an operator's,
+run as `toolshed_migrate`, which owns the tables, and never as `toolshed_app`.
+It would delete, in batches by key, the sessions whose `expires_at` passed
+more than ninety days before, which no browser can ever present again. The
+audit events of every sign in, refresh, reuse and sign out stay, so nothing
+the log answers is lost.
 
 `Throttle` in `app/application/throttle.py` is the reusable piece. The account
 routes use it with seven rules of their own, listed in the next section, and
@@ -469,10 +540,14 @@ The role dependencies read the role from the `user_account` row on every
 request and not from the token. That is stricter than the fifteen minutes the
 design document allows a claim to be trusted for.
 
-Waivers, user and role management and force release do not exist yet. When
-they are added they depend on `FreshAdminUser` from `app/api/identity_deps.py`.
-It reads the account again under a shared row lock, so the role that is checked
-is the role that holds until the action commits.
+The charge corrections, the re-send, the force release, the five writes of
+the admin catalogue and the three writes of the asset register depend on
+`FreshAdminUser` from
+`app/api/identity_deps.py`, and so does a change of a customer's standing. It
+reads the account again under a shared row lock, so the role that is checked
+is the role that holds until the action commits. The writes of user and role
+management depend on `AdminUser` and take a stronger lock inside the use case,
+which is described under User and role management.
 
 ### Ownership and branch scope
 
@@ -558,8 +633,13 @@ with the same answer.
 ### Completing a reset
 
 `POST /api/auth/password-reset/complete` sets the new hash, clears the token,
-lifts any lock and revokes every refresh session of the account, in one
-transaction with the audit event `auth.password_reset_completed`. A browser
+lifts any lock, marks the email address as verified when it was not yet, and
+revokes every refresh session of the account, in one transaction with the
+audit event `auth.password_reset_completed`. The link only ever went to that
+address, so using it proves the person reads mail there, which is all a
+verification link proves. The event records `email_verified` before and after
+beside `locked`. A verification link still pending is left alone, so using it
+later succeeds and changes nothing. A browser
 that was signed in with the old password is signed out at its next refresh.
 The sessions are revoked with the reason `LOGOUT`. No reason is added to the
 enumeration, and of the four it has `LOGOUT` is the nearest, because the
@@ -569,8 +649,10 @@ names `newPassword`.
 
 ### The messages
 
-The three messages go through the `NotificationGateway` port, so the Resend
-adapter and the fake both carry them. None of them writes a `notification`
+The three messages go through the `NotificationGateway` port, and so does the
+invitation a new member of staff is sent, which is described under User and
+role management. The Resend adapter and the fake both carry all four. None of
+them writes a `notification`
 row, because that table records the booking confirmation and nothing else.
 Each is sent inside the request, after the commit and with no transaction
 open, with the five second timeout the adapter already has. A message that
@@ -670,9 +752,11 @@ It locks the due rows, checks each again and lapses it, so two sweeps at once
 take turns and the second finds nothing left to do. Its query reads through the
 partial index `ix_reservation_hold_expiry`. Every use case that is about to
 decide something about one reservation also lapses that one itself, so the
-bound on the batch never lets an expired hold be confirmed. The other half of
-the same sweep marks the bookings nobody collected, which is described under
-the counter overview below. Each half runs in a transaction of its own.
+bound on the batch never lets an expired hold be confirmed. The same sweep has
+three more parts. The second marks the bookings nobody collected, which is
+described under the counter overview below, the third marks the hires gone
+overdue, under Returns and settlement, and the fourth deletes old throttle
+counters, under Throttling. Each part runs in a transaction of its own.
 
 **A confirmation is where the customer is told.** `ConfirmReservationUseCase`
 queues the booking confirmation in its own transaction and sends it after the
@@ -685,9 +769,12 @@ profile by one. There is no route that deletes anything (BR-51).
 
 **A customer on hold cannot book.** A profile whose `account_status` is not
 `ACTIVE` is refused when a draft is created and again when it is put on hold,
-with `AccountOnHoldError`, which is a 403 (BR-18). For an account on hold the
-`detail` says why, which is three bookings in the last twelve months that were
-not collected, and that an administrator lifts the hold.
+with `AccountOnHoldError`, which is a 403 (BR-18). The `detail` says plainly
+that the account is on hold and to contact a branch, and nothing about why. A
+hold comes from the third no show in twelve months or from an administrator
+by hand, and the profile does not record which. Only the audit trail does,
+and a booking, which writes to the log, never reads it. So one neutral
+sentence serves both, and a blacklisted account is told the same.
 
 Every change of status writes one audit event in the same transaction (BR-49),
 `reservation.created`, `reservation.held`, `reservation.confirmed`,
@@ -790,9 +877,9 @@ units it has. The checkout read is two. `daysLateToday` and `lateFeeToday` are
 what the late fee policy says a unit still out would owe if it came back
 today, and `settlementWaitingOn` is the domain's `settlement_wait`, the same
 rule the return asks before it settles, both worked out in
-`app/application/hire/progress.py`. `damageAssessment` is `NOT_NEEDED` until
-damage and quarantine arrive, and `damage_assessment_of` is the one function
-that change replaces. A customer is never shown a tag.
+`app/application/hire/progress.py`. `damageAssessment` comes from
+`damage_assessment_of`, which reads `NOT_NEEDED`, `REQUIRED` or `DONE` as
+described under Damage and quarantine. A customer is never shown a tag.
 
 What degrades first as the data grows is the customer search on a short text.
 A trigram index cannot narrow a name pattern of two characters, so a search
@@ -813,8 +900,8 @@ date, find a unit at any branch, and a confirmed booking nobody collected
 becomes a no show that frees its units (FR-12, FR-15, FR-16, US-10, US-18,
 US-19, US-37, BR-17, BR-18, BR-43).
 
-**The no show half of the sweep.** `ExpireHoldsAndNoShowsUseCase` now has both
-halves, each in a transaction of its own. The second takes at most 25
+**The no show part of the sweep.** The second part of
+`ExpireHoldsAndNoShowsUseCase`, in a transaction of its own, takes at most 25
 confirmed reservations whose collection branch has closed on the first day of
 the hire, by the clock in Cape Town, earliest first day first. Its query joins
 the branch for its closing time, writes the status as the literal the partial
@@ -866,24 +953,27 @@ order, and a unit on hire carries the day it is due back and its rental.
 
 | Read | Statements | Indexes |
 |---|---|---|
-| Dashboard | 6, and the route adds the account, the branch and the sweep for 10 | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, the unique key on a line's reservation and model, `ix_rental_item_rental` |
-| Diary | 4, and 8 through the route | `ix_reservation_branch_start`, `ix_rental_branch_due_back`, and the same two for lines and units |
+| Dashboard | 6, and the route adds the account, the branch and the four of the sweep for 12 | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, the unique key on a line's reservation and model, `ix_rental_item_rental` |
+| Diary | 4, and 10 through the route | `ix_reservation_branch_start`, `ix_rental_branch_due_back`, and the same two for lines and units |
 | Locator | 2, the count and the page | `ix_asset_tag_trgm`, `ix_asset_product_model`, `ix_rental_item_asset` |
 
 `tests/integration/test_counter_reads.py` counts the statements with few rows
 and with many, and `tests/integration/test_counter_read_indexes.py` asks the
 planner to prove each index is used.
 
-**What the sweep costs a request.** Three statements when nothing is due, one
-for each part, each read through a partial index that holds only rows that
-could be due. The third part, which marks hires overdue, is described under
-Returns and settlement. When something is due, each reservation of a batch is loaded
-with its lines and allocations and written by its own statements, and a no
-show adds the lock, the count and the update of its customer. Twenty five of
-each is the most a request ever pays for.
+**What the sweep costs a request.** Four statements when nothing is due, one
+for each part. The first three each read through a partial index that holds
+only rows that could be due, and the fourth, which deletes old throttle
+counters, reads one entry of `ix_rate_limit_counter_window_started_at`. The
+third part, which marks hires overdue, is described under Returns and
+settlement, and the fourth under Throttling. When something is due, each
+reservation of a batch is loaded with its lines and allocations and written by
+its own statements, and a no show adds the lock, the count and the update of
+its customer. Twenty five of each, and one delete of at most 500 counters, is
+the most a request ever pays for.
 
 **What degrades first as the data grows.** The backlog of the sweep. It clears
-one batch of each half a request, so if bookings were missed faster than
+one batch of each part a request, so if bookings were missed faster than
 requests arrived to sweep them, their units would look taken for longer, and
 at a hundred times the volume the sweep belongs in a scheduled job. After that
 comes the diary of a busy branch, whose lists are not capped because the
@@ -949,11 +1039,14 @@ The worked example holds. R1,200.00 held, two days late at R120.00, R240.00
 withheld as R208.70 plus R31.30 VAT, R960.00 released, R0.00 due, `SETTLED`.
 `tests/api/test_returns.py` follows it through the routes.
 
-**A settled charge is never edited (BR-24).** `Charge.settled` is the one way
-a charge moves on, and it refuses a charge that is no longer `PENDING`. The
-repository writes a charge's status only from `PENDING` to `SETTLED`, and
-refuses to write over a stored charge that is settled, waived or reversed, so
-no path in the application edits one.
+**A settled charge is never edited (BR-24).** `Charge.settled` and the waiver
+of an administrator are the only two ways a charge moves on, and both ask
+`Charge.ensure_may_change` first, which refuses a charge that is no longer
+`PENDING`. The repository writes a charge's status only from `PENDING` to
+`SETTLED` or `WAIVED`, and refuses to write over a stored charge that is
+settled, waived or reversed, so no path in the application edits one. A
+correction of a settled charge is a new charge, described under Admin
+operations.
 
 **A lost unit (BR-31).** `POST /api/rentals/{id}/items/{itemId}/loss` is
 `RecordLossUseCase`, for a unit more than fourteen days past its due date. I
@@ -1132,6 +1225,766 @@ that matches is sorted to find one page, the way the list of rentals is. A few
 hundred reports a year make that nothing for a long time. At a hundred times
 that it wants an index on `reported_at` and a page keyed on it.
 
+## The utilisation report and the admin dashboard
+
+The owner can see which equipment earns its keep, for any period, per unit,
+model, category and branch, and can take it away as CSV (FR-24, US-33, US-34,
+NFR-04, C-32). The admin dashboard shows the business across every branch
+today (SC-19). There is no new table. Revision `0007` adds five indexes.
+
+**The two definitions.** They are written once, in
+`app/application/reporting/definitions.py`. Every page of the report carries
+them, the first line of the CSV repeats them, and they read as follows.
+
+- Utilisation, per asset, for a period. The days the asset was on an active
+  allocation within the period, divided by the days it was in the fleet and
+  serviceable within the period. Days quarantined, under repair, lost or
+  retired are left out of the denominator. Days are half open, [from, to).
+- Gross contribution, per asset, for a period. Hire revenue excluding VAT
+  attributed to that asset, plus late fees and damage recovery charged on it
+  (excluding VAT), less the actual repair costs recorded against it. It
+  excludes acquisition cost, depreciation, finance, staff and premises costs
+  and all overheads. It is labelled gross contribution everywhere, never
+  profit.
+
+**One module for each rule.** Each piece of the arithmetic is a pure function
+in the domain with no database, and nothing else works it out.
+
+| Rule | Module |
+|---|---|
+| The overlap, the union and the difference of half open spans of days | `app/domain/report_days.py` |
+| The serviceable days and the days on hire of one unit | `app/domain/unit_days.py` |
+| Utilisation as a percentage, two decimals, half up, None with no serviceable day | `app/domain/utilisation.py` |
+| The share of a hire charge raised on a whole hire | `app/domain/policies/hire_charge_share.py` |
+| Gross contribution and the sum of its parts | `app/domain/contribution.py` |
+
+The share scales an amount, so it uses `Money.in_proportion`. It multiplies
+before it divides, so an exact share such as R212.625 stays exact until it is
+rounded half up to R212.63. Every method that scales an amount is
+called only from the policies and the VAT module, and
+`tests/unit/test_one_place_for_a_price.py` now holds this one to that as well,
+which is why the share lives among the policies.
+
+**How the out of service spans are built.** Every day is a business day in
+Cape Town, and an instant becomes the day it falls on there. A unit is in the
+fleet from `acquired_on` up to `retired_on` when that is set. Within that it is
+out of service on every day any of these says so.
+
+1. A damage report, in any status, runs from the day it was reported up to the
+   day it was resolved, or on to the end of the period while it is open.
+2. A lost unit, which is a rental item closed with no condition, is out from
+   the day the loss was recorded up to the day of the next recorded change of
+   the unit's status, or on to the end of the period.
+3. The recorded changes of status are the `asset.status_changed` audit events
+   that checkout, a return, a loss and every move of a damage report write.
+   After a change the unit holds the status that change gave it, and before
+   its first change it holds the status that change moved it from. The last
+   change before the period and the first after it are read too, so a unit
+   already quarantined when the period began is out from its first day. This
+   is what makes a unit quarantined at its return out of service from that
+   day and not only from the day its report is filed. A day in INTAKE,
+   QUARANTINED, UNDER_REPAIR, LOST or RETIRED is out of service.
+4. A unit whose status has never been recorded as changing holds its present
+   status since it was acquired, when that is INTAKE, QUARANTINED or
+   UNDER_REPAIR. So an asset still at INTAKE is never serviceable. A present
+   status of LOST or RETIRED is never stretched back that way, because each
+   carries a date of its own.
+
+The spans of a unit are joined into one union before anything is counted, so
+a day a quarantine and a report both name comes off once.
+
+**What that misses.** First, a status set without an audit event, which only
+the seed does. Its quarantined and under repair units have no history, so they
+are out of service on every day of any period, including one long before they
+were damaged. Second, a day is counted whole. A unit quarantined at four in
+the afternoon is out of service all that day, one back on the shelf at nine in
+the morning is serviceable all that day, and a move and its undoing on the
+same day take no day off. Third, a unit moved out of service and back with no
+event for either move would count as serviceable throughout. Every route that
+moves a unit writes its event in the same transaction (BR-49), so that can
+only come from rows written outside the application. Fourth, damage nobody has
+reported yet does not exist for the report. A unit sitting damaged on the
+shelf counts as serviceable until its report or its change of status.
+
+**Days on hire.** A rental item is on hire from the day it went out up to the
+day it came back, or up to tomorrow while it is still out, and always for at
+least the day it went out, which is how the prototype counts a hire collected
+today. A booking that is confirmed, or held by a hold that has not run out,
+and not yet collected counts its own dates. An allocation released without
+going out counts nothing. The spans of a unit are joined, so a unit that ran
+late into a booking already made for it is counted once, and only a day the
+unit was serviceable counts, so utilisation never passes a hundred percent.
+The one case that changes today is a booking that still holds a unit put into
+quarantine, whose booked days are left out until the unit is back.
+
+**Money.** Everything excludes VAT. A charge counts in the period its business
+day of `raised_at` falls in. A HIRE, LATE_FEE or DAMAGE_RECOVERY charge with a
+rental item belongs to that unit. The DEPOSIT_FORFEIT of a lost unit counts as
+damage recovery, because with the recovery it makes up the replacement value
+the customer paid, which is how `app/domain/damage_recovery.py` already counts
+what was recovered for a unit. A HIRE charge raised on a whole hire is shared
+between its units. Each unit weighs the amount of its booking line divided by
+the units the line books, its share is the charge in that proportion rounded
+half up to the cent, and the last unit, in line order and then tag order,
+takes whatever the rounding left, so the shares add up to the charge. A waived
+charge counts nothing. A reversal is a negative row of the same type, so it
+nets off. Deposit movements, ADJUSTMENT and CLEANING are no part of the
+definition and are left out. Repair costs are the `actual_repair_cost` of the
+reports resolved within the period, against their unit, whatever the outcome.
+
+**Grouping and paging.** A line for a model, a category or a branch adds up
+the day counts and the four parts of its units and works its utilisation and
+gross contribution out from the sums, so it is never an average of
+percentages. Lines are ranked by gross contribution, highest first, and then
+by key. The totals are over every line. A unit is in the report when it was in
+the fleet during the period, or when money was charged or a repair cost was
+recorded on it within the period after it had left, so the totals keep every
+rand of the period. A category includes its children, active or not. A unit's
+share of a whole hire is the same whatever the report is narrowed to, because
+every unit of such a hire is read to weigh it.
+
+| Route | Query | Answers |
+|---|---|---|
+| `GET /api/admin/reports/utilisation` | `from` and `to` required, `groupBy` of `asset`, `model`, `category` or `branch`, `branchCode`, `categorySlug`, `page`, `pageSize` from 1 to 100 and 20 by default | 200 with `from`, `to`, `groupBy`, `definitions`, `totals`, `items`, `page`, `pageSize` and `total`. 422 naming `query.from`, `query.to`, `query.groupBy`, `query.page`, `query.pageSize`, `query.branchCode` or `query.categorySlug`. 403 for anybody but an administrator. |
+| `GET /api/admin/reports/utilisation.csv` | the same but the page | 200, `text/csv; charset=utf-8`, an attachment named `toolshed-gross-contribution-<groupBy>-<from>-<to>.csv`. The same refusals as problem documents. |
+| `GET /api/admin/dashboard` | none | 200 with `date`, `branches`, `totals`, `monthToDate`, `openDamageReports`, `customersOnHold` and `failedNotifications`. 403 for anybody but an administrator. |
+
+`to` has to be after `from` and at most 366 days later. A line carries `key`,
+`label`, `branchCode`, `categoryName`, `modelName`, `assetTag`, `status` and
+the nine figures. `assetTag` and `status` are set on a line for a unit,
+`branchCode` on a line for a unit or a branch, `categoryName` on a line for a
+unit, a model or a category and `modelName` on a line for a unit or a model.
+`utilisationPercent` is null when there was no serviceable day.
+
+**The CSV.** It is worked out before the response starts, so a refusal is
+still a problem document, and then written a line at a time by a generator.
+The first line is a comment cell that says these are gross contribution
+figures and not profit, names the period and repeats both definitions. The
+second names the columns of the screen. A line for a unit begins with its tag,
+model, category, branch and status, a line for a model with its model and
+category, a line for a category with its category and a line for a branch with
+its code and name, and every line ends with the nine figures, money with two
+decimals and no currency sign. Every cell that begins with `=`, `+`, `-`, `@`,
+a tab or a carriage return is written with a single quote in front (C-32).
+The one exception is a cell that is a plain decimal number, such as a negative
+gross contribution of `-180.00`, which no spreadsheet can read as a formula and
+which the owner needs to add up, so it is written as it is. `-1+2` is still
+escaped. `escaped_cell` in `app/api/csv_cells.py` is the rule and has tests of
+its own.
+
+**The admin dashboard.** For each trading branch it counts the collections
+due, the returns due today and the overdue hires with the very conditions the
+counter's dashboard uses, `due_for_collection` and `still_out`, so the two can
+never disagree, and the units on hire, in quarantine, under repair and on the
+shelf. The totals add the branches up. `monthToDate` runs from the first of the
+month up to tomorrow, so today counts in full, and is worked out by the same
+`FleetFigures` as the report. The three counts that wait for an administrator
+are the reports open or under repair, the customers on hold and the
+notifications that failed.
+
+**The sweep runs first.** Both the report and the dashboard run it before they
+read anything. The contract asks it of the dashboard, and I run it before the
+report as well, because the report counts the days of bookings not yet
+collected, and a booking nobody collected or a hold that ran out would
+otherwise count days nobody has booked. The report's statement also leaves out
+a hold whose time has run out, so a backlog the sweep has not reached yet
+changes nothing.
+
+| Read | Statements | Indexes |
+|---|---|---|
+| Report and CSV | 3, which are the units in scope with their money of the period, every dated fact about them as one `UNION ALL`, and the units of every hire charge on a whole hire. 4 when a category is named, which is checked first. The route adds the account, the branch when one is named and the sweep, which is 4 when nothing is due | `ix_charge_raised_at`, `ix_damage_report_resolved_at`, `ix_audit_event_asset_status`, `ix_rental_item_returned_at`, `ix_rental_item_lost`, `ix_reservation_confirmed_start`, `ix_reservation_hold_expiry`, `ix_audit_event_occurred_at`, `ix_asset_allocation_line`, `ix_rental_item_rental`, `ix_asset_branch_status` with a branch, and the primary keys |
+| Dashboard | 2, every branch in one and the three counts in the other, and the 3 of the report for the month. The route adds the account and the sweep | `ix_reservation_confirmed_start`, `ix_rental_open_due_back`, `ix_asset_branch_status`, `ix_notification_failed` |
+
+`tests/integration/test_report_reads.py` counts the statements with the
+worked dataset and again with twenty more units hired, and asks the planner to
+prove each condition of a period uses the index revision `0007` built for it.
+
+**What degrades first as the data grows.** The report reads every unit in
+scope and every dated fact of the period into memory on each request, works
+the days out in Python and then groups, ranks and pages there. That is linear
+in the units and in the hires, reports and changes of the period. At four
+hundred units it is a few thousand rows and a few milliseconds. At a hundred
+times the fleet, forty thousand units, one request would hold a few hundred
+thousand rows and take seconds, and every page of the screen and every
+dashboard would pay for the whole report again. That is what degrades first.
+The way out is into PostgreSQL in two steps. First the day counting, which
+`daterange` and `datemultirange` can do in one statement, `range_agg` for the
+union of a unit's spans, `-` to take the out of service days away and `*` to
+keep the days on hire that were serviceable, with the length of each range
+summed, so the statement returns finished figures and the grouping, the
+ranking and the page become `GROUP BY`, `ORDER BY` and a keyed page. Second, at
+that size, a table of each unit's figures for each day, written as hires,
+returns, reports and charges happen, so a report of any period is a sum over
+an index. The share of a whole hire stays the policy in the domain and is
+written into that table when the charge is raised. After the report come the
+two counts of the dashboard that stand on no index, the open damage reports
+and the customers on hold, a few hundred and a few thousand rows today, which
+would want partial indexes. The audit log grows fastest of all, and revision
+`0007` keeps what the report reads of it to two short index lookups a unit and
+the changes of the period.
+
+## Admin operations
+
+The owner sees who did what, sends a failed confirmation again, corrects the
+money of a hire without editing anything that was settled, and releases a
+unit of a booking by hand (FR-26, FR-27, US-28, US-32, US-36, BR-24, BR-25,
+BR-49, BR-50). There is no new table and no new column. Revision `0008` adds
+four indexes. Every route under `/api/admin/` is for an administrator alone,
+and every write reads the account again under a row lock (`FreshAdminUser`).
+
+**The audit log.** `GET /api/admin/audit-events` is `ReadAuditLog` over
+`SqlAuditEventReads`. It lists events newest first, by `occurred_at` and then
+by the event's number, narrowed by `entityType`, `entityId`, `action`,
+`actorUserId` and a span of business days, `from` and `to`, both included, so
+a search from a day to the same day finds everything that happened on it. A
+`to` before `from` is a 422 naming `query.to`. Each event carries the key, the
+name and the role of the account that acted, the role as it was then, and an
+event the sweep wrote carries null for all three. `beforeState` and
+`afterState` are the fields the change named, and an empty object when it
+named none. There is no write path, and the role the application connects as
+may insert into `audit_event` and read it and nothing else, which
+`tests/integration/test_application_role.py` proves for an update and a delete
+of one event as well as of the whole table.
+
+| Filter | Index |
+|---|---|
+| `entityType` and `entityId` | `ix_audit_event_entity`, of the baseline |
+| `entityType` alone | `ix_audit_event_entity`, its leading column |
+| `entityId` alone | `ix_audit_event_entity_id`, revision 0008 |
+| `action` | `ix_audit_event_action`, revision 0008, partial on every action but `asset.status_changed` |
+| `action` of `asset.status_changed` | `ix_audit_event_occurred_at`, read backwards |
+| `actorUserId` | `ix_audit_event_actor`, revision 0008, partial on an event with an actor |
+| `from` and `to` | `ix_audit_event_occurred_at`, of the baseline |
+| none | `ix_audit_event_occurred_at`, read backwards |
+
+**The notification log and the re-send.** `GET /api/admin/notifications` is
+`ReadNotificationLog` over `SqlNotificationLog`, every booking confirmation
+newest first by `queued_at`, narrowed by `status`. A status is written into
+the statement as the literal it is stored as, so the failed sends are read
+through the partial index `ix_notification_failed` and the rest through
+`ix_notification_queued_at`. `POST /api/admin/notifications/{id}/resend` is
+`ResendNotificationUseCase`. A notification that has not failed is a 409. For
+one that failed it writes a new row for the same booking, address and subject
+through the outbox a confirmation uses, with the audit event
+`notification.resent` in the same transaction, and after the commit the
+dispatcher sends it the way it sends a confirmation. So the email gateway
+decides as it always does, and `EMAIL_ALLOWED_RECIPIENT` still applies. The
+answer is 201 with the new notification as the log shows it once the
+dispatch has recorded what became of it. The failed row is never changed, so
+the failure and the re-send are both in the log. The table has nowhere to
+store `resendOf`, so the log reads it from the after state of that audit
+event, through a correlated subquery that is one probe of
+`ix_audit_event_entity` for each row of the page. A failed row that was sent
+again still counts among `failedNotifications` on the admin dashboard, because
+it is still a failure that happened.
+
+**Correcting a charge.** The three corrections are use cases of the hire
+module, and their rules are in `app/domain/charge_corrections.py`. Each takes
+a reason of 5 to 200 characters, kept on the charge in `waiver_reason` and
+written to the audit event with the administrator (BR-25), and answers 200
+with the `Rental`. A waiver needs a `PENDING` charge and moves it to `WAIVED`
+through `Charge.ensure_may_change`, the guard a settlement goes through. A
+reversal needs a `SETTLED` charge that is not a deposit movement, is not itself
+a reversal and has not been reversed, and writes a new charge of the same type
+with every amount negated, `reverses_charge_id` set to the original and the
+reason. The original row is never touched, so it stays `SETTLED` and the
+status `REVERSED` is never written. An adjustment is a new `ADJUSTMENT` charge
+for an amount that includes VAT, positive or negative and never nothing, split
+by `split_vat_inclusive` the way a late fee is, so R150.00 is R130.43 plus
+R19.57. A reversal and an adjustment are raised `PENDING`, a debit owed like a
+late fee or a credit the customer is owed. The rental's charges carry
+`reversesChargeId` and `reason`.
+
+After each correction the deposit, the balance and the status are worked out
+again through the settlement. Before the deposit is settled nothing more
+happens, because `settle_deposit` counts every charge pending at that moment,
+credits included, and a credit larger than everything owed and the deposit
+together is paid back by settling the credit itself. Once the deposit is
+settled, `rework_settlement` in `app/domain/resettlement.py` runs
+`deposit_settlement_of` again over the part of the deposit still paying for
+charges not yet settled, which is what is pending less what is due. Nothing
+already paid or given back is taken back. What that part no longer needs is
+released as a new `DEPOSIT_RELEASE`, what it cannot cover is the balance due,
+and the rework writes `rental.settlement_reworked`.
+
+What this does to a rental that is already `SETTLED` is exact. A correction
+that gives money back, a reversal or a negative adjustment, leaves it
+`SETTLED` with `settledAt` as it was, and the credit is settled at once with a
+simulated reference, which is the refund. A settled rental is never edited and
+a later correction is a reversing charge (BR-53), so a positive adjustment of
+a `SETTLED` rental is refused with 409 and changes nothing, and money found
+owed afterwards is a matter for the office and not for the rental. A positive
+adjustment of a rental not yet settled is owed like a late fee. A rental
+waiting on a balance is `SETTLED` the moment a correction leaves
+nothing due, with what of the deposit was paying for the waived charge
+released. The worked example, reversed, keeps R240.00 withheld and R960.00
+released and adds a settled charge of minus R240.00.
+
+**The force release and the reallocation.**
+`POST /api/admin/allocations/{id}/release` is `ForceReleaseUseCase`. It finds
+the allocation through the asset repository, locks the booking that holds it,
+lets it go with the reason `REALLOCATED` through `force_release` in
+`app/domain/reallocation.py`, writes the release through the same repository
+and records `reservation.unit_released` with the unit's tag, the reason and how
+many units the booking is now short of. An allocation already released, or a
+unit out on hire on its booking, is a 409. A unit on hire with another
+customer is exactly the case the release is for, so that is not refused. The
+answer is the `Reservation`, which now holds one unit fewer than it asks for.
+A booking short of a unit cannot be confirmed (BR-08) or collected. The
+checkout read carries `unitsShort`, its `refusal` says how many units are
+missing and `canCheckOut` is false, and the checkout answers 409 with the same
+sentence. `POST /api/reservations/{id}/reallocation` is `ReallocateUseCase`,
+for counter staff of the collection branch and administrators. It runs the
+sweep, refuses a booking that is neither on hold nor confirmed, and tops up
+every short line through `RepositoryAllocator`, the allocator a hold uses, so
+the units come from `lock_allocatable` at the collection branch, the exclusion
+constraint has the last word and a conflict is a 409 naming the model and the
+dates. It is all or nothing, and a booking short of nothing is answered as it
+stands with nothing written.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/audit-events` | `entityType`, `entityId`, `action`, `actorUserId`, `from`, `to`, `page`, `pageSize` | 200 with `items` of `AuditEventView`, `page`, `pageSize` and `total`. 422 naming the parameter. |
+| `GET /api/admin/notifications` | `status`, `page`, `pageSize` | 200 with `items` of `NotificationView`. 422 naming the parameter. |
+| `POST /api/admin/notifications/{id}/resend` | none | 201 with the new `NotificationView`. 404. 409 `state-transition` when it has not failed. |
+| `POST /api/admin/charges/{id}/waiver` | `reason` | 200 with the `Rental`. 404. 409 `state-transition` when the charge is not pending. 422 naming `body.reason`. |
+| `POST /api/admin/charges/{id}/reversal` | `reason` | 200 with the `Rental`. 404. 409 `state-transition` when it is not settled, is a deposit movement, is a reversal or was reversed. 422. |
+| `POST /api/admin/rentals/{id}/adjustments` | `amountIncVat`, `reason` | 200 with the `Rental`. 404. 409 `state-transition` for an amount owed on a `SETTLED` rental. 422 naming `body.amountIncVat` for nothing or an amount that is not a string with at most two decimals. |
+| `POST /api/admin/allocations/{id}/release` | `reason` | 200 with the `Reservation`. 404. 409 `state-transition` when it is not active or its unit is on hire on the booking. 422. |
+| `POST /api/reservations/{id}/reallocation` | none | 200 with the `Reservation`. 403 `branch-scope`. 404. 409 `state-transition` or `asset-unavailable`. |
+
+Every admin route answers 403 to counter staff and customers.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| Audit log | 2, the count and the page, which joins the account that acted | the table above |
+| Notification log | 2, the count and the page, with one index probe a row for `resendOf` | `ix_notification_failed`, `ix_notification_queued_at`, `ix_audit_event_entity` |
+| Re-send | The failed row, the insert, the audit event, then the dispatch and one read of the new row | the primary key |
+| A correction | The charge's rental, the rental with its items and charges under its lock, the writes, the read of the answer | `ix_charge_rental`, `ix_rental_item_rental` |
+| Force release | The allocation with its booking and tag, the booking under its lock, the update, the audit event, the read | the primary keys |
+| Reallocation | The sweep, the booking under its lock, then for each short line the locking query and the insert | `ix_asset_available`, the exclusion constraint's GiST index |
+
+**What degrades first as the data grows.** The count of the audit log. Every
+page counts every event that matches, so the log with no filter is counted in
+full on each page, and `audit_event` grows fastest of all, by every change
+the business makes. A few hundred events a day is nothing for years. At a
+hundred times that, a year holds tens of millions of rows and the count takes
+seconds, so the screen would want an estimate from the planner or no total,
+and a page keyed on the event's number rather than OFFSET. The four new
+indexes cost every insert into the log a little, which is the price of a log
+that can be searched. The notification log holds a row a confirmation and
+stays small. A correction is linear in the charges of one hire. The
+reallocation takes one locking query a short line, bounded by the twenty lines
+a booking can carry.
+
+## The admin catalogue
+
+The owner keeps the categories and the product models once for all three
+branches, and sets each rate, deposit, late fee and replacement value there
+(FR-22, US-30, BR-44). There is no new table and no new column. Revision
+`0009` adds one index. Every route is for an administrator alone, and every
+write reads the account again under a row lock (`FreshAdminUser`). Each write
+is a use case on the unit of work that commits the change with its audit
+event, and answers what it wrote as the list shows it, read once it has
+committed.
+
+**Categories.** `app/domain/category_rules.py` holds a category to its forms
+and to the cap of two levels. A code is capital letters and digits and a slug
+small letters and digits, each in words joined by single hyphens, for example
+`BREAK-DRILL` and `breaking-drilling`, which is the form every seeded category
+already has. A parent has to be a top level category, a category is never its
+own parent, and a category that has children cannot be put under another one,
+because they would end up three levels down. Each is a 422 naming
+`parentCategoryId`, and so is a parent nobody can find. A category leaves the
+catalogue by being switched off with `isActive`, because nothing is deleted
+(BR-51). The list answers every category, switched off or not, each top level
+category followed by its children by sort order and then name, on one page of
+up to a hundred unless another page is asked for. `modelCount` counts the
+models the category classifies itself, published or not. The visitor's list
+rolls a child's models up into its parent, and this one does not, so the
+counts of a parent and its children never count one model twice. I allow a
+parent that is switched off, and switching off a category that still holds
+models, because the contract refuses neither. The visitor's list already
+shows such a child at the top level.
+
+**Product models.** `app/domain/catalogue_entry_rules.py` holds the rules of
+the contract, each a 422 naming its field. Every amount is zero or more, in
+whole cents and within its NUMERIC(12,2) column (BR-22). The weekly rate is
+at most seven days at the daily rate, because the pricing policy charges the
+lower of the two totals (BR-21) and would never charge a weekly rate above
+that. What seven days cost is asked of `StandardPricingPolicy`, which stays
+the one place a rate is multiplied by days. The shortest hire is at least one
+day, the longest at most 28, and the shortest never longer than the longest
+(BR-03). The SKU takes the form of a code, as the design document's
+`DR-BOSCH-GBH226` does, and the slug the form of a slug. A model is only
+classified under an active category, which is checked when a model is created
+and when its category changes, so the rate of a model whose category was
+switched off since can still be changed. A new model starts unpublished, and a
+creation that asks to be published is refused naming `isPublished`. An edit
+never changes the SKU, so an edit that sends one is refused naming `sku`. The
+contract lets an edit carry every other field, `isPublished` among them, and a
+change of it there is recorded with the other changed fields.
+
+**Duplicates.** A code, a SKU or a slug that another row holds is looked for
+first, in one statement through the unique indexes, so the answer is a
+sentence naming the field. Two administrators can still pass that check at
+once. The unique constraints `category_code_key`, `category_slug_key`,
+`product_model_sku_key` and `product_model_slug_key` then refuse the second
+row, and `app/infrastructure/catalogue_uniques.py` recognises each by SQLSTATE
+`23505` and its name, read from the driver and never from the message. The
+answer is the same 422 the check would have given.
+`tests/integration/test_admin_catalogue_race.py` stages that race for real.
+
+**The snapshot.** A reservation line copies the rates, the deposit, the late
+fee and the replacement value when it is made, and the rental is checked out
+from the line (BR-20). Nothing in the admin catalogue reads or writes either
+table, so a change reaches the next quote and the next booking and nothing
+else. `tests/integration/test_rate_change_snapshot.py` books a hammer at R280
+a day through HTTP, raises the rate to R310, and shows the booking, its line
+and the rental checked out from it after the raise all at R280, while a new
+quote and a new booking take R310.
+
+**Publishing.** `POST /api/admin/models/{id}/publication` writes
+`product_model.published` or `product_model.unpublished`, and asking for the
+state a model is already in writes nothing. A hidden model leaves the
+catalogue, the availability search and the quote the moment the change
+commits, because each asks for published models only. The counter books
+through the path a customer books through, and `models_of` in
+`app/application/booking/reservation_request.py` asks for a published model,
+so a hidden model cannot be booked at the counter either, which is a 422
+naming `lines.0.modelSlug`. That was already decided in the code and I kept
+it. A booking made before the model was hidden reads its model by key when it
+is held, confirmed and checked out, so it carries on as it was.
+
+**The audit events.** `category.created`, `category.updated`,
+`product_model.created`, `product_model.updated`, `product_model.published`
+and `product_model.unpublished`. A creation records every field as it became.
+An edit records only the fields that changed, each before and after, so a
+rate change reads `{"daily_rate": "280.00"}` and `{"daily_rate": "310.00"}`.
+An edit that changes nothing writes nothing. `updatedAt` is stamped from the
+clock the use case is handed.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/categories` | `page`, `pageSize` (default 100) | 200 with `items` of `AdminCategory`, `page`, `pageSize` and `total`. 422 naming the parameter. |
+| `POST /api/admin/categories` | `code`, `name`, `slug`, `description`, `parentCategoryId`, `sortOrder` | 201 with the `AdminCategory`. 422 naming the field. |
+| `PATCH /api/admin/categories/{id}` | any of those and `isActive` | 200 with the `AdminCategory`. 404. 422 naming the field. |
+| `GET /api/admin/models` | `q`, `categoryId`, `published`, `page`, `pageSize` | 200 with `items` of `AdminModel`. 422 naming the parameter. |
+| `GET /api/admin/models/{id}` | none | 200 with the `AdminModel`. 404. |
+| `POST /api/admin/models` | every member of `AdminModel` but `id`, `categoryName`, `assetCount` and `updatedAt` | 201 with the `AdminModel`, unpublished. 422 naming the field. |
+| `PATCH /api/admin/models/{id}` | any of those but `sku` | 200 with the `AdminModel`. 404. 422 naming the field. |
+| `POST /api/admin/models/{id}/publication` | `published` | 200 with the `AdminModel`. 404. 422 naming `published`. |
+
+Every route answers 403 to counter staff and customers.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| Category list | 2, the count and the page, with a correlated count of models a row | `category_pkey` for the parent, `ix_product_model_category` for each count |
+| Model list by category | 2, with a correlated count of units a row | `ix_product_model_category`, or `ix_product_model_published` when narrowed to published models, and `ix_asset_product_model` for each count |
+| Model list unfiltered, by publication alone, or by text | 2 | none, it reads `product_model` from end to end |
+| One category or one model | 1 | the primary key |
+| Create a category | the check of code and slug, the parent, the insert, the audit event, the read | `category_code_key`, `category_slug_key`, `category_pkey` |
+| Edit a category | the row under its lock, the parent and whether it has children when the parent changes, the check, the update, the audit event, the read | `category_pkey`, the unique indexes, and a scan of `category` for its children |
+| Create a model | the check of SKU and slug, the category, the insert, the audit event, the read | `product_model_sku_key`, `product_model_slug_key`, `category_pkey` |
+| Edit or publish a model | the row under its lock, the category or the slug check when they change, the update, the audit event, the read | `product_model_pkey`, `product_model_slug_key`, `category_pkey` |
+
+**What degrades first as the data grows.** The model list that is not narrowed
+by category. Its count and its page read `product_model` from end to end, and
+a text search is a contains match on four columns that no btree can serve,
+the same as a visitor's search. The catalogue is 120 models kept by hand, so
+that is nothing, and at a hundred times as many it is still a few
+milliseconds. Past that I would put a trigram index on the four columns,
+because `pg_trgm` is installed, and page by name and SKU rather than OFFSET.
+The category list orders the whole table in the statement, which is fine for
+the hundreds of categories a hire business could ever hold, and whether a
+category has children is a scan of the same small table. Each correlated count
+is one index probe for each row of the page, so it is bounded by the hundred a
+page may hold. A write locks one row, so two administrators only ever wait for
+each other on the same model or category.
+
+## The asset register
+
+Every physical unit is tagged and moves through a fixed lifecycle from intake
+to retirement, and the owner keeps the register of them (FR-23, US-31, US-32,
+BR-34, BR-37, BR-38). There is no new table and no new column. Revision
+`0010` adds two indexes. Every route is for an administrator alone, and every
+write reads the account again under a row lock (`FreshAdminUser`). Each write
+is a use case on the unit of work that commits the change with its audit
+event, and answers the unit with its history, read once it has committed, so
+the screen shows the move it has just made.
+
+**Registering and editing (BR-34).** `app/domain/asset_register.py` holds a
+unit to its rules, each a 422 naming its field. A tag is capital letters and
+digits in words joined by single hyphens, the form of a code, in sixteen
+characters at most, for example `TSH-DR-0042`. A tag another unit carries is
+refused naming `assetTag`, whether the check finds it or the unique constraint
+`asset_asset_tag_key` does when two administrators race, which
+`app/infrastructure/catalogue_uniques.py` recognises the way it recognises a
+SKU. The model has to exist, published or not, because stock arrives before a
+model is put in the catalogue, and the branch has to be trading. A unit is
+acquired on or before today, because that day is where its days in the fleet
+begin for the report, and its cost is zero or more in whole cents. A new unit
+starts at INTAKE. An edit changes the serial number, the grade, the meter
+reading and the notes it names, and `UnitDetails` holds exactly those four,
+so nothing an edit carries can reach the tag, the model or the branch. A body
+that sends any of the three is refused naming it, the way an edit that sends a
+SKU is. An edit that changes nothing writes nothing. A meter reading may go
+down here, because correcting a misread meter is what an edit is for, and the
+event records it before and after.
+
+**Moving a unit by hand.** `app/domain/asset_transitions.py` adds the guards of
+the route to the one table of moves in `app/domain/asset_lifecycle.py`, and
+every move goes through its `moved`. I made five decisions there that the
+contract does not settle.
+
+1. ON_HIRE and LOST are never set here, because only checkout and the loss
+   route set them. Asking for either is a 422 naming `to`, since no status of
+   the unit would ever make it acceptable.
+2. A unit on hire has no move by hand. The table lets it go back to the shelf
+   or to quarantine, but those moves belong to the return, which closes the
+   rental item and lets the allocation go with it. Doing either by hand would
+   leave a rental item out and a booking holding a unit on the shelf. It is a
+   409 that says the unit comes off hire through its return or its loss.
+3. A move to QUARANTINED, UNDER_REPAIR or RETIRED takes a reason of 5 to 200
+   characters, the rule of an administrator's override. A move to AVAILABLE
+   may carry one and is held to the same bounds when it does.
+4. A unit with a damage report still open goes back on the shelf when the
+   report is resolved, and a move to AVAILABLE by hand is a 409 naming the
+   report. Resolving the report records the repair cost and ends its span in
+   the report, so putting the unit back by hand would leave it counted out of
+   service while it is on the shelf.
+5. `allowedTransitions` comes from the same table and the first two rules, so
+   it is what the route accepts. It does not leave out RETIRED for a unit a
+   booking holds, because the refusal names the booking, which is what the
+   administrator needs to act on.
+
+A move the table does not hold is a 409 whose sentence names where the unit
+stands and whose `errors` carries `from_status` and `to_status`. A retirement
+is refused with 409 while a booking holds the unit, and the sentence names the
+booking's reference (BR-37). The booking is found through the GiST index of
+the exclusion constraint, after the unit is locked with `FOR UPDATE`, and
+`lock_allocatable` takes the same row lock with `SKIP LOCKED`, so a hold racing
+the retirement either skips the unit or waits and finds it retired. A
+retirement stamps `retired_on` with the business day and keeps the row (BR-38),
+so the unit stays in the register, in its history and in the report, and the
+availability search, which offers AVAILABLE units only, never offers it again.
+
+**The audit events.** `asset.registered` records every field of the new unit
+with the code of its branch. `asset.updated` records the fields that changed,
+each before and after. A move writes `asset.status_changed`, the action
+checkout, a return, a loss and a damage report already write, with the status
+before, and after it the status, the tag and `retired_on`, which is the shape
+the report reads, and the reason beside them. The move is written through
+`save_units` of the asset repository, where every other change of a unit's
+status is written. The utilisation report rebuilds a unit's days out of
+service from these events, so a unit quarantined by hand is out of service
+from the day it was moved and not from the day it was acquired.
+
+**The history.** `GET /api/admin/assets/{tag}` adds `history`, at most fifty
+entries, the newest first, each `at`, `kind`, `summary` and `reference`. `kind`
+is where the entry comes from, `ALLOCATION`, `RENTAL`, `DAMAGE_REPORT` or
+`AUDIT_EVENT`. An allocation is the hold and, once let go, the release with
+why. A rental item is the handover and, once it ended, the return with its
+grade or the loss. A damage report is the filing and, once closed, how it
+ended. An audit event is the registration, an edit naming the fields it
+changed, or a move with its reason. A checkout therefore shows the handover
+and the move it made, because both happened. Each source is one statement of
+at most fifty rows ordered by the latest instant a row carries, so the fifty
+newest entries are always among what is read, and
+`app/application/catalogue/asset_history.py` puts them in one list and says
+what each means.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/assets` | `q` of 2 to 80 characters, `branchCode`, `status`, `modelId`, `page`, `pageSize` | 200 with `items` of `AdminAsset`, in tag order. 422 naming the parameter, and `query.branchCode` for a code no branch has. |
+| `GET /api/admin/assets/{tag}` | none | 200 with `AdminAsset` and `history`. 404. |
+| `POST /api/admin/assets` | `assetTag`, `modelId`, `branchCode`, `serialNumber`, `conditionGrade`, `acquiredOn`, `acquisitionCost`, `hourMeterReading`, `notes` | 201 with the unit and its history, at INTAKE. 422 naming the field. |
+| `PATCH /api/admin/assets/{tag}` | any of `serialNumber`, `conditionGrade`, `hourMeterReading`, `notes` | 200 with the unit and its history. 404. 422 naming the field, and `assetTag`, `modelId` or `branchCode` when one is sent. |
+| `POST /api/admin/assets/{tag}/transitions` | `to`, `reason` | 200 with the unit and its history. 404. 409 `state-transition` naming the status, the booking or the report. 422 naming `to` or `reason`. |
+
+Every route answers 403 to counter staff and customers. A tag in a path is
+read in capitals, the way it is painted on the unit. The branch filter takes
+any branch, trading or not, because units of a closed branch are still in the
+register.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| A page | 2, the count and the page, and 3 with `branchCode`, which is looked up first. Each row carries two correlated counts | `asset_asset_tag_key` for the order, `ix_asset_branch_status` for a branch, `ix_asset_product_model` for a model, `ix_asset_tag_trgm`, `ix_asset_serial_trgm` and a read of `product_model` for `q`, the GiST index of `asset_allocation_no_overlap` and `ix_damage_report_asset` for the counts |
+| One unit | 1, and 4 more for its history | `asset_asset_tag_key`, then `ix_asset_allocation_released` and the GiST index of the exclusion constraint for the released and the active allocations, `ix_rental_item_asset`, `ix_damage_report_asset` and `ix_audit_event_entity_id` |
+| Register | the model, the branch, the check of the tag, the insert, the audit event, then the read of the answer | the primary key, `branch_code_key`, `asset_asset_tag_key` |
+| Edit | the unit under its lock, the update, the audit event, the read | `asset_asset_tag_key` |
+| Move | the unit under its lock, the booking that holds it for a retirement or the open report for a move to the shelf, the update, the audit event, the read | `asset_asset_tag_key`, the GiST index of the exclusion constraint, `ix_damage_report_asset` |
+
+The route adds the account to each, and a write reads it again under its lock.
+
+**What degrades first as the data grows.** The page narrowed by `status`
+alone. No index leads with the status, so the planner walks the tag index and
+keeps the units in that status, which is quick for a status many units hold
+and reads most of the fleet to fill a page of one few hold, such as LOST. At
+four hundred units that is nothing. At a hundred times the fleet a partial
+index on the tag for each rare status, or one on `(status, asset_tag)`, would
+serve it. After that comes the count of every page, which counts every unit
+that matches, and OFFSET, which reads every unit before a deep page, as the
+other lists do. A search of two characters reads the whole trigram index, so
+the screen should ask for three. A unit's history reads at most fifty rows of
+each of its four sources, and each source is sorted inside the statement,
+which is a few hundred rows over a unit's life. The audit events grow fastest
+and are read off the end of their index, so the history stays four short
+statements however long the unit has been in the fleet.
+
+## User and role management
+
+Only the owner opens a staff account, changes a role or a branch, stops an
+account signing in and lifts a customer's hold, and access follows the people
+who work here (FR-25, US-35, BR-18, BR-41, BR-44, BR-51). There is no new
+table and no new column. Revision `0011` adds three indexes. Every route is
+for an administrator alone, and counter staff and customers are answered 403.
+
+**A staff account.** It is a `user_account` whose role is COUNTER_STAFF or
+ADMIN. A customer's account is never listed or changed here, and a key that
+names one is a 404, because a customer is kept through their profile.
+`app/domain/staff_account.py` holds the rules. Counter staff work at one
+trading branch and an administrator at none, each a 422 naming `branchCode`,
+the name is required and at most 120 characters, the phone may be empty and
+is otherwise held to the rule a customer's number is held to, and CUSTOMER is
+a 422 naming `role`. `ck_user_account_branch_scope` has the last word on the
+role and the branch.
+
+**No password is read or set.** `POST /api/admin/users` writes the account
+with a bcrypt hash of 32 random bytes that are thrown away, so no password
+opens it, and a reset token, in one transaction with
+`user_account.created`. The random value is hashed before the transaction
+opens. After the commit the person is sent the reset link every account uses,
+`{FRONTEND_ORIGIN}/signin#reset=<token>`, in a message that says an account
+was opened for them, and chooses their own password through
+`POST /api/auth/password-reset/complete`. The account starts with no verified
+address and ends verified when the password is chosen, because the link only
+reached the person through that address. The link lasts the sixty minutes a
+reset link lasts. Once it has run out the person asks for a new one from the
+sign in page, which works because the account is active. `emailDeliverable`
+in the answer is whether the email gateway took the message, so it is false
+when email is off, when the address is not the one allowed recipient, and when
+the provider refused it. An address another account holds, a customer's
+included, is a 422 naming `email`, whether the lookup finds it or the unique
+constraint does when two administrators race. No request body has a field for
+a password, so a body that sends one is a 422 naming it.
+
+**Changing an account.** `PATCH /api/admin/users/{id}` changes the name, the
+phone, the role and the branch it names. An edit that makes somebody an
+administrator and names no branch lets go of their branch, because an
+administrator belongs to none and that is the only value it can take. An edit
+that moves an administrator to the counter has to name a branch. A role change
+takes effect on the next request the person makes, because every request
+reads the role from the account and never from the token, and a demoted
+administrator is refused an admin route with the token they already hold. An
+edit that changes nothing writes nothing. `user_account.updated` records the
+names of the fields that changed, and the role and the branch before and
+after. The name and the phone are recorded by name only, the way a customer's
+own edit is.
+
+**Stopping an account.** `POST /api/admin/users/{id}/deactivation` takes a
+`reason` of 5 to 200 characters. In one transaction it sets `is_active` to
+false, revokes every live refresh session of the account with `ADMIN_REVOKE`,
+withdraws a reset link still pending, and records `user_account.deactivated`
+with the reason, how many sessions were revoked and whether a link was
+withdrawn. The link is withdrawn because it would otherwise let the person
+choose a password while they cannot sign in, which a reactivation would then
+bring back. The design document does not ask for that, and I added it on
+purpose. The access token the person holds stops working on its next
+request, because every request checks that the account is active, signing in
+is answered with the 401 a wrong password gets, and a refresh is a 401.
+`POST /api/admin/users/{id}/reactivation` sets it active again and records
+`user_account.reactivated`, and the person signs in with the password they
+had. Asking for the state an account is already in writes nothing. Nothing is
+deleted (BR-51), so every booking, rental and audit event the account touched
+still names it.
+
+One window is left, and it is harmless. A refresh that read the account a
+moment before a deactivation committed can still commit a new session after
+it. That session is live in the table, but the access token it came with is
+refused on its first request and the next refresh reads the account again and
+refuses it, so nothing comes of it.
+
+**The last administrator and the race.** The last active administrator can
+never be deactivated or moved to another role, and an administrator cannot
+deactivate their own account, each a 409 `state-transition` that changes
+nothing. Every write of this section starts by locking every active
+administrator with `FOR UPDATE`, in the order of their keys, through
+`SqlStaffRepository.lock_active_administrators`, and refuses with 403 an
+actor who is no longer among them. That one lock does two jobs. It reads the
+administrator again, as `FreshAdminUser` does elsewhere, and it is what the
+rule about the last administrator is asked under. Two administrators who
+demote each other at the same moment take turns. When the second is let
+through, PostgreSQL reads the rows it waited for again, the first's change is
+there, and the second is refused because it is no longer an administrator.
+Two who each step down at once leave one as well, because the second sees
+the first step down and is refused by the rule about the last one.
+`tests/integration/test_staff_admin_race.py` stages both for real. I did not
+put `FreshAdminUser` on these routes. It takes a shared lock on the caller's
+own row before the use case runs, and two administrators each holding one and
+each wanting to change the other's row would wait on each other until
+PostgreSQL broke the deadlock with an error.
+
+**The customer holds (BR-18).** `GET /api/admin/customers` lists the
+customers by name as the `CustomerSummary` the counter reads, narrowed by
+`status` and searched by `q` the way the counter searches.
+`POST /api/admin/customers/{id}/status` takes `accountStatus` and a `reason`
+of 5 to 200 characters. Any standing may move to any other. In one transaction
+the profile is locked, the way a no show locks it before it counts a strike,
+the standing is written and `customer.status_changed` is recorded with the
+standing before and after and the reason. Nothing else on the profile
+changes, so releasing a hold keeps `noShowCount`. A customer on hold or
+blacklisted is refused the next booking with 403 `account-on-hold` by
+`CustomerProfile.ensure_may_book`, the rule every booking already asks. Asking
+for the standing a customer already has writes nothing. This write depends on
+`FreshAdminUser`, as the other admin writes do.
+
+| Route | Body or query | Answers |
+|---|---|---|
+| `GET /api/admin/users` | `q` of 2 to 80 characters, `role`, `active`, `page`, `pageSize` | 200 with `items` of `AdminUser`, by name. 422 naming the parameter, and `query.role` for CUSTOMER. |
+| `POST /api/admin/users` | `email`, `fullName`, `phone`, `role`, `branchCode` | 201 with `user` and `emailDeliverable`. 403 when the caller stopped being an administrator. 422 naming the field. |
+| `PATCH /api/admin/users/{id}` | any of `fullName`, `phone`, `role`, `branchCode` | 200 with the `AdminUser`. 404. 409 `state-transition` for the last active administrator. 422 naming the field. |
+| `POST /api/admin/users/{id}/deactivation` | `reason` | 200 with the `AdminUser`. 404. 409 `state-transition` for the caller's own account or the last active administrator. 422 naming `body.reason`. |
+| `POST /api/admin/users/{id}/reactivation` | none | 200 with the `AdminUser`. 404. |
+| `GET /api/admin/customers` | `status`, `q` of 2 to 80 characters, `page`, `pageSize` | 200 with `items` of `CustomerSummary`, by name. 422 naming the parameter. |
+| `POST /api/admin/customers/{id}/status` | `accountStatus`, `reason` | 200 with the `CustomerSummary`. 404. 422 naming the field. |
+
+`AdminUser` carries `id`, `email`, `fullName`, `phone`, `role`, `branchCode`,
+`isActive`, `emailVerified`, `lastLoginAt`, `lockedUntil` and `createdAt`, and
+never anything about a password. `role` is the stored value, for example
+`COUNTER_STAFF`, and `branchCode` is null for an administrator.
+
+| Read or write | Statements | Indexes |
+|---|---|---|
+| A page of staff | 2, the count and the page, with the branch joined by its key | `ix_user_account_staff`, `branch_pkey` |
+| One staff account | 1 | `user_account_pkey`, `branch_pkey` |
+| The lock on the administrators | 1 | `ix_user_account_staff` |
+| A page of customers on hold or blacklisted | 2 | `ix_customer_profile_standing`, then `user_account_pkey` and `branch_pkey` for each row |
+| A page of every customer, or of those in good standing | 2. The page is read off `ix_customer_profile_name` in its order and stops at the end of the page. The count reads every customer | `ix_customer_profile_name` |
+| A page of customers searched by `q` | 2 | the trigram and unique indexes of the counter's search, `ix_customer_profile_name` for the order |
+| Open an account | the lock, the address, the branch, the insert, the audit event, the read of the answer | `ix_user_account_staff`, `user_account_email_key`, `branch_code_key` |
+| Edit, deactivate or reactivate | the lock, the account under its lock, the branch when one is named, the update, the reset link withdrawn when one is pending, the revocation, the audit event, the read | `ix_user_account_staff`, `user_account_pkey`, `ix_refresh_session_live` |
+| Set a standing | the profile under its lock, the update, the audit event, the read | `customer_profile_pkey` |
+
+`tests/integration/test_people_list_reads.py` counts the statements with few
+customers and many and asks the planner, with sequential scans switched off,
+for a plan of every statement each read sends, word for word. None of them
+names a sequential scan except the count of every customer in good standing,
+which is a count of almost every row and is what degrades first.
+
+**What degrades first as the data grows.** The count of the customer list with
+no standing named, or with ACTIVE, which is almost every customer. Each page
+counts every profile that matches, so the count reads the whole of an index
+or of the table, and OFFSET reads every customer before a deep page. A few
+thousand customers make that a millisecond or two. At a hundred times that it
+wants an estimate from the planner or no total, and a page keyed on the name
+and the key, which the order of `ix_customer_profile_name` already allows. The
+held customers and the staff stay small whatever the business does, so their
+pages stay a handful of index entries. Every staff write locks every active
+administrator, which serialises the writes of this section through two or
+three rows. Staff accounts change a few times a year, so that costs nothing,
+and it is the price of a rule that can never be raced.
+
 ## The schema
 
 Migration `0001` is the baseline. It creates seventeen tables with singular
@@ -1186,6 +2039,92 @@ it never names the column, so its inserts take the default and it keeps working
 against a migrated database. A privilege on a table covers the columns it gains
 later, so there is nothing to grant.
 
+Revision `0007` adds five indexes and nothing else, all of them read by the
+utilisation report. `ix_charge_raised_at` on `charge.raised_at` finds the
+charges of a period. `ix_rental_item_returned_at` on `rental_item.returned_at`
+finds the hires still out and those back since a period began.
+`ix_rental_item_lost`, partial on a rental item closed with no condition,
+holds the lost units and nothing else. `ix_damage_report_resolved_at` on
+`damage_report.resolved_at` finds the reports open during a period and those
+resolved in it. `ix_audit_event_asset_status` on `audit_event (entity_id,
+occurred_at)`, partial on the action `asset.status_changed`, finds the last
+change of a unit's status before a period and the first after it. Each is
+built inside the migration's transaction, which blocks writes to its table
+while it builds, and `audit_event` is written by every change. On the tables of
+a first year that takes moments. A table a hundred times larger would want
+`CREATE INDEX CONCURRENTLY` outside a transaction instead.
+
+Revision `0008` adds four indexes and nothing else, read by the two logs of
+the admin console. `ix_audit_event_entity_id` on `audit_event (entity_id,
+occurred_at)` finds the history of one record by its key alone, which the
+baseline index on the kind and the key cannot. `ix_audit_event_action` on
+`(action, occurred_at)` finds every event of one action, and it is partial on
+every action but `asset.status_changed`. Holding those changes in time order
+it would answer the report's question about a unit's last change of status by
+reading every change of the fleet backwards, which the planner takes on a
+small table, so it leaves them out, and the log of that one action is read
+through `ix_audit_event_occurred_at`. A search for any other action says so in
+the statement as a literal, which is how the planner matches the predicate.
+`ix_audit_event_actor` on `(actor_user_id, occurred_at)`, partial on an event
+that has an actor, finds everything one account did, and
+`ix_notification_queued_at` on `notification.queued_at` reads the notification
+log newest first. Each ends in the column its log is ordered by, so a page is
+read off the end of its index. They are built inside the migration's
+transaction like those of `0007`, with the same caution for a table a hundred
+times larger.
+
+Revision `0009` adds one index and nothing else, `ix_product_model_category`
+on `product_model (category_id, name)` with no predicate. The admin catalogue
+finds the models of one category through it, published or not, in the order
+it lists them, and counts the models of each category through it. The partial
+index of the baseline holds the published models only, and PostgreSQL never
+indexes a foreign key by itself. `product_model` is the catalogue, 120 rows
+that change by hand, so building it inside the migration's transaction blocks
+writes to the table for a moment. A table a hundred times larger would want
+`CREATE INDEX CONCURRENTLY` outside a transaction instead.
+
+Revision `0010` adds two indexes and nothing else, both read by the asset
+register. `ix_asset_serial_trgm` is a trigram index on `asset.serial_number`,
+through which the register finds part of a serial number the way it finds
+part of a tag through `ix_asset_tag_trgm`. `ix_asset_allocation_released` is a
+btree on `asset_allocation (asset_id, released_at)`, partial on a released
+allocation, through which the history of a unit reads every booking it was
+released from. The GiST index of the exclusion constraint already holds the
+active ones, and `asset_allocation` is the table that grows with every
+booking. The index is partial on purpose. A plain index on the unit was my
+first version, and on a small table the planner then preferred it to the
+GiST index for the availability search, which
+`tests/integration/test_availability_list.py` caught. An index that holds
+released allocations only can never answer a question about active ones, so
+the search keeps the index it was written for. Both are built inside the
+migration's transaction, with the same caution as the revisions before it for
+a table a hundred times larger.
+
+Revision `0011` adds three indexes and nothing else, read by the lists of
+people of the admin console. `ix_user_account_staff` on `user_account
+(lower(full_name), id)`, partial on `role <> 'CUSTOMER'`, holds the staff
+accounts and no customer's. `ix_customer_profile_name` on `customer_profile
+(lower(display_name), id)` gives the list of customers its order, and
+`ix_customer_profile_standing` on the same columns, partial on
+`account_status <> 'ACTIVE'`, holds the customers on hold or blacklisted. The
+names are indexed through `lower` on purpose. An index on the bare name could
+answer a search for part of a name by reading all of it, and on a small table
+the planner then preferred it to the trigram index the counter's search was
+written for, which `tests/integration/test_customer_search_index.py` caught.
+They are built inside the migration's transaction, with the same caution as
+the revisions before it for a table a hundred times larger.
+
+Revision `0012` adds one index and nothing else,
+`ix_rate_limit_counter_window_started_at`, a btree on
+`rate_limit_counter.window_started_at`. The fourth part of the sweep finds the
+counters whose window ended more than a day ago through it, oldest first, so
+the statement reads one index entry when nothing is due and never reads the
+whole table, which the unique key on the bucket and the window cannot do
+because it leads with the bucket. The table holds about a day of counters, so
+building the index inside the migration's transaction blocks the throttle for
+a moment. Every counter is written once a window and then only has its count
+raised, which never touches the indexed column.
+
 ## The seed and the two database roles
 
 `python seed.py` gives a database a fleet worth looking at, so the system has
@@ -1194,6 +2133,15 @@ branches, fourteen categories, 120 published product models, 400 physical
 units (171 at CBD, 125 at BLV, 104 at SMW), five accounts with verified email
 addresses and a profile for each of the two customers, and the worked example
 from the design document as a hire that is already closed.
+
+In the same transaction it then writes a season of trading history, every hire
+from 1 June to 30 September 2026 at all three branches booked, collected,
+returned and settled through the domain for thirty walk-in customers and the
+two seeded ones, with about one hire in forty brought back damaged and
+repaired, so the utilisation report has something to read. Every unit ends the
+season back on the shelf and no audit event is written, so today's fleet is
+exactly as it was, and `seeding/trading_history.py` says how a second run
+finds the history and writes nothing.
 
 Thirty four units keep the tags the prototype showed. The other 366 are tagged
 `TSH-<prefix>-<number>`, numbered upward within each prefix in SKU order and
@@ -1258,7 +2206,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 `GET http://localhost:8000/api/health` should report
-`{"status": "healthy", "databaseReachable": true, "btreeGistInstalled": true, "revision": "local"}`.
+`{"status": "healthy", "environment": "development", "databaseReachable": true, "btreeGistInstalled": true, "revision": "local"}`.
 
 ## Endpoints
 
@@ -1299,6 +2247,37 @@ uvicorn app.main:app --reload --port 8000
 | GET | `/api/counter/dashboard` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/counter/diary` | Counter staff for their own branch, and administrators for the branch they name. |
 | GET | `/api/assets/locator` | Counter staff and administrators, every branch. |
+| GET | `/api/admin/reports/utilisation` | An administrator. |
+| GET | `/api/admin/reports/utilisation.csv` | An administrator. |
+| GET | `/api/admin/dashboard` | An administrator. |
+| GET | `/api/admin/audit-events` | An administrator. |
+| GET | `/api/admin/notifications` | An administrator. |
+| POST | `/api/admin/notifications/{id}/resend` | An administrator, read again under a lock. |
+| POST | `/api/admin/charges/{id}/waiver` | An administrator, read again under a lock. |
+| POST | `/api/admin/charges/{id}/reversal` | An administrator, read again under a lock. |
+| POST | `/api/admin/rentals/{id}/adjustments` | An administrator, read again under a lock. |
+| POST | `/api/admin/allocations/{id}/release` | An administrator, read again under a lock. |
+| POST | `/api/reservations/{id}/reallocation` | Counter staff of the collection branch, and administrators. |
+| GET | `/api/admin/categories` | An administrator. |
+| POST | `/api/admin/categories` | An administrator, read again under a lock. |
+| PATCH | `/api/admin/categories/{id}` | An administrator, read again under a lock. |
+| GET | `/api/admin/models` | An administrator. |
+| GET | `/api/admin/models/{id}` | An administrator. |
+| POST | `/api/admin/models` | An administrator, read again under a lock. |
+| PATCH | `/api/admin/models/{id}` | An administrator, read again under a lock. |
+| POST | `/api/admin/models/{id}/publication` | An administrator, read again under a lock. |
+| GET | `/api/admin/assets` | An administrator. |
+| GET | `/api/admin/assets/{tag}` | An administrator. |
+| POST | `/api/admin/assets` | An administrator, read again under a lock. |
+| PATCH | `/api/admin/assets/{tag}` | An administrator, read again under a lock. |
+| POST | `/api/admin/assets/{tag}/transitions` | An administrator, read again under a lock. |
+| GET | `/api/admin/users` | An administrator. |
+| POST | `/api/admin/users` | An administrator, read again under the lock on every active administrator. |
+| PATCH | `/api/admin/users/{id}` | An administrator, read again under the lock on every active administrator. |
+| POST | `/api/admin/users/{id}/deactivation` | An administrator, read again under the lock on every active administrator. |
+| POST | `/api/admin/users/{id}/reactivation` | An administrator, read again under the lock on every active administrator. |
+| GET | `/api/admin/customers` | An administrator. |
+| POST | `/api/admin/customers/{id}/status` | An administrator, read again under a lock. |
 | GET | `/api/customers` | Counter staff and administrators. |
 | POST | `/api/customers` | Counter staff and administrators. Counter staff register at their own branch. |
 | GET | `/api/customers/{id}` | Counter staff and administrators. |
@@ -1325,9 +2304,14 @@ answer errors as `application/problem+json`.
 | `POST /api/auth/refresh` | none | 200 with the same body and a `Set-Cookie` that replaces the refresh token. 401 `session-expired`, with the cookie cleared. 403 `origin-not-allowed`. |
 | `POST /api/auth/logout` | none | 204 with the cookie cleared. 403 `origin-not-allowed`. |
 
-`user` is `id`, `email`, `fullName`, `role`, `branchCode` and `emailVerified`,
-and `GET /api/me` returns the same object. `role` is `customer`, `counter` or
-`admin`. `branchCode` is null unless the account is counter staff.
+`user` is `id`, `email`, `fullName`, `role`, `branchCode`, `emailVerified` and
+`emailDeliverable`, and `GET /api/me` returns the same object. `role` is
+`customer`, `counter` or `admin`. `branchCode` is null unless the account is
+counter staff. `emailDeliverable` is the email gateway's own rule for the
+account's address, the one behind the same field of the account routes, so it
+is false when email is off in this environment and when the address is not
+the one allowed recipient. The booking screen reads it so that it never
+promises a confirmation email that cannot arrive.
 
 ### The account routes
 
@@ -1392,8 +2376,8 @@ sentence names a business rule. The rule goes to the log.
 | `GET /api/customers` | `q` of 2 to 80 characters, `page`, `pageSize` | 200 with `items` of `CustomerSummary`, `page`, `pageSize` and `total`, best match first. 422 naming `query.q`. |
 | `POST /api/customers` | `displayName`, `phone`, `idDocumentType`, `idDocumentLast4`, the four billing fields, `customerType`, `companyName`, `vatNumber`, `branchCode` | 201 with the `CustomerSummary` and a `Location` header. 422 naming the field, and `branchCode` when an administrator names none. 403 `branch-scope` when counter staff name another branch. |
 | `GET /api/customers/{id}` | none | 200 with the `CustomerSummary`. 404 when there is no such customer. |
-| `GET /api/reservations/{id}/checkout` | none | 200 with the reservation, its customer, its units, `hireTotalIncVat`, `depositTotal`, `canCheckOut`, `refusal` and `rentalId`. 404. |
-| `POST /api/reservations/{id}/checkout` | `items` of `allocationId`, `conditionOut`, `accessoriesOut` and `hourMeterOut`, and `agreementSigned` | 201 with the `Rental` and a `Location` header. 200 with the existing rental when it was already checked out. 409 `state-transition` when it is not confirmed or its hire has not started. 403 `branch-scope`. 422 naming the field. |
+| `GET /api/reservations/{id}/checkout` | none | 200 with the reservation, its customer, its units, `hireTotalIncVat`, `depositTotal`, `canCheckOut`, `refusal`, `rentalId` and `unitsShort`. 404. |
+| `POST /api/reservations/{id}/checkout` | `items` of `allocationId`, `conditionOut`, `accessoriesOut` and `hourMeterOut`, and `agreementSigned` | 201 with the `Rental` and a `Location` header. 200 with the existing rental when it was already checked out. 409 `state-transition` when it is not confirmed, its hire has not started or it is short of a unit. 403 `branch-scope`. 422 naming the field. |
 | `GET /api/rentals/{id}` | none | 200 with the `Rental`. 404 when there is no such rental. |
 | `GET /api/rentals` | `branchCode`, `status`, `overdueOnly`, `customerProfileId`, `page`, `pageSize` | 200 with `items` of `Rental`, `page`, `pageSize` and `total`, the overdue first. 422 naming `query.branchCode`. |
 | `POST /api/rentals/{id}/returns` | `items` of `rentalItemId`, `conditionIn`, `hourMeterIn`, `accessoriesIn`, `notes` and `flaggedForDamage` | 200 with the `Rental`. 409 `state-transition` for a unit already back. 403 `branch-scope`. 404. 422 naming the field. |
@@ -1621,11 +2605,10 @@ example `https://www.example.co.za`, with no path. Left unset it is the one
 origin in `CORS_ORIGINS`, and in development, when that list holds more than
 one, it is `http://localhost:5173`. Staging and production refuse to start
 when it cannot be worked out, when it is not `https` or when it names this
-machine. The deploy script sets the address of the site as `CORS_ORIGINS` on
-the service and does not pass `FRONTEND_ORIGIN` itself, so the deployed
-services use that fallback today. Passing `FRONTEND_ORIGIN` to the service as
-well would make the setting explicit. The start-up log shows the origin in use
-as `frontend_origin`.
+machine. The deploy script, `infra/scripts/deploy-api.sh`, passes the address
+of the site to the service as both `CORS_ORIGINS` and `FRONTEND_ORIGIN`, so a
+deployed service names its origin explicitly and never relies on the
+fallback. The start-up log shows the origin in use as `frontend_origin`.
 
 Three settings control email.
 
@@ -1662,6 +2645,7 @@ the same commands.
 ```bash
 ruff check .                     # lint, including S608 and C901 at complexity 10
 mypy app                         # strict type check
+mypy seed.py seeding seed_data scripts   # the same for the tools that are not in the image
 lint-imports                     # the layer contract
 pytest tests -m "not postgres"   # unit, component and API tests, no database
 pip-audit                        # known vulnerabilities in the installed packages
@@ -1699,8 +2683,9 @@ the compose file is a local throwaway and the port is bound to 127.0.0.1. I set
 
 ## Tests
 
-The suite is split in two by the `postgres` marker, and the pipeline runs the
-two halves as separate jobs.
+The suite is split in two by the `postgres` marker. The fast job of the
+pipeline runs the half without it, and the integration job migrates an empty
+PostgreSQL and runs the whole suite with coverage.
 
 ```bash
 pytest tests -m "not postgres"   # unit, component and API tests, no database
@@ -1816,6 +2801,111 @@ and its history, and that the two reads of revision `0005` stand on its
 indexes. `test_flagged_return.py` takes a unit back flagged in the grade it
 went out in and reads the committed row, which holds the flag in its column and
 the notes exactly as they were posted.
+
+The report and the dashboard are tested the same way. `tests/unit` holds the
+day counting on half open spans, the serviceable days of a unit acquired,
+retired, damaged, lost and moved through its statuses, the days on hire of a
+unit back, still out, back the day it went out and late into a booking, the
+percentage at its rounding edges, gross contribution, the share of a whole
+hire with its rounding cent and its reversal, the escape of a CSV cell, the
+lines, ranking, totals and pages, and both use cases against fakes of their
+ports, with every refusal and the sweep before the read. `tests/api` pins the
+shapes of the report, the CSV and the dashboard, a hire of two units shared
+between them, every refused parameter by name, the three roles and a caller
+with no credential, a model name a spreadsheet would run, and a booking the
+sweep marks before the dashboard counts it. On PostgreSQL,
+`test_report_worked_dataset.py` builds the fleet in `tests/support/report_dataset.py`,
+whose docstring works every figure out by hand, and asserts every grouping,
+both filters, the totals and the dashboard against those figures.
+`test_report_losses.py` follows a loss to the next recorded change, and
+`test_report_reads.py` counts the statements and proves the indexes.
+
+The admin operations are tested the same way. `tests/unit` holds the reason
+rule, the waiver, the reversal and the adjustment and every refusal of each,
+the rework of a settlement before and after the deposit is settled with a
+balance and with nothing left, the force release, the missing units at the
+checkout and the top up, and the force release, the reallocation, the re-send
+and the two reads against the in memory stores and fakes of their ports.
+`tests/api` follows every correction, the release and the replacement through
+the routes, asks each route for every refusal it can give, reads the two logs
+with every filter, and sends a failed confirmation again through the Resend
+adapter with an allowed recipient, which still refuses it. On PostgreSQL,
+`test_charge_correction_transaction.py` makes a correction fail at its audit
+event and finds nothing kept and proves the original row of a reversal is left
+as it was, `test_force_release_transaction.py` releases and tops up through
+the exclusion constraint, `test_admin_log_reads.py` counts the statements of
+both logs with few rows and many and asks the planner to prove each filter
+stands on its index, and `test_application_role.py` proves the restricted role
+reads both logs and cannot change or remove one event.
+
+The admin catalogue is tested the same way. `tests/unit` holds the forms of a
+code and a slug, the amounts, the cap of two levels, the weekly rate and the
+hire days and every refusal of each, and the five writes and the reads
+against the in memory unit of work in `tests/support/memory_catalogue.py`,
+which can be made to lose a race to a unique constraint or to fail at its
+audit event. `tests/api` lists, creates, edits and publishes through the
+routes, asks for every refusal with the field it names, and proves a hidden
+model leaves the public catalogue. On PostgreSQL,
+`test_rate_change_snapshot.py` raises a rate from R280 to R310 between a
+booking and its checkout, `test_unpublished_model.py` hides a model from the
+availability search and still checks out a booking made before,
+`test_admin_catalogue_transaction.py` makes each write fail at its audit event,
+`test_admin_catalogue_race.py` names the field of each unique constraint and
+stages a race for one code, and `test_admin_catalogue_reads.py` counts the
+statements of each read with few rows and many and asks the planner to prove
+each filter and each count stands on its index.
+
+The asset register is tested the same way. `tests/unit` holds the form of a
+tag, the day a unit is acquired, its cost, its meter reading and its text,
+every move by hand the table offers and every one it refuses, ON_HIRE and
+LOST asked for from every status, the reason, a unit a booking holds and a
+unit with a report open, the three use cases against the in memory unit of
+work in `tests/support/memory_register.py`, which can be made to lose the tag
+to the unique constraint or to fail at its audit event, and the history put
+together from facts built by hand. `tests/api` lists, searches, registers,
+edits and moves through the routes, reads the history of a unit checked out at
+the counter, and asks every route for every refusal with the field or the
+status it names. On PostgreSQL, `test_asset_register_transaction.py` makes
+each write fail at its audit event, refuses to retire a unit a booking holds,
+shows a retired unit kept, never offered again and still in the report for
+the days it was in the fleet, and a unit quarantined by hand out of service
+from the day it moved. `test_asset_register_race.py` stages a race for one
+tag. `test_asset_register_reads.py` counts the statements of a page, a unit
+and its history with few rows and many, and `test_asset_register_indexes.py`
+asks the planner to prove each condition stands on its index.
+
+User and role management is tested the same way. `tests/unit` holds the
+rules of a staff account, the role and the branch, the last administrator and
+the own account, a customer's standing, and the use cases against the in
+memory unit of work in `tests/support/memory_staff.py`, which can lose an
+address to the unique constraint or fail at its audit event, with the reset
+link read out of the fake gateway. `tests/api` lists, opens, edits,
+deactivates and reactivates through the routes, chooses the password of a new
+account through the link and signs in with it, refuses a deactivated account
+its sign in, its refresh and its token, refuses a demoted administrator an
+admin route with the token they had, puts a customer on hold and sees the
+booking refused, and asks every route for every refusal with the field or
+the status it names. On PostgreSQL, `test_staff_account_transaction.py`
+follows an account from opening to reactivation and makes each write fail at
+its audit event, `test_staff_admin_race.py` stages two administrators
+demoting each other and two stepping down at once, and
+`test_people_list_reads.py` counts the statements of each read and asks the
+planner about each of them.
+
+The pruning of the throttle counters, `emailDeliverable` and the reset that
+proves an address are tested the same way. `tests/unit/test_throttle_pruning.py`
+holds the cutoff, the batch, the order and the log line, and runs the pruning
+as the fourth part of the sweep against the in memory unit of work. On
+PostgreSQL, `test_throttle_counter_pruning.py` runs the sweep as the
+application role, counts its statements, asks the planner for the index of
+revision `0012` and shows a locked counter skipped rather than waited for.
+`tests/api/test_account_email_deliverable.py` reads `emailDeliverable` from
+signing in, refreshing and `GET /api/me` through a gateway that delivers to
+everybody, one that delivers to one inbox and one with email off.
+`tests/api/test_reset_proves_the_address.py` follows a customer and a new
+member of staff to a verified address through the reset link, and
+`tests/integration/test_reset_proves_the_address.py` makes the reset fail at
+its audit event and finds nothing kept.
 
 The role tests need no setup. They create `toolshed_app` and `toolshed_migrate`
 through `scripts/provision_roles.py`, using the connection in `DATABASE_URL` as
