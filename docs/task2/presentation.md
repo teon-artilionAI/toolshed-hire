@@ -4,7 +4,7 @@ The recorded presentation of Task 2 runs for about fifteen minutes. It is a
 walk through the slides below with a live demonstration on production in the
 middle. The script for the demonstration follows the slides. The slides are in
 [slides/toolshed-hire-task-2.pdf](slides/toolshed-hire-task-2.pdf), and the
-video is linked from the [README](../../README.md#links).
+recording is handed in on ARC with the link to this repository.
 
 | Part | Slides | Time |
 |---|---|---|
