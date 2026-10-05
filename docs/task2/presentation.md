@@ -4,7 +4,7 @@ The recorded presentation of Task 2 runs for about fifteen minutes. It is a
 walk through the slides below with a live demonstration on production in the
 middle. The script for the demonstration follows the slides. The slides are in
 [slides/toolshed-hire-task-2.pdf](slides/toolshed-hire-task-2.pdf), and the
-video is linked from the [README](../../README.md#links).
+recording is handed in on ARC with the link to this repository.
 
 | Part | Slides | Time |
 |---|---|---|
@@ -46,7 +46,7 @@ locator answers the second, and the report answers the third.
 - The owner's side, the dashboard, the report with its CSV, the catalogue and
   prices, the asset register, users and customer holds, the audit trail and
   charge corrections
-- Two environments, deployed by the pipeline only, released as `v0.4.0`
+- Two environments, deployed by the pipeline only, and live as `v0.4.2`
 
 **Notes.** All 24 screens read from the API now, and no screen shows sample
 data any more. I say plainly that the statement download and the damage
@@ -169,7 +169,7 @@ scaling to zero.
 - 100 percent of lines covered in the domain and application layers, against a
   floor of 70
 - Twenty holds at once for five units give exactly five holds
-- 4,618 backend tests on PostgreSQL 16, 1,443 frontend unit and component
+- 4,623 backend tests on PostgreSQL 16, 1,458 frontend unit and component
   tests and 392 browser and accessibility tests against the real API in CI
 - 109 axe scans across all 24 screens and their states with zero findings, and
   every screen laid out at 360, 768 and 1440 pixels
