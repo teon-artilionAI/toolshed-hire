@@ -24,9 +24,12 @@ import type { QueryShape } from './query-string'
 export const API_BASE_PATH = '/api'
 
 /** How long a request may take before it is abandoned. Long enough for a cold
- *  Cloud Run instance, short enough that a dead backend does not leave a screen
- *  waiting with nothing to say. */
-export const REQUEST_TIMEOUT_MS = 8000
+ *  Cloud Run instance that also wakes a suspended database, which took more
+ *  than eight seconds on production, and short enough that a dead backend does
+ *  not leave a screen waiting with nothing to say. A backend that is down
+ *  usually answers at once through the proxy with a gateway error, so only a
+ *  backend that hangs waits this long. */
+export const REQUEST_TIMEOUT_MS = 15_000
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH'
 

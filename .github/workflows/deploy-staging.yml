@@ -230,10 +230,13 @@ jobs:
           E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
         run: npx playwright test --project=staging
 
-      - name: Keep the report when a journey fails
+      # The staging run writes no HTML report, because the report names what
+      # each step typed. What it keeps is a screenshot of each failure, in
+      # test-results, and a password box shows only dots.
+      - name: Keep the failure screenshots when a journey fails
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: staging-journeys-report
-          path: frontend/playwright-report
+          name: staging-journeys-failures
+          path: frontend/test-results
           retention-days: 7

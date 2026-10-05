@@ -53,7 +53,8 @@ function CollectionEntry({ collection, today }: { collection: DiaryCollection; t
     >
       <p>{collection.summary}</p>
       <p className="tabular text-slate-soft">
-        {countOf(collection.unitCount, 'unit', 'units')}, back {formatDate(collection.to)}
+        {countOf(collection.unitCount, 'unit', 'units')},{' '}
+        {collection.status === 'RETURNED' ? 'booked until' : 'due back'} {formatDate(collection.to)}
       </p>
     </CounterEntry>
   )

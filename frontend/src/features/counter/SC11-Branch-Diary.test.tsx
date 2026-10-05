@@ -115,6 +115,19 @@ describe('today in the diary', () => {
     )
   })
 
+  it('says when a booking is due back, and never reads a booked date as the day it came back', async () => {
+    const back = { ...COLLECTED_TODAY, status: 'RETURNED' as const }
+    await openDiary({
+      [DIARY_ROUTE]: diaryAnswering([{ date: TEST_TODAY, collections: [DUE_OUT, back], returns: [] }]),
+    })
+    await screen.findByRole('heading', { level: 2, name: TODAY_HEADING }, SCREEN_WAIT)
+
+    const going = screen.getByRole('list', { name: /^Going out on Thursday 12 March 2026/ })
+    expect(within(going).getByText('2 units, due back 13 Mar 2026')).toBeVisible()
+    expect(within(going).getByText(/^1 unit, booked until /)).toBeVisible()
+    expect(within(going).queryByText(/, back /)).not.toBeInTheDocument()
+  })
+
   it('offers no checkout for a booking that starts on a later day', async () => {
     const later = { ...DUE_OUT, from: '2026-03-13', canMarkNoShow: false }
     await openDiary({ [DIARY_ROUTE]: diaryAnswering([{ date: '2026-03-13', collections: [later], returns: [] }]) }, '/counter/diary?date=2026-03-13')

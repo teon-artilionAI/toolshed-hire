@@ -112,7 +112,10 @@ was kept.
 
 These are the figures of the release, from the release hardening pull request,
 [#60](https://github.com/teon-artilionAI/toolshed-hire/pull/60), the last change
-before `v0.4.0` on 4 October 2026.
+before `v0.4.0` on 4 October 2026. The hotfixes `v0.4.1` and `v0.4.2` the same
+afternoon added five backend tests and fifteen frontend tests, and the rest of
+the table holds for them too. What testing by hand found is under
+[Testing the release by hand](#testing-the-release-by-hand).
 
 | Check | Result |
 |---|---|
@@ -145,6 +148,65 @@ follows.
 | [#58](https://github.com/teon-artilionAI/toolshed-hire/pull/58) asset register | 4,363 | 1,353 | 184 |
 | [#59](https://github.com/teon-artilionAI/toolshed-hire/pull/59) staff accounts and customer holds | 4,594 | 1,438 | 202 |
 | [#60](https://github.com/teon-artilionAI/toolshed-hire/pull/60) release hardening | 4,618 | 1,443 | 392 |
+| [#64](https://github.com/teon-artilionAI/toolshed-hire/pull/64) hotfix 0.4.1 | 4,623 | 1,455 | 392 |
+| [#69](https://github.com/teon-artilionAI/toolshed-hire/pull/69) hotfix 0.4.2 | 4,623 | 1,458 | 392 |
+
+### Testing the release by hand
+
+After `v0.4.0` was live I walked every role through a browser on a local copy
+of the release, and the public pages on production. As a customer I searched,
+booked and opened my bookings and account. At the counter I booked for a
+customer, checked the unit out, took it back, filed a damage report that
+charged the customer, and read the settlement. As the owner I read the
+dashboard and the report, resolved the damage report, reversed the recovery
+charge and opened the audit trail, the users, the catalogue and the asset
+register.
+
+Every automated check was green, and the walk still found eight faults. None
+lost data. Each told a person something wrong or made the first visit slower
+than it had to be. They are listed in issue
+[#63](https://github.com/teon-artilionAI/toolshed-hire/issues/63), and seven
+are fixed in [#64](https://github.com/teon-artilionAI/toolshed-hire/pull/64),
+released as `v0.4.1`.
+
+- The browser gave up on a request after eight seconds, which a cold start can
+  take longer than.
+- The home page named the suburbs of the branches, not the branches.
+- A booking already collected or back said nothing had been charged and to
+  ring the branch to change it.
+- The seeded customers were members since the day of the seed, with hire
+  history from March and June.
+- While a damage report was outstanding, the return showed a settlement table
+  of noughts.
+- A settled hire did not say when a correction had since given money back.
+- The diary wrote a booked return date in words that read like the day the unit
+  came back.
+- Stored charge descriptions write money as R300.00, where the screens write
+  R 300.00. This one is left on purpose. The whole backend writes it that way
+  and production already holds those rows, so changing one line would leave
+  the history in two formats.
+
+Three more turned up while I fixed these, and are fixed in the same release.
+Reading the staging pipeline showed that a failed journey uploaded a report
+folder the run never writes. A test written for the settlement fix found a
+reversed late fee shown under its unit as a second charge with a minus sign.
+The first pipeline run of the fix showed that the release journey only passed
+before half past ten, because the API's clock is pinned to 10:00 and the
+journey counted down on the browser's real clock. Each fix to a screen or to
+the seed has a test that fails without it. The longer timeout and the pipeline
+changes have none, and I checked them by running them.
+
+Then I tested `v0.4.1` the same way on production, signed in as the customer
+and as the owner. The customer searched, booked, held and confirmed a unit,
+found it under My Hires and cancelled it. At the Cape Town CBD counter the
+owner booked a unit for the trade customer, checked it out and took it back,
+and the deposit was released in full. The owner's screens, the September
+report and the worked example read as they should. One fault turned up. A
+cancellation reason that ended in a full stop read with a second full stop
+after the closing quote. It is issue
+[#68](https://github.com/teon-artilionAI/toolshed-hire/issues/68), fixed in
+[#69](https://github.com/teon-artilionAI/toolshed-hire/pull/69) and released
+as `v0.4.2`.
 
 ### Figures worked out by hand
 

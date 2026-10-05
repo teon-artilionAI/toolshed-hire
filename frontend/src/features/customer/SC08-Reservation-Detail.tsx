@@ -11,17 +11,20 @@
  * both, because saying which would tell a stranger which references are real.
  *
  * Charges belong to a hire, and a hire only begins when the equipment is
- * collected. Until the API has them, the charges card says so and shows no
- * figure.
+ * collected. The charges card shows no figure. It says whether anything has
+ * been charged, and once the equipment has gone out it points to the hire
+ * history on the account page, where the charges are.
  */
 
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react'
+import type { Reservation, ReservationStatus } from '../../shared/api/contract'
 import { queryPhase } from '../../shared/api/query-phase'
 import { rememberReservation, reservationQueries } from '../../shared/api/reservation-queries'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { formatDate } from '../../shared/format'
+import { ACCOUNT_PATH } from '../../shared/navigation'
 import { branchDateTime } from '../../shared/today'
 import { Card, EmptyState, PageHeader, StatusPill } from '../../shared/ui'
 import { isNotFound } from './booking-refusal'
@@ -29,6 +32,39 @@ import { RESERVATION_STATUS_LABEL } from './customer-labels'
 import { CancellationPanel } from './reservation-cancel-panel'
 import { ReservationLines, ReservationTotals } from './reservation-figures'
 import { MY_RESERVATIONS_PATH } from './reservation-links'
+
+/** A booking that has not gone out yet and still may. */
+const UPCOMING_STATUSES: readonly ReservationStatus[] = ['DRAFT', 'HELD', 'CONFIRMED']
+
+/** Where the charges of a booking are, by where the booking stands. The
+ *  charges belong to the hire, so once the equipment has gone out they are
+ *  read on the account page with the rest of the hire history. */
+function ChargesCard({ reservation }: { reservation: Reservation }) {
+  if (reservation.status === 'COLLECTED' || reservation.status === 'RETURNED') {
+    return (
+      <Card title="Charges">
+        <p className="text-sm text-slate-soft">
+          {reservation.status === 'COLLECTED'
+            ? 'The equipment has been collected, so this booking is now a hire.'
+            : 'The equipment has come back, so this hire is finished.'}{' '}
+          Its charges and where the deposit stands are in your hire history.
+        </p>
+        <Link to={ACCOUNT_PATH} className="btn-secondary mt-md px-md">
+          See your hire history
+        </Link>
+      </Card>
+    )
+  }
+  return (
+    <Card title="Charges">
+      <p className="text-sm text-slate-soft">
+        {UPCOMING_STATUSES.includes(reservation.status)
+          ? 'Nothing has been charged on this booking. The hire is charged once the equipment is collected, and its charges are then in your hire history.'
+          : 'Nothing was charged on this booking, because the equipment never went out.'}
+      </p>
+    </Card>
+  )
+}
 
 function BackLink() {
   return (
@@ -115,12 +151,7 @@ export default function ReservationDetail() {
             </div>
           </Card>
 
-          <Card title="Charges">
-            <p className="text-sm text-slate-soft">
-              Charges appear here once the equipment has been collected. Until then nothing has
-              been charged on this booking.
-            </p>
-          </Card>
+          <ChargesCard reservation={booking} />
 
           <CancellationPanel
             reservation={booking}
@@ -153,10 +184,12 @@ export default function ReservationDetail() {
                   Collect from
                 </dt>
                 <dd className="mt-xs text-slate-soft">{booking.branchName}</dd>
-                <dd className="mt-xs text-slate-soft">
-                  Bring the identity document on your account. The counter checks it before
-                  anything leaves the branch.
-                </dd>
+                {UPCOMING_STATUSES.includes(booking.status) && (
+                  <dd className="mt-xs text-slate-soft">
+                    Bring the identity document on your account. The counter checks it before
+                    anything leaves the branch.
+                  </dd>
+                )}
               </div>
             </dl>
           </Card>

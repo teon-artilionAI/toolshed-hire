@@ -84,14 +84,38 @@ describe('the booking', () => {
     expect(figure('Held until')).toHaveTextContent('12 Mar 2026 at 08:30')
   })
 
-  it('shows no sample charges, and says when charges will appear', async () => {
+  it('shows no sample charges, and says when the hire is charged', async () => {
     await openBooking({ [DETAIL]: () => jsonResponse(CONFIRMED) })
 
     const charges = screen.getByRole('heading', { name: 'Charges' }).closest('section')
-    expect(charges).toHaveTextContent('Charges appear here once the equipment has been collected.')
+    expect(charges).toHaveTextContent('Nothing has been charged on this booking. The hire is charged once the equipment is collected')
     expect(charges).not.toHaveTextContent(/R\s\d/)
     expect(screen.queryByText(/Late fee|Deposit held|under way/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Bring the identity document on your account/)).toBeVisible()
   })
+
+  it.each([
+    ['COLLECTED', 'The equipment has been collected, so this booking is now a hire.'],
+    ['RETURNED', 'The equipment has come back, so this hire is finished.'],
+  ] as const)('points a %s booking to the hire history for its charges', async (status, said) => {
+    await openBooking({ [DETAIL]: () => jsonResponse({ ...CONFIRMED, status, canCancel: false }) })
+
+    const charges = screen.getByRole('heading', { name: 'Charges' }).closest('section') as HTMLElement
+    expect(charges).toHaveTextContent(said)
+    expect(charges).not.toHaveTextContent(/Nothing has been charged/)
+    expect(within(charges).getByRole('link', { name: 'See your hire history' })).toHaveAttribute('href', '/account')
+    expect(screen.queryByText(/Bring the identity document/)).not.toBeInTheDocument()
+  })
+
+  it.each(['CANCELLED', 'EXPIRED', 'NO_SHOW'] as const)(
+    'says nothing was charged on a booking %s before it went out',
+    async (status) => {
+      await openBooking({ [DETAIL]: () => jsonResponse({ ...CONFIRMED, status, canCancel: false }) })
+
+      const charges = screen.getByRole('heading', { name: 'Charges' }).closest('section')
+      expect(charges).toHaveTextContent('Nothing was charged on this booking, because the equipment never went out.')
+    },
+  )
 })
 
 describe('while it is loading and when it cannot be loaded', () => {
@@ -143,6 +167,19 @@ describe('whether cancelling is offered', () => {
     expect(screen.getByText(/This booking cannot be cancelled online/)).toBeVisible()
   })
 
+  it.each([
+    ['COLLECTED', 'The equipment has been collected, so the booking can no longer be cancelled. Bring it back to Cape Town CBD by the return date.'],
+    ['RETURNED', 'The equipment has come back and the hire is finished, so there is nothing to cancel.'],
+    ['EXPIRED', 'The hold ran out before the booking was confirmed, so there is nothing to cancel.'],
+    ['NO_SHOW', 'The equipment was not collected on the day, so the booking was closed. There is nothing to cancel.'],
+  ] as const)('says why a %s booking has nothing to cancel, and never to ring about it', async (status, said) => {
+    await openBooking({ [DETAIL]: () => jsonResponse({ ...CONFIRMED, status, canCancel: false }) })
+
+    expect(screen.getByText(said)).toBeVisible()
+    expect(screen.queryByText(/cannot be cancelled online/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: OPEN_QUESTION })).not.toBeInTheDocument()
+  })
+
   it('shows what the server recorded for a booking that is already cancelled', async () => {
     await openBooking({ [DETAIL]: () => jsonResponse(CANCELLED_WITH_REASON) })
 
@@ -151,6 +188,17 @@ describe('whether cancelling is offered', () => {
     expect(notice).toHaveTextContent(`The reason given was "${TYPED_REASON}".`)
     expect(screen.queryByRole('button', { name: OPEN_QUESTION })).not.toBeInTheDocument()
   })
+
+  it.each(['Testing the live site.', 'Is the branch open?', 'Plans changed!'])(
+    'ends the sentence once when the reason "%s" ends one already',
+    async (reason) => {
+      await openBooking({ [DETAIL]: () => jsonResponse({ ...CANCELLED, cancellationReason: reason }) })
+
+      const notice = screen.getByText(CANCELLED_TITLE).closest('[role="status"]')
+      expect(notice).toHaveTextContent(`The reason given was "${reason}"`)
+      expect(notice?.textContent).not.toContain(`"${reason}".`)
+    },
+  )
 })
 
 describe('cancelling', () => {

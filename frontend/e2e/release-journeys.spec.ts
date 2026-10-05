@@ -30,6 +30,7 @@
 import { expect, test } from '@playwright/test'
 import type { APIRequestContext } from '@playwright/test'
 import { assetRegisterRoutesArePresent } from './admin-assets-backend.ts'
+import { startBrowserClockWithTheApi } from './api-clock.ts'
 import { RESERVATION_ROUTES_NEEDED, RETURN_ROUTES_NEEDED, reservationRoutesArePresent, returnRoutesArePresent } from './backend.ts'
 import {
   BASKET_HEADING,
@@ -91,6 +92,9 @@ test('a customer books, holds, confirms and cancels a unit', { tag: STAGING_TAG 
   await skipLocallyUnless(reservationRoutesArePresent, request, RESERVATION_ROUTES_NEEDED)
   const period = periodStarting(COLLECT_IN_DAYS[testInfo.project.name] ?? DEFAULT_COLLECT_IN_DAYS)
   const branch = await firstBranch(request)
+  // The hold counts down to an instant on the API's clock. On staging the API
+  // keeps the real time and this changes nothing.
+  await startBrowserClockWithTheApi(page)
 
   await signInAsCustomer(page)
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
