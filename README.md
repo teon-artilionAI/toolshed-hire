@@ -27,7 +27,7 @@ alone.
 |---|---|
 | Live system | <https://toolshed-hire.vercel.app> |
 | Staging | <https://toolshed-hire-staging.vercel.app> |
-| Recorded presentation | The link is added here once the recording is done on 4 October 2026. <!-- final: video link --> |
+| Recorded presentation | Handed in on ARC with the link to this repository, as agreed with my lecturer. |
 | Slides | [toolshed-hire-task-2.pdf](docs/task2/slides/toolshed-hire-task-2.pdf). The outline and the demonstration script are in [presentation.md](docs/task2/presentation.md). |
 | Task 1 design document | [INSY7315_Task1_ToolshedHire.pdf](docs/task1/INSY7315_Task1_ToolshedHire.pdf) |
 | Task 2 evidence | [docs/task2](docs/task2/README.md) |
@@ -38,8 +38,8 @@ alone.
 |---|---|---|
 | Customer | `w.adonis@buildright.co.za` | `Hire-UQdzV8RMo50z` |
 
-The counter staff and admin logins are never published in this repository, and
-I show them in the recorded presentation and send them to my lecturer privately.
+The counter staff and admin logins are never published in this repository. They
+are handed in on ARC with the recorded presentation.
 
 ## Try it in five minutes
 
@@ -121,7 +121,7 @@ This table says where to find the evidence for each part of Task 2.
 | Stability and the reasons for each choice | [infra/SETUP.md](infra/SETUP.md), [deviations.md](docs/task2/deviations.md) |
 | Branching and workflow | [CONTRIBUTING.md](CONTRIBUTING.md), the [merged pull requests](https://github.com/teon-artilionAI/toolshed-hire/pulls?q=is%3Apr+is%3Amerged) |
 | Automated tests and deployment | [Pipeline and branching](#pipeline-and-branching) below, and [test-plan-and-results.md](docs/task2/test-plan-and-results.md) |
-| Presentation | The video link above, and [presentation.md](docs/task2/presentation.md) |
+| Presentation | The recording, handed in on ARC, and [presentation.md](docs/task2/presentation.md) |
 
 ## Requirements traceability
 
