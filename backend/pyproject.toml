@@ -26,7 +26,7 @@ dependencies = [
     "alembic==1.14.0",
     "psycopg[binary]==3.2.3",
     "pydantic==2.10.4",
-    "pydantic-settings==2.7.0",
+    "pydantic-settings==2.15.0",
     "pyjwt==2.15.1",
     "passlib[bcrypt]==1.7.4",
     # passlib 1.7.4 reads bcrypt.__about__, which bcrypt 4.1 removed. 4.0.1 is
