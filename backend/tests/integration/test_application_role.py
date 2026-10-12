@@ -57,6 +57,16 @@ INSERT_BRANCH: Final[str] = (
     "opens_at, closes_at) VALUES (gen_random_uuid(), 'TST', 'Role test branch', "
     "'1 Test Road', 'Woodstock', 'Cape Town', '7925', '021 555 0100', '07:00', '17:00')"
 )
+INSERT_OWNER: Final[str] = (
+    "INSERT INTO user_account (id, email, password_hash, role, full_name) VALUES "
+    "(gen_random_uuid(), 'role.owner@example.com', 'not-a-real-hash', 'ADMIN', 'Role Owner')"
+)
+INSERT_CLOSURE_DAY: Final[str] = (
+    "INSERT INTO closure_day (id, branch_id, day, reason, created_by_user_id) "
+    "SELECT gen_random_uuid(), branch.id, DATE '2026-10-20', 'stocktake', user_account.id "
+    "FROM branch, user_account WHERE branch.code = 'TST' "
+    "AND user_account.email = 'role.owner@example.com'"
+)
 INSERT_RATE_LIMIT_WINDOW: Final[str] = (
     "INSERT INTO rate_limit_counter (bucket_key_hash, window_started_at, request_count) "
     "VALUES (repeat('a', 64), now() - interval '1 hour', 3)"
@@ -174,6 +184,46 @@ class TestTheApplicationRoleCannotHardDelete:
         with application_engine.begin() as connection:
             connection.execute(delete(table(SWEPT_TABLE)))
         assert count_rows(application_engine, SWEPT_TABLE) == 0
+
+
+class TestTheTradingCalendarTables:
+    """Revision 0013. Hours are read only to the application, closure days are written."""
+
+    def test_trading_hours_can_be_read_and_not_changed(self, application_engine: Engine) -> None:
+        with application_engine.begin() as connection:
+            connection.execute(text(INSERT_BRANCH))
+        with application_engine.connect() as connection:
+            count = connection.execute(
+                text("SELECT count(*) FROM branch_trading_hours")
+            ).scalar_one()
+
+        state = refused_sqlstate(
+            application_engine,
+            text(
+                "INSERT INTO branch_trading_hours (branch_id, weekday, opens_at, closes_at) "
+                "SELECT id, 7, '07:00', '13:00' FROM branch WHERE code = 'TST'"
+            ),
+        )
+
+        assert int(count) == 0
+        assert state == INSUFFICIENT_PRIVILEGE_SQLSTATE
+
+    def test_a_closure_day_can_be_added_and_cancelled(self, application_engine: Engine) -> None:
+        with application_engine.begin() as connection:
+            connection.execute(text(INSERT_BRANCH))
+            connection.execute(text(INSERT_OWNER))
+            connection.execute(text(INSERT_CLOSURE_DAY))
+            connection.execute(
+                text(
+                    "UPDATE closure_day SET cancelled_at = now(), "
+                    "cancelled_by_user_id = created_by_user_id"
+                )
+            )
+        with application_engine.connect() as connection:
+            live = connection.execute(
+                text("SELECT count(*) FROM closure_day WHERE cancelled_at IS NULL")
+            ).scalar_one()
+        assert int(live) == 0
 
 
 class TestTheApplicationRoleCanStillDoItsWork:
