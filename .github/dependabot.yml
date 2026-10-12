@@ -25,6 +25,12 @@ updates:
     open-pull-requests-limit: 3
     labels:
       - "area: frontend"
+    ignore:
+      # The Node types follow the Node version the project runs on, which is
+      # 22 in CI and the build. A newer major would offer APIs the runtime does
+      # not have, so it moves only when the runtime moves.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /backend
