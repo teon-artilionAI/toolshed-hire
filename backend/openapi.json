@@ -6971,10 +6971,12 @@
             "title": "Action"
           },
           "beforeState": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Beforestate"
           },
           "afterState": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Afterstate"
           },
@@ -9732,6 +9734,7 @@
           "errors": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
