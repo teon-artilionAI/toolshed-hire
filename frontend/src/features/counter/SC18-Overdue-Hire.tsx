@@ -36,7 +36,7 @@ function isEscalated(item: RentalItem): boolean {
 
 function UnitLine({ item }: { item: RentalItem }) {
   return (
-    <li className="tabular break-words">
+    <li className="tabular wrap-break-word">
       <span className="font-mono">{itemLabel(item)}</span>, {item.modelName}.{' '}
       {countOf(item.daysLateToday, 'day', 'days')} late, late fee so far{' '}
       <span className="font-semibold">{money(item.lateFeeToday)}</span>.

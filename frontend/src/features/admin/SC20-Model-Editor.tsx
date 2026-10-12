@@ -50,7 +50,7 @@ function Frame({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-labelledby={HEADING_ID} className="card mb-lg min-w-0">
       <div className="border-b border-line px-lg py-md">
-        <h2 id={HEADING_ID} ref={heading} tabIndex={-1} className="break-words text-lg font-semibold text-ink">
+        <h2 id={HEADING_ID} ref={heading} tabIndex={-1} className="wrap-break-word text-lg font-semibold text-ink">
           {title}
         </h2>
       </div>

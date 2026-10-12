@@ -110,7 +110,7 @@ export default function LineEditor({
   return (
     <li className="rounded border border-line bg-surface p-md">
       <div className="flex flex-wrap items-end justify-between gap-md">
-        <p className="min-w-0 break-words font-medium text-ink">
+        <p className="min-w-0 wrap-break-word font-medium text-ink">
           <span className="sr-only">Tool {position}, </span>
           {line.modelName}
         </p>

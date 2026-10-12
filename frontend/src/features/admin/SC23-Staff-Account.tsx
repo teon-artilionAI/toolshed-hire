@@ -38,7 +38,7 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-soft">{term}</dt>
-      <dd className="mt-xs break-words text-sm text-ink">{children}</dd>
+      <dd className="mt-xs wrap-break-word text-sm text-ink">{children}</dd>
     </div>
   )
 }
@@ -106,7 +106,7 @@ export function StaffAccount({
   return (
     <section aria-labelledby={HEADING_ID} className="card mb-lg min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-md border-b border-line px-lg py-md">
-        <h3 id={HEADING_ID} ref={headingRef} tabIndex={-1} className="min-w-0 break-words text-lg font-semibold text-ink">
+        <h3 id={HEADING_ID} ref={headingRef} tabIndex={-1} className="min-w-0 wrap-break-word text-lg font-semibold text-ink">
           Account of {user.fullName}
           {isYou && <span className="ml-sm text-sm font-normal text-slate-soft">(you)</span>}
         </h3>

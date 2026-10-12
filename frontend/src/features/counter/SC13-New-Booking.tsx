@@ -72,7 +72,7 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
   const status = customer.accountStatus
   return (
     <div className="mb-lg flex flex-wrap items-center gap-sm rounded border border-line bg-surface px-md py-sm">
-      <p className="min-w-0 break-words text-sm text-ink">
+      <p className="min-w-0 wrap-break-word text-sm text-ink">
         Booking for <span className="font-semibold">{customer.displayName}</span>,{' '}
         <span className="tabular">{customer.phone}</span>
       </p>

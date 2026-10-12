@@ -46,7 +46,7 @@ function NotCancellable({ reservation }: { reservation: Reservation }) {
   return (
     <p className="text-sm text-slate-soft">
       {why[reservation.status] ??
-        `This booking cannot be cancelled online. If you need to change it, ring ${reservation.branchName}.`}
+        `This booking cannot be cancelled online. If you need to change it, ring-3 ${reservation.branchName}.`}
     </p>
   )
 }

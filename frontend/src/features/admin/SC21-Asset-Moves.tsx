@@ -33,7 +33,7 @@ const REASON_IS_READ_WITH = 'the history of this unit'
 /** The server's sentence, with every booking it names as a link to its checkout. */
 function ServerSentence({ sentence }: { sentence: string }) {
   return (
-    <p className="break-words">
+    <p className="wrap-break-word">
       {sentenceWithBookings(sentence).map((part, index) =>
         part.href === null ? (
           <span key={index}>{part.text}</span>
@@ -95,10 +95,10 @@ function MoveQuestion({
       aria-labelledby={`${id}-heading`}
       className="min-w-0 rounded-lg border-2 border-ink bg-surface p-md"
     >
-      <h4 id={`${id}-heading`} ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold text-ink">
+      <h4 id={`${id}-heading`} ref={headingRef} tabIndex={-1} className="wrap-break-word text-base font-semibold text-ink">
         {words.question(unit.assetTag)}
       </h4>
-      <p id={`${id}-consequence`} className="mt-xs break-words text-sm text-ink">
+      <p id={`${id}-consequence`} className="mt-xs wrap-break-word text-sm text-ink">
         {words.consequence(unit)}
       </p>
       {words.asksForAReason && (

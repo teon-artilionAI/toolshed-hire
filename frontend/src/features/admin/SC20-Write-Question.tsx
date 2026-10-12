@@ -66,10 +66,10 @@ export function WriteQuestion({
 
   return (
     <section aria-labelledby={headingId} className="min-w-0 rounded-lg border-2 border-ink bg-surface p-md">
-      <Heading id={headingId} ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold text-ink">
+      <Heading id={headingId} ref={headingRef} tabIndex={-1} className="wrap-break-word text-base font-semibold text-ink">
         {heading}
       </Heading>
-      <div id={consequenceId} className="mt-xs flex flex-col gap-xs break-words text-sm text-ink">
+      <div id={consequenceId} className="mt-xs flex flex-col gap-xs wrap-break-word text-sm text-ink">
         {children}
       </div>
       {failure !== null && failure.kind === 'fault' && (

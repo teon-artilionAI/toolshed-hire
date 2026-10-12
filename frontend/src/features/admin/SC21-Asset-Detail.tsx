@@ -82,7 +82,7 @@ function Unit({ unit, onMoved, onSaved }: { unit: AdminAssetDetail } & Omit<Unit
 
   return (
     <>
-      <p className="break-words text-sm text-slate-soft">
+      <p className="wrap-break-word text-sm text-slate-soft">
         {unit.modelName}, at {unit.branchName}.
       </p>
       <AssetFacts unit={unit} />

@@ -86,7 +86,7 @@ export function ModelFinder({
 
   return (
     <div>
-      <div className="max-w-xl">
+      <div className="max-w-(--container-xl)">
         <TextInput
           id="finder-search"
           type="search"
@@ -131,7 +131,7 @@ export function ModelFinder({
                     className="flex flex-wrap items-center justify-between gap-sm rounded border border-line p-sm"
                   >
                     <div className="min-w-0">
-                      <p className="break-words text-sm font-medium text-ink">{model.name}</p>
+                      <p className="wrap-break-word text-sm font-medium text-ink">{model.name}</p>
                       <p className="text-sm text-slate-soft">
                         {model.manufacturer}, {model.categoryName}
                       </p>

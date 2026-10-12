@@ -56,7 +56,7 @@ export default function UtilisationChart({
         {rows.map((row) => (
           <li key={row.key}>
             <div className="flex items-baseline justify-between gap-md text-sm">
-              <span className={`min-w-0 break-words text-ink ${groupBy === 'asset' ? 'font-mono' : ''}`}>
+              <span className={`min-w-0 wrap-break-word text-ink ${groupBy === 'asset' ? 'font-mono' : ''}`}>
                 {row.label}
               </span>
               <span className="tabular shrink-0 font-semibold text-ink">

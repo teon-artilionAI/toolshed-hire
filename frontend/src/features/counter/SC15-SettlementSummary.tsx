@@ -66,7 +66,7 @@ function ChargedAgainstDeposit({ charges }: { charges: readonly RentalCharge[] }
       <ul className="mt-xs flex flex-col gap-xs">
         {charges.map((charge) => (
           <li key={charge.id} className="flex flex-wrap justify-between gap-x-md gap-y-xs rounded bg-muted p-sm text-sm">
-            <span className="min-w-0 break-words text-ink">
+            <span className="min-w-0 wrap-break-word text-ink">
               {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}
               <span className="block text-xs text-slate-soft">{CHARGE_STATUS_LABEL[charge.status]}</span>
             </span>

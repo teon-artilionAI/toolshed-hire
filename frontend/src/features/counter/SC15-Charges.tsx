@@ -87,7 +87,7 @@ function ChargeEntry({
         </h3>
         <p className="tabular font-mono text-sm text-ink">{amountWords(charge.amountIncVat)}</p>
       </div>
-      <p className="mt-xs break-words text-sm text-ink">{charge.description}</p>
+      <p className="mt-xs wrap-break-word text-sm text-ink">{charge.description}</p>
       <p className="mt-xs text-sm text-slate-soft">
         {CHARGE_STATUS_LABEL[charge.status]}. Raised {branchDateTime(charge.raisedAt)}.
       </p>
@@ -98,7 +98,7 @@ function ChargeEntry({
       {charge.reason !== null && (
         <dl className="mt-xs flex flex-wrap gap-x-sm text-sm">
           <dt className="text-slate-soft">The owner&apos;s reason</dt>
-          <dd className="min-w-0 break-words text-ink">{charge.reason}</dd>
+          <dd className="min-w-0 wrap-break-word text-ink">{charge.reason}</dd>
         </dl>
       )}
       {ownerSignedIn && offer !== null && !correcting && (

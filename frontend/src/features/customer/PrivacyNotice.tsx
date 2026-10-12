@@ -39,7 +39,7 @@ export default function PrivacyNotice() {
         subtitle="What we collect about you, why we collect it, who handles it and what you can do about it."
       />
 
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-(--container-2xl)">
         <Notice tone="warn" title="Do not enter real personal information">
           <p>
             Toolshed Hire is a fictional business, built as a university project. Nothing here is

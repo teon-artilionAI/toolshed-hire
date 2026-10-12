@@ -110,7 +110,7 @@ export function PageHeader({
         )}
         <h1 className="text-2xl font-semibold text-ink">{title}</h1>
         {subtitle && (
-          <p className="mt-xs max-w-2xl text-sm text-slate-soft">{subtitle}</p>
+          <p className="mt-xs max-w-(--container-2xl) text-sm text-slate-soft">{subtitle}</p>
         )}
       </div>
       {actions && <div className="flex flex-wrap gap-sm">{actions}</div>}
@@ -187,7 +187,7 @@ export function EmptyState({
     <div className="flex flex-col items-center justify-center px-lg py-2xl text-center">
       <Inbox className="mb-md h-8 w-8 text-slate-faint" aria-hidden="true" />
       <p className="text-base font-medium text-ink">{title}</p>
-      <p className="mt-xs max-w-sm text-sm text-slate-soft">{body}</p>
+      <p className="mt-xs max-w-(--container-sm) text-sm text-slate-soft">{body}</p>
       {action && <div className="mt-lg">{action}</div>}
     </div>
   )
