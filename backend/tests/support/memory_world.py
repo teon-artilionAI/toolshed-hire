@@ -12,7 +12,7 @@ two of them ever share an open transaction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from typing import Final
@@ -42,9 +42,9 @@ from app.domain.enums import AccountStatus, AssetStatus, ConditionGrade, UserRol
 from app.domain.identity import Actor, Branch, CustomerProfile
 from app.domain.period import BookingPeriod
 from app.domain.policies import PricingPolicy, StandardPricingPolicy
+from app.domain.trading_calendar import BranchCalendar
 from app.infrastructure.notification import FakeEmailGateway
 from tests.support.clock import FixedClock
-from tests.support.factories import CLOSES_AT
 from tests.support.memory import InMemoryUnitOfWork, MemoryStore
 
 SINGLE_ASSET: Final[int] = 1
@@ -147,7 +147,9 @@ def build_memory_world(
         max_hire_days: The longest hire the model may be booked for.
 
     """
-    branch = Branch(id=uuid4(), code="CBD", name="Cape Town CBD", closes_at=CLOSES_AT)
+    branch = Branch(
+        id=uuid4(), code="CBD", name="Cape Town CBD", calendar=BranchCalendar.standard()
+    )
     product_model = ProductModel(
         id=uuid4(),
         sku="TSH-PM-0001",
@@ -306,3 +308,14 @@ __all__ = [
     "build_memory_world",
     "open_desk",
 ]
+
+
+def with_branch_calendar(world: MemoryWorld, calendar: BranchCalendar) -> MemoryWorld:
+    """Return the world with its branch trading on another calendar.
+
+    The store's copy is replaced as well, so the use cases read the same
+    calendar the test set.
+    """
+    branch = replace(world.branch, calendar=calendar)
+    world.store.branches[branch.id] = branch
+    return replace(world, branch=branch)

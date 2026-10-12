@@ -32,8 +32,8 @@ from app.application.reporting.report_models import AttentionCounts, GroupBy
 from app.domain.enums import UserRole
 from app.domain.errors import AuthorisationFailure, ValidationFailure
 from app.domain.identity import Actor, Branch
+from app.domain.trading_calendar import BranchCalendar
 from tests.support.clock import FixedClock
-from tests.support.factories import CLOSES_AT
 from tests.support.report_fakes import (
     READ,
     SWEEP,
@@ -48,7 +48,9 @@ from tests.support.report_fakes import (
 NOW: Final[datetime] = datetime(2026, 9, 20, 8, 0, tzinfo=UTC)
 FIRST: Final[date] = date(2026, 9, 1)
 AFTER_SEPTEMBER: Final[date] = date(2026, 10, 1)
-CBD: Final[Branch] = Branch(id=uuid4(), code="CBD", name="Cape Town CBD", closes_at=CLOSES_AT)
+CBD: Final[Branch] = Branch(
+    id=uuid4(), code="CBD", name="Cape Town CBD", calendar=BranchCalendar.standard()
+)
 ADMIN: Final[Actor] = Actor(user_id=uuid4(), role=UserRole.ADMIN, branch_id=None)
 COUNTER: Final[Actor] = Actor(user_id=uuid4(), role=UserRole.COUNTER_STAFF, branch_id=CBD.id)
 HAMMER = a_unit("TSH-HM-0001", hire_revenue="518.00")

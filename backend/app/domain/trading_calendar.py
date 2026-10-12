@@ -26,6 +26,7 @@ from types import MappingProxyType
 from typing import Final
 
 from app.domain.errors import ValidationFailure
+from app.domain.period import BookingPeriod
 from app.domain.public_holidays import holiday_on
 
 # date.isoweekday() numbers Monday 1 and Sunday 7.
@@ -260,3 +261,40 @@ def ensure_open_on(calendar: BranchCalendar, day: date, *, collecting: bool) -> 
         },
         rule=CLOSED_DAY_RULE,
     )
+
+
+# The names of the two days of a hire, as a refusal reports which one it was.
+COLLECTION_DAY: Final[str] = "collection"
+RETURN_DAY: Final[str] = "return"
+
+
+def closed_hire_day(period: BookingPeriod, calendar: BranchCalendar) -> str | None:
+    """Return which day of a hire falls on a closed day, collection first, or None."""
+    if not calendar.is_open(period.start):
+        return COLLECTION_DAY
+    if not calendar.is_open(period.end):
+        return RETURN_DAY
+    return None
+
+
+def ensure_hire_days_open(period: BookingPeriod, calendar: BranchCalendar) -> None:
+    """Refuse a hire whose collection day or return day the branch is closed on.
+
+    The days in between are not checked. The equipment is out on them, and the
+    hire counts every one of them (Task 1, section 1.1).
+
+    Raises:
+        ValidationFailure: For the collection day first, then the return day.
+            The detail names which of the two it was.
+
+    """
+    for day, collecting, which in (
+        (period.start, True, COLLECTION_DAY),
+        (period.end, False, RETURN_DAY),
+    ):
+        try:
+            ensure_open_on(calendar, day, collecting=collecting)
+        except ValidationFailure as failure:
+            raise ValidationFailure(
+                failure.message, {**failure.detail, "hire_day": which}, rule=failure.rule
+            ) from failure

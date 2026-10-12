@@ -55,9 +55,11 @@ SEARCH_FINISHED: Final[str] = "availability.search_finished"
 # The four parts of the sweep, which lapse expired holds, mark no shows, mark
 # hires overdue and prune old throttle counters, then the count and the page
 # (BR-13, BR-17, BR-52, C-17).
-STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 6
-# A category and a branch each add one lookup.
-MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = STATEMENTS_OF_A_PLAIN_SEARCH + 2
+# Then the branches with their trading hours and closure days, three statements,
+# so a day no branch trades on is refused before the page is read.
+STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 9
+# A category adds one lookup. A branch is read with the others and adds none.
+MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = STATEMENTS_OF_A_PLAIN_SEARCH + 1
 LARGEST_PAGE: Final[int] = 50
 
 
@@ -279,7 +281,7 @@ class TestAPageCostsAFixedNumberOfStatements:
 
         assert len(many_models) == len(few_models) == STATEMENTS_OF_A_PLAIN_SEARCH
 
-    def test_a_category_and_a_branch_add_one_lookup_each_and_nothing_per_model(
+    def test_a_category_adds_one_lookup_and_a_branch_none_and_nothing_per_model(
         self, visitor: TestClient, postgres_engine: Engine
     ) -> None:
         slug = visitor.get("/api/catalogue/categories").json()["items"][0]["slug"]

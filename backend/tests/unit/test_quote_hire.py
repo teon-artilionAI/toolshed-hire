@@ -24,6 +24,7 @@ from app.application.availability.hire_request import (
     requested_period,
 )
 from app.application.catalogue.read_models import ModelDetail
+from app.application.identity.read_models import BranchListing
 from app.application.money.quote import ModelQuote, QuoteHire, snapshot_of
 from app.application.refusal import refused_parameter_of
 from app.domain.errors import NotFound, ValidationFailure
@@ -36,6 +37,7 @@ from app.domain.policies import (
     PricingBasis,
     StandardPricingPolicy,
 )
+from app.domain.trading_calendar import BranchCalendar
 from tests.support.clock import FixedClock
 
 HAMMER = ModelDetail(
@@ -100,6 +102,23 @@ def catalogue() -> OneModelCatalogue:
     return OneModelCatalogue()
 
 
+class OneBranch:
+    """One branch on the design's week, as the directory lists it."""
+
+    def list_active(self) -> list[BranchListing]:
+        """Return the one branch."""
+        return [
+            BranchListing(
+                code="CBD",
+                name="Cape Town CBD",
+                suburb="Cape Town",
+                city="Cape Town",
+                phone="021 555 0100",
+                calendar=BranchCalendar.standard(),
+            )
+        ]
+
+
 @pytest.fixture
 def policy() -> RecordingPolicy:
     """Return the policy the service under test prices with."""
@@ -109,7 +128,9 @@ def policy() -> RecordingPolicy:
 @pytest.fixture
 def service(catalogue: OneModelCatalogue, policy: RecordingPolicy) -> QuoteHire:
     """Return the quote service on the fakes and a clock that stands still."""
-    return QuoteHire(catalogue, policy, FixedClock())  # type: ignore[arg-type]  # a partial fake
+    return QuoteHire(  # type: ignore[arg-type]  # a partial fake
+        catalogue, policy, FixedClock(), OneBranch()
+    )
 
 
 class TestAQuoteThatIsGiven:
@@ -153,7 +174,9 @@ class TestAQuoteThatIsGiven:
         self, catalogue: OneModelCatalogue
     ) -> None:
         fixed = FixedRatePricingPolicy(Money.create("100.00"))
-        service = QuoteHire(catalogue, fixed, FixedClock())  # type: ignore[arg-type]  # a partial fake
+        service = QuoteHire(  # type: ignore[arg-type]  # a partial fake
+            catalogue, fixed, FixedClock(), OneBranch()
+        )
         answer = service.for_model(HAMMER.slug, NINTH, NINETEENTH, 2)
         assert answer.quote.subtotal_ex_vat == Money.create("200.00")
 
@@ -287,3 +310,17 @@ class TestWhatMayBeAskedAboutAHire:
 
     def test_a_hire_inside_the_limits_of_the_model_is_accepted(self) -> None:
         ensure_within_hire_limits(HAMMER, BookingPeriod(NINTH, TWELFTH))
+
+
+class TestAQuoteForAClosedDay:
+    """No price is given for a hire no branch could hand over."""
+
+    def test_a_quote_starting_on_a_sunday_is_refused_naming_the_start(
+        self, service: QuoteHire, policy: RecordingPolicy
+    ) -> None:
+        with pytest.raises(ValidationFailure) as refusal:
+            service.for_model(HAMMER.slug, date(2026, 3, 8), date(2026, 3, 10), 1)
+
+        assert refused_parameter_of(refusal.value) == "from"
+        assert "Monday 9 March" in refusal.value.message
+        assert policy.asked == []

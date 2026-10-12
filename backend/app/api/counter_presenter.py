@@ -18,6 +18,7 @@ from app.api.counter_schemas import (
     DiaryReturnResponse,
     OverdueRentalResponse,
     ReturnDueResponse,
+    TradingDayResponse,
 )
 from app.application.catalogue.locator import AssetLocation, AssetLocationPage
 from app.application.hire.overview_models import (
@@ -27,6 +28,7 @@ from app.application.hire.overview_models import (
     DiaryCollection,
     OverdueEntry,
     ReturnEntry,
+    TradingDay,
 )
 
 
@@ -37,6 +39,7 @@ def dashboard_response(dashboard: BranchDashboard) -> DashboardResponse:
         branch_code=dashboard.branch.code,
         branch_name=dashboard.branch.name,
         business_day=dashboard.business_day,
+        trading=_trading(dashboard.trading),
         counts=DashboardCountsResponse(
             collections_due=counts.collections_due,
             returns_due=counts.returns_due,
@@ -58,11 +61,23 @@ def diary_response(diary: BranchDiary) -> DiaryResponse:
         days=[
             DiaryDayResponse(
                 business_day=day.business_day,
+                trading=_trading(day.trading),
                 collections=[_diary_collection(collection) for collection in day.collections],
                 returns=[_diary_return(entry) for entry in day.returns],
             )
             for day in diary.days
         ],
+    )
+
+
+def _trading(day: TradingDay) -> TradingDayResponse:
+    """Write whether the branch trades on a day."""
+    return TradingDayResponse(
+        open=day.hours is not None,
+        opens_at=day.hours.opens if day.hours else None,
+        closes_at=day.hours.closes if day.hours else None,
+        closed_reason=day.closed.reason if day.closed else None,
+        closed_kind=day.closed.kind if day.closed else None,
     )
 
 

@@ -12,6 +12,7 @@ import logging
 from sqlmodel import Session, col, select
 
 from app.application.identity.read_models import BranchListing
+from app.infrastructure.branch_calendars import load_calendars
 from app.infrastructure.models import Branch
 from app.infrastructure.query_log import logged_query
 
@@ -40,6 +41,7 @@ class SqlBranchDirectory:
         with logged_query(logger, "identity.branch_directory", {"active_only": True}) as outcome:
             rows = self._session.exec(statement).all()
             outcome.row_count = len(rows)
+        calendars = load_calendars(self._session, [row.id for row in rows])
         return [
             BranchListing(
                 code=row.code,
@@ -47,8 +49,7 @@ class SqlBranchDirectory:
                 suburb=row.suburb,
                 city=row.city,
                 phone=row.phone,
-                opens_at=row.opens_at,
-                closes_at=row.closes_at,
+                calendar=calendars[row.id],
             )
             for row in rows
         ]

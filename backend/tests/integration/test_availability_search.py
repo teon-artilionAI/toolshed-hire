@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 from typing import Final
 
 import pytest
@@ -30,6 +30,8 @@ from sqlmodel import Session
 
 from app.domain.enums import AssetStatus
 from app.domain.period import BookingPeriod
+from app.domain.trading_calendar import SUNDAY, BranchCalendar, OpeningHours
+from app.infrastructure.branch_calendars import hours_rows_for
 from app.infrastructure.models import Asset, Branch, ProductModel
 from tests.support.catalogue import (
     AVAILABILITY_PATH,
@@ -251,11 +253,35 @@ class TestWhatMakesAUnitFree:
         assert answers(visitor, rammers.model.slug, FOURTH_TO_SIXTH) == {"BLV": True}
 
     def test_the_last_day_of_the_booking_horizon_is_answered(
-        self, visitor: TestClient, rammers: Rammers
+        self,
+        visitor: TestClient,
+        rammers: Rammers,
+        postgres_session: Session,
     ) -> None:
-        """Ninety days after the second of March is the thirty first of May (BR-05)."""
+        """Ninety days after the second of March is the thirty first of May (BR-05).
+
+        That day is a Sunday, so both branches are given Sunday hours here and
+        the horizon alone is what is tested.
+        """
+        sunday = OpeningHours(time(8, 0), time(12, 0))
+        for branch in (rammers.bellville, rammers.somerset_west):
+            postgres_session.add_all(
+                hours_rows_for(branch.id, BranchCalendar(weekly={SUNDAY: sunday}))
+            )
+        postgres_session.commit()
         on_the_horizon = {"from": "2026-05-31", "to": "2026-06-28"}
         assert answers(visitor, rammers.model.slug, on_the_horizon) == {"BLV": True, "SMW": True}
+
+    def test_a_search_starting_on_a_sunday_is_refused_naming_the_monday(
+        self, visitor: TestClient, rammers: Rammers
+    ) -> None:
+        response = visitor.get(
+            model_availability_path(rammers.model.slug),
+            params={"from": "2026-03-08", "to": "2026-03-10"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        assert "Monday 9 March" in response.text
 
 
 class TestTheQuantityOnTheSingleModel:

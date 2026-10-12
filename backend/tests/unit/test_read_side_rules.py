@@ -35,8 +35,8 @@ from app.application.identity.read_models import BranchListing
 from app.application.refusal import REFUSED_PARAMETER, refused, refused_parameter_of
 from app.domain.errors import NotFound, ValidationFailure
 from app.domain.period import BookingPeriod
+from app.domain.trading_calendar import BranchCalendar
 from tests.support.clock import FixedClock
-from tests.support.factories import CLOSES_AT, OPENS_AT
 
 RAMMER = ModelDetail(
     sku="TSH-PM-0001",
@@ -62,8 +62,7 @@ BELLVILLE = BranchListing(
     suburb="Stikland",
     city="Cape Town",
     phone="021 555 0157",
-    opens_at=OPENS_AT,
-    closes_at=CLOSES_AT,
+    calendar=BranchCalendar.standard(),
 )
 FREE_AT_BELLVILLE = BranchAvailability(branch_code="BLV", branch_name="Bellville", available=True)
 # The fixed clock says today is Monday the second of March 2026.

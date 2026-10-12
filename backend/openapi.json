@@ -5238,7 +5238,7 @@
           "branches"
         ],
         "summary": "List the trading branches",
-        "description": "Return every active branch, ordered by name.",
+        "description": "Return every active branch, ordered by name, with its days and hours.",
         "operationId": "list_branches_api_branches_get",
         "responses": {
           "200": {
@@ -7235,13 +7235,19 @@
             "type": "string",
             "title": "Phone"
           },
-          "opensAt": {
-            "type": "string",
-            "title": "Opensat"
+          "weeklyHours": {
+            "items": {
+              "$ref": "#/components/schemas/OpeningHoursResponse"
+            },
+            "type": "array",
+            "title": "Weeklyhours"
           },
-          "closesAt": {
-            "type": "string",
-            "title": "Closesat"
+          "closedDays": {
+            "items": {
+              "$ref": "#/components/schemas/ClosedDayResponse"
+            },
+            "type": "array",
+            "title": "Closeddays"
           }
         },
         "type": "object",
@@ -7251,11 +7257,11 @@
           "suburb",
           "city",
           "phone",
-          "opensAt",
-          "closesAt"
+          "weeklyHours",
+          "closedDays"
         ],
         "title": "BranchResponse",
-        "description": "One trading branch."
+        "description": "One trading branch, with the days and hours it trades.\n\n`weeklyHours` lists the weekdays the counter opens. A weekday that is not\nlisted is a day it never opens. `closedDays` lists every day it is closed\nfrom today to the last day a hire booked today could end, so a date picker\ncan steer a customer away from them before the server has to refuse."
       },
       "CancellationRequest": {
         "properties": {
@@ -7874,6 +7880,32 @@
         ],
         "title": "CheckoutUnitResponse",
         "description": "One unit the reservation holds, as the counter hands it over."
+      },
+      "ClosedDayResponse": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "weekly, public_holiday or closure."
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "reason",
+          "kind"
+        ],
+        "title": "ClosedDayResponse",
+        "description": "A day a branch does not trade, and why."
       },
       "CollectionDueResponse": {
         "properties": {
@@ -8496,6 +8528,9 @@
             "format": "date",
             "title": "Date"
           },
+          "trading": {
+            "$ref": "#/components/schemas/TradingDayResponse"
+          },
           "counts": {
             "$ref": "#/components/schemas/DashboardCountsResponse"
           },
@@ -8526,6 +8561,7 @@
           "branchCode",
           "branchName",
           "date",
+          "trading",
           "counts",
           "collectionsDue",
           "returnsDue",
@@ -8619,6 +8655,9 @@
             "format": "date",
             "title": "Date"
           },
+          "trading": {
+            "$ref": "#/components/schemas/TradingDayResponse"
+          },
           "collections": {
             "items": {
               "$ref": "#/components/schemas/DiaryCollectionResponse"
@@ -8637,6 +8676,7 @@
         "type": "object",
         "required": [
           "date",
+          "trading",
           "collections",
           "returns"
         ],
@@ -9609,6 +9649,31 @@
         ],
         "title": "NotificationType",
         "description": "What an outbound message is about. Phase one sends one kind only."
+      },
+      "OpeningHoursResponse": {
+        "properties": {
+          "weekday": {
+            "type": "integer",
+            "title": "Weekday",
+            "description": "ISO weekday, Monday 1 to Sunday 7."
+          },
+          "opensAt": {
+            "type": "string",
+            "title": "Opensat"
+          },
+          "closesAt": {
+            "type": "string",
+            "title": "Closesat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "weekday",
+          "opensAt",
+          "closesAt"
+        ],
+        "title": "OpeningHoursResponse",
+        "description": "A branch's hours on one weekday."
       },
       "OverdueRentalResponse": {
         "properties": {
@@ -11394,6 +11459,69 @@
         ],
         "title": "TokenResponse",
         "description": "The access token and the account it belongs to.\n\nSigning in and refreshing both return this. The refresh token is not in\nit. That travels in a cookie the page cannot read."
+      },
+      "TradingDayResponse": {
+        "properties": {
+          "open": {
+            "type": "boolean",
+            "title": "Open"
+          },
+          "opensAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opensat"
+          },
+          "closesAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closesat"
+          },
+          "closedReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedreason"
+          },
+          "closedKind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedkind",
+            "description": "weekly, public_holiday or closure."
+          }
+        },
+        "type": "object",
+        "required": [
+          "open",
+          "opensAt",
+          "closesAt",
+          "closedReason",
+          "closedKind"
+        ],
+        "title": "TradingDayResponse",
+        "description": "Whether the branch trades on a day. Hours when it does, the reason when it does not."
       },
       "UnitQuoteResponse": {
         "properties": {

@@ -35,8 +35,15 @@ from app.domain.booking import Reservation
 from app.domain.enums import AccountStatus, ReleaseReason, ReservationStatus
 from app.domain.errors import AccountOnHoldError
 from app.domain.period import BookingPeriod
+from app.domain.trading_calendar import BranchCalendar, OpeningHours
 from tests.support.memory import COMMIT
-from tests.support.memory_world import BookingDesk, MemoryWorld, build_memory_world, open_desk
+from tests.support.memory_world import (
+    BookingDesk,
+    MemoryWorld,
+    build_memory_world,
+    open_desk,
+    with_branch_calendar,
+)
 
 ONE_SECOND: Final[timedelta] = timedelta(seconds=1)
 ONE_DAY: Final[timedelta] = timedelta(days=1)
@@ -115,12 +122,24 @@ class TestWhatOneSweepMarks:
         assert sweep_once(desk).no_show_references == (confirmed.detail.reference,)
 
     def test_a_branch_that_closes_earlier_makes_its_bookings_due_earlier(self) -> None:
-        world = build_memory_world()
+        early = BranchCalendar.standard()
+        monday_at_noon = {**early.weekly, 1: OpeningHours(time(7, 0), time(12, 0))}
+        world = with_branch_calendar(build_memory_world(), BranchCalendar(weekly=monday_at_noon))
         world.store.closing_times[world.branch.id] = time(12, 0)
         desk = open_desk(world)
         confirmed = desk.confirmed()
         desk.clock.instant = datetime(2026, 3, 9, 10, 0, 1, tzinfo=UTC)
         assert sweep_once(desk).no_show_references == (confirmed.detail.reference,)
+
+    def test_a_booking_whose_first_day_the_owner_closed_is_left_confirmed(self) -> None:
+        world = build_memory_world()
+        desk = open_desk(world)
+        confirmed = desk.confirmed()
+        start = world.stored(confirmed.detail.id).period.start
+        with_branch_calendar(world, BranchCalendar.standard({start: "stocktake"}))
+        desk.clock.instant = BRANCH_CLOSED_AT + ONE_DAY
+        assert sweep_once(desk).no_show_count == 0
+        assert world.stored(confirmed.detail.id).status is ReservationStatus.CONFIRMED
 
     def test_a_held_booking_and_a_draft_are_never_marked(self) -> None:
         world = build_memory_world(asset_count=2)

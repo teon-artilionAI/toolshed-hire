@@ -15,13 +15,13 @@ sign in account and its lockout rule are in `app.domain.account`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import time
 from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
 from app.domain.enums import AccountStatus, UserRole
 from app.domain.errors import AccountOnHoldError, BranchScopeError
+from app.domain.trading_calendar import BranchCalendar
 
 NO_TRADE_DISCOUNT: Final[Decimal] = Decimal("0.00")
 ACCOUNT_STANDING_RULE: Final[str] = "BR-18"
@@ -103,15 +103,16 @@ class Branch:
         id: The branch key.
         code: The short code staff use, for example CBD.
         name: The display name.
-        closes_at: When the counter closes, on a clock in Cape Town. A hire
-            can no longer start on a day once it has passed (BR-04).
+        calendar: The days and hours the branch trades. A hire starts and
+            ends on a day it is open, and can no longer start on a day once
+            that day's closing time has passed (BR-04).
 
     """
 
     id: UUID
     code: str
     name: str
-    closes_at: time
+    calendar: BranchCalendar
 
 
 @dataclass(frozen=True, slots=True)

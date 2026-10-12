@@ -31,10 +31,12 @@ from app.domain.booking import (
     MODEL_ALREADY_ON_RESERVATION_MESSAGE,
     QUANTITY_OUT_OF_RANGE_MESSAGE,
 )
+from app.domain.business_time import in_business_time
 from app.domain.catalogue import ProductModel
 from app.domain.errors import AuthorisationFailure, ValidationFailure
 from app.domain.identity import Actor, Branch, CustomerProfile
 from app.domain.period import BookingPeriod, ensure_branch_open_for_start
+from app.domain.trading_calendar import COLLECTION_DAY, ensure_hire_days_open
 
 logger = logging.getLogger(__name__)
 
@@ -140,15 +142,28 @@ def ensure_lines_are_well_formed(lines: tuple[RequestedLine, ...]) -> None:
 
 
 def ensure_start_while_branch_open(period: BookingPeriod, branch: Branch, now: datetime) -> None:
-    """Refuse a hire for today at a branch that has closed for the day, naming `from` (BR-04).
+    """Refuse a hire the collection branch cannot hand over or take back, naming the date.
+
+    The collection day and the return day have to be days the branch trades,
+    and a hire for today cannot start once today's closing time has passed
+    (BR-04).
 
     Raises:
-        ValidationFailure: Naming `from`, the start date, when the hire starts
-            today and the collection branch has already closed.
+        ValidationFailure: Naming `from` when the branch is closed on the
+            collection day or has closed for today, and `to` when it is closed
+            on the return day.
 
     """
     try:
-        ensure_branch_open_for_start(period, now=now, closes_at=branch.closes_at)
+        ensure_hire_days_open(period, branch.calendar)
+    except ValidationFailure as failure:
+        field = FROM_PARAMETER if failure.detail.get("hire_day") == COLLECTION_DAY else TO_PARAMETER
+        raise refused(
+            field, failure.message, {**failure.detail, "branch": branch.code}, rule=failure.rule
+        ) from failure
+    today = in_business_time(now).date()
+    try:
+        ensure_branch_open_for_start(period, now=now, hours_today=branch.calendar.hours_on(today))
     except ValidationFailure as failure:
         raise refused(
             FROM_PARAMETER,

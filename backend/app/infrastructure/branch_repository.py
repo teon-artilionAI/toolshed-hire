@@ -16,6 +16,7 @@ from uuid import UUID
 from sqlmodel import Session, col, select
 
 from app.domain import identity as domain
+from app.infrastructure.branch_calendars import load_calendar
 from app.infrastructure.models import Branch
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class SqlBranchRepository:
         )
         if row is None:
             return None
-        return _branch_of(row)
+        return _branch_of(self._session, row)
 
     def find_active_by_code(self, code: str) -> domain.Branch | None:
         """Return the trading branch with this code, or None when there is none."""
@@ -50,9 +51,11 @@ class SqlBranchRepository:
         )
         if row is None:
             return None
-        return _branch_of(row)
+        return _branch_of(self._session, row)
 
 
-def _branch_of(row: Branch) -> domain.Branch:
-    """Return a branch row as the domain knows a branch."""
-    return domain.Branch(id=row.id, code=row.code, name=row.name, closes_at=row.closes_at)
+def _branch_of(session: Session, row: Branch) -> domain.Branch:
+    """Return a branch row as the domain knows a branch, with its trading calendar."""
+    return domain.Branch(
+        id=row.id, code=row.code, name=row.name, calendar=load_calendar(session, row.id)
+    )

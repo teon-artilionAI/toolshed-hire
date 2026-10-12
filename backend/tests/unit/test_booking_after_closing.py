@@ -31,9 +31,11 @@ from app.domain.period import (
     BookingPeriod,
     ensure_branch_open_for_start,
 )
+from app.domain.trading_calendar import OpeningHours
 from tests.support.memory_world import build_memory_world, open_desk
 
 CLOSES_AT: Final[time] = time(17, 0)
+TODAY_HOURS: Final[OpeningHours] = OpeningHours(time(7, 0), CLOSES_AT)
 TODAY: Final[date] = date(2026, 3, 2)
 TODAY_HIRE: Final[BookingPeriod] = BookingPeriod(TODAY, date(2026, 3, 4))
 TOMORROW_HIRE: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 3), date(2026, 3, 5))
@@ -50,12 +52,12 @@ class TestTheRule:
         ids=["in the morning", "a second before closing", "at closing exactly"],
     )
     def test_today_can_be_booked_while_the_branch_is_open(self, now: datetime) -> None:
-        ensure_branch_open_for_start(TODAY_HIRE, now=now, closes_at=CLOSES_AT)
+        ensure_branch_open_for_start(TODAY_HIRE, now=now, hours_today=TODAY_HOURS)
 
     def test_today_cannot_be_booked_a_second_after_the_branch_closes(self) -> None:
         with pytest.raises(ValidationFailure) as refused:
             ensure_branch_open_for_start(
-                TODAY_HIRE, now=CLOSING_INSTANT + ONE_SECOND, closes_at=CLOSES_AT
+                TODAY_HIRE, now=CLOSING_INSTANT + ONE_SECOND, hours_today=TODAY_HOURS
             )
         assert refused.value.message == BRANCH_CLOSED_FOR_TODAY_MESSAGE
         assert refused.value.rule == "BR-04"
@@ -63,7 +65,7 @@ class TestTheRule:
 
     def test_tomorrow_can_still_be_booked_after_closing(self) -> None:
         ensure_branch_open_for_start(
-            TOMORROW_HIRE, now=CLOSING_INSTANT + timedelta(hours=5), closes_at=CLOSES_AT
+            TOMORROW_HIRE, now=CLOSING_INSTANT + timedelta(hours=5), hours_today=TODAY_HOURS
         )
 
 

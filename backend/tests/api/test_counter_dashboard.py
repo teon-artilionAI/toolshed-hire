@@ -28,6 +28,7 @@ from tests.support.counter_api import (
     COLLECTION_DUE_MEMBERS,
     COUNTS_MEMBERS,
     DASHBOARD_MEMBERS,
+    MONDAY_TRADING,
     OVERDUE_MEMBERS,
     RETURN_DUE_MEMBERS,
     read_dashboard,
@@ -86,6 +87,7 @@ class TestTheShape:
             world.branch.name,
         )
         assert dashboard["date"] == "2026-03-02"
+        assert dashboard["trading"] == MONDAY_TRADING
         assert dashboard["counts"].keys() == COUNTS_MEMBERS
         assert dashboard["counts"] == NO_COUNTS
         assert (dashboard["collectionsDue"], dashboard["returnsDue"], dashboard["overdue"]) == (

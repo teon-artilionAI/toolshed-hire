@@ -30,7 +30,8 @@ from app.domain.errors import AllocationConflictError
 from app.domain.period import BookingPeriod
 from tests.support.memory_world import FIRST_HIRE, MemoryWorld, build_memory_world, open_desk
 
-OVERLAPPING_HIRE: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 11), date(2026, 3, 15))
+# It ends on the Saturday, because the branch is closed on the Sunday.
+OVERLAPPING_HIRE: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 11), date(2026, 3, 14))
 SECOND_MODEL_SLUG: Final[str] = "wacker-plate-compactor"
 
 

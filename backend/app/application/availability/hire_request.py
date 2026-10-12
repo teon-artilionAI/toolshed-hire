@@ -8,7 +8,9 @@ hire that could not then be booked.
 The period is built as a `BookingPeriod`, which gives BR-02, the half open
 bounds, and BR-03, the limit of twenty eight days.
 `ensure_within_booking_window` gives BR-04 and BR-05, no start in the past and
-none more than ninety days ahead.
+none more than ninety days ahead. `ensure_some_branch_trades` refuses a hire
+that no branch in question could hand over or take back, because every one of
+them is closed on its first or its last day.
 
 Every refusal names the parameter that caused it, so the screen can put the
 sentence beside the right input. The sentence is shown as it is written, so it
@@ -18,6 +20,7 @@ in the failure for the log.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Final
 
@@ -31,6 +34,7 @@ from app.domain.period import (
     InvalidBookingPeriod,
     ensure_within_booking_window,
 )
+from app.domain.trading_calendar import BranchCalendar, ensure_open_on
 
 # The names of the parameters a hire is asked about with, as a refusal reports them.
 FROM_PARAMETER: Final[str] = "from"
@@ -74,6 +78,43 @@ def requested_period(start: date, end: date, today: date) -> BookingPeriod:
             FROM_PARAMETER, failure.message, {**attempted, **failure.detail}, rule=failure.rule
         ) from failure
     return period
+
+
+def ensure_some_branch_trades(period: BookingPeriod, calendars: Sequence[BranchCalendar]) -> None:
+    """Refuse a hire when every branch asked about is closed on its first or last day.
+
+    A search or a quote may name no branch, and is then about all of them. A
+    day one branch closes for a stocktake is still a day another trades, so
+    only a day every branch is closed on is refused here. The booking itself
+    is held to its own branch's calendar.
+
+    Args:
+        period: The hire period asked about.
+        calendars: The calendars of the branches in question. With none there
+            is nothing to check against, and nothing is refused.
+
+    Raises:
+        ValidationFailure: Naming `from` for the first day and `to` for the
+            last. The message names the earliest day any of them is open.
+
+    """
+    if not calendars:
+        return
+    for day, collecting, parameter in (
+        (period.start, True, FROM_PARAMETER),
+        (period.end, False, TO_PARAMETER),
+    ):
+        if any(calendar.is_open(day) for calendar in calendars):
+            continue
+        soonest = min(
+            calendars, key=lambda calendar: calendar.next_open_day(day) or date.max
+        )
+        try:
+            ensure_open_on(soonest, day, collecting=collecting)
+        except ValidationFailure as failure:
+            raise refused(
+                parameter, failure.message, failure.detail, rule=failure.rule
+            ) from failure
 
 
 def ensure_quantity_in_range(quantity: int) -> None:
