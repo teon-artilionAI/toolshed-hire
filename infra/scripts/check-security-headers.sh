@@ -13,6 +13,7 @@
 # passes through the /api rewrite:
 #   Strict-Transport-Security with a max-age of at least half a year
 #   Content-Security-Policy with default-src 'none' and frame-ancestors 'none'
+#   and, on the page only, Trusted Types required with no policy allowed
 #   X-Content-Type-Options: nosniff
 #   Referrer-Policy and Permissions-Policy present
 # And on the connection:
@@ -95,6 +96,19 @@ check_headers() {
   done
 }
 
+# The page's policy requires Trusted Types for every script sink and allows no
+# policy to be created (C-09). The API answers JSON and is not checked for it.
+check_trusted_types() {
+  local url="$1"
+  local csp
+  csp="$(headers_of "${url}" | awk -F': ' '$1 == "content-security-policy" { print $2 }')"
+  if [[ "${csp}" == *"require-trusted-types-for 'script'"* && "${csp}" == *"trusted-types 'none'"* ]]; then
+    pass "${url} Content-Security-Policy requires Trusted Types and allows no policy"
+  else
+    fail "${url} Content-Security-Policy does not require Trusted Types with trusted-types 'none' (got '${csp}')"
+  fi
+}
+
 check_redirect_to_https() {
   local plain="http://${SITE_URL#https://}/"
   local location
@@ -141,6 +155,7 @@ check_old_tls_refused() {
 
 echo "Checking the security headers and TLS of ${SITE_URL}"
 check_headers "${SITE_URL}/"
+check_trusted_types "${SITE_URL}/"
 check_headers "${SITE_URL}${API_PATH}"
 check_redirect_to_https
 check_old_tls_refused

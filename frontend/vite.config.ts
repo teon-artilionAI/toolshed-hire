@@ -54,6 +54,16 @@ import type { ProxyOptions } from 'vite'
  * for fast refresh and injects each stylesheet as a style element, and the
  * policy forbids both on purpose. Applying it there would only break `dev`.
  *
+ * WHY THE POLICY REQUIRES TRUSTED TYPES
+ * =====================================
+ * The policy carries require-trusted-types-for 'script' with trusted-types
+ * 'none' (C-09). The browser then refuses a string written to any script sink,
+ * such as innerHTML or a script's src, and no code can create a policy to get
+ * round it. Nothing in this application writes HTML as a string, so it needs
+ * no policy. The browser tests load every screen under it through `preview`,
+ * and scripts/bundle-check.mjs fails the build on an inline script or code
+ * evaluation, which the policy would refuse in the same way.
+ *
  * WHY FONTS ARE NEVER INLINED
  * ===========================
  * Vite writes a small asset into the bundle as a `data:` address to save a
