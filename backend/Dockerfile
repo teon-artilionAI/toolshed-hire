@@ -77,19 +77,25 @@ RUN apt-get update \
 RUN python -m venv "${VIRTUAL_ENV}"
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
-# The project declares its dependencies in pyproject.toml and every version
-# there is pinned exactly. pyproject.toml, the readme it references and the
-# package itself are all required for the install to resolve, so they are
-# copied together.
+# The whole dependency tree comes from requirements.txt, which pip-compile
+# writes from pyproject.toml with a hash for every file (C-37). With
+# --require-hashes pip refuses any package, direct or indirect, that is not in
+# the lock at that version and with that hash, so a rebuild cannot pick up a
+# different transitive version or a tampered file. The lock also carries the
+# build backend, which is why the project itself installs with
+# --no-build-isolation and fetches nothing further.
 #
-# The trade-off this carries is worth naming. Because the source is part of the
-# install input, a change to any Python file invalidates this layer and the
-# dependencies are resolved again. Splitting them would need a lock file
-# generated from pyproject.toml, for example by pip-compile, and that is the
-# follow-up when build time starts to hurt. Correctness first.
+# The lock is copied on its own first, so a change to the source no longer
+# invalidates the dependency layer. That was the follow-up an earlier version
+# of this comment named for when build time started to hurt.
+COPY requirements.txt ./
+RUN pip install --require-hashes --no-deps --requirement requirements.txt
+
+# pyproject.toml, the readme it references and the package itself are all
+# needed to install the project, so they are copied together.
 COPY pyproject.toml README.md ./
 COPY app ./app
-RUN pip install .
+RUN pip install --no-deps --no-build-isolation .
 
 # ---------------------------------------------------------------- final stage
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime

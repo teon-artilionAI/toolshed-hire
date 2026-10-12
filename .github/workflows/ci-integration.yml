@@ -94,10 +94,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements-dev.txt
 
+      # Every package, direct or indirect, comes from the hashed lock (C-37).
+      # The project itself is installed on top with no dependencies of its own.
       - name: Install the backend and its development dependencies
-        run: pip install --editable ".[dev]"
+        run: |
+          pip install --require-hashes --requirement requirements-dev.txt
+          pip install --no-deps --no-build-isolation --editable .
 
       # Every migration is applied to an empty database on every run, so a
       # migration that only works on my machine is caught here.
@@ -131,7 +135,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements-dev.txt
 
       # pip-audit checks everything installed, including pip itself, so pip is
       # brought up to date first. Otherwise the runner's own pip can fail the
@@ -140,7 +144,8 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install --editable ".[dev]"
+          pip install --require-hashes --requirement requirements-dev.txt
+          pip install --no-deps --no-build-isolation --editable .
 
       - name: Audit Python dependencies
         working-directory: backend
@@ -221,11 +226,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install the backend
         working-directory: backend
-        run: pip install --editable .
+        run: |
+          pip install --require-hashes --requirement requirements.txt
+          pip install --no-deps --no-build-isolation --editable .
 
       - name: Migrate and seed the database
         working-directory: backend
