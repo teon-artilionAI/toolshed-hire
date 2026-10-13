@@ -1,4 +1,4 @@
-"""Reading a damage photograph off the request, as raw bytes with a hard cap (C-30).
+"""Reading a damage photograph off the request, as raw bytes with a hard cap (C-29).
 
 The photograph is the whole body, sent with `Content-Type: image/jpeg` or
 `image/png`. Multipart would need python-multipart, a further dependency, for

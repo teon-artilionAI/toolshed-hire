@@ -5,14 +5,15 @@ kept has to be what the counter took and nothing more. Three rules hold here.
 
 A photograph is a JPEG or a PNG, and its first bytes decide which. The name of
 the file and the type the browser claimed are never trusted, so an SVG, which
-can carry script, or anything else renamed to end in .jpg is refused (C-30).
+can carry script, or anything else renamed to end in .jpg is refused (C-29).
 
 A photograph is at most 4 MB as it arrives, and a report holds at most six.
-The seventh is refused with the six already there, not by dropping one.
+The seventh is refused with the six already there, not by dropping one
+(C-29).
 
-A photograph is stored under a name nobody can guess, in a private bucket, and
-read through a link that works for five minutes (C-31). The name says which
-report it belongs to and nothing about the customer.
+A photograph is stored under a name nobody can guess (C-30), in a private
+bucket, and read through a link that works for five minutes (C-31). The name
+says which report it belongs to and nothing about the customer.
 
 Re-encoding the image, which removes its metadata, and the storage itself are
 outside the domain. This module holds the rules and the record.
@@ -54,7 +55,7 @@ PHOTO_LIMIT_MESSAGE: Final[str] = (
     f"This damage report already has {MAXIMUM_PHOTOS_PER_REPORT} photographs, which is as many "
     "as a report can hold."
 )
-PHOTO_LIMIT_RULE: Final[str] = "C-30"
+PHOTO_LIMIT_RULE: Final[str] = "C-29"
 
 
 class PhotoFormat(str, Enum):
