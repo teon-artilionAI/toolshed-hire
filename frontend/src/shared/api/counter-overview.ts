@@ -28,6 +28,7 @@ import type {
 } from './contract'
 import { readCount, readDate, readFlag, readList, readMoney, readObject, readOneOf, readText } from './read'
 import { RENTAL_STATUSES } from './rental-read'
+import { readTradingDay } from './trading-read'
 
 const DASHBOARD_ENDPOINT = '/counter/dashboard'
 const DIARY_ENDPOINT = '/counter/diary'
@@ -99,6 +100,7 @@ function readDashboard(value: unknown, path: string): CounterDashboard {
     branchCode: readText(record, 'branchCode', path),
     branchName: readText(record, 'branchName', path),
     date: readDate(record, 'date', path),
+    trading: readTradingDay(record.trading, path),
     counts: readCounts(record.counts, path),
     collectionsDue: readList(record, 'collectionsDue', path, readDashboardCollection),
     returnsDue: readList(record, 'returnsDue', path, readDashboardReturn),
@@ -141,6 +143,7 @@ function readDiaryDay(value: unknown, path: string): DiaryDay {
   const record = readObject(value, path, 'a day of the diary')
   return {
     date: readDate(record, 'date', path),
+    trading: readTradingDay(record.trading, path),
     collections: readList(record, 'collections', path, readDiaryCollection),
     returns: readList(record, 'returns', path, readDiaryReturn),
   }

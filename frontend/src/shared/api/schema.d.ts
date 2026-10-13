@@ -1508,7 +1508,7 @@ export interface paths {
         };
         /**
          * List the trading branches
-         * @description Return every active branch, ordered by name.
+         * @description Return every active branch, ordered by name, with its days and hours.
          */
         get: operations["list_branches_api_branches_get"];
         put?: never;
@@ -2254,7 +2254,12 @@ export interface components {
         };
         /**
          * BranchResponse
-         * @description One trading branch.
+         * @description One trading branch, with the days and hours it trades.
+         *
+         *     `weeklyHours` lists the weekdays the counter opens. A weekday that is not
+         *     listed is a day it never opens. `closedDays` lists every day it is closed
+         *     from today to the last day a hire booked today could end, so a date picker
+         *     can steer a customer away from them before the server has to refuse.
          */
         BranchResponse: {
             /** Code */
@@ -2267,10 +2272,10 @@ export interface components {
             city: string;
             /** Phone */
             phone: string;
-            /** Opensat */
-            opensAt: string;
-            /** Closesat */
-            closesAt: string;
+            /** Weeklyhours */
+            weeklyHours: components["schemas"]["OpeningHoursResponse"][];
+            /** Closeddays */
+            closedDays: components["schemas"]["ClosedDayResponse"][];
         };
         /**
          * CancellationRequest
@@ -2512,6 +2517,24 @@ export interface components {
             hourMeter: number | null;
             /** Depositperunit */
             depositPerUnit: string;
+        };
+        /**
+         * ClosedDayResponse
+         * @description A day a branch does not trade, and why.
+         */
+        ClosedDayResponse: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Kind
+             * @description weekly, public_holiday or closure.
+             */
+            kind: string;
         };
         /**
          * CollectionDueResponse
@@ -2779,6 +2802,7 @@ export interface components {
              * Format: date
              */
             date: string;
+            trading: components["schemas"]["TradingDayResponse"];
             counts: components["schemas"]["DashboardCountsResponse"];
             /** Collectionsdue */
             collectionsDue: components["schemas"]["CollectionDueResponse"][];
@@ -2839,6 +2863,7 @@ export interface components {
              * Format: date
              */
             date: string;
+            trading: components["schemas"]["TradingDayResponse"];
             /** Collections */
             collections: components["schemas"]["DiaryCollectionResponse"][];
             /** Returns */
@@ -3247,6 +3272,21 @@ export interface components {
          * @enum {string}
          */
         NotificationType: "BOOKING_CONFIRMATION";
+        /**
+         * OpeningHoursResponse
+         * @description A branch's hours on one weekday.
+         */
+        OpeningHoursResponse: {
+            /**
+             * Weekday
+             * @description ISO weekday, Monday 1 to Sunday 7.
+             */
+            weekday: number;
+            /** Opensat */
+            opensAt: string;
+            /** Closesat */
+            closesAt: string;
+        };
         /**
          * OverdueRentalResponse
          * @description A rental past its due date with a unit still out, and the late fee it has run up.
@@ -3967,6 +4007,25 @@ export interface components {
             /** Expiresin */
             expiresIn: number;
             user: components["schemas"]["UserResponse"];
+        };
+        /**
+         * TradingDayResponse
+         * @description Whether the branch trades on a day. Hours when it does, the reason when it does not.
+         */
+        TradingDayResponse: {
+            /** Open */
+            open: boolean;
+            /** Opensat */
+            opensAt: string | null;
+            /** Closesat */
+            closesAt: string | null;
+            /** Closedreason */
+            closedReason: string | null;
+            /**
+             * Closedkind
+             * @description weekly, public_holiday or closure.
+             */
+            closedKind: string | null;
         };
         /**
          * UnitQuoteResponse

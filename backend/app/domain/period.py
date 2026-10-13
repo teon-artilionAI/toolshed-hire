@@ -18,10 +18,14 @@ the dates that were attempted.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from app.domain.business_time import business_instant, in_business_time
 from app.domain.errors import ValidationFailure
+
+if TYPE_CHECKING:
+    from app.domain.trading_calendar import OpeningHours
 
 # The PostgreSQL bound specifier that matches this class. Written here so the
 # migration and the domain object quote the same literal.
@@ -201,7 +205,9 @@ def ensure_within_booking_window(period: BookingPeriod, today: date) -> None:
         )
 
 
-def ensure_branch_open_for_start(period: BookingPeriod, *, now: datetime, closes_at: time) -> None:
+def ensure_branch_open_for_start(
+    period: BookingPeriod, *, now: datetime, hours_today: OpeningHours | None
+) -> None:
     """Refuse a hire that starts today once its collection branch has closed for the day (BR-04).
 
     Today stops being a day a hire can start on the moment the branch closes,
@@ -213,7 +219,9 @@ def ensure_branch_open_for_start(period: BookingPeriod, *, now: datetime, closes
     Args:
         period: The hire period being booked.
         now: The current instant, from the clock.
-        closes_at: When the collection branch closes, on a clock in Cape Town.
+        hours_today: The collection branch's hours today, or None when it is
+            closed all day. A closed day is refused by the trading calendar
+            itself, so it passes here.
 
     Raises:
         ValidationFailure: If the hire starts today and the branch has closed.
@@ -222,10 +230,12 @@ def ensure_branch_open_for_start(period: BookingPeriod, *, now: datetime, closes
 
     """
     today = in_business_time(now).date()
-    if period.start != today or now <= business_instant(today, closes_at):
+    if period.start != today or hours_today is None:
+        return
+    if now <= business_instant(today, hours_today.closes):
         return
     raise ValidationFailure(
         BRANCH_CLOSED_FOR_TODAY_MESSAGE,
-        {"start_date": period.start.isoformat(), "closes_at": closes_at.isoformat()},
+        {"start_date": period.start.isoformat(), "closes_at": hours_today.closes.isoformat()},
         rule=NO_PAST_START_RULE,
     )

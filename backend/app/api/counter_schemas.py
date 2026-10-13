@@ -20,7 +20,7 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field
 
-from app.api.catalogue_schemas import Money
+from app.api.catalogue_schemas import ClockTime, Money
 from app.api.schemas import CamelModel, ProblemDetail
 from app.domain.enums import AssetStatus, ConditionGrade, RentalStatus, ReservationStatus
 
@@ -79,12 +79,25 @@ class OverdueRentalResponse(CamelModel):
     late_fee_accrued: Money = Field(serialization_alias="lateFeeAccrued")
 
 
+class TradingDayResponse(CamelModel):
+    """Whether the branch trades on a day. Hours when it does, the reason when it does not."""
+
+    open: bool
+    opens_at: ClockTime | None = Field(serialization_alias="opensAt")
+    closes_at: ClockTime | None = Field(serialization_alias="closesAt")
+    closed_reason: str | None = Field(serialization_alias="closedReason")
+    closed_kind: str | None = Field(
+        serialization_alias="closedKind", description="weekly, public_holiday or closure."
+    )
+
+
 class DashboardResponse(CamelModel):
     """What is due today at one branch. Each list holds at most fifty rows."""
 
     branch_code: str = Field(serialization_alias="branchCode")
     branch_name: str = Field(serialization_alias="branchName")
     business_day: date = Field(serialization_alias="date")
+    trading: TradingDayResponse
     counts: DashboardCountsResponse
     collections_due: list[CollectionDueResponse] = Field(serialization_alias="collectionsDue")
     returns_due: list[ReturnDueResponse] = Field(serialization_alias="returnsDue")
@@ -124,6 +137,7 @@ class DiaryDayResponse(CamelModel):
     """One day of the diary."""
 
     business_day: date = Field(serialization_alias="date")
+    trading: TradingDayResponse
     collections: list[DiaryCollectionResponse]
     returns: list[DiaryReturnResponse]
 

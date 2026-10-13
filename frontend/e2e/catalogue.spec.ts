@@ -18,7 +18,7 @@ import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
 import { blockingViolations } from './axe.ts'
 import { BACKEND_NEEDED, backendIsReachable } from './backend.ts'
-import { dateFromToday } from './hire-dates.ts'
+import { openDayFromToday, openHireFromToday } from './hire-dates.ts'
 import { asShown, quoteFromTheApi } from './quote.ts'
 import { CATALOGUE_HOME, SEARCH } from './routes.ts'
 
@@ -54,9 +54,9 @@ interface CategoryOnTheWire {
   modelCount: number
 }
 
-const COLLECT_ON = dateFromToday(COLLECT_IN_DAYS)
-const RETURN_ON = dateFromToday(COLLECT_IN_DAYS + HIRE_DAYS)
-const RETURN_TOO_LATE = dateFromToday(COLLECT_IN_DAYS + TOO_MANY_HIRE_DAYS)
+// Each on a day the branches trade, so the API refuses only what a test means it to.
+const { from: COLLECT_ON, to: RETURN_ON } = openHireFromToday(COLLECT_IN_DAYS, HIRE_DAYS)
+const RETURN_TOO_LATE = openDayFromToday(COLLECT_IN_DAYS + TOO_MANY_HIRE_DAYS)
 const DATED_SEARCH = `${SEARCH.path}?from=${COLLECT_ON}&to=${RETURN_ON}`
 
 /** A name as a pattern that matches it and nothing else. */

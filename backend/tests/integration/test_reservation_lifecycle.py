@@ -44,8 +44,10 @@ pytestmark = pytest.mark.postgres
 TWENTIETH_TO_TWENTY_FOURTH: Final[BookingPeriod] = BookingPeriod(
     date(2026, 3, 20), date(2026, 3, 24)
 )
-TWENTY_SECOND_TO_TWENTY_SIXTH: Final[BookingPeriod] = BookingPeriod(
-    date(2026, 3, 22), date(2026, 3, 26)
+# The twenty second is a Sunday, when the branch is closed, so the overlapping
+# hire starts on the Monday.
+TWENTY_THIRD_TO_TWENTY_SIXTH: Final[BookingPeriod] = BookingPeriod(
+    date(2026, 3, 23), date(2026, 3, 26)
 )
 FROM_THE_TWENTY_FOURTH: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 24), date(2026, 3, 27))
 CONFLICT_PROBLEM: Final[str] = "asset-unavailable"
@@ -67,18 +69,18 @@ def world(postgres_session: Session, postgres_factory: Factory) -> BookingWorld:
 class TestAHeldUnitRefusesAnOverlappingHire:
     """US-17. The conflict is a clean 409 that names the dates."""
 
-    def test_the_twenty_second_to_the_twenty_sixth_is_refused_naming_the_dates(
+    def test_the_twenty_third_to_the_twenty_sixth_is_refused_naming_the_dates(
         self, booking: BookingClient, world: BookingWorld
     ) -> None:
         booking.held(world, TWENTIETH_TO_TWENTY_FOURTH)
-        second = booking.drafted(world, TWENTY_SECOND_TO_TWENTY_SIXTH)
+        second = booking.drafted(world, TWENTY_THIRD_TO_TWENTY_SIXTH)
 
         response = booking.hold(world.customer, second["id"])
 
         assert response.status_code == status.HTTP_409_CONFLICT
         assert problem_code(response) == CONFLICT_PROBLEM
         detail = str(problem_of(response)["detail"])
-        assert "22 March 2026" in detail
+        assert "23 March 2026" in detail
         assert "26 March 2026" in detail
         assert world.product_model.name in detail
 
@@ -86,7 +88,7 @@ class TestAHeldUnitRefusesAnOverlappingHire:
         self, booking: BookingClient, postgres_session: Session, world: BookingWorld
     ) -> None:
         booking.held(world, TWENTIETH_TO_TWENTY_FOURTH)
-        second = booking.drafted(world, TWENTY_SECOND_TO_TWENTY_SIXTH)
+        second = booking.drafted(world, TWENTY_THIRD_TO_TWENTY_SIXTH)
         booking.hold(world.customer, second["id"])
 
         (only,) = postgres_session.exec(select(AssetAllocation)).all()
@@ -108,7 +110,7 @@ class TestAHeldUnitRefusesAnOverlappingHire:
         self, booking: BookingClient, world: BookingWorld
     ) -> None:
         first = booking.held(world, TWENTIETH_TO_TWENTY_FOURTH)
-        second = booking.drafted(world, TWENTY_SECOND_TO_TWENTY_SIXTH)
+        second = booking.drafted(world, TWENTY_THIRD_TO_TWENTY_SIXTH)
         assert booking.hold(world.customer, second["id"]).status_code == status.HTTP_409_CONFLICT
         answered(booking.cancel(world.customer, first["id"]))
         assert answered(booking.hold(world.customer, second["id"]))["status"] == "HELD"

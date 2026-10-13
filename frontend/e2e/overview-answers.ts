@@ -12,6 +12,7 @@
  */
 
 import { dateFromToday } from './hire-dates.ts'
+import { OPEN_DAY } from './branch-week.ts'
 
 const TODAY = dateFromToday(0)
 const TOMORROW = dateFromToday(1)
@@ -25,6 +26,7 @@ const DASHBOARD = {
   branchCode: 'CBD',
   branchName: 'Cape Town CBD',
   date: TODAY,
+  trading: OPEN_DAY,
   counts: { collectionsDue: 1, returnsDue: 1, overdue: 1, onHire: 27, quarantined: 3 },
   collectionsDue: [
     { reservationId: '5f0c2a9e-0000-4000-8000-000000000124', reference: 'TSH-R-26-000124', customerName: CUSTOMER_NAME, customerPhone: '0824417719', from: TODAY, to: TOMORROW, unitCount: 3, summary: LONG_SUMMARY },
@@ -43,6 +45,7 @@ const DIARY = {
   days: [
     {
       date: TODAY,
+      trading: OPEN_DAY,
       collections: [
         { reservationId: '5f0c2a9e-0000-4000-8000-000000000124', reference: 'TSH-R-26-000124', status: 'CONFIRMED', customerName: CUSTOMER_NAME, customerPhone: '0824417719', from: TODAY, to: TOMORROW, unitCount: 3, summary: LONG_SUMMARY, canMarkNoShow: true },
         { reservationId: '5f0c2a9e-0000-4000-8000-000000000125', reference: 'TSH-R-26-000125', status: 'COLLECTED', customerName: SECOND_CUSTOMER_NAME, customerPhone: '0824417720', from: TODAY, to: TOMORROW, unitCount: 1, summary: '1 x CP 100 Plate Compactor with Water Tank', canMarkNoShow: false },

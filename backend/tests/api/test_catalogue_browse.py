@@ -12,7 +12,6 @@ decimals and a time of day is `HH:MM`.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import time
 from typing import Final
 
 import pytest
@@ -53,8 +52,8 @@ BRANCH_MEMBERS: Final[set[str]] = {
     "suburb",
     "city",
     "phone",
-    "opensAt",
-    "closesAt",
+    "weeklyHours",
+    "closedDays",
 }
 CATEGORY_MEMBERS: Final[set[str]] = {
     "code",
@@ -135,16 +134,26 @@ class TestTheBranchDirectory:
         items = response.json()["items"]
         assert [item["code"] for item in items] == ["BLV", "SMW"]
         assert items[0].keys() == BRANCH_MEMBERS
-        assert items[0]["opensAt"] == "07:00"
-        assert items[0]["closesAt"] == "17:00"
+        monday, saturday = items[0]["weeklyHours"][0], items[0]["weeklyHours"][5]
+        assert monday == {"weekday": 1, "opensAt": "07:00", "closesAt": "17:00"}
+        assert saturday == {"weekday": 6, "opensAt": "07:00", "closesAt": "13:00"}
+        assert [hours["weekday"] for hours in items[0]["weeklyHours"]] == [1, 2, 3, 4, 5, 6]
 
-    def test_a_closing_time_with_minutes_keeps_them(
-        self, visitor: TestClient, session: Session, factory: Factory
+    def test_the_closed_days_through_the_booking_horizon_are_listed(
+        self, visitor: TestClient, factory: Factory
     ) -> None:
-        branch = factory.branch(code="CBD")
-        branch.closes_at = time(16, 30)
-        session.commit()
-        assert visitor.get(BRANCHES_PATH).json()["items"][0]["closesAt"] == "16:30"
+        factory.branch(code="CBD")
+
+        closed = visitor.get(BRANCHES_PATH).json()["items"][0]["closedDays"]
+
+        # The fixed clock says Monday 2 March 2026, so the first closed day is
+        # the Sunday after it, and Good Friday is in the horizon too.
+        assert closed[0] == {
+            "day": "2026-03-08",
+            "reason": "is closed on Sundays",
+            "kind": "weekly",
+        }
+        assert {"day": "2026-04-03", "reason": "Good Friday", "kind": "public_holiday"} in closed
 
     def test_it_is_an_empty_list_before_any_branch_exists(self, visitor: TestClient) -> None:
         assert visitor.get(BRANCHES_PATH).json() == {"items": []}

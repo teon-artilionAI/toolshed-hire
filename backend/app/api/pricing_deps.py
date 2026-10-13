@@ -16,7 +16,7 @@ from typing import Annotated, Final
 
 from fastapi import Depends
 
-from app.api.catalogue_deps import CatalogueQueryDependency
+from app.api.catalogue_deps import BranchDirectoryDependency, CatalogueQueryDependency
 from app.api.deps import ClockDependency
 from app.application.money.quote import QuoteHire
 from app.domain.policies.pricing import PricingPolicy
@@ -37,9 +37,10 @@ def get_quote_hire(
     catalogue: CatalogueQueryDependency,
     pricing: PricingPolicyDependency,
     clock: ClockDependency,
+    branches: BranchDirectoryDependency,
 ) -> QuoteHire:
-    """Return the quote service, wired to its query object, its policy and its clock."""
-    return QuoteHire(catalogue, pricing, clock)
+    """Return the quote service, wired to its query object, policy, clock and branches."""
+    return QuoteHire(catalogue, pricing, clock, branches)
 
 
 QuoteHireDependency = Annotated[QuoteHire, Depends(get_quote_hire)]

@@ -24,10 +24,13 @@ from app.domain.enums import ENUMS_BY_TYPE_NAME
 # customer lookup by part of a name.
 REQUIRED_EXTENSIONS: Final[tuple[str, ...]] = ("btree_gist", "citext", "pg_trgm")
 
-# The seventeen tables of the documented schema, parents before children.
+# The seventeen tables of the documented schema and the two of the trading
+# calendar (revision 0013), parents before children.
 TABLE_NAMES: Final[tuple[str, ...]] = (
     "branch",
+    "branch_trading_hours",
     "user_account",
+    "closure_day",
     "customer_profile",
     "refresh_session",
     "category",

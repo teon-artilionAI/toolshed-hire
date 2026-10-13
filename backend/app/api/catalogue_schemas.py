@@ -95,16 +95,38 @@ BASIS_TO_WIRE: Final[dict[PricingBasis, QuoteBasis]] = {
 }
 
 
+class OpeningHoursResponse(CamelModel):
+    """A branch's hours on one weekday."""
+
+    weekday: int = Field(description="ISO weekday, Monday 1 to Sunday 7.")
+    opens_at: ClockTime = Field(serialization_alias="opensAt")
+    closes_at: ClockTime = Field(serialization_alias="closesAt")
+
+
+class ClosedDayResponse(CamelModel):
+    """A day a branch does not trade, and why."""
+
+    day: date
+    reason: str
+    kind: str = Field(description="weekly, public_holiday or closure.")
+
+
 class BranchResponse(CamelModel):
-    """One trading branch."""
+    """One trading branch, with the days and hours it trades.
+
+    `weeklyHours` lists the weekdays the counter opens. A weekday that is not
+    listed is a day it never opens. `closedDays` lists every day it is closed
+    from today to the last day a hire booked today could end, so a date picker
+    can steer a customer away from them before the server has to refuse.
+    """
 
     code: str
     name: str
     suburb: str
     city: str
     phone: str
-    opens_at: ClockTime = Field(serialization_alias="opensAt")
-    closes_at: ClockTime = Field(serialization_alias="closesAt")
+    weekly_hours: list[OpeningHoursResponse] = Field(serialization_alias="weeklyHours")
+    closed_days: list[ClosedDayResponse] = Field(serialization_alias="closedDays")
 
 
 class BranchListResponse(CamelModel):

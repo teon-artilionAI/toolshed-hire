@@ -53,6 +53,7 @@ import {
   takeItBackWorse,
 } from './damage-journey.ts'
 import { signInAsStaff, staffFor } from './staff.ts'
+import { CLOSED_TODAY_REASON, todayIsTradingDay } from './hire-dates.ts'
 
 /** A hire reference, for example TSH-H-26-000099. */
 const RENTAL_REFERENCE = /TSH-H-\d{2}-\d{6}/
@@ -97,6 +98,7 @@ test.describe('a booking at the counter and its return against the real backend'
   test('an assistant registers a walk in, books one unit for today, checks it out and takes it back', async ({
     page,
   }, testInfo) => {
+    test.skip(!todayIsTradingDay(), CLOSED_TODAY_REASON)
     const { name, phone } = unusedWalkIn(testInfo.project.name)
     await signInAsStaff(page, staffFor(testInfo.project.name))
 

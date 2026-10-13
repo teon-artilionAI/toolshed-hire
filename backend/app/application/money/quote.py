@@ -26,6 +26,7 @@ from decimal import Decimal
 
 from app.application.availability.hire_request import (
     ensure_quantity_in_range,
+    ensure_some_branch_trades,
     ensure_within_hire_limits,
     requested_period,
 )
@@ -33,6 +34,7 @@ from app.application.catalogue.browse import MODEL_NOT_FOUND_MESSAGE
 from app.application.catalogue.ports import CatalogueQuery
 from app.application.catalogue.read_models import ModelDetail
 from app.application.clock import Clock
+from app.application.identity.ports import BranchDirectory
 from app.domain.errors import NotFound
 from app.domain.money import Money
 from app.domain.policies.pricing import (
@@ -80,18 +82,27 @@ def snapshot_of(model: ModelDetail, quantity: int) -> LineSnapshot:
 class QuoteHire:
     """What a hire will cost, as a visitor asks it."""
 
-    def __init__(self, catalogue: CatalogueQuery, pricing: PricingPolicy, clock: Clock) -> None:
-        """Keep the port the model is read through, the policy and the clock.
+    def __init__(
+        self,
+        catalogue: CatalogueQuery,
+        pricing: PricingPolicy,
+        clock: Clock,
+        branches: BranchDirectory,
+    ) -> None:
+        """Keep the port the model is read through, the policy, the clock and the branches.
 
         Args:
             catalogue: Finds the published model.
             pricing: The policy that works out the price.
             clock: Where the current business day comes from.
+            branches: The trading branches, whose calendars a quote is held
+                to, so no price is given for days no branch trades.
 
         """
         self._catalogue = catalogue
         self._pricing = pricing
         self._clock = clock
+        self._branches = branches
 
     def for_model(
         self,
@@ -120,6 +131,9 @@ class QuoteHire:
         """
         period = requested_period(start, end, self._clock.today())
         ensure_quantity_in_range(quantity)
+        ensure_some_branch_trades(
+            period, [listing.calendar for listing in self._branches.list_active()]
+        )
         logger.info(
             "quote.requested",
             extra={

@@ -34,6 +34,7 @@ from typing import Final
 
 from app.application.availability.hire_request import (
     ensure_quantity_in_range,
+    ensure_some_branch_trades,
     ensure_within_hire_limits,
     requested_period,
 )
@@ -50,6 +51,7 @@ from app.application.clock import Clock
 from app.application.identity.ports import BranchDirectory
 from app.application.refusal import refused
 from app.domain.errors import NotFound
+from app.domain.period import BookingPeriod
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,7 @@ class SearchAvailability:
         """
         period = requested_period(start, end, self._clock.today())
         ensure_category_exists(self._catalogue, models.category_slug)
-        self._ensure_branch_exists(branch_code)
+        self._ensure_branch_trades(period, branch_code)
         self._lapse_expired_holds()
         return self._availability.search(
             AvailabilitySearch(period=period, models=models, branch_code=branch_code)
@@ -131,6 +133,7 @@ class SearchAvailability:
         """
         period = requested_period(start, end, self._clock.today())
         ensure_quantity_in_range(quantity)
+        self._ensure_branch_trades(period, None)
         model = self._catalogue.find_model(slug)
         if model is None:
             logger.info(
@@ -143,22 +146,29 @@ class SearchAvailability:
         answers = self._availability.for_model(slug, period, quantity)
         return ModelAvailabilityAnswer(period=period, quantity=quantity, branches=tuple(answers))
 
-    def _ensure_branch_exists(self, branch_code: str | None) -> None:
-        """Refuse a search narrowed to a branch that is not trading.
+    def _ensure_branch_trades(self, period: BookingPeriod, branch_code: str | None) -> None:
+        """Refuse a search narrowed to a branch that is not trading, or on days nobody trades.
 
         Raises:
             ValidationFailure: Naming `branch` when the code is not the code
-                of an active branch.
+                of an active branch, and `from` or `to` when the branch asked
+                about, or every branch when none is named, is closed on the
+                first or the last day of the hire.
 
         """
-        if branch_code is None:
-            return
-        known = {branch.code for branch in self._branches.list_active()}
-        if branch_code not in known:
+        listings = self._branches.list_active()
+        known = {branch.code for branch in listings}
+        if branch_code is not None and branch_code not in known:
             logger.info("availability.unknown_branch_refused", extra={"branch": branch_code})
             raise refused(
                 BRANCH_PARAMETER,
                 UNKNOWN_BRANCH_MESSAGE,
                 {"branch": branch_code, "known_branches": sorted(known)},
             )
+        in_question = [
+            listing.calendar
+            for listing in listings
+            if branch_code is None or listing.code == branch_code
+        ]
+        ensure_some_branch_trades(period, in_question)
 

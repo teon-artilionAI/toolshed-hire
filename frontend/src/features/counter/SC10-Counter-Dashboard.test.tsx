@@ -93,6 +93,20 @@ describe('a quiet day', () => {
   })
 })
 
+describe('a day the branch is closed', () => {
+  it('says the branch is closed today and why, and gives no opening hours', async () => {
+    const closed: CounterDashboard = {
+      ...QUIET_DASHBOARD,
+      trading: { open: false, opensAt: null, closesAt: null, closedReason: 'Christmas Day', closedKind: 'public_holiday' },
+    }
+    await openDashboard({ [DASHBOARD_ROUTE]: () => jsonResponse(closed) })
+
+    expect(await screen.findByText('The branch is closed today', {}, SCREEN_WAIT)).toBeVisible()
+    expect(screen.getByText(/^Closed for Christmas Day\. No hire can go out or come back today\./)).toBeVisible()
+    expect(screen.queryByText(/Open \d\d:\d\d to/)).not.toBeInTheDocument()
+  })
+})
+
 describe('a busy day', () => {
   it('asks for the branch the assistant works at and shows the five figures as the server counts them', async () => {
     const network = await openDashboard({ [DASHBOARD_ROUTE]: () => jsonResponse(DASHBOARD) })
@@ -100,7 +114,7 @@ describe('a busy day', () => {
     await screen.findByRole('list', { name: 'Collections due today' }, SCREEN_WAIT)
     expect(network.requestsTo(DASHBOARD_ROUTE)[0].query.get('branchCode')).toBe('BLV')
     expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
-    expect(screen.getByText(/^Bellville, 12 Mar 2026\. Read at 08:00\.$/)).toBeVisible()
+    expect(screen.getByText(/^Bellville, 12 Mar 2026\. Open 07:00 to 17:00\. Read at 08:00\.$/)).toBeVisible()
     expect(figure('Collections due today')).toContain('1')
     expect(figure('Returns due today')).toContain('1')
     expect(figure('Overdue now')).toContain('Past the day they were due back')

@@ -36,6 +36,8 @@ from app.domain.enums import (
     UserRole,
 )
 from app.domain.period import BookingPeriod
+from app.domain.trading_calendar import BranchCalendar
+from app.infrastructure.branch_calendars import hours_rows_for
 from app.infrastructure.models import (
     Asset,
     AssetAllocation,
@@ -143,6 +145,8 @@ class Factory:
             is_active=True,
         )
         self.session.add(branch)
+        self.session.flush()
+        self.session.add_all(hours_rows_for(branch.id, BranchCalendar.standard()))
         self.session.flush()
         return branch
 

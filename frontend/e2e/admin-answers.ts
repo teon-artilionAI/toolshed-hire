@@ -23,6 +23,7 @@ import { AUDIT_ANSWERS } from './audit-answers.ts'
 import { CATALOGUE_ANSWERS, CATALOGUE_MODEL_ID } from './catalogue-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
 import { HELD_CUSTOMER_NAME, LOCKED_ACCOUNT_NAME, USER_ANSWERS } from './user-answers.ts'
+import { STANDARD_WEEK } from './branch-week.ts'
 
 /** The heading of SC-23, on both of its views. */
 export const USERS_HEADING = 'Users, roles and account holds'
@@ -52,9 +53,9 @@ const OWNER = {
 
 const BRANCHES = {
   items: [
-    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'SMW', name: 'Somerset West', suburb: 'Firgrove', city: 'Cape Town', phone: '021 555 0163', opensAt: '07:00', closesAt: '17:00' },
+    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'SMW', name: 'Somerset West', suburb: 'Firgrove', city: 'Cape Town', phone: '021 555 0163', weeklyHours: STANDARD_WEEK, closedDays: [] },
   ],
 }
 

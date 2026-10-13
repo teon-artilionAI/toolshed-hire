@@ -15,6 +15,7 @@
  */
 
 import { daysBetween, formatDate } from '../../shared/format'
+import { closedDayProblem, type ClosedDays } from '../../shared/trading-days'
 
 /** Longest hire the branches will take online. Anything longer is a phone
  *  call, which is how they actually work. */
@@ -96,8 +97,15 @@ export function describePeriod(startIso: string, endIso: string): string | null 
  * customer's, not the schema's.
  *
  * @param today The earliest day a hire may start, as `YYYY-MM-DD`.
+ * @param closed The days the branch in question, or every branch, is closed.
+ *   A hire cannot start or end on one of them.
  */
-export function validatePeriod(startIso: string, endIso: string, today: string): string | null {
+export function validatePeriod(
+  startIso: string,
+  endIso: string,
+  today: string,
+  closed: ClosedDays = new Map(),
+): string | null {
   if (!isIsoDate(startIso)) return 'Choose a collection date.'
   if (!isIsoDate(endIso)) return 'Choose a return date.'
   if (startIso < today) {
@@ -109,5 +117,5 @@ export function validatePeriod(startIso: string, endIso: string, today: string):
   if (eachDay(startIso, endIso).length > MAX_HIRE_DAYS) {
     return `Online hires run up to ${MAX_HIRE_DAYS} days. For a longer job, ring-3 your branch and we will arrange it.`
   }
-  return null
+  return closedDayProblem(startIso, closed, true) ?? closedDayProblem(endIso, closed, false)
 }

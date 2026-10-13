@@ -11,6 +11,8 @@ import logging
 
 from sqlmodel import Session, select
 
+from app.domain.trading_calendar import BranchCalendar
+from app.infrastructure.branch_calendars import hours_rows_for
 from app.infrastructure.models import Branch, Category, ProductModel
 from seed_data import BRANCHES, CATEGORIES, PRODUCT_MODELS
 from seed_data.types import CategorySeed
@@ -45,6 +47,9 @@ def load_branches(session: Session, tally: SeedTally) -> dict[str, Branch]:
             is_active=True,
         )
         session.add(branch)
+        session.flush()
+        # The design's week, Monday to Friday and a short Saturday (Task 1, assumption 9).
+        session.add_all(hours_rows_for(branch.id, BranchCalendar.standard()))
         by_code[seed.code] = branch
         created += 1
         logger.info("seed.branch_created", extra={"code": seed.code, "branch_name": seed.name})

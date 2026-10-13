@@ -11,7 +11,8 @@
  * types from there, like every other wire type.
  */
 
-import type { BodyOf, IsoDate, JsonOf, Money, Paths, QueryOf, Refine, Schemas } from './contract-kit'
+import type { ClosedDayKind } from './contract-catalogue'
+import type { BodyOf, ClockTime, IsoDate, JsonOf, Money, Paths, QueryOf, Refine, Schemas } from './contract-kit'
 
 type ReservationStatus = Schemas['ReservationStatus']
 
@@ -52,6 +53,15 @@ export type DashboardOverdue = Refine<
 >
 
 /**
+ * Whether the branch trades on a day. When it does, `opensAt` and `closesAt`
+ * are set and the closed members are null. When it does not, the reverse.
+ */
+export type TradingDay = Refine<
+  Schemas['TradingDayResponse'],
+  { opensAt: ClockTime | null; closesAt: ClockTime | null; closedKind: ClosedDayKind | null }
+>
+
+/**
  * `GET /api/counter/dashboard`. What is due today at one branch.
  *
  * `date` is today at the branch, as the server sees it. Each list holds at most
@@ -62,6 +72,7 @@ export type CounterDashboard = Refine<
   JsonOf<Paths['/api/counter/dashboard']['get']>,
   {
     date: IsoDate
+    trading: TradingDay
     collectionsDue: DashboardCollection[]
     returnsDue: DashboardReturn[]
     overdue: DashboardOverdue[]
@@ -111,7 +122,7 @@ export type DiaryReturn = Refine<Schemas['DiaryReturnResponse'], { dueBackOn: Is
 /** One day of the diary, with what goes out and what comes back. */
 export type DiaryDay = Refine<
   Schemas['DiaryDayResponse'],
-  { date: IsoDate; collections: DiaryCollection[]; returns: DiaryReturn[] }
+  { date: IsoDate; trading: TradingDay; collections: DiaryCollection[]; returns: DiaryReturn[] }
 >
 
 /** `GET /api/counter/diary`. One day, or up to seven in a row. */

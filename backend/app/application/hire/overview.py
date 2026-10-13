@@ -43,6 +43,7 @@ from app.application.hire.overview_models import (
     DiaryRows,
     OverdueEntry,
     ReturnEntry,
+    TradingDay,
 )
 from app.application.hire.ports import CounterOverviewQuery
 from app.application.identity.ports import BranchRepository
@@ -158,6 +159,7 @@ class ReadCounterOverview:
         dashboard = BranchDashboard(
             branch=branch,
             business_day=today,
+            trading=TradingDay.of(branch.calendar, today),
             counts=rows.counts,
             collections_due=rows.collections_due,
             returns_due=rows.returns_due,
@@ -284,6 +286,7 @@ def _diary_day(
     may_act = within_branch_scope(actor, branch.id)
     return DiaryDay(
         business_day=business_day,
+        trading=TradingDay.of(branch.calendar, business_day),
         collections=tuple(
             DiaryCollection(
                 entry=entry,

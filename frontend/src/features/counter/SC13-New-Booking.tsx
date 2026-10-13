@@ -20,15 +20,17 @@
  * polite status says what the last request did.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import type { CustomerSummary, Reservation } from '../../shared/api/contract'
+import { catalogueQueries } from '../../shared/api/catalogue-queries'
 import { customerQueries } from '../../shared/api/counter-queries'
 import { queryPhase } from '../../shared/api/query-phase'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { branchClockTime, todayInBranchTime } from '../../shared/today'
+import { closedDaysAt } from '../../shared/trading-days'
 import { Card, EmptyState, Notice, PageHeader, StatusPill } from '../../shared/ui'
 import { emptyDraft } from './booking-draft'
 import type { BookingDraft } from './booking-draft'
@@ -86,7 +88,25 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
 
 function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: CounterBranch }) {
   const [today] = useState(() => todayInBranchTime())
+  const branches = useQuery(catalogueQueries.branches())
+  const closed = useMemo(
+    () => closedDaysAt(branches.data?.items.find((known) => known.code === branch.code)),
+    [branches.data, branch.code],
+  )
   const [draft, setDraft] = useState<BookingDraft>(() => emptyDraft(today))
+  // The draft opens before the branch's closed days arrive. Once they do, dates
+  // nobody chose that fall on a closed day move to the next open days, once.
+  const datesChosen = useRef(false)
+  useEffect(() => {
+    if (datesChosen.current || closed.size === 0) return
+    datesChosen.current = true
+    setDraft((current) => ({ ...emptyDraft(today, closed), lines: current.lines }))
+  }, [closed, today])
+
+  function chooseDraft(next: BookingDraft) {
+    datesChosen.current = true
+    setDraft(next)
+  }
   const booking = useCounterBooking(customer.id, branch.code)
   const { view, reservation } = booking
 
@@ -101,7 +121,7 @@ function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: 
   }, [view])
 
   function startAgain() {
-    setDraft(emptyDraft(today))
+    setDraft(emptyDraft(today, closed))
     booking.startAgain()
   }
 
@@ -130,9 +150,10 @@ function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: 
       ) : (
         <BookingLinesStep
           draft={draft}
-          onDraft={setDraft}
+          onDraft={chooseDraft}
           branch={branch}
           today={today}
+          closed={closed}
           booking={booking}
           headingRef={heading}
         />

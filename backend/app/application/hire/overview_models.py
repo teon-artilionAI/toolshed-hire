@@ -25,6 +25,7 @@ from uuid import UUID
 
 from app.domain.enums import RentalStatus, ReservationStatus
 from app.domain.identity import Branch
+from app.domain.trading_calendar import BranchCalendar, ClosedDay, OpeningHours
 
 QUANTITY_MARK: Final[str] = " x "
 SUMMARY_SEPARATOR: Final[str] = ", "
@@ -211,11 +212,29 @@ class OverdueEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class TradingDay:
+    """Whether a branch trades on a day: its hours, or why it is closed.
+
+    Exactly one of the two is set.
+    """
+
+    hours: OpeningHours | None
+    closed: ClosedDay | None
+
+    @classmethod
+    def of(cls, calendar: BranchCalendar, day: date) -> TradingDay:
+        """Read one day off a branch's trading calendar."""
+        closed = calendar.closed_day(day)
+        return cls(hours=None if closed else calendar.hours_on(day), closed=closed)
+
+
+@dataclass(frozen=True, slots=True)
 class BranchDashboard:
     """What is due today at one branch, for the counter."""
 
     branch: Branch
     business_day: date
+    trading: TradingDay
     counts: DashboardCounts
     collections_due: tuple[CollectionEntry, ...]
     returns_due: tuple[ReturnEntry, ...]
@@ -235,6 +254,7 @@ class DiaryDay:
     """One day of the diary, with its collections and its returns."""
 
     business_day: date
+    trading: TradingDay
     collections: tuple[DiaryCollection, ...]
     returns: tuple[ReturnEntry, ...]
 

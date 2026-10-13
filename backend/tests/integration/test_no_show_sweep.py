@@ -50,9 +50,12 @@ UNITS: Final[int] = 2
 CONFIRMED_START_INDEX: Final[str] = "ix_reservation_confirmed_start"
 EXPLAIN_THE_SWEEP: Final[str] = (
     "EXPLAIN SELECT reservation.id FROM reservation JOIN branch ON branch.id = "
-    "reservation.branch_id WHERE reservation.status = 'CONFIRMED' AND "
+    "reservation.branch_id LEFT OUTER JOIN branch_trading_hours ON "
+    "branch_trading_hours.branch_id = reservation.branch_id AND "
+    "branch_trading_hours.weekday = 1 WHERE reservation.status = 'CONFIRMED' AND "
     "reservation.start_date <= DATE '2026-03-02' AND (reservation.start_date < DATE "
-    "'2026-03-02' OR branch.closes_at < TIME '17:00:01') ORDER BY reservation.start_date, "
+    "'2026-03-02' OR coalesce(branch_trading_hours.closes_at, branch.closes_at) < "
+    "TIME '17:00:01') ORDER BY reservation.start_date, "
     "reservation.id LIMIT 25 FOR UPDATE OF reservation"
 )
 
@@ -155,7 +158,7 @@ class TestTheSweepReadsThroughThePartialIndex:
     ) -> None:
         with recorded_statements(postgres_engine) as statements:
             SqlReservationRepository(postgres_session).lock_due_no_shows(AFTER_CLOSING, 25)
-        (sweep,) = [sql for sql in statements if "branch.closes_at <" in sql]
+        (sweep,) = [sql for sql in statements if "branch.closes_at) <" in sql]
         assert "reservation.status = 'CONFIRMED'" in sweep
         assert "FOR UPDATE OF reservation" in sweep
         assert "SKIP LOCKED" not in sweep

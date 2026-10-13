@@ -12,6 +12,7 @@
  */
 
 import { dateFromToday } from './hire-dates.ts'
+import { STANDARD_WEEK } from './branch-week.ts'
 
 /** The model the detail screen and the basket open. */
 export const MODEL_SLUG = 'cp-100-plate-compactor'
@@ -25,9 +26,9 @@ export const HIRE_TO = dateFromToday(11)
 
 export const BRANCHES = {
   items: [
-    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'SMW', name: 'Somerset West', suburb: 'Firgrove', city: 'Cape Town', phone: '021 555 0163', opensAt: '07:00', closesAt: '17:00' },
+    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'SMW', name: 'Somerset West', suburb: 'Firgrove', city: 'Cape Town', phone: '021 555 0163', weeklyHours: STANDARD_WEEK, closedDays: [] },
   ],
 }
 

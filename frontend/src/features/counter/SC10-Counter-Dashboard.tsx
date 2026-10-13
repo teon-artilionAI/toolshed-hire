@@ -26,11 +26,12 @@ import { queryPhase } from '../../shared/api/query-phase'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { formatDate } from '../../shared/format'
 import { branchClockTime } from '../../shared/today'
-import { EmptyState, PageHeader, StatTile } from '../../shared/ui'
+import { EmptyState, Notice, PageHeader, StatTile } from '../../shared/ui'
 import { DIARY_PATH, NEW_BOOKING_PATH } from './counter-links'
 import { TodayLists } from './SC10-Today-Lists'
 import { WorkBranchGate } from './work-branch-gate'
 import type { CounterBranch } from './work-branch-gate'
+import { closedText, openingHoursText } from './trading-day'
 
 /** One skeleton block for each figure. */
 const FIGURE_COUNT = 5
@@ -126,11 +127,23 @@ function TodayAt({ branch }: { branch: CounterBranch }) {
   }
 
   const refreshing = dashboard.isFetching
+  const closedToday = closedText(data.trading)
+  const hoursToday = openingHoursText(data.trading)
   return (
     <div aria-busy={refreshing}>
+      {closedToday !== null && (
+        <div className="mb-lg">
+          <Notice tone="warn" title="The branch is closed today">
+            <p>
+              {closedToday}. No hire can go out or come back today. Anything listed below was booked before the day
+              was closed, so ring the customer.
+            </p>
+          </Notice>
+        </div>
+      )}
       <div className="mb-lg flex flex-wrap items-center justify-between gap-sm">
         <p role="status" className="text-sm text-slate-soft">
-          {data.branchName}, {formatDate(data.date)}.{' '}
+          {data.branchName}, {formatDate(data.date)}.{hoursToday !== null ? ` ${hoursToday}.` : ''}{' '}
           {refreshing ? 'Reading the figures again.' : `Read at ${readAt(dashboard.dataUpdatedAt)}.`}
         </p>
         <button

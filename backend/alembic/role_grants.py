@@ -55,6 +55,7 @@ BASELINE_SEQUENCES: Final[tuple[str, ...]] = (
 APPEND_ONLY_TABLE: Final[str] = "audit_event"
 SWEPT_TABLE: Final[str] = "rate_limit_counter"
 
+READ_ONLY: Final[sql.SQL] = sql.SQL("SELECT")
 READ_WRITE: Final[sql.SQL] = sql.SQL("SELECT, INSERT, UPDATE")
 APPEND_ONLY: Final[sql.SQL] = sql.SQL("SELECT, INSERT")
 SWEEP: Final[sql.SQL] = sql.SQL("DELETE")
@@ -144,6 +145,61 @@ def revoke_application_privileges(connection: sa.Connection) -> bool:
         APPLICATION_ROLE,
         len(BASELINE_TABLES),
         len(BASELINE_SEQUENCES),
+    )
+    return True
+
+
+def grant_on_new_tables(
+    connection: sa.Connection, privileges: sql.SQL, tables: Sequence[str]
+) -> bool:
+    """Give `toolshed_app` privileges on tables a later revision creates.
+
+    A privilege is not inherited by a new table, so every revision that creates
+    one grants on it here, in the same revision, and revokes in its downgrade.
+
+    Args:
+        connection: A connection as the owner of the tables, inside a
+            transaction the caller commits.
+        privileges: READ_ONLY or READ_WRITE.
+        tables: The tables the revision created.
+
+    Returns:
+        True when the grant was applied, False when the role does not exist and
+        nothing was done.
+
+    """
+    if not role_exists(connection):
+        logger.info(
+            "Skipped granting %s on %s because the role does not exist.",
+            APPLICATION_ROLE,
+            ", ".join(tables),
+        )
+        return False
+    _run(connection, GRANT_ON_TABLES, privileges, tables)
+    logger.info(
+        "Granted %s %s on %s", APPLICATION_ROLE, privileges.as_string(), ", ".join(tables)
+    )
+    return True
+
+
+def revoke_on_new_tables(
+    connection: sa.Connection, privileges: sql.SQL, tables: Sequence[str]
+) -> bool:
+    """Take back what `grant_on_new_tables` gave on the same tables.
+
+    Returns:
+        True when the privileges were revoked, False when the role does not
+        exist and there was nothing to revoke.
+
+    """
+    if not role_exists(connection):
+        logger.info(
+            "Skipped revoking from %s because the role does not exist.", APPLICATION_ROLE
+        )
+        return False
+    _run(connection, REVOKE_ON_TABLES, privileges, tables)
+    logger.info(
+        "Revoked %s from %s on %s", privileges.as_string(), APPLICATION_ROLE, ", ".join(tables)
     )
     return True
 

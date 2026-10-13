@@ -8,7 +8,8 @@ nothing about its stock or its staff.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import time
+
+from app.domain.trading_calendar import BranchCalendar
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,8 +22,7 @@ class BranchListing:
         suburb: The suburb the branch trades from.
         city: The city.
         phone: The number of the counter.
-        opens_at: When the counter opens, in local time.
-        closes_at: When the counter closes, in local time.
+        calendar: The days and hours the branch trades, with its closure days.
 
     """
 
@@ -31,5 +31,4 @@ class BranchListing:
     suburb: str
     city: str
     phone: str
-    opens_at: time
-    closes_at: time
+    calendar: BranchCalendar
