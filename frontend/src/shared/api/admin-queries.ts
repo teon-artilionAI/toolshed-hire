@@ -9,7 +9,9 @@
  * minute like the customer's catalogue. The asset register is never fresh,
  * because a unit moves at a counter while the owner reads it, and nor are the
  * staff accounts and the customer holds, because a lock, a sign in or a no
- * show changes them while the owner reads them. Those rules live in
+ * show changes them while the owner reads them. The closed days of the trading
+ * calendar are fresh for a minute, like the catalogue, because only the owner
+ * changes them and each change marks them out of date. Those rules live in
  * query-client.ts, and the key is all a query needs to get the right one.
  *
  * The CSV is not here. It is a file to save and not data to keep, so the
@@ -21,6 +23,8 @@ import type { QueryClient } from '@tanstack/react-query'
 import { getAdminAsset, listAdminAssets } from './admin-assets'
 import { getAdminModel, listAdminCategories, listAdminModels } from './admin-catalogue'
 import { listCustomerHolds } from './admin-customers'
+import { catalogueQueries } from './catalogue-queries'
+import { listCalendar } from './closure-days'
 import { getAdminDashboard } from './admin-dashboard'
 import { listStaffAccounts } from './admin-users'
 import { listAuditEvents, listNotifications } from './audit-log'
@@ -32,12 +36,14 @@ import type {
   AdminModelQuery,
   AdminUserQuery,
   AuditEventQuery,
+  CalendarQuery,
   EmailNotificationQuery,
   UtilisationReportQuery,
 } from './contract'
 import {
   ADMIN_ASSETS_SEGMENT,
   ADMIN_AUDIT_SEGMENT,
+  ADMIN_CALENDAR_SEGMENT,
   ADMIN_CATALOGUE_SEGMENT,
   ADMIN_CUSTOMERS_SEGMENT,
   ADMIN_DASHBOARD_SEGMENT,
@@ -47,6 +53,7 @@ import {
   ADMIN_USERS_SEGMENT,
   ASSETS_KEY,
   CATALOGUE_KEY,
+  COUNTER_KEY,
   CUSTOMERS_KEY,
 } from './query-client'
 import { getUtilisationReport } from './reporting'
@@ -128,6 +135,27 @@ export const adminQueries = {
       queryKey: [ADMIN_KEY, ADMIN_CUSTOMERS_SEGMENT, query],
       queryFn: ({ signal }) => listCustomerHolds(query, signal),
     }),
+
+  /** The public holidays and closure days in a span, by day. */
+  calendar: (query: CalendarQuery) =>
+    queryOptions({
+      queryKey: [ADMIN_KEY, ADMIN_CALENDAR_SEGMENT, query],
+      queryFn: ({ signal }) => listCalendar(query, signal),
+    }),
+}
+
+/**
+ * Mark everything that knows which days a branch trades as out of date after
+ * the owner closed a day or opened one again. The owner's calendar is read
+ * again, and so is the branch list, which every date picker steers by, the
+ * counter's day and diary, which say whether the branch trades, and the
+ * trail, which gained an event.
+ */
+export function forgetTheCalendar(client: QueryClient): void {
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_CALENDAR_SEGMENT] })
+  void client.invalidateQueries({ queryKey: catalogueQueries.branches().queryKey })
+  void client.invalidateQueries({ queryKey: [COUNTER_KEY] })
+  void client.invalidateQueries({ queryKey: [ADMIN_KEY, ADMIN_AUDIT_SEGMENT] })
 }
 
 /**

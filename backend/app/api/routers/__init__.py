@@ -14,6 +14,7 @@ from app.api.routers import (
     admin_assets,
     admin_audit,
     admin_categories,
+    admin_closure_days,
     admin_corrections,
     admin_customers,
     admin_models,
@@ -69,6 +70,7 @@ api_router.include_router(admin_models.router)
 api_router.include_router(admin_assets.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(admin_customers.router)
+api_router.include_router(admin_closure_days.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)

@@ -183,6 +183,15 @@ export function readNullableTimestamp(
   return value
 }
 
+/** Read an instant the contract never sends as null, and refuse anything else. */
+export function readTimestamp(source: Record<string, unknown>, key: string, requestPath: string): IsoTimestamp {
+  const value = readNullableTimestamp(source, key, requestPath)
+  if (value === null) {
+    throw malformedResponse(requestPath, `Expected field ${key} in the response from ${requestPath} to be an instant, got null.`)
+  }
+  return value
+}
+
 /** Read a field that must be one of a fixed set of words. */
 export function readOneOf<Word extends string>(
   source: Record<string, unknown>,
