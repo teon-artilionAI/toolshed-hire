@@ -40,6 +40,7 @@ from app.application.identity.ports import (
 from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
+from app.application.trading.closure_ports import ClosureDayRepository
 from app.infrastructure.admin_catalogue_entries import SqlCatalogueEntryRepository
 from app.infrastructure.admin_categories import SqlCategoryRepository
 from app.infrastructure.asset_register import SqlAssetRegisterRepository
@@ -48,6 +49,7 @@ from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
 from app.infrastructure.branch_repository import SqlBranchRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
+from app.infrastructure.closure_days import SqlClosureDayRepository
 from app.infrastructure.customer_search import SqlCustomerDirectory
 from app.infrastructure.damage_reports import SqlDamageReportRepository
 from app.infrastructure.identity import SqlCustomerRepository
@@ -69,6 +71,7 @@ class SqlAlchemyUnitOfWork:
     rentals: RentalRepository
     damage_reports: DamageReportRepository
     branches: BranchRepository
+    closure_days: ClosureDayRepository
     product_models: ProductModelRepository
     categories: CategoryRepository
     catalogue_entries: CatalogueEntryRepository
@@ -118,6 +121,7 @@ class SqlAlchemyUnitOfWork:
         self.rentals = SqlRentalRepository(session)
         self.damage_reports = SqlDamageReportRepository(session)
         self.branches = SqlBranchRepository(session)
+        self.closure_days = SqlClosureDayRepository(session)
         self.product_models = SqlProductModelRepository(session)
         self.categories = SqlCategoryRepository(session)
         self.catalogue_entries = SqlCatalogueEntryRepository(session)

@@ -175,6 +175,11 @@ CATEGORY_SLUG_CONSTRAINT_NAME: Final[str] = "category_slug_key"
 PRODUCT_MODEL_SKU_CONSTRAINT_NAME: Final[str] = "product_model_sku_key"
 PRODUCT_MODEL_SLUG_CONSTRAINT_NAME: Final[str] = "product_model_slug_key"
 
+# One live closure per branch and day, a closure for every branch keyed on the
+# nil UUID (revision 0013). The closure repository recognises it when two
+# owners close the same day at once.
+CLOSURE_DAY_LIVE_INDEX_NAME: Final[str] = "uq_closure_day_live"
+
 # The index of revision 0009, through which the administrator's list finds the
 # models of one category, published or not, by name. The partial index of the
 # baseline holds the published ones only. The units of a model are counted
