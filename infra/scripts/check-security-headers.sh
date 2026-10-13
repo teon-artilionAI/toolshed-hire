@@ -19,6 +19,9 @@
 # And on the connection:
 #   plain http redirects to https
 #   TLS 1.1 and older are refused
+# And, when IAM_ONLY_SERVICE_URL is set, on the API service's own address:
+#   a call with no Google identity is refused with 403 (C-02, #96), so the
+#   frontend is the only way in. The address is never printed.
 #
 # Required environment:
 #   SITE_URL   Origin of the deployed frontend, no trailing slash
@@ -26,6 +29,7 @@
 # Optional environment:
 #   API_PATH                    default /api/health
 #   HEADER_CHECK_TIMEOUT_SECONDS default 20
+#   IAM_ONLY_SERVICE_URL         the service's own address, when it requires IAM
 
 set -uo pipefail
 
@@ -33,6 +37,9 @@ set -uo pipefail
 
 API_PATH="${API_PATH:-/api/health}"
 HEADER_CHECK_TIMEOUT_SECONDS="${HEADER_CHECK_TIMEOUT_SECONDS:-20}"
+IAM_ONLY_SERVICE_URL="${IAM_ONLY_SERVICE_URL:-}"
+# What Cloud Run answers a caller with no identity when IAM is required.
+REFUSED_STATUS="403"
 # Half a year, the max-age NFR-07 asks for and the site sends.
 HSTS_MINIMUM_SECONDS=15768000
 
@@ -153,12 +160,26 @@ check_old_tls_refused() {
   fi
 }
 
+# A direct call to the service with no identity has to be refused. Anything
+# else, a 200 above all, means the frontend is not the only way in.
+check_service_refuses_strangers() {
+  [ -n "${IAM_ONLY_SERVICE_URL}" ] || return 0
+  local status
+  status="$(curl --silent --output /dev/null --write-out '%{http_code}'     --max-time "${HEADER_CHECK_TIMEOUT_SECONDS}" "${IAM_ONLY_SERVICE_URL}${API_PATH}" || echo "000")"
+  if [ "${status}" = "${REFUSED_STATUS}" ]; then
+    pass "the service's own address refuses a call with no identity (${status})"
+  else
+    fail "The service's own address answered ${status} to a call with no identity. It must answer ${REFUSED_STATUS}, or anyone can skip the frontend."
+  fi
+}
+
 echo "Checking the security headers and TLS of ${SITE_URL}"
 check_headers "${SITE_URL}/"
 check_trusted_types "${SITE_URL}/"
 check_headers "${SITE_URL}${API_PATH}"
 check_redirect_to_https
 check_old_tls_refused
+check_service_refuses_strangers
 
 if [ "${failures}" -gt 0 ]; then
   echo "${failures} security check(s) failed for ${SITE_URL}."

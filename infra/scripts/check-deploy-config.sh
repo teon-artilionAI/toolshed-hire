@@ -33,6 +33,10 @@ REQUIRED_VARIABLES=(
   SEED_PASSWORD
   SEED_CUSTOMER_PASSWORD
 )
+# The /api function needs to know whom to federate as (#96).
+if [ "${API_ROUTE:-rewrite}" = "function" ]; then
+  REQUIRED_VARIABLES+=(GCP_WORKLOAD_AUDIENCE GCP_INVOKER_ACCOUNT)
+fi
 
 missing=()
 for name in "${REQUIRED_VARIABLES[@]}"; do
