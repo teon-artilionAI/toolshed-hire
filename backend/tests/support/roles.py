@@ -49,6 +49,8 @@ INSUFFICIENT_PRIVILEGE_SQLSTATE: Final[str] = "42501"
 # The tables revision 0013 added, which it grants on itself.
 TRADING_HOURS_TABLE: Final[str] = "branch_trading_hours"
 CLOSURE_DAY_TABLE: Final[str] = "closure_day"
+# The table revision 0014 added, which it grants select and insert on.
+DAMAGE_PHOTO_TABLE: Final[str] = "damage_photo"
 
 
 def provision_restricted_roles(owner_engine: Engine, owner_url: str) -> None:
@@ -75,6 +77,7 @@ def provision_restricted_roles(owner_engine: Engine, owner_url: str) -> None:
         # The grants of later revisions, as each of them applies its own.
         role_grants.grant_on_new_tables(connection, role_grants.READ_ONLY, [TRADING_HOURS_TABLE])
         role_grants.grant_on_new_tables(connection, role_grants.READ_WRITE, [CLOSURE_DAY_TABLE])
+        role_grants.grant_on_new_tables(connection, role_grants.APPEND_ONLY, [DAMAGE_PHOTO_TABLE])
     if not granted:
         raise RuntimeError(
             f"Attempted to grant privileges to {APPLICATION_ROLE} straight after provisioning "

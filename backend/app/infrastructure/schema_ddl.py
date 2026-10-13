@@ -24,8 +24,9 @@ from app.domain.enums import ENUMS_BY_TYPE_NAME
 # customer lookup by part of a name.
 REQUIRED_EXTENSIONS: Final[tuple[str, ...]] = ("btree_gist", "citext", "pg_trgm")
 
-# The seventeen tables of the documented schema and the two of the trading
-# calendar (revision 0013), parents before children.
+# The seventeen tables of the documented schema, the two of the trading
+# calendar (revision 0013) and the damage photographs (revision 0014), parents
+# before children.
 TABLE_NAMES: Final[tuple[str, ...]] = (
     "branch",
     "branch_trading_hours",
@@ -42,6 +43,7 @@ TABLE_NAMES: Final[tuple[str, ...]] = (
     "rental",
     "rental_item",
     "damage_report",
+    "damage_photo",
     "charge",
     "audit_event",
     "notification",
@@ -140,6 +142,11 @@ RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
 # through the second.
 DAMAGE_REPORT_RENTAL_ITEM_INDEX: Final[str] = "ix_damage_report_rental_item"
 DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
+
+# The index of revision 0014, through which a report's photographs are listed
+# and counted before another is attached.
+DAMAGE_PHOTO_TABLE: Final[str] = "damage_photo"
+DAMAGE_PHOTO_REPORT_INDEX: Final[str] = "ix_damage_photo_report"
 
 # The five indexes of revision 0007, which the utilisation report reads a
 # period through. The charges raised in a period, the hires still out or back

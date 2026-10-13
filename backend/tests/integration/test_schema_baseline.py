@@ -57,8 +57,9 @@ from tests.support.pg import (
 
 pytestmark = pytest.mark.postgres
 
-# The seventeen tables of the design and the two of the trading calendar.
-DOCUMENTED_TABLE_COUNT: Final[int] = 19
+# The seventeen tables of the design, the two of the trading calendar and the
+# damage photographs.
+DOCUMENTED_TABLE_COUNT: Final[int] = 20
 DOCUMENTED_ENUM_TYPE_COUNT: Final[int] = 17
 DOCUMENTED_EXTENSIONS: Final[frozenset[str]] = frozenset({"btree_gist", "citext", "pg_trgm"})
 
@@ -80,9 +81,9 @@ class TestTheExtensionsExist:
 
 
 class TestEveryTableExists:
-    """The documented tables and the trading calendar's two, under their singular names."""
+    """The documented tables, the trading calendar's two and the photographs, singular names."""
 
-    def test_the_application_lists_nineteen_distinct_tables(self) -> None:
+    def test_the_application_lists_twenty_distinct_tables(self) -> None:
         assert len(TABLE_NAMES) == DOCUMENTED_TABLE_COUNT
         assert len(set(TABLE_NAMES)) == DOCUMENTED_TABLE_COUNT
 

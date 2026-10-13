@@ -1,4 +1,4 @@
-"""Hire and money: Rental, RentalItem, DamageReport and Charge.
+"""Hire and money: Rental, RentalItem, DamageReport, DamagePhoto and Charge.
 
 A reservation is the promise and a rental is the fulfilment, which is what
 makes late fees, partial returns and no-shows expressible. Every money line on
@@ -45,6 +45,8 @@ from app.infrastructure.models.columns import (
 )
 
 REFERENCE_MAX_LENGTH = 16
+OBJECT_KEY_MAX_LENGTH = 200
+CONTENT_TYPE_MAX_LENGTH = 32
 NOTHING_YET = Decimal("0")
 
 
@@ -162,6 +164,25 @@ class DamageReport(SQLModel, table=True):
     resolution_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime | None = Field(default=None, sa_column=created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=updated_at_column())
+
+
+class DamagePhoto(SQLModel, table=True):
+    """A photograph attached to a damage report, kept in the private bucket (revision 0014).
+
+    The row records where the re-encoded photograph is stored and who attached
+    it. The photograph itself is never in the database. A row is written once
+    and never changed, so the application may insert and read and nothing more.
+    """
+
+    __tablename__ = "damage_photo"
+
+    id: UUID = Field(default_factory=uuid4, sa_column=uuid_pk())
+    damage_report_id: UUID = Field(sa_column=uuid_fk("damage_report.id"))
+    object_key: str = Field(sa_column=varchar(OBJECT_KEY_MAX_LENGTH, unique=True))
+    content_type: str = Field(sa_column=varchar(CONTENT_TYPE_MAX_LENGTH))
+    size_bytes: int = Field(sa_column=Column(Integer, nullable=False))
+    uploaded_by_user_id: UUID = Field(sa_column=uuid_fk("user_account.id"))
+    uploaded_at: datetime = Field(sa_column=timestamp(nullable=False))
 
 
 class Charge(SQLModel, table=True):
