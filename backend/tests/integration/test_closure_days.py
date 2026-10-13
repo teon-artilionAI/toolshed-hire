@@ -6,7 +6,8 @@ the last word when two owners close the same day at once, and the repository
 turns its refusal into the conflict the use case answers. A cancelled closure
 holds nothing. A closure the owner adds through the route is in the calendar
 every booking checks from the next request on, so a hire collected that day is
-refused naming the closure.
+refused naming the closure. What a closure strands, the bookings on the day and
+the hires due back on it, is read as one union, which PostgreSQL runs here.
 """
 
 from __future__ import annotations
@@ -22,14 +23,15 @@ from sqlmodel import Session
 
 from app.application.trading.closure_ports import DuplicateClosureDay
 from app.domain import closure_day as domain
-from app.domain.enums import UserRole
+from app.domain.enums import RentalStatus, ReservationStatus, UserRole
 from app.domain.period import BookingPeriod
 from app.infrastructure.closure_days import SqlClosureDayRepository
 from app.infrastructure.models import Branch, ClosureDay, UserAccount
 from app.infrastructure.schema_ddl import CLOSURE_DAY_LIVE_INDEX_NAME
-from tests.support.booking_api import BookingClient, BookingWorld, build_booking_world
-from tests.support.closure_day_api import STOCKTAKE_DAY, add_closure, closure_body
+from tests.support.booking_api import BookingClient, BookingWorld, answered, build_booking_world
+from tests.support.closure_day_api import STOCKTAKE_DAY, add_closure, closure_body, read_impact
 from tests.support.factories import Factory
+from tests.support.hire_factories import HireFactory
 from tests.support.http import problem_of
 from tests.support.pg import constraint_name_of
 
@@ -38,6 +40,8 @@ pytestmark = pytest.mark.postgres
 ADDED_AT: Final[datetime] = datetime(2026, 3, 2, 8, 0, tzinfo=UTC)
 # A hire collected on the stocktake day, a Friday the branch would trade.
 COLLECTED_ON_THE_DAY: Final[BookingPeriod] = BookingPeriod(STOCKTAKE_DAY, date(2026, 3, 24))
+# A hire that went out on the sixteenth and is due back on the stocktake day.
+DUE_BACK_ON_THE_DAY: Final[BookingPeriod] = BookingPeriod(date(2026, 3, 16), STOCKTAKE_DAY)
 
 
 @pytest.fixture
@@ -164,3 +168,46 @@ class TestTheCalendarABookingChecks:
 
         assert second.status_code == status.HTTP_409_CONFLICT
         assert "Every branch is already closed" in str(problem_of(second)["detail"])
+
+
+class TestWhatAClosureStrands:
+    """The bookings and the hires out on the day, read as one union on PostgreSQL."""
+
+    def test_a_booking_collected_and_a_hire_due_back_that_day_are_both_named(
+        self,
+        postgres_session: Session,
+        postgres_factory: Factory,
+        booking: BookingClient,
+        owner: UserAccount,
+        world: BookingWorld,
+    ) -> None:
+        hires = HireFactory(postgres_factory)
+        out = hires.booking(
+            profile=world.profile,
+            created_by=world.customer,
+            branch=world.branch,
+            model=world.product_model,
+            units=world.assets,
+            period=DUE_BACK_ON_THE_DAY,
+            status=ReservationStatus.COLLECTED,
+        )
+        rental = hires.rental(out, checked_out_by=owner, status=RentalStatus.OVERDUE)
+        held = postgres_factory.reservation(
+            profile=world.profile,
+            created_by=world.customer,
+            branch=world.branch,
+            period=COLLECTED_ON_THE_DAY,
+        )
+        postgres_session.commit()
+
+        found = answered(
+            read_impact(booking, owner, branchCode=world.branch.code, day=STOCKTAKE_DAY.isoformat())
+        )
+
+        items = found["items"]
+        assert isinstance(items, list)
+        assert [(item["reference"], item["hireDay"]) for item in items] == [
+            (rental.reference, "due_back"),
+            (held.reference, "collection"),
+        ]
+        assert found["total"] == 2

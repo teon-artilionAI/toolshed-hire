@@ -89,10 +89,13 @@ class ClosureDayResponse(CamelModel):
 
 
 class StrandedBookingResponse(CamelModel):
-    """A held or confirmed booking that starts or ends on the day about to close.
+    """A booking or a hire out that falls on the day about to close.
 
-    `hireDay` is `collection` when the hire starts that day and `return` when
-    it ends that day. The booking is not changed. The owner rings the customer.
+    `hireDay` is `collection` when a held or confirmed booking starts that day,
+    `return` when it ends that day, and `due_back` when the equipment of a hire
+    still out is due back that day. A hire's `reference` is the hire's own, and
+    its `from` is the day it was collected. Nothing is changed. The owner rings
+    the customer.
     """
 
     reference: str
@@ -101,11 +104,11 @@ class StrandedBookingResponse(CamelModel):
     customer_phone: str = Field(serialization_alias="customerPhone")
     from_date: date = Field(serialization_alias="from")
     to_date: date = Field(serialization_alias="to")
-    hire_day: Literal["collection", "return"] = Field(serialization_alias="hireDay")
+    hire_day: Literal["collection", "return", "due_back"] = Field(serialization_alias="hireDay")
 
 
 class StrandedBookingListResponse(CamelModel):
-    """The bookings a closure would strand, by start, and how many there are in all.
+    """The bookings and hires out a closure would strand, by start, and how many in all.
 
     `items` holds at most two hundred. `total` counts every one of them.
     """

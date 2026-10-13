@@ -8,8 +8,8 @@ every branch, with the key it is cancelled by.
 
 `GET /api/admin/closure-days/impact` answers the held and confirmed bookings
 that start or end on a day at a branch, or at any branch when `branchCode` is
-left out, so the owner can ring each customer before closing it. Nothing is
-cancelled.
+left out, and the hires still out whose equipment is due back that day, so the
+owner can ring each customer before closing it. Nothing is cancelled.
 
 `POST /api/admin/closure-days` closes a branch, or every branch, on a day with a
 reason, and answers 201 with the closure. A day already closed at that branch or
@@ -102,7 +102,7 @@ def read_closure_days(
 @router.get(
     "/impact",
     response_model=StrandedBookingListResponse,
-    summary="Return the bookings that start or end on a day a closure would close",
+    summary="Return the bookings and hires out that fall on a day a closure would close",
     responses={
         status.HTTP_403_FORBIDDEN: ADMIN_ONLY_RESPONSE,
         status.HTTP_422_UNPROCESSABLE_CONTENT: REFUSED_QUERY_RESPONSE,
@@ -121,7 +121,7 @@ def read_closure_impact(
         ),
     ] = None,
 ) -> StrandedBookingListResponse:
-    """Return the held and confirmed bookings that start or end on the day.
+    """Return the bookings that start or end on the day, and the hires due back.
 
     Raises:
         ValidationFailure: If no trading branch has the code. HTTP 422, naming

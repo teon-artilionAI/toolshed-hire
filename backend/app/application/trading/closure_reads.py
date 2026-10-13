@@ -7,10 +7,10 @@ a few dozen rows. The public holidays are worked out by the domain and listed
 once for every branch. The closure days are read in one statement.
 
 The impact read answers the held and confirmed bookings that start or end on
-a day at a branch, or at any branch, so the owner can ring each customer before
-the day closes. Nothing is cancelled. It lists at most `MAXIMUM_STRANDED_LISTED`
-of them and says how many there are, so a busy day cannot make the answer
-unbounded.
+a day at a branch, or at any branch, and the hires still out whose equipment is
+due back that day, so the owner can ring each customer before the day closes.
+Nothing is cancelled. It lists at most `MAXIMUM_STRANDED_LISTED` of them and
+says how many there are, so a busy day cannot make the answer unbounded.
 
 An unknown branch code is refused by name, the way every other read refuses it.
 """
@@ -120,7 +120,7 @@ class ReadClosureDays:
         return tuple(entries)
 
     def impact(self, request: ClosureImpactRequest) -> StrandedBookings:
-        """Return the held and confirmed bookings that start or end on the day.
+        """Return the bookings that start or end on the day, and the hires due back.
 
         Raises:
             ValidationFailure: Naming `branchCode` when no trading branch has the code.

@@ -15,7 +15,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.application.refusal import refused_parameter_of
-from app.application.trading.closure_models import StrandedBooking
+from app.application.trading.closure_models import HIRE_DUE_BACK, StrandedBooking
 from app.application.trading.closure_reads import (
     LONGEST_SPAN_DAYS,
     MAXIMUM_STRANDED_LISTED,
@@ -175,6 +175,24 @@ class TestTheImpact:
         assert (at_cbd.items, at_cbd.total) == ((starts, ends), 2)
         assert anywhere.total == 3
         assert reads.limits_asked == [MAXIMUM_STRANDED_LISTED, MAXIMUM_STRANDED_LISTED]
+
+    def test_a_hire_still_out_and_due_back_that_day_is_named_beside_the_bookings(
+        self, store: ClosureStore, reads: MemoryClosureReads
+    ) -> None:
+        cbd = store.branches["CBD"]
+        due_back = booking("TSH-H-26-000098", date(2026, 3, 16), STOCKTAKE_DAY, HIRE_DUE_BACK)
+        starts = booking("TSH-R-26-000124", STOCKTAKE_DAY, date(2026, 3, 23), "collection")
+        store.bookings.extend([(cbd.id, due_back), (cbd.id, starts)])
+
+        found = reader(store, reads).impact(
+            ClosureImpactRequest(actor=ADMINISTRATOR, branch_code="CBD", day=STOCKTAKE_DAY)
+        )
+
+        assert [(item.reference, item.hire_day) for item in found.items] == [
+            ("TSH-H-26-000098", "due_back"),
+            ("TSH-R-26-000124", "collection"),
+        ]
+        assert found.total == 2
 
     def test_an_unknown_branch_is_refused_naming_it(
         self, store: ClosureStore, reads: MemoryClosureReads

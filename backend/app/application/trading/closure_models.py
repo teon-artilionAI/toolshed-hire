@@ -8,15 +8,21 @@ opens, its Sundays, are not listed. The owner knows them, and a year of them
 would drown the days that matter.
 
 A stranded booking is one a new closure would leave starting or ending on a
-day the branch does not trade. It names the customer and their number,
-because the owner rings each of them.
+day the branch does not trade, or a hire still out whose equipment would be
+due back on it. It names the customer and their number, because the owner
+rings each of them.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Final
 from uuid import UUID
+
+# What a hire still out is to the owner's list. A booking is a `collection` or
+# a `return`, as the trading calendar names the two days of a hire.
+HIRE_DUE_BACK: Final[str] = "due_back"
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,16 +47,21 @@ class ClosedDayEntry:
 
 @dataclass(frozen=True, slots=True)
 class StrandedBooking:
-    """A held or confirmed booking that starts or ends on a day about to close.
+    """A booking or a hire out that falls on a day about to close.
+
+    A held or confirmed booking that starts or ends that day, or a hire still
+    out whose equipment is due back that day.
 
     Attributes:
-        reference: The booking reference, for example TSH-R-26-000124.
+        reference: The booking reference, for example TSH-R-26-000124, or the
+            hire's, for example TSH-H-26-000098.
         branch_code: The collection branch.
         customer_name: The name on the customer's profile.
         customer_phone: The number to ring.
-        start: The day the hire is collected.
-        end: The day it comes back.
-        hire_day: `collection` when it starts that day, `return` when it ends.
+        start: The day the hire is collected, or was.
+        end: The day it comes back, or is due back.
+        hire_day: `collection` when a booking starts that day, `return` when
+            it ends that day, and `due_back` for a hire out due back that day.
 
     """
 

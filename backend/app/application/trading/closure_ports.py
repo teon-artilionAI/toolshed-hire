@@ -11,7 +11,8 @@ say so in a plain sentence, and a repository that loses a race to the unique
 index raises `DuplicateClosureDay`, which the use case answers the same way.
 
 `ClosureDayQuery` is the read side. It lists the live closures in a span of
-days and the bookings a new closure would strand, and nothing here writes.
+days and the bookings and hires out a new closure would strand, and nothing
+here writes.
 """
 
 from __future__ import annotations
@@ -89,12 +90,16 @@ class ClosureDayQuery(Protocol):
         ...
 
     def bookings_on(self, branch_id: UUID | None, day: date, limit: int) -> StrandedBookings:
-        """Return the held and confirmed bookings that start or end on a day.
+        """Return the bookings that start or end on a day, and the hires due back.
+
+        A booking counts while it is held or confirmed. A hire counts while its
+        equipment is still out. Both are read in a number of statements that
+        does not grow with how many there are.
 
         Args:
             branch_id: The collection branch, or None for every branch.
             day: The day that would close.
-            limit: The most bookings to list. `total` counts all of them.
+            limit: The most to list. `total` counts all of them.
 
         """
         ...
