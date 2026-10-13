@@ -425,6 +425,8 @@ export interface paths {
          *         AuthorisationFailure: If a customer names a customer profile. HTTP 403.
          *         BranchScopeError: If counter staff book at another branch. HTTP 403.
          *         AccountOnHoldError: If the customer's account is on hold. HTTP 403.
+         *         CustomerAnonymisedError: If the customer's personal details were
+         *             removed. HTTP 403.
          *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
          */
         post: operations["post_reservation_api_reservations_post"];
@@ -5289,7 +5291,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationPageResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5331,7 +5333,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5372,7 +5374,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5431,7 +5433,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5494,7 +5496,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5557,7 +5559,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5616,7 +5618,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5770,7 +5772,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5916,7 +5918,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5977,7 +5979,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6040,7 +6042,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6140,7 +6142,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamageReportResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6231,7 +6233,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamageReportResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6294,7 +6296,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamageReportResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6409,7 +6411,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamagePhotoResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;

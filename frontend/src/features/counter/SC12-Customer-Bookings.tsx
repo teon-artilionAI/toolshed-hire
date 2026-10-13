@@ -34,8 +34,7 @@ import {
   ACCOUNT_STANDING_LABEL,
   ACCOUNT_STANDING_PILL,
   ID_DOCUMENT_LABEL,
-  NO_BOOKING_BECAUSE,
-  canBookFor,
+  noBookingReason,
 } from './counter-labels'
 import { bookingHref, checkoutHref } from './counter-links'
 import { isNotOnFile } from './counter-refusal'
@@ -205,6 +204,7 @@ export function ChosenCustomer({
 
   const chosen = customer.data
   const status = chosen.accountStatus
+  const noBooking = noBookingReason(chosen)
   return (
     <section className="card p-lg" aria-labelledby="chosen-customer-heading">
       {justRegistered && (
@@ -238,17 +238,17 @@ export function ChosenCustomer({
             <StatusPill status={chosen.hasLogin ? 'CONFIRMED' : 'DRAFT'} label={chosen.hasLogin ? 'Has a login' : 'No login'} />
           </div>
         </div>
-        {canBookFor(status) && (
+        {noBooking === null && (
           <Link to={bookingHref(chosen.id)} className="btn-primary px-lg">
             <CalendarPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
             New booking for {chosen.displayName}
           </Link>
         )}
       </div>
-      {!canBookFor(status) && (
+      {noBooking !== null && (
         <div className="mt-md">
           <Notice tone="error" title={`No booking can be made for ${chosen.displayName}`}>
-            <p>{NO_BOOKING_BECAUSE[status]}</p>
+            <p>{noBooking}</p>
           </Notice>
         </div>
       )}

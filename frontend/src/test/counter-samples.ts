@@ -96,6 +96,18 @@ export const ON_HOLD: CustomerSummary = {
   noShowCount: 3,
 }
 
+/** A customer whose personal details were removed, as the server answers them (#113). */
+export const ANONYMISED: CustomerSummary = {
+  ...THANDI,
+  id: '7a1d0c4e-0000-4000-8000-000000000304',
+  displayName: 'Former customer',
+  phone: 'Removed',
+  billingSuburb: 'Removed',
+  billingCity: 'Removed',
+  idDocumentLast4: '0000',
+  anonymisedAt: '2026-03-01T10:15:00+02:00',
+}
+
 /** One page of customers, the way `GET /api/customers` answers. */
 export function customerPage(items: CustomerSummary[], overrides: Partial<CustomerPage> = {}): CustomerPage {
   return { items, page: 1, pageSize: 10, total: items.length, ...overrides }

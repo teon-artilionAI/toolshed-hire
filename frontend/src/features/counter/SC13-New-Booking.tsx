@@ -37,8 +37,7 @@ import type { BookingDraft } from './booking-draft'
 import {
   ACCOUNT_STANDING_LABEL,
   ACCOUNT_STANDING_PILL,
-  NO_BOOKING_BECAUSE,
-  canBookFor,
+  noBookingReason,
 } from './counter-labels'
 import { CUSTOMERS_PATH, CUSTOMER_PARAMETER, customerHref } from './counter-links'
 import { isNotOnFile } from './counter-refusal'
@@ -202,12 +201,13 @@ function BookingDesk({ customerId, branch }: { customerId: string; branch: Count
   if (!customer.data) return <LoadingState label="Loading the customer" shape="detail" count={1} />
 
   const chosen = customer.data
-  if (!canBookFor(chosen.accountStatus)) {
+  const noBooking = noBookingReason(chosen)
+  if (noBooking !== null) {
     return (
       <>
         <CustomerCard customer={chosen} />
         <Card title="No booking can be made">
-          <p className="text-sm text-ink">{NO_BOOKING_BECAUSE[chosen.accountStatus]}</p>
+          <p className="text-sm text-ink">{noBooking}</p>
         </Card>
       </>
     )
