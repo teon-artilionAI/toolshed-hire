@@ -34,6 +34,7 @@ from app.application.identity.ports import (
 from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
+from app.application.trading.closure_ports import ClosureDayRepository
 
 
 class UnitOfWork(Protocol):
@@ -67,6 +68,11 @@ class UnitOfWork(Protocol):
     @property
     def branches(self) -> BranchRepository:
         """Return the branch repository of this transaction."""
+        ...
+
+    @property
+    def closure_days(self) -> ClosureDayRepository:
+        """Return the closure days the owner adds and cancels."""
         ...
 
     @property

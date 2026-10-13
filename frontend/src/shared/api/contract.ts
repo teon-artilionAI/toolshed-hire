@@ -21,9 +21,10 @@
  * contract-reporting.ts, the admin operations types are in
  * contract-operations.ts, the admin catalogue types are in
  * contract-admin-catalogue.ts, the asset register types are in
- * contract-admin-assets.ts, and the staff account and customer hold types are
- * in contract-admin-users.ts. All twelve are passed on from here, and the
- * session types below stay here.
+ * contract-admin-assets.ts, the staff account and customer hold types are in
+ * contract-admin-users.ts, and the owner's closed days and closure days are in
+ * contract-trading.ts. All thirteen are passed on from here, and the session
+ * types below stay here.
  *
  * Where the generated type says less than the screens rely on, I keep a more
  * precise type here and say why beside it. A refinement can only name a member
@@ -207,6 +208,16 @@ export type {
   StaffAccountCreated,
   StaffRole,
 } from './contract-admin-users'
+export type {
+  CalendarClosedDay,
+  CalendarClosedDays,
+  CalendarQuery,
+  ClosureDay,
+  ClosureImpact,
+  ClosureImpactQuery,
+  NewClosureRequest,
+  StrandedBooking,
+} from './contract-trading'
 
 /**
  * An RFC 9457 problem document, as the backend's `ProblemDetail` emits it.

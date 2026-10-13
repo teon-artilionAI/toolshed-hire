@@ -6,7 +6,8 @@
  * a report with rows, the trail and the log, whose answers are in
  * audit-answers.ts, the catalogue, whose answers are in catalogue-answers.ts,
  * the asset register, whose answers are in asset-answers.ts, and the staff
- * accounts and customer holds, whose answers are in user-answers.ts. A scan
+ * accounts and customer holds, whose answers are in user-answers.ts. The
+ * trading calendar, a view of SC-19, answers from calendar-answers.ts. A scan
  * should not depend on what a database happens to hold, and it should run with
  * or without a backend, so these answers stand in for the API. They are
  * shaped the way the API sends them, with long names and large figures, which
@@ -20,6 +21,7 @@ import type { Page, Route } from '@playwright/test'
 import { fulfil } from './answered.ts'
 import { ASSET_ANSWERS, ASSET_TAG } from './asset-answers.ts'
 import { AUDIT_ANSWERS } from './audit-answers.ts'
+import { CALENDAR_ANSWERS, CALENDAR_HEADING, LONG_REASON } from './calendar-answers.ts'
 import { CATALOGUE_ANSWERS, CATALOGUE_MODEL_ID } from './catalogue-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
 import { HELD_CUSTOMER_NAME, LOCKED_ACCOUNT_NAME, USER_ANSWERS } from './user-answers.ts'
@@ -145,6 +147,7 @@ async function answerTheApi(route: Route, instead: Record<string, unknown>): Pro
     ...CATALOGUE_ANSWERS,
     ...ASSET_ANSWERS,
     ...USER_ANSWERS,
+    ...CALENDAR_ANSWERS,
     ...instead,
   }
   await fulfil(route, answers[key])
@@ -192,6 +195,7 @@ export const ADMIN_SCREENS: readonly AdminScreen[] = [
   { id: 'SC-21', path: `/admin/assets?asset=${ASSET_TAG}`, heading: ASSET_REGISTER_HEADING, loaded: 'Held for booking TSH-R-26-000124' },
   { id: 'SC-23', path: '/admin/users', heading: USERS_HEADING, loaded: LOCKED_ACCOUNT_NAME },
   { id: 'SC-23', path: '/admin/users?view=customers&status=ON_HOLD', heading: USERS_HEADING, loaded: HELD_CUSTOMER_NAME },
+  { id: 'VIEW-01', path: '/admin/closure-days', heading: CALENDAR_HEADING, loaded: LONG_REASON },
 ]
 
 /** SC-23 from the screens above, on the staff accounts or the customer holds. */
