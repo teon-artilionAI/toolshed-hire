@@ -65,6 +65,13 @@ jobs:
       FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      # Staging accepts only callers with a Google identity, and the browser's
+      # /api requests reach it through the function in frontend/api (C-02,
+      # #96). Setting these two back to public and rewrite is the way back.
+      API_ACCESS: iam
+      API_ROUTE: function
+      GCP_WORKLOAD_AUDIENCE: ${{ vars.GCP_WORKLOAD_AUDIENCE }}
+      GCP_INVOKER_ACCOUNT: ${{ vars.GCP_INVOKER_ACCOUNT }}
 
     steps:
       - name: Check out the repository
@@ -139,11 +146,24 @@ jobs:
       - name: Make sure the new revision is the one serving
         run: bash infra/scripts/promote-api.sh
 
+      # The service requires IAM, so the smoke test carries an ID token of the
+      # deploy account, which create-edge-identity.sh lets invoke it.
+      - name: Get an ID token for the smoke test
+        id: smoke_identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.api.outputs.service_url }}
+          id_token_include_email: true
+
       # Without this, a green run would mean only that gcloud accepted the
       # request, which is a much weaker claim than it looks.
       - name: Smoke test the API
         env:
           SERVICE_URL: ${{ steps.api.outputs.check_url }}
+          SMOKE_TEST_ID_TOKEN: ${{ steps.smoke_identity.outputs.id_token }}
         run: bash infra/scripts/smoke-test.sh
 
       - name: Set up Node for the frontend build
@@ -173,6 +193,7 @@ jobs:
       - name: Check the security headers and TLS of the deployed site
         env:
           SITE_URL: ${{ env.FRONTEND_ORIGIN }}
+          IAM_ONLY_SERVICE_URL: ${{ steps.api.outputs.service_url }}
         run: bash infra/scripts/check-security-headers.sh
 
       - name: Record the deployment in the run summary

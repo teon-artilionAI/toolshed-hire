@@ -14,6 +14,13 @@
 # The address is masked as soon as it is known, and the output of the deploy
 # command, which prints it, is filtered.
 #
+# API_ACCESS decides who may call the service (C-02, #96). "public", the
+# default, lets anyone in, and the frontend's rewrite forwards /api to it.
+# "iam" requires a Google identity, so only the frontend's /api function, whose
+# invoker account create-edge-identity.sh sets up, and the deploy account's
+# smoke test get in. Switching an existing service to "iam" removes its public
+# grant, and switching back adds it again.
+#
 # Outputs, written to GITHUB_OUTPUT:
 #   service_url     the stable URL of the service
 #   check_url       the URL to smoke test (the candidate URL when one exists)
@@ -42,6 +49,16 @@ USE_CANDIDATE="${USE_CANDIDATE:-false}"
 # for its key.
 PHOTO_BUCKET="${PHOTO_BUCKET:-}"
 CANDIDATE_TAG="candidate"
+API_ACCESS="${API_ACCESS:-public}"
+
+case "${API_ACCESS}" in
+  public) access_flag="--allow-unauthenticated" ;;
+  iam) access_flag="--no-allow-unauthenticated" ;;
+  *)
+    echo "::error title=Unknown API_ACCESS::API_ACCESS is '${API_ACCESS}'. It must be public or iam."
+    exit 1
+    ;;
+esac
 
 CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
 CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-1}"
@@ -104,7 +121,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --timeout="${CLOUD_RUN_REQUEST_TIMEOUT}" \
   --min-instances="${CLOUD_RUN_MIN_INSTANCES}" \
   --max-instances="${CLOUD_RUN_MAX_INSTANCES}" \
-  --allow-unauthenticated \
+  "${access_flag}" \
   --set-env-vars="ENVIRONMENT=${ENVIRONMENT_NAME},CORS_ORIGINS=${FRONTEND_ORIGIN},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},EMAIL_ALLOWED_RECIPIENT=${EMAIL_ALLOWED_RECIPIENT},PHOTO_BUCKET=${PHOTO_BUCKET}" \
   --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_NAME}:latest,RESEND_API_KEY=${RESEND_API_KEY_SECRET}:latest" \
   --revision-suffix="${revision_suffix}" \
@@ -136,6 +153,7 @@ fi
   echo "service_url=${service_url}"
   echo "check_url=${check_url}"
   echo "used_candidate=${used_candidate}"
+  echo "api_access=${API_ACCESS}"
 } >> "${GITHUB_OUTPUT}"
 
 echo "Deployed. The service address is kept out of this log on purpose."

@@ -28,7 +28,7 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
-      include: ['src/**/*.test.{ts,tsx}'],
+      include: ['src/**/*.test.{ts,tsx}', 'api/**/*.test.ts'],
       // I keep the browser tests out of this run. Playwright owns the e2e
       // folder and its files would fail here, because they expect a real page.
       exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
