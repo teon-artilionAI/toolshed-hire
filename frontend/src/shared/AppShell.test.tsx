@@ -40,7 +40,7 @@ function menuLabels(): Set<string> {
 
 const CUSTOMER_MENU = new Set(['Catalogue', 'Search', 'Basket', 'My Hires', 'Account'])
 const COUNTER_MENU = ['Today', 'Diary', 'Customers', 'New Booking', 'Locator', 'Overdue']
-const ADMIN_MENU = ['Overview', 'Catalogue', 'Assets', 'Reports', 'Users', 'Audit']
+const ADMIN_MENU = ['Overview', 'Catalogue', 'Assets', 'Reports', 'Users', 'Audit', 'Calendar']
 
 describe('the menu and the layout', () => {
   it('offers a visitor the customer menu and a way to sign in', async () => {

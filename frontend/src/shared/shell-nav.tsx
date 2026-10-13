@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   AlarmClock, BarChart3, Boxes, CalendarDays, CalendarPlus, CalendarRange,
-  Home, LayoutDashboard, MapPin, MoreHorizontal, ScrollText, Search,
+  CalendarX, Home, LayoutDashboard, MapPin, MoreHorizontal, ScrollText, Search,
   ShieldCheck, ShoppingCart, Tags, User, Users, Wrench, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -20,7 +20,7 @@ import { MAX_TAB_BAR_ITEMS, TAB_CLASS, navItemClass } from './shell-nav-style'
 
 const ICONS: Record<string, LucideIcon> = {
   AlarmClock, BarChart3, Boxes, CalendarDays, CalendarPlus, CalendarRange,
-  Home, LayoutDashboard, MapPin, ScrollText, Search, ShieldCheck,
+  CalendarX, Home, LayoutDashboard, MapPin, ScrollText, Search, ShieldCheck,
   ShoppingCart, Tags, User, Users,
 }
 

@@ -11,7 +11,8 @@
  * The figures link to where the owner would go next. The month opens the
  * report for the same period, the damage reports open the asset register, the
  * holds open the customer holds, the failed notifications open the log, and
- * what is due at a branch opens that branch's diary.
+ * what is due at a branch opens that branch's diary. The trading calendar,
+ * where the owner closes a branch on a day, is a link beside the heading.
  *
  * The screen is left open all day. It reads the figures again whenever the
  * window comes back into focus, which is the cache's rule for the dashboard,
@@ -20,7 +21,8 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { RotateCw } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { CalendarX, RotateCw } from 'lucide-react'
 import type { AdminDashboard as Dashboard } from '../../shared/api/contract'
 import { adminQueries } from '../../shared/api/admin-queries'
 import { queryPhase } from '../../shared/api/query-phase'
@@ -28,6 +30,7 @@ import { ErrorState, LoadingState } from '../../shared/async-states'
 import { formatDate } from '../../shared/format'
 import { branchClockTime } from '../../shared/today'
 import { PageHeader } from '../../shared/ui'
+import { TRADING_CALENDAR_PATH } from './admin-links'
 import { BranchCards } from './SC19-Branch-Cards'
 import { FleetToday, MonthSoFar, NeedsAttention } from './SC19-Figures'
 
@@ -81,6 +84,12 @@ export default function AdminDashboard() {
         screenId="SC-19"
         title="Business overview"
         subtitle="Where the three branches stand today, how the month is going, and what is waiting on you."
+        actions={
+          <Link to={TRADING_CALENDAR_PATH} className="btn-secondary px-md">
+            <CalendarX className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Trading calendar
+          </Link>
+        }
       />
       {phase === 'failed' ? (
         <ErrorState

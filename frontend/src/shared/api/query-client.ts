@@ -172,6 +172,9 @@ export const ADMIN_USERS_SEGMENT = 'users'
 /** The second segment of the customer holds. */
 export const ADMIN_CUSTOMERS_SEGMENT = 'customers'
 
+/** The second segment of the owner's trading calendar, the closed days. */
+export const ADMIN_CALENDAR_SEGMENT = 'calendar'
+
 /** How long a report counts as fresh. */
 export const REPORT_FRESH_MS = 60_000
 
@@ -242,5 +245,6 @@ export function createQueryClient(): QueryClient {
   client.setQueryDefaults([ADMIN_KEY, ADMIN_ASSETS_SEGMENT], NEVER_FRESH)
   client.setQueryDefaults([ADMIN_KEY, ADMIN_USERS_SEGMENT], NEVER_FRESH)
   client.setQueryDefaults([ADMIN_KEY, ADMIN_CUSTOMERS_SEGMENT], NEVER_FRESH)
+  client.setQueryDefaults([ADMIN_KEY, ADMIN_CALENDAR_SEGMENT], { staleTime: CATALOGUE_FRESH_MS })
   return client
 }

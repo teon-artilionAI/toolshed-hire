@@ -10,6 +10,12 @@ import { writeNotificationFilters } from './audit-address'
 import { FIRST_PAGE, writeReportFilters } from './report-address'
 import { holdsHref } from './users-address'
 
+/** SC-19, the business overview, which is the owner's home. */
+export const ADMIN_HOME_PATH = '/admin'
+
+/** The trading calendar, a view of SC-19, where the owner closes a day. */
+export const TRADING_CALENDAR_PATH = '/admin/closure-days'
+
 /** SC-22, the utilisation and gross contribution report. */
 export const REPORT_PATH = '/admin/reports'
 

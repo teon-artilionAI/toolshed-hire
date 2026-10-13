@@ -1499,6 +1499,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/closure-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the public holidays and closure days in a span, by day
+         * @description Return every public holiday and live closure day in the span, by day.
+         *
+         *     Raises:
+         *         ValidationFailure: If `to` is before `from` or the span is longer than
+         *             a year. HTTP 422, naming `to`.
+         */
+        get: operations["read_closure_days_api_admin_closure_days_get"];
+        put?: never;
+        /**
+         * Close a branch, or every branch, on a day, with the reason
+         * @description Add the closure and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: For a reason out of bounds, a day that has passed or
+         *             is more than a year ahead, or a branch that is not trading. HTTP
+         *             422, naming the field.
+         *         StateTransitionError: If the day is closed already. HTTP 409.
+         */
+        post: operations["post_closure_day_api_admin_closure_days_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/closure-days/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the bookings that start or end on a day a closure would close
+         * @description Return the held and confirmed bookings that start or end on the day.
+         *
+         *     Raises:
+         *         ValidationFailure: If no trading branch has the code. HTTP 422, naming
+         *             `branchCode`.
+         */
+        get: operations["read_closure_impact_api_admin_closure_days_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/closure-days/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a closure day, which opens the day again
+         * @description Cancel the closure and record it, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such closure. HTTP 404.
+         *         StateTransitionError: If it was cancelled already. HTTP 409.
+         */
+        post: operations["post_closure_cancel_api_admin_closure_days__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -2519,6 +2601,40 @@ export interface components {
             depositPerUnit: string;
         };
         /**
+         * ClosedDayEntryResponse
+         * @description One day the owner's list shows as closed.
+         *
+         *     `branchCode` is null for a day every branch is closed. `closureId` is the
+         *     key to cancel a closure day by, and null for a public holiday, which
+         *     cannot be cancelled.
+         */
+        ClosedDayEntryResponse: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Branchcode */
+            branchCode: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "public_holiday" | "closure";
+            /** Closureid */
+            closureId: string | null;
+        };
+        /**
+         * ClosedDayListResponse
+         * @description Every public holiday and live closure day in the span, by day.
+         */
+        ClosedDayListResponse: {
+            /** Items */
+            items: components["schemas"]["ClosedDayEntryResponse"][];
+        };
+        /**
          * ClosedDayResponse
          * @description A day a branch does not trade, and why.
          */
@@ -2535,6 +2651,48 @@ export interface components {
              * @description weekly, public_holiday or closure.
              */
             kind: string;
+        };
+        /**
+         * ClosureDayRequest
+         * @description A day to close, at one branch or at every branch, and why. Customers read the reason.
+         */
+        ClosureDayRequest: {
+            /** Branchcode */
+            branchCode?: string | null;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * ClosureDayResponse
+         * @description One closure day, as it was added or as it is once cancelled.
+         *
+         *     `branchCode` is null for a closure of every branch. `cancelledAt` is null
+         *     while the closure is live.
+         */
+        ClosureDayResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Branchcode */
+            branchCode: string | null;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Reason */
+            reason: string;
+            /** Createdat */
+            createdAt: string;
+            /** Cancelledat */
+            cancelledAt: string | null;
         };
         /**
          * CollectionDueResponse
@@ -3980,6 +4138,50 @@ export interface components {
             role?: components["schemas"]["UserRole"] | null;
             /** Branchcode */
             branchCode?: string | null;
+        };
+        /**
+         * StrandedBookingListResponse
+         * @description The bookings a closure would strand, by start, and how many there are in all.
+         *
+         *     `items` holds at most two hundred. `total` counts every one of them.
+         */
+        StrandedBookingListResponse: {
+            /** Items */
+            items: components["schemas"]["StrandedBookingResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * StrandedBookingResponse
+         * @description A held or confirmed booking that starts or ends on the day about to close.
+         *
+         *     `hireDay` is `collection` when the hire starts that day and `return` when
+         *     it ends that day. The booking is not changed. The owner rings the customer.
+         */
+        StrandedBookingResponse: {
+            /** Reference */
+            reference: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /**
+             * Hireday
+             * @enum {string}
+             */
+            hireDay: "collection" | "return";
         };
         /**
          * TokenRequest
@@ -7511,6 +7713,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_closure_days_api_admin_closure_days_get: {
+        parameters: {
+            query?: {
+                /** @description The first day. Today when left out. */
+                from?: string | null;
+                /** @description The last day, which is included. A year from the first when left out. */
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosedDayListResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_closure_day_api_admin_closure_days_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClosureDayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosureDayResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The day is closed already, at that branch or at every branch. `detail` names the closure to cancel first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_closure_impact_api_admin_closure_days_impact_get: {
+        parameters: {
+            query: {
+                /** @description The day the owner is thinking of closing. */
+                day: string;
+                /** @description The branch. Every branch when left out. */
+                branchCode?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrandedBookingListResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_closure_cancel_api_admin_closure_days__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the closure day. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosureDayResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such closure day. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The closure day was cancelled already. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
