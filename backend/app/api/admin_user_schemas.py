@@ -50,6 +50,13 @@ STAFF_CHANGE_REFUSED_RESPONSE: Final[dict[str, object]] = {
         "deactivate. `detail` says which."
     ),
 }
+ANONYMISATION_REFUSED_RESPONSE: Final[dict[str, object]] = {
+    "model": ProblemDetail,
+    "description": (
+        "The customer was anonymised already, or still has a booking open, a hire not yet "
+        "settled or money owing. `detail` says which."
+    ),
+}
 NO_LONGER_ADMINISTRATOR_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": (
@@ -100,6 +107,12 @@ class CustomerStatusRequest(StrictRequest):
     reason: ReasonText
 
 
+class AnonymisationRequest(StrictRequest):
+    """Why a customer's personal details are being removed. The audit event keeps the reason."""
+
+    reason: ReasonText
+
+
 class AdminUserResponse(CamelModel):
     """One staff account as the administrator sees it, never with anything about a password.
 
@@ -143,11 +156,13 @@ class AdminUserPageResponse(CamelModel):
 
 
 __all__ = [
+    "ANONYMISATION_REFUSED_RESPONSE",
     "NO_LONGER_ADMINISTRATOR_RESPONSE",
     "STAFF_CHANGE_REFUSED_RESPONSE",
     "UNKNOWN_STAFF_RESPONSE",
     "AdminUserPageResponse",
     "AdminUserResponse",
+    "AnonymisationRequest",
     "CustomerStatusRequest",
     "DeactivationRequest",
     "StaffCreateRequest",

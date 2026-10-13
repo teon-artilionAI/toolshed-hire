@@ -102,6 +102,7 @@ class TestRegisteringAWalkIn:
             "tradeDiscountPercent": "0.00",
             "noShowCount": 0,
             "homeBranchCode": branch.code,
+            "anonymisedAt": None,
         }
 
     def test_the_profile_is_stored_with_no_account_and_none_is_made(

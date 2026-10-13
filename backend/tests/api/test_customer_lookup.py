@@ -31,6 +31,7 @@ SUMMARY_MEMBERS: Final[frozenset[str]] = frozenset(
         "id", "displayName", "email", "phone", "hasLogin", "emailVerified", "customerType",
         "companyName", "idDocumentType", "idDocumentLast4", "billingSuburb", "billingCity",
         "accountStatus", "tradeDiscountPercent", "noShowCount", "homeBranchCode",
+        "anonymisedAt",
     }
 )  # fmt: skip
 PAGE_MEMBERS: Final[frozenset[str]] = frozenset({"items", "page", "pageSize", "total"})
@@ -131,6 +132,7 @@ class TestTheCustomerSummary:
             "tradeDiscountPercent": "0.00",
             "noShowCount": 0,
             "homeBranchCode": branch.code,
+            "anonymisedAt": None,
         }
 
     def test_a_walk_in_has_no_login_and_no_email(

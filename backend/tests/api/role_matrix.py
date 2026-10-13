@@ -144,6 +144,9 @@ MATRIX: Final[tuple[MatrixRow, ...]] = (
     ),
     MatrixRow("identity", API, "GET", "/api/admin/customers", ADMIN_ONLY),
     MatrixRow("identity", API, "POST", f"/api/admin/customers/{NOBODYS_KEY}/status", ADMIN_ONLY),
+    MatrixRow(
+        "identity", API, "POST", f"/api/admin/customers/{NOBODYS_KEY}/anonymise", ADMIN_ONLY
+    ),
     MatrixRow("branches", API, "GET", "/api/branches", EVERYONE),
     MatrixRow("catalogue", API, "GET", "/api/catalogue/categories", EVERYONE),
     MatrixRow("availability", API, "GET", "/api/catalogue/availability", EVERYONE),

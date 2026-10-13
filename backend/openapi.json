@@ -5655,6 +5655,92 @@
         }
       }
     },
+    "/api/admin/customers/{id}/anonymise": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Remove a customer's personal details at their request, with the reason",
+        "description": "Anonymise the customer and record it with the reason, in one transaction.\n\nRaises:\n    NotFound: If there is no customer with this key. HTTP 404.\n    StateTransitionError: If the customer was anonymised already or still\n        has something open. HTTP 409.\n    ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.",
+        "operationId": "post_customer_anonymisation_api_admin_customers__id__anonymise_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the customer.",
+              "title": "Id"
+            },
+            "description": "The key of the customer."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnonymisationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummaryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no customer with this key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The customer was anonymised already, or still has a booking open, a hire not yet settled or money owing. `detail` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/closure-days": {
       "get": {
         "tags": [
@@ -7274,6 +7360,23 @@
         ],
         "title": "AdminUserResponse",
         "description": "One staff account as the administrator sees it, never with anything about a password.\n\n`branchCode` is null for an administrator. `lockedUntil` is when a lock\nafter failed sign ins ends, and null when there has been none since the\nlast success."
+      },
+      "AnonymisationRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "AnonymisationRequest",
+        "description": "Why a customer's personal details are being removed. The audit event keeps the reason."
       },
       "AssetCreateRequest": {
         "properties": {
@@ -9041,6 +9144,17 @@
           "homeBranchCode": {
             "type": "string",
             "title": "Homebranchcode"
+          },
+          "anonymisedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anonymisedat"
           }
         },
         "type": "object",
@@ -9060,10 +9174,11 @@
           "accountStatus",
           "tradeDiscountPercent",
           "noShowCount",
-          "homeBranchCode"
+          "homeBranchCode",
+          "anonymisedAt"
         ],
         "title": "CustomerSummaryResponse",
-        "description": "A customer as the counter sees one.\n\n`email` is null and `hasLogin` is false for a walk-in, who has no account."
+        "description": "A customer as the counter sees one.\n\n`email` is null and `hasLogin` is false for a walk-in, who has no account.\n`anonymisedAt` is when the customer's identifying details were written\nover, and null while they are still known. An anonymised customer is\ncalled \"Former customer\" and holds no real contact details."
       },
       "CustomerType": {
         "type": "string",

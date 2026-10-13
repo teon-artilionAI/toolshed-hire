@@ -20,6 +20,7 @@ from app.api.admin_catalogue_presenter import cleared_or_sent, sent
 from app.api.admin_user_schemas import (
     AdminUserPageResponse,
     AdminUserResponse,
+    AnonymisationRequest,
     CustomerStatusRequest,
     DeactivationRequest,
     StaffCreatedResponse,
@@ -28,6 +29,7 @@ from app.api.admin_user_schemas import (
 )
 from app.api.booking_deps import actor_of
 from app.application.catalogue.admin_commands import Change
+from app.application.identity.anonymise_customer import AnonymiseCustomerCommand
 from app.application.identity.customer_standing import ChangeCustomerStandingCommand
 from app.application.identity.staff_commands import (
     DeactivateStaffAccountCommand,
@@ -109,6 +111,15 @@ def standing_command(
         customer_profile_id=customer_id,
         account_status=request.account_status,
         reason=request.reason,
+    )
+
+
+def anonymisation_command(
+    user: UserAccount, customer_id: UUID, request: AnonymisationRequest
+) -> AnonymiseCustomerCommand:
+    """Return the command that anonymises a customer at the owner's request."""
+    return AnonymiseCustomerCommand(
+        actor=actor_of(user), customer_profile_id=customer_id, reason=request.reason
     )
 
 
