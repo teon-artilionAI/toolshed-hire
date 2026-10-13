@@ -2141,9 +2141,13 @@ export interface components {
             /** Action */
             action: string;
             /** Beforestate */
-            beforeState: Record<string, unknown>;
+            beforeState: {
+                [key: string]: unknown;
+            };
             /** Afterstate */
-            afterState: Record<string, unknown>;
+            afterState: {
+                [key: string]: unknown;
+            };
             /** Requestid */
             requestId: string | null;
         };
@@ -3313,7 +3317,9 @@ export interface components {
             /** Instance */
             instance?: string | null;
             /** Errors */
-            errors?: Record<string, unknown> | null;
+            errors?: {
+                [key: string]: unknown;
+            } | null;
             /** Requestid */
             requestId?: string | null;
         };
