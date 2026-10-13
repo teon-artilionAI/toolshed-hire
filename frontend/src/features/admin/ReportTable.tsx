@@ -76,7 +76,7 @@ function ReportLine({ row, groupBy }: { row: ReportRow; groupBy: ReportGrouping 
   return (
     <tr role="row" className="block px-md py-sm lg:table-row">
       <th role="rowheader" scope="row" className={`${CELL_BASE} block font-medium text-ink`}>
-        <span className={`break-words ${groupBy === 'asset' ? 'font-mono' : ''}`}>{row.label}</span>
+        <span className={`wrap-break-word ${groupBy === 'asset' ? 'font-mono' : ''}`}>{row.label}</span>
         <RowDetail row={row} groupBy={groupBy} />
       </th>
       {FIGURE_COLUMNS.map((column) => (

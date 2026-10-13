@@ -70,9 +70,9 @@ function CustomerRow({
     <li className="rounded border border-line bg-surface p-md">
       <div className="flex flex-wrap items-start justify-between gap-md">
         <div className="min-w-0">
-          <p className="break-words font-medium text-ink">{customer.displayName}</p>
+          <p className="wrap-break-word font-medium text-ink">{customer.displayName}</p>
           {customer.companyName && (
-            <p className="break-words text-sm text-slate-soft">{customer.companyName}</p>
+            <p className="wrap-break-word text-sm text-slate-soft">{customer.companyName}</p>
           )}
           <p className="tabular mt-xs text-sm text-ink">{customer.phone}</p>
           <p className="break-all text-sm text-slate-soft">{customer.email ?? 'No email on file'}</p>

@@ -75,7 +75,7 @@ export default function CatalogueHome() {
 
       <section className="card mb-lg overflow-hidden">
         <div className="grid lg:grid-cols-5">
-          <div className="bg-gradient-to-br from-ink to-slate p-lg text-white lg:col-span-2 lg:p-xl">
+          <div className="bg-linear-to-br from-ink to-slate p-lg text-white lg:col-span-2 lg:p-xl">
             <p className="font-mono text-xs uppercase tracking-wide text-accent">
               Booked, not promised
             </p>

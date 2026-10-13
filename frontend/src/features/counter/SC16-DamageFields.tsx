@@ -40,7 +40,7 @@ function OptionCard({
   return (
     <label
       htmlFor={id}
-      className={`flex min-h-[2.75rem] cursor-pointer items-start gap-sm rounded border p-sm transition-colors duration-200 ${
+      className={`flex min-h-11 cursor-pointer items-start gap-sm rounded border p-sm transition-colors duration-200 ${
         checked ? 'border-accent bg-accent-wash' : 'border-line hover:bg-muted'
       }`}
     >

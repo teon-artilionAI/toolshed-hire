@@ -31,7 +31,7 @@ function Saved({ label, children }: { label: string; children: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-sm text-slate-soft">{label}</dt>
-      <dd className="break-words text-sm text-ink">{children}</dd>
+      <dd className="wrap-break-word text-sm text-ink">{children}</dd>
     </div>
   )
 }

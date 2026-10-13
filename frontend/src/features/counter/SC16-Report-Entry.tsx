@@ -118,16 +118,16 @@ export function ReportEntry({
         </h3>
         <StatusPill status={DAMAGE_STATUS_PILL[report.status]} label={DAMAGE_STATUS_LABEL[report.status]} />
       </div>
-      <p className="mt-xs break-words text-sm text-slate-soft">
+      <p className="mt-xs wrap-break-word text-sm text-slate-soft">
         {DAMAGE_SEVERITY_LABEL[report.severity]}. Reported {branchDateTime(report.reportedAt)} by {report.reportedByName}
         {report.rentalReference === null ? '' : `, from hire ${report.rentalReference}`}.
       </p>
-      <p className="mt-xs break-words text-sm text-ink">{report.description}</p>
+      <p className="mt-xs wrap-break-word text-sm text-ink">{report.description}</p>
       <p className="tabular mt-xs text-sm text-slate-soft">
         Repair estimated at {money(report.repairEstimate)}. {chargedInWords(report)}
       </p>
       {!open && (
-        <p className="tabular mt-xs break-words text-sm text-slate-soft">
+        <p className="tabular mt-xs wrap-break-word text-sm text-slate-soft">
           {closedInWords(report)}
           {report.resolutionNotes === null ? '' : ` ${report.resolutionNotes}`}
         </p>

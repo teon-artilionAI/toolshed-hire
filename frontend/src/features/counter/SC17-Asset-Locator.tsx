@@ -80,7 +80,7 @@ export default function AssetLocator() {
         subtitle="Search any asset tag or model across all three branches. Nothing on this screen changes anything, so it is safe to use while you are on the phone."
       />
 
-      <div className="mb-lg max-w-xl">
+      <div className="mb-lg max-w-(--container-xl)">
         <Field
           label="Asset tag or model"
           htmlFor="locator-search"
@@ -94,7 +94,7 @@ export default function AssetLocator() {
             <input
               id="locator-search"
               type="search"
-              className="field-input pl-[2.75rem] pr-[3rem]"
+              className="field-input pl-11 pr-[3rem]"
               value={draft}
               maxLength={MAX_LOCATOR_SEARCH_LENGTH}
               placeholder="TSH-PC-0021, or plate compactor"

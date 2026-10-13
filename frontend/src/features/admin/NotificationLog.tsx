@@ -113,7 +113,7 @@ export default function NotificationLog() {
   return (
     <>
       <form className="card mb-lg p-lg" aria-label="Choose which emails to show" onSubmit={(e) => e.preventDefault()}>
-        <div className="max-w-sm">
+        <div className="max-w-(--container-sm)">
           <Field label="Which emails" htmlFor={STATUS_FILTER_ID}>
             <select
               id={STATUS_FILTER_ID}

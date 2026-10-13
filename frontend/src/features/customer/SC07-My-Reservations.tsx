@@ -184,7 +184,7 @@ export default function MyReservations() {
         }
       />
 
-      <div className="mb-md max-w-xs">
+      <div className="mb-md max-w-(--container-xs)">
         <label className="field-label" htmlFor="reservation-status">
           Filter by status
         </label>
