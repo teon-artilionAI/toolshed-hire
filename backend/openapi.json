@@ -875,7 +875,7 @@
           "booking"
         ],
         "summary": "Create a draft reservation",
-        "description": "Create a priced draft. Nothing is held until it is put on hold.\n\nRaises:\n    AuthorisationFailure: If a customer names a customer profile. HTTP 403.\n    BranchScopeError: If counter staff book at another branch. HTTP 403.\n    AccountOnHoldError: If the customer's account is on hold. HTTP 403.\n    ValidationFailure: If a field is refused. HTTP 422, naming the field.",
+        "description": "Create a priced draft. Nothing is held until it is put on hold.\n\nRaises:\n    AuthorisationFailure: If a customer names a customer profile. HTTP 403.\n    BranchScopeError: If counter staff book at another branch. HTTP 403.\n    AccountOnHoldError: If the customer's account is on hold. HTTP 403.\n    CustomerAnonymisedError: If the customer's personal details were\n        removed. HTTP 403.\n    ValidationFailure: If a field is refused. HTTP 422, naming the field.",
         "operationId": "post_reservation_api_reservations_post",
         "requestBody": {
           "required": true,
@@ -899,7 +899,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1044,7 +1044,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1101,7 +1101,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1178,7 +1178,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1272,7 +1272,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1359,7 +1359,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1436,7 +1436,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1645,7 +1645,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1918,7 +1918,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2007,7 +2007,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2094,7 +2094,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2166,7 +2166,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2405,7 +2405,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2492,7 +2492,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2569,7 +2569,7 @@
             }
           },
           "403": {
-            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
             "content": {
               "application/json": {
                 "schema": {

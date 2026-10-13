@@ -7,8 +7,10 @@ them on their booking, hire, damage report, waived charge and confirmation are
 written over. The hire and its charges stay, linked to the profile. The audit
 event names the trigger and the reason, and no value the customer had. Counter
 staff and customers are refused with 403, an unknown customer with 404, and a
-customer anonymised already or with something open with 409. These run against
-the in memory database on the still clock.
+customer anonymised already or with something open with 409. Afterwards the
+counter is refused a booking for them with 403, and so is the customer, whose
+account no longer signs in. These run against the in memory database on the
+still clock.
 """
 
 from __future__ import annotations
@@ -60,6 +62,7 @@ from tests.support.anonymisation_world import (
 from tests.support.booking_api import BookingClient, answered
 from tests.support.clock import FixedClock
 from tests.support.factories import TEST_PASSWORD, Factory
+from tests.support.http import problem_code
 from tests.support.sessions import LOGIN_PATH
 
 REASON = "The customer asked by email for their details to be removed."
@@ -271,3 +274,46 @@ class TestRefusals:
             select(AuditEvent).where(col(AuditEvent.action) == CUSTOMER_ANONYMISED_ACTION)
         ).all()
         assert events == []
+
+
+class TestNoNewBooking:
+    """A profile that names nobody can never own a new booking."""
+
+    def test_the_counter_is_refused_a_booking_for_the_customer(
+        self,
+        session: Session,
+        factory: Factory,
+        people: BookingClient,
+        history: CustomerHistory,
+    ) -> None:
+        answered(anonymise(people, history.owner, history.world.profile.id))
+        assistant = factory.user(role=UserRole.COUNTER_STAFF, branch=history.world.branch)
+        session.commit()
+        body = history.world.payload(customer_profile_id=history.world.profile.id)
+        response = people.create(assistant, body)
+        problem = refused_with(response, status.HTTP_403_FORBIDDEN)
+        assert problem_code(response) == "customer-anonymised"
+        assert problem["detail"] == (
+            "This customer's personal details were removed, so no reservation can be made "
+            "for them."
+        )
+        assert bookings_of(session, history) == 1
+
+    def test_the_customer_is_refused_a_booking_of_their_own(
+        self, session: Session, people: BookingClient, history: CustomerHistory
+    ) -> None:
+        answered(anonymise(people, history.owner, history.world.profile.id))
+        response = people.create(history.world.customer, history.world.payload())
+        assert response.status_code in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}
+        assert bookings_of(session, history) == 1
+
+
+def bookings_of(session: Session, history: CustomerHistory) -> int:
+    """Return how many bookings the customer's profile owns, the settled one included."""
+    return len(
+        session.exec(
+            select(Reservation).where(
+                col(Reservation.customer_profile_id) == history.world.profile.id
+            )
+        ).all()
+    )

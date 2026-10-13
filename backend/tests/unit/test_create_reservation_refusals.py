@@ -29,6 +29,7 @@ from app.domain.errors import (
     AccountOnHoldError,
     AuthorisationFailure,
     BranchScopeError,
+    CustomerAnonymisedError,
     ValidationFailure,
 )
 from app.domain.identity import Actor
@@ -64,6 +65,15 @@ def refusal_of(world: MemoryWorld, command: CreateReservationCommand) -> Validat
     assert world.store.committed.reservations == []
     assert world.store.committed.audit_events == []
     return refusal.value
+
+
+def anonymised(world: MemoryWorld) -> MemoryWorld:
+    """Return the world with its customer's personal details removed (#113)."""
+    world.store.profiles = {
+        account: replace(profile, anonymised=True)
+        for account, profile in world.store.profiles.items()
+    }
+    return world
 
 
 def with_lines(world: MemoryWorld, *lines: RequestedLine) -> CreateReservationCommand:
@@ -277,6 +287,26 @@ class TestTheBranchAndTheCustomer:
         assert refusal.value.rule == "BR-18"
         assert refusal.value.detail == {"account_status": standing.value}
         assert world.store.committed.reservations == []
+
+    def test_a_customer_whose_details_were_removed_cannot_create_a_draft(self) -> None:
+        world = anonymised(build_memory_world())
+        with pytest.raises(CustomerAnonymisedError) as refusal:
+            open_desk(world).drafted()
+        assert refusal.value.rule == "NFR-16"
+        assert refusal.value.message == (
+            "This customer's personal details were removed, so no reservation can be made "
+            "for them."
+        )
+        assert world.store.committed.reservations == []
+
+    def test_staff_cannot_book_for_a_customer_whose_details_were_removed(self) -> None:
+        world = anonymised(build_memory_world(account_status=AccountStatus.ON_HOLD))
+        with pytest.raises(CustomerAnonymisedError):
+            open_desk(world).drafted(
+                world.draft_command(actor=world.assistant(), customer_profile_id=world.profile.id)
+            )
+        assert world.store.committed.reservations == []
+        assert world.store.committed.audit_events == []
 
     def test_staff_cannot_book_for_a_customer_who_is_on_hold_either(self) -> None:
         world = build_memory_world(account_status=AccountStatus.ON_HOLD)

@@ -264,6 +264,7 @@ class SqlCustomerRepository:
             email=email,
             trade_discount_percent=Decimal(row.trade_discount_percent),
             email_verified=email_verified_at is not None,
+            anonymised=row.anonymised_at is not None,
         )
 
 

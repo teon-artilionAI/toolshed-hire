@@ -187,7 +187,12 @@ def branch_of(uow: UnitOfWork, branch_code: str) -> Branch:
 
 
 def customer_named_in(uow: UnitOfWork, command: CreateReservationCommand) -> CustomerProfile:
-    """Return the customer profile the booking is for.
+    """Return the customer profile the booking is for, locked until the booking commits.
+
+    The lock is the one an anonymisation takes on the same row, so a booking
+    and the removal of the customer's details take turns. Whichever comes
+    second sees the first, and a booking is never left pointing at a profile
+    that names nobody (#113).
 
     Raises:
         ValidationFailure: Naming `customerProfileId` when staff named no
@@ -201,10 +206,15 @@ def customer_named_in(uow: UnitOfWork, command: CreateReservationCommand) -> Cus
             raise ValidationFailure(
                 NO_PROFILE_MESSAGE, {"customer_user_id": str(command.actor.user_id)}
             )
-        return own
+        locked = uow.customers.get_for_update(own.id)
+        if locked is None:
+            raise ValidationFailure(
+                NO_PROFILE_MESSAGE, {"customer_user_id": str(command.actor.user_id)}
+            )
+        return locked
     if command.customer_profile_id is None:
         raise refused(CUSTOMER_PARAMETER, CUSTOMER_REQUIRED_MESSAGE)
-    named = uow.customers.get(command.customer_profile_id)
+    named = uow.customers.get_for_update(command.customer_profile_id)
     if named is None:
         raise refused(
             CUSTOMER_PARAMETER,

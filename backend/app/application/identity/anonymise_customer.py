@@ -1,7 +1,9 @@
 """Anonymising one customer, which the owner does when a customer asks (#113).
 
 The owner gives a reason, which the audit event keeps. In one unit of work the
-profile and the account are locked, the customer is refused if they were
+profile and the account are locked, the profile with the same lock a new
+booking takes on it, so the two take turns and a booking made a moment before
+is seen as open, the customer is refused if they were
 anonymised already or still have a booking open, a hire not settled or money
 owing, and otherwise every identifying column the personal data map names on
 the profile and the account is written over with the values of
