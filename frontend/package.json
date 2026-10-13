@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/bundle-check.mjs",
-    "lint": "oxlint && node scripts/container-widths-check.mjs",
+    "lint": "oxlint && node scripts/container-widths-check.mjs && node scripts/renamed-utility-prose-check.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --build --force",
     "test": "vitest run",
