@@ -20,6 +20,7 @@ import {
   DUE_OUT,
   MONDAY_OF_NEXT_WEEK,
   MONDAY_OF_THIS_WEEK,
+  OPEN_DAY,
 } from '../../test/overview-samples'
 import { SCREEN_WAIT, currentAddress } from '../../test/render-app'
 import { REFERENCE, SECOND_REFERENCE } from '../../test/reservation-samples'
@@ -29,7 +30,7 @@ const TODAY_HEADING = /^Thursday 12 March 2026/
 
 /** Today at Bellville, with two bookings going out and one hire coming back. */
 const BUSY_TODAY = diaryAnswering([
-  { date: TEST_TODAY, collections: [DUE_OUT, COLLECTED_TODAY], returns: [DUE_BACK] },
+  { date: TEST_TODAY, trading: OPEN_DAY, collections: [DUE_OUT, COLLECTED_TODAY], returns: [DUE_BACK] },
 ])
 
 function day(name: RegExp): HTMLElement {
@@ -118,7 +119,7 @@ describe('today in the diary', () => {
   it('says when a booking is due back, and never reads a booked date as the day it came back', async () => {
     const back = { ...COLLECTED_TODAY, status: 'RETURNED' as const }
     await openDiary({
-      [DIARY_ROUTE]: diaryAnswering([{ date: TEST_TODAY, collections: [DUE_OUT, back], returns: [] }]),
+      [DIARY_ROUTE]: diaryAnswering([{ date: TEST_TODAY, trading: OPEN_DAY, collections: [DUE_OUT, back], returns: [] }]),
     })
     await screen.findByRole('heading', { level: 2, name: TODAY_HEADING }, SCREEN_WAIT)
 
@@ -128,9 +129,29 @@ describe('today in the diary', () => {
     expect(within(going).queryByText(/, back /)).not.toBeInTheDocument()
   })
 
+  it('says when the branch is closed on a day, and gives the hours of an open one', async () => {
+    const sunday = {
+      date: '2026-03-15',
+      trading: { open: false, opensAt: null, closesAt: null, closedReason: 'is closed on Sundays', closedKind: 'weekly' as const },
+      collections: [],
+      returns: [],
+    }
+    await openDiary({ [DIARY_ROUTE]: diaryAnswering([sunday]) }, '/counter/diary?date=2026-03-15')
+
+    expect(await screen.findByText('Bellville is closed on this day', {}, SCREEN_WAIT)).toBeVisible()
+    expect(screen.getByText(/^Closed on Sundays\. Nothing can be collected or brought back\./)).toBeVisible()
+    expect(screen.queryByText(/^Open \d\d:\d\d to/)).not.toBeInTheDocument()
+  })
+
+  it('gives the opening hours of an open day', async () => {
+    await openDiary({ [DIARY_ROUTE]: BUSY_TODAY })
+    const heading = await screen.findByRole('heading', { level: 2, name: TODAY_HEADING }, SCREEN_WAIT)
+    expect(within(heading).getByText('Open 07:00 to 17:00')).toBeVisible()
+  })
+
   it('offers no checkout for a booking that starts on a later day', async () => {
     const later = { ...DUE_OUT, from: '2026-03-13', canMarkNoShow: false }
-    await openDiary({ [DIARY_ROUTE]: diaryAnswering([{ date: '2026-03-13', collections: [later], returns: [] }]) }, '/counter/diary?date=2026-03-13')
+    await openDiary({ [DIARY_ROUTE]: diaryAnswering([{ date: '2026-03-13', trading: OPEN_DAY, collections: [later], returns: [] }]) }, '/counter/diary?date=2026-03-13')
 
     expect(await screen.findByText('Booked, not collected yet', {}, SCREEN_WAIT)).toBeVisible()
     expect(screen.queryByRole('link', { name: `Check out ${REFERENCE}` })).not.toBeInTheDocument()
@@ -159,9 +180,9 @@ describe('moving through the diary', () => {
   })
 
   it('shows a whole week from Monday, moves a week at a time, and opens one day of it', async () => {
-    const nextWednesday = { date: '2026-03-18', collections: [], returns: [{ ...DUE_BACK, dueBackOn: '2026-03-18' }] }
+    const nextWednesday = { date: '2026-03-18', trading: OPEN_DAY, collections: [], returns: [{ ...DUE_BACK, dueBackOn: '2026-03-18' }] }
     const twoWeeks = diaryAnswering([
-      { date: TEST_TODAY, collections: [DUE_OUT, COLLECTED_TODAY], returns: [DUE_BACK] },
+      { date: TEST_TODAY, trading: OPEN_DAY, collections: [DUE_OUT, COLLECTED_TODAY], returns: [DUE_BACK] },
       nextWednesday,
     ])
     const { user, network } = await openDiary({ [DIARY_ROUTE]: twoWeeks })

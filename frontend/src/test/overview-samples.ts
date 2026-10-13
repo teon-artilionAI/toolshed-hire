@@ -14,7 +14,7 @@ import type {
   BranchDiary,
   CounterDashboard,
   DiaryCollection,
-  DiaryDay,
+  DiaryDay, TradingDay,
   DiaryReturn,
   LocatedUnit,
   LocatorPage,
@@ -40,11 +40,21 @@ export const MONDAY_OF_NEXT_WEEK = '2026-03-16'
 /** Two days late, with a fee no rate would give. */
 export const ODD_LATE_FEE = '333.33'
 
+/** An ordinary weekday at the counter, open 07:00 to 17:00. */
+export const OPEN_DAY: TradingDay = {
+  open: true,
+  opensAt: '07:00',
+  closesAt: '17:00',
+  closedReason: null,
+  closedKind: null,
+}
+
 /** Everything due at Bellville today, with the true counts above the lists. */
 export const DASHBOARD: CounterDashboard = {
   branchCode: 'BLV',
   branchName: 'Bellville',
   date: TEST_TODAY,
+  trading: OPEN_DAY,
   counts: { collectionsDue: 1, returnsDue: 1, overdue: 1, onHire: 14, quarantined: 2 },
   collectionsDue: [
     {
@@ -136,7 +146,7 @@ export const DUE_BACK: DiaryReturn = {
 
 /** A day with nothing on it. */
 export function emptyDay(date: string): DiaryDay {
-  return { date, collections: [], returns: [] }
+  return { date, trading: OPEN_DAY, collections: [], returns: [] }
 }
 
 /** The diary at Bellville for the days given. */
@@ -146,7 +156,7 @@ export function diaryOf(days: DiaryDay[]): BranchDiary {
 
 /** Today at Bellville, with two bookings going out and one hire coming back. */
 export const TODAY_IN_THE_DIARY = diaryOf([
-  { date: TEST_TODAY, collections: [DUE_OUT, COLLECTED_TODAY], returns: [DUE_BACK] },
+  { date: TEST_TODAY, trading: OPEN_DAY, collections: [DUE_OUT, COLLECTED_TODAY], returns: [DUE_BACK] },
 ])
 
 /** The answer of the no show. Thandi's booking, now a no show. */

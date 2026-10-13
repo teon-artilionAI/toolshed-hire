@@ -27,7 +27,7 @@ import { expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { RAND, REFERENCE, figure } from './booking.ts'
 import { signInAsCustomer } from './customer.ts'
-import { dateFromToday } from './hire-dates.ts'
+import { openHireFromToday, todayIsTradingDay } from './hire-dates.ts'
 import { note } from './staging.ts'
 
 /** The trade customer the seed creates, in `backend/seeding/people.py`. */
@@ -160,14 +160,18 @@ async function customerCancels(browser: Browser, baseURL: string | undefined, re
 export async function bookForTheTradeCustomer(page: Page, browser: Browser, baseURL: string | undefined): Promise<CounterOutcome> {
   await startABookingForTheTradeCustomer(page)
   await addOneFreeUnit(page)
-  await page.getByRole('button', { name: 'Work out the cost' }).click()
-
   const review = stepHeading(page, REVIEW_STEP)
-  // The sentence can show under the date and in the box above the button.
-  const closed = page.getByText(CLOSED_FOR_TODAY).first()
-  await expect(review.or(closed)).toBeVisible()
 
-  if (await review.isVisible()) {
+  // On a day the branches trade, the counter first tries today. On a Sunday or
+  // a public holiday it goes straight to a later day.
+  if (todayIsTradingDay()) {
+    await page.getByRole('button', { name: 'Work out the cost' }).click()
+    // The sentence can show under the date and in the box above the button.
+    const closed = page.getByText(CLOSED_FOR_TODAY).first()
+    await expect(review.or(closed)).toBeVisible()
+  }
+
+  if (todayIsTradingDay() && (await review.isVisible())) {
     await expect(figure(page, 'Total with VAT')).toHaveText(RAND)
     const reference = await holdAndConfirm(page)
     await checkOutAndTakeBack(page, reference)
@@ -175,13 +179,13 @@ export async function bookForTheTradeCustomer(page: Page, browser: Browser, base
     return 'out and back today'
   }
 
-  const from = dateFromToday(DAYS_AHEAD_WHEN_CLOSED)
+  const { from, to } = openHireFromToday(DAYS_AHEAD_WHEN_CLOSED, HIRE_DAYS)
   note(
-    `The branch has closed for today, so the counter books ${from} instead, confirms it, and the customer ` +
-      'cancels it. Two days ahead and not one, so the cancellation is not a late one.',
+    `The branch is closed for the rest of today, so the counter books ${from} instead, confirms it, and the ` +
+      'customer cancels it. At least two days ahead and not one, so the cancellation is not a late one.',
   )
   await page.getByLabel('Goes out on').fill(from)
-  await page.getByLabel('Comes back on').fill(dateFromToday(DAYS_AHEAD_WHEN_CLOSED + HIRE_DAYS))
+  await page.getByLabel('Comes back on').fill(to)
   await expect(page.getByText(/^1 unit free at .+ for these dates$/)).toBeVisible()
   await page.getByRole('button', { name: 'Work out the cost' }).click()
   await expect(review).toBeFocused()

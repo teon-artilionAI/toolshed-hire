@@ -9,7 +9,7 @@
 import type {
   AvailabilityPage,
   BranchAvailability,
-  BranchList,
+  BranchList, OpeningHours,
   CategoryList,
   ModelAvailability,
   ModelDetail,
@@ -25,11 +25,17 @@ export const TEST_NOW = new Date('2026-03-12T08:00:00+02:00')
 export const TEST_TODAY = '2026-03-12'
 export const TEST_DEFAULT_RETURN = '2026-03-16'
 
+/** The design's week, Monday to Friday 07:00 to 17:00 and Saturday 07:00 to 13:00. */
+export const STANDARD_WEEK: OpeningHours[] = [
+  ...[1, 2, 3, 4, 5].map((weekday) => ({ weekday, opensAt: '07:00', closesAt: '17:00' })),
+  { weekday: 6, opensAt: '07:00', closesAt: '13:00' },
+]
+
 export const BRANCHES: BranchList = {
   items: [
-    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'SMW', name: 'Somerset West', suburb: 'Firgrove', city: 'Cape Town', phone: '021 555 0163', opensAt: '07:00', closesAt: '17:00' },
+    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'SMW', name: 'Somerset West', suburb: 'Firgrove', city: 'Cape Town', phone: '021 555 0163', weeklyHours: STANDARD_WEEK, closedDays: [] },
   ],
 }
 

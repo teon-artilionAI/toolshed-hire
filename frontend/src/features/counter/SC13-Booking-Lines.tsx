@@ -33,6 +33,7 @@ import LineEditor from './SC13-Line-Editor'
 import { ModelFinder } from './SC13-Model-Finder'
 import type { CounterBooking } from './use-counter-booking'
 import type { CounterBranch } from './work-branch-gate'
+import type { ClosedDays } from '../../shared/trading-days'
 
 const NO_FIELD_ERRORS: FieldErrors = {}
 
@@ -48,6 +49,7 @@ export function BookingLinesStep({
   onDraft,
   branch,
   today,
+  closed,
   booking,
   headingRef,
 }: {
@@ -55,6 +57,7 @@ export function BookingLinesStep({
   onDraft: (next: BookingDraft) => void
   branch: CounterBranch
   today: string
+  closed: ClosedDays
   booking: CounterBooking
   headingRef: RefObject<HTMLHeadingElement | null>
 }) {
@@ -62,7 +65,7 @@ export function BookingLinesStep({
   const busy = booking.pending !== null
   const refusal = booking.failure?.action === 'price' ? booking.failure.refusal : null
   const fields = refusal?.kind === 'refused' ? refusal.fields : NO_FIELD_ERRORS
-  const problems = tried ? draftProblems(draft, today) : {}
+  const problems = tried ? draftProblems(draft, today, closed) : {}
   const period = periodIsUsable(draft) ? { from: draft.from, to: draft.to } : null
   const shownFields = [
     'from',
@@ -77,7 +80,7 @@ export function BookingLinesStep({
 
   function price() {
     setTried(true)
-    if (Object.keys(draftProblems(draft, today)).length > 0) return
+    if (Object.keys(draftProblems(draft, today, closed)).length > 0) return
     booking.price(draft)
   }
 

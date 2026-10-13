@@ -19,9 +19,10 @@
  * unit.
  */
 
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { REFERENCE } from './booking.ts'
+import { CLOSED_TODAY_REASON, todayIsTradingDay } from './hire-dates.ts'
 
 /** How many digits of the time go into a phone number, after its prefix. */
 const PHONE_TIME_DIGITS = 8
@@ -82,6 +83,7 @@ export async function bookForTodayAtTheCounter(
   projectName: string,
   purpose: BookingPurpose = 'noShow',
 ): Promise<CounterBooking> {
+  test.skip(!todayIsTradingDay(), CLOSED_TODAY_REASON)
   const details = PURPOSES[purpose]
   const { name, phone } = unusedWalkIn(projectName, details)
 

@@ -13,8 +13,29 @@
 
 import type { ClockTime, IsoDate, JsonOf, Money, Paths, QueryOf, Refine, Schemas } from './contract-kit'
 
-/** One trading branch. The codes in use are CBD, BLV and SMW. */
-export type Branch = Refine<Schemas['BranchResponse'], { opensAt: ClockTime; closesAt: ClockTime }>
+/** A branch's hours on one ISO weekday, Monday 1 to Sunday 7. */
+export type OpeningHours = Refine<Schemas['OpeningHoursResponse'], { opensAt: ClockTime; closesAt: ClockTime }>
+
+/**
+ * Why a branch is closed on a day. `weekly` is a day it never opens, such as a
+ * Sunday. `public_holiday` is a holiday the server worked out from the Public
+ * Holidays Act. `closure` is a day the owner closed it.
+ */
+export type ClosedDayKind = 'weekly' | 'public_holiday' | 'closure'
+
+/** A day a branch is closed, and the reason a customer reads. */
+export type ClosedDay = Refine<Schemas['ClosedDayResponse'], { day: IsoDate; kind: ClosedDayKind }>
+
+/**
+ * One trading branch. The codes in use are CBD, BLV and SMW.
+ *
+ * `weeklyHours` lists the weekdays the counter opens. `closedDays` lists every
+ * day it is closed from today to the last day a hire booked today could end.
+ */
+export type Branch = Refine<
+  Schemas['BranchResponse'],
+  { weeklyHours: OpeningHours[]; closedDays: ClosedDay[] }
+>
 
 /** `GET /api/branches`. */
 export type BranchList = Refine<JsonOf<Paths['/api/branches']['get']>, { items: Branch[] }>

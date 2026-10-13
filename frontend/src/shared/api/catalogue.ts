@@ -47,6 +47,7 @@ import {
   readPercent,
   readText,
 } from './read'
+import { readClosedDay, readOpeningHours } from './trading-read'
 
 /** The page size the API uses when a request does not name one. */
 export const DEFAULT_PAGE_SIZE = 24
@@ -78,8 +79,8 @@ function readBranch(value: unknown, path: string): Branch {
     suburb: readText(record, 'suburb', path),
     city: readText(record, 'city', path),
     phone: readText(record, 'phone', path),
-    opensAt: readText(record, 'opensAt', path),
-    closesAt: readText(record, 'closesAt', path),
+    weeklyHours: readList(record, 'weeklyHours', path, readOpeningHours),
+    closedDays: readList(record, 'closedDays', path, readClosedDay),
   }
 }
 
