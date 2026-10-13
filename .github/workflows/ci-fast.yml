@@ -57,10 +57,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements-dev.txt
 
+      # Every package, direct or indirect, comes from the hashed lock (C-37).
+      # The project itself is installed on top with no dependencies of its own.
       - name: Install the backend and its development dependencies
-        run: pip install --editable ".[dev]"
+        run: |
+          pip install --require-hashes --requirement requirements-dev.txt
+          pip install --no-deps --no-build-isolation --editable .
 
       - name: Lint
         run: ruff check .
@@ -81,6 +85,35 @@ jobs:
         run: pytest tests -m "not postgres"
         env:
           ENVIRONMENT: test
+
+  # The lockfiles are compiled from pyproject.toml in the same base image the
+  # Dockerfile pins, read from the Dockerfile so the two cannot drift apart.
+  # A pin changed in pyproject.toml without the lockfiles compiled again, or a
+  # lockfile edited by hand, fails here.
+  lockfiles:
+    name: Backend lockfiles match pyproject.toml
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Compile the lockfiles again
+        run: |
+          base_image="$(grep -m 1 -oE 'python:3\.12-slim-bookworm@sha256:[0-9a-f]{64}' Dockerfile)"
+          test -n "${base_image}" || { echo "No pinned base image found in the Dockerfile"; exit 1; }
+          docker run --rm --volume "${PWD}:/src" --workdir /src "${base_image}" \
+            sh scripts/compile-lockfiles.sh
+
+      - name: Fail if they differ from what is committed
+        run: |
+          git diff --exit-code -- requirements.txt requirements-dev.txt || {
+            echo "The lockfiles are out of date. Run scripts/compile-lockfiles.sh as its header describes and commit the result."
+            exit 1
+          }
 
   frontend:
     name: Frontend lint, types and unit tests
@@ -125,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: always()
-    needs: [secrets, backend, frontend]
+    needs: [secrets, backend, lockfiles, frontend]
     steps:
       - name: Fail unless every job passed
         env:

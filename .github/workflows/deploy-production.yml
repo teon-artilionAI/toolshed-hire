@@ -132,11 +132,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install backend dependencies
         working-directory: backend
-        run: pip install .
+        run: |
+          pip install --require-hashes --requirement requirements.txt
+          pip install --no-deps --no-build-isolation .
 
       # Migrations run before the new revision exists and are written to stay
       # compatible with the revision that is still serving. If this step fails
