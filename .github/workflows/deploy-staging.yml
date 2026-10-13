@@ -129,6 +129,7 @@ jobs:
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
           EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+          PHOTO_BUCKET: ${{ vars.PHOTO_BUCKET }}
         run: bash infra/scripts/deploy-api.sh
 
       # A new revision normally takes traffic as it is deployed. If traffic was

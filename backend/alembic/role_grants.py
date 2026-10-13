@@ -160,7 +160,7 @@ def grant_on_new_tables(
     Args:
         connection: A connection as the owner of the tables, inside a
             transaction the caller commits.
-        privileges: READ_ONLY or READ_WRITE.
+        privileges: READ_ONLY, READ_WRITE or APPEND_ONLY.
         tables: The tables the revision created.
 
     Returns:

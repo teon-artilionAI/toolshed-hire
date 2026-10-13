@@ -27,7 +27,10 @@
  * and the name the server gave the file.
  *
  * The request itself goes out in transport.ts, which is the one file that
- * calls `fetch`. This file decides what a good answer means.
+ * calls `fetch`. This file decides what a good answer means. A damage
+ * photograph is the one exception. It goes out through photo-upload.ts,
+ * because `fetch` cannot say how much of a body has been sent, and that file
+ * reuses the token, the renewal and the error type from here.
  *
  * WHERE THE BEARER TOKEN COMES FROM
  * =================================
@@ -83,8 +86,10 @@ export function resolvedApiUrl(endpoint: string): string {
   return new URL(apiPath(endpoint), window.location.href).toString()
 }
 
-/** Give an error the request id of the response it came from, if it has none. */
-function withRequestId(error: ApiError, requestId: string | null): ApiError {
+/** Give an error the request id of the response it came from, if it has none.
+ *  photo-upload.ts uses it too, for the one request that does not go out
+ *  through `fetch`. */
+export function withRequestId(error: ApiError, requestId: string | null): ApiError {
   if (error.requestId !== null || requestId === null) return error
   return new ApiError({
     kind: error.kind,

@@ -226,6 +226,33 @@ class TestTheTradingCalendarTables:
         assert int(live) == 0
 
 
+class TestTheDamagePhotoTable:
+    """Revision 0014. A photograph's row is written once and then only read."""
+
+    @pytest.mark.parametrize(
+        ("privilege", "held"),
+        [("SELECT", True), ("INSERT", True), ("UPDATE", False), ("DELETE", False)],
+    )
+    def test_the_role_may_add_and_read_a_row_and_nothing_more(
+        self, application_engine: Engine, privilege: str, held: bool
+    ) -> None:
+        with application_engine.connect() as connection:
+            granted = connection.execute(
+                text("SELECT has_table_privilege(current_user, 'damage_photo', :privilege)"),
+                {"privilege": privilege},
+            ).scalar_one()
+        assert granted is held
+
+    def test_a_change_to_a_row_is_refused(self, application_engine: Engine) -> None:
+        with application_engine.connect() as connection:
+            rows = connection.execute(text("SELECT count(*) FROM damage_photo")).scalar_one()
+        state = refused_sqlstate(
+            application_engine, text("UPDATE damage_photo SET size_bytes = size_bytes + 1")
+        )
+        assert int(rows) == 0
+        assert state == INSUFFICIENT_PRIVILEGE_SQLSTATE
+
+
 class TestTheApplicationRoleCanStillDoItsWork:
     """A restriction that stopped ordinary reads and writes would be no use."""
 

@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlmodel import Session
 
+from app.api.damage_photo_deps import get_photo_store
 from app.api.deps import get_clock, get_notification_gateway
 from app.api.identity_deps import get_password_verifier
 from app.api.refresh_cookie import REFRESH_COOKIE_NAME, SET_COOKIE_HEADER
@@ -35,6 +36,7 @@ from app.infrastructure.notification import FakeEmailGateway
 from app.main import app as production_app
 from tests.support.clock import FixedClock
 from tests.support.factories import TEST_PASSWORD
+from tests.support.memory_photos import MemoryPhotoStore
 
 LOGIN_PATH: Final[str] = "/api/auth/login"
 REFRESH_PATH: Final[str] = "/api/auth/refresh"
@@ -65,6 +67,7 @@ def session_client(
     *,
     application: FastAPI = production_app,
     client_address: str | None = None,
+    photo_store: MemoryPhotoStore | None = None,
 ) -> Iterator[TestClient]:
     """Yield a client for an application, on the test's session and a still clock.
 
@@ -79,9 +82,12 @@ def session_client(
             environment when omitted.
         client_address: The address the requests appear to come from. Left
             out, the server cannot tell, as it cannot for a bare test client.
+        photo_store: The bucket damage photographs are kept in. An empty one
+            in memory when omitted, so photographs are switched on.
 
     """
     still_clock = clock or FixedClock()
+    photos = photo_store if photo_store is not None else MemoryPhotoStore()
 
     def _session() -> Iterator[Session]:
         """Hand the request the test's session and discard uncommitted work after."""
@@ -94,6 +100,7 @@ def session_client(
         get_session: _session,
         get_clock: lambda: still_clock,
         get_notification_gateway: lambda: FakeEmailGateway(),
+        get_photo_store: lambda: photos,
     }
     application.dependency_overrides.update(overrides)
     try:

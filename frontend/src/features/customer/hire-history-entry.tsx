@@ -8,6 +8,9 @@
  *
  * A deposit given back is a negative amount on the wire. It is written as
  * returned to the customer, never with a bare minus sign.
+ *
+ * A hire whose damage was reported ends with its damage photographs, opened
+ * on request, in hire-damage-photos.tsx.
  */
 
 import type { Rental, RentalCharge } from '../../shared/api/contract'
@@ -15,6 +18,7 @@ import { formatDate, isNegativeMoney, money, unsignedMoney } from '../../shared/
 import { branchDateTime } from '../../shared/today'
 import { StatusPill } from '../../shared/ui'
 import { HIRE_CHARGE_LABEL, HIRE_CHARGE_STATUS_LABEL, HIRE_STATUS_LABEL } from './customer-labels'
+import { HireDamagePhotos } from './hire-damage-photos'
 
 /** What was hired, by model, for example "2 x CP 100 Plate Compactor". */
 function modelsHired(rental: Rental): string {
@@ -88,6 +92,7 @@ export function HireHistoryEntry({ rental }: { rental: Rental }) {
           <DepositLine term="Returned to you" amount={rental.depositRefunded} />
           <DepositLine term="Balance due" amount={rental.balanceDue} />
         </dl>
+        <HireDamagePhotos rental={rental} />
       </article>
     </li>
   )

@@ -104,6 +104,13 @@ _MAP: dict[str, TableClassification] = {
         reached_through="rental_item_id",
         free_text_columns=("description", "resolution_notes"),
     ),
+    # The object key reaches the photograph itself, which can show the customer
+    # or what they hired, so it is listed with the columns that identify. Erasing
+    # a customer's data means removing the object it names from the bucket.
+    "damage_photo": CustomerData(
+        reached_through="damage_report_id",
+        identifying_columns=("object_key",),
+    ),
     "charge": CustomerData(
         reached_through="rental_id",
         free_text_columns=("description", "waiver_reason", "payment_reference"),

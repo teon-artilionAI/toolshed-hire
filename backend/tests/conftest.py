@@ -52,6 +52,7 @@ from tests.support.log_capture import (
     capture_application_log,
     preserved_logging_configuration,
 )
+from tests.support.memory_photos import MemoryPhotoStore
 from tests.support.pg import truncate_schema_tables
 from tests.support.probe_app import build_role_probe_app
 from tests.support.sqlite_dialect import build_sqlite_engine
@@ -134,6 +135,16 @@ def email_gateway() -> FakeEmailGateway:
     dependency itself.
     """
     return FakeEmailGateway()
+
+
+@pytest.fixture
+def photo_store() -> MemoryPhotoStore:
+    """Return the in memory bucket damage photographs are kept in for one test.
+
+    A test that wants photographs switched off overrides the store dependency
+    with the switched off store itself.
+    """
+    return MemoryPhotoStore()
 
 
 def _client_for(

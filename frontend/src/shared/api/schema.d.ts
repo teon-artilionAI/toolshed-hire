@@ -298,6 +298,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/rentals/{id}/damage-photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the damage photographs on the signed in customer's own hire
+         * @description Return the photographs of every damage report on the hire.
+         *
+         *     Raises:
+         *         NotFound: If the hire does not exist or is not the caller's. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["list_my_damage_photos_api_me_rentals__id__damage_photos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/rentals/{id}/damage-photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return a five minute link that opens one damage photograph on the customer's hire
+         * @description Return a signed link to the photograph, served as a download.
+         *
+         *     Raises:
+         *         NotFound: If the hire is not the caller's or holds no such photograph. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["read_my_damage_photo_link_api_me_rentals__id__damage_photos__photoId__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers": {
         parameters: {
             query?: never;
@@ -804,6 +852,67 @@ export interface paths {
          *             would retire a unit a booking still holds. HTTP 409.
          */
         post: operations["post_resolution_api_damage_reports__id__resolution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the photographs of a damage report, oldest first
+         * @description Return every photograph of the report.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["list_damage_photos_api_damage_reports__id__photos_get"];
+        put?: never;
+        /**
+         * Attach a JPEG or PNG photograph to a damage report
+         * @description Check, re-encode, store and record one photograph.
+         *
+         *     Raises:
+         *         PhotoTooLarge: Past 4 MB. HTTP 413.
+         *         UnsupportedPhoto: Not a JPEG or a PNG. HTTP 415.
+         *         NotFound: If there is no such report. HTTP 404.
+         *         BranchScopeError: If counter staff attach it at another branch. HTTP 403.
+         *         PhotoLimitReached: If the report holds six already. HTTP 409.
+         *         ValidationFailure: If it cannot be decoded or holds too many pixels. HTTP 422.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        post: operations["post_damage_photo_api_damage_reports__id__photos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return a five minute link that opens one photograph of a damage report
+         * @description Return a signed link to the photograph, served as a download.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report or photograph. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["read_damage_photo_link_api_damage_reports__id__photos__photoId__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2835,6 +2944,38 @@ export interface components {
          */
         DamageAssessment: "NOT_NEEDED" | "REQUIRED" | "DONE";
         /**
+         * DamagePhotoListResponse
+         * @description The photographs of one report, or of every report on one hire, oldest first.
+         */
+        DamagePhotoListResponse: {
+            /** Items */
+            items: components["schemas"]["DamagePhotoResponse"][];
+        };
+        /**
+         * DamagePhotoResponse
+         * @description One photograph of a damage report.
+         */
+        DamagePhotoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Damagereportid
+             * Format: uuid
+             */
+            damageReportId: string;
+            /** Damagereportreference */
+            damageReportReference: string;
+            /** Contenttype */
+            contentType: string;
+            /** Sizebytes */
+            sizeBytes: number;
+            /** Uploadedat */
+            uploadedAt: string;
+        };
+        /**
          * DamageReportPageResponse
          * @description One page of damage reports, newest first.
          */
@@ -3490,6 +3631,16 @@ export interface components {
         PasswordResetRequest: {
             /** Email */
             email: string;
+        };
+        /**
+         * PhotoLinkResponse
+         * @description A signed link that opens one photograph as a download, for five minutes.
+         */
+        PhotoLinkResponse: {
+            /** Url */
+            url: string;
+            /** Expiresat */
+            expiresAt: string;
         };
         /**
          * ProblemDetail
@@ -4835,6 +4986,108 @@ export interface operations {
             };
         };
     };
+    list_my_damage_photos_api_me_rentals__id__damage_photos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer's hire. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamagePhotoListResponse"];
+                };
+            };
+            /** @description There is no such hire of yours, or no such photograph on it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_my_damage_photo_link_api_me_rentals__id__damage_photos__photoId__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer's hire. */
+                id: string;
+                /** @description The key of the photograph. */
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoLinkResponse"];
+                };
+            };
+            /** @description There is no such hire of yours, or no such photograph on it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     search_customers_api_customers_get: {
         parameters: {
             query: {
@@ -6031,6 +6284,209 @@ export interface operations {
             };
             /** @description A field was refused. `errors.fields` names it. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_damage_photos_api_damage_reports__id__photos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamagePhotoListResponse"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_damage_photo_api_damage_reports__id__photos_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The photograph itself, at most 4194304 bytes. Its first bytes decide whether it is a JPEG or a PNG. */
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamagePhotoResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The report already holds 6 photographs. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The photograph is larger than 4 MB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The body is not a JPEG or a PNG, by its media type or by its first bytes. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The photograph could not be decoded, or holds more pixels than are kept. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Other photographs are being processed. Try again after `Retry-After`. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_damage_photo_link_api_damage_reports__id__photos__photoId__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+                /** @description The key of the photograph. */
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoLinkResponse"];
+                };
+            };
+            /** @description There is no such report, or it has no such photograph. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

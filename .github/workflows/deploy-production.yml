@@ -157,6 +157,7 @@ jobs:
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
           EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+          PHOTO_BUCKET: ${{ vars.PHOTO_BUCKET }}
           USE_CANDIDATE: "true"
         run: bash infra/scripts/deploy-api.sh
 

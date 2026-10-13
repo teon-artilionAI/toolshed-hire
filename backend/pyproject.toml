@@ -36,6 +36,14 @@ dependencies = [
     # The HTTP client behind the Resend adapter. It was already pinned for the
     # test client, so the running application gains no new package.
     "httpx==0.28.1",
+    # The official client for the private bucket damage photographs are kept
+    # in, and for the V4 links that open them. Only app/infrastructure/photo_store.py
+    # imports it.
+    "google-cloud-storage==3.15.0",
+    # Decodes each damage photograph and encodes it again from its pixels, which
+    # drops the EXIF block and any GPS position in it. Only
+    # app/infrastructure/photo_images.py imports it.
+    "pillow==12.3.0",
 ]
 
 [project.optional-dependencies]
@@ -155,6 +163,16 @@ source_modules = ["app.domain", "app.application"]
 forbidden_modules = ["sqlalchemy", "sqlmodel", "fastapi", "starlette", "pydantic", "httpx", "psycopg"]
 allow_indirect_imports = true
 
+# The image library and the storage client are wrapped by one adapter each in
+# the infrastructure layer. Nothing above it imports either, so replacing one
+# touches one file.
+[[tool.importlinter.contracts]]
+name = "Only the infrastructure layer imports the image library and the storage client"
+type = "forbidden"
+source_modules = ["app.domain", "app.application", "app.api"]
+forbidden_modules = ["PIL", "google"]
+allow_indirect_imports = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -202,14 +220,22 @@ warn_unreachable = true
 module = ["passlib.*"]
 ignore_missing_imports = true
 
-# disallow_any_explicit is left on everywhere else, and off in exactly the eighteen
+# google-cloud-storage ships no type information and has no stub package on
+# PyPI. The one module that imports it, app/infrastructure/photo_store.py, calls
+# it through two small protocols of its own and wraps the signed URL in str(),
+# so the Any stops at that module.
+[[tool.mypy.overrides]]
+module = ["google.cloud", "google.cloud.*"]
+ignore_missing_imports = true
+
+# disallow_any_explicit is left on everywhere else, and off in exactly the nineteen
 # modules that declare pydantic models. The Any it objects to is not in this
 # source. pydantic marks BaseModel with @dataclass_transform, and for every
 # such class mypy synthesises a hidden "__mypy-replace" member whose keyword
 # parameters are typed Any. The flag then reports that synthesised member
 # against the class statement itself, so the only ways to satisfy it are to
 # stop using pydantic or to switch the flag off for the file. Narrowing it to
-# these eighteen modules keeps the check live across the domain, the application
+# these nineteen modules keeps the check live across the domain, the application
 # layer and the routers, which is where an Any written by hand would actually
 # do damage.
 [[tool.mypy.overrides]]
@@ -223,6 +249,7 @@ module = [
     "app.api.return_schemas",
     "app.api.counter_schemas",
     "app.api.damage_schemas",
+    "app.api.damage_photo_schemas",
     "app.api.report_schemas",
     "app.api.admin_schemas",
     "app.api.admin_catalogue_schemas",

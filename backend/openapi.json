@@ -534,6 +534,150 @@
         }
       }
     },
+    "/api/me/rentals/{id}/damage-photos": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "List the damage photographs on the signed in customer's own hire",
+        "description": "Return the photographs of every damage report on the hire.\n\nRaises:\n    NotFound: If the hire does not exist or is not the caller's. HTTP 404.\n    FeatureSwitchedOff: If photographs are switched off. HTTP 503.",
+        "operationId": "list_my_damage_photos_api_me_rentals__id__damage_photos_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the customer's hire.",
+              "title": "Id"
+            },
+            "description": "The key of the customer's hire."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamagePhotoListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such hire of yours, or no such photograph on it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Photographs are not switched on in this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/rentals/{id}/damage-photos/{photoId}": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return a five minute link that opens one damage photograph on the customer's hire",
+        "description": "Return a signed link to the photograph, served as a download.\n\nRaises:\n    NotFound: If the hire is not the caller's or holds no such photograph. HTTP 404.\n    FeatureSwitchedOff: If photographs are switched off. HTTP 503.",
+        "operationId": "read_my_damage_photo_link_api_me_rentals__id__damage_photos__photoId__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the customer's hire.",
+              "title": "Id"
+            },
+            "description": "The key of the customer's hire."
+          },
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the photograph.",
+              "title": "Photoid"
+            },
+            "description": "The key of the photograph."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoLinkResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such hire of yours, or no such photograph on it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Photographs are not switched on in this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/customers": {
       "get": {
         "tags": [
@@ -2383,6 +2527,285 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/damage-reports/{id}/photos": {
+      "post": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Attach a JPEG or PNG photograph to a damage report",
+        "description": "Check, re-encode, store and record one photograph.\n\nRaises:\n    PhotoTooLarge: Past 4 MB. HTTP 413.\n    UnsupportedPhoto: Not a JPEG or a PNG. HTTP 415.\n    NotFound: If there is no such report. HTTP 404.\n    BranchScopeError: If counter staff attach it at another branch. HTTP 403.\n    PhotoLimitReached: If the report holds six already. HTTP 409.\n    ValidationFailure: If it cannot be decoded or holds too many pixels. HTTP 422.\n    FeatureSwitchedOff: If photographs are switched off. HTTP 503.",
+        "operationId": "post_damage_photo_api_damage_reports__id__photos_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the damage report, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the damage report, or its reference."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamagePhotoResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such damage report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The report already holds 6 photographs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The photograph is larger than 4 MB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not a JPEG or a PNG, by its media type or by its first bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The photograph could not be decoded, or holds more pixels than are kept.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Other photographs are being processed. Try again after `Retry-After`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Photographs are not switched on in this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "The photograph itself, at most 4194304 bytes. Its first bytes decide whether it is a JPEG or a PNG.",
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "List the photographs of a damage report, oldest first",
+        "description": "Return every photograph of the report.\n\nRaises:\n    NotFound: If there is no such report. HTTP 404.\n    FeatureSwitchedOff: If photographs are switched off. HTTP 503.",
+        "operationId": "list_damage_photos_api_damage_reports__id__photos_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the damage report, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the damage report, or its reference."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DamagePhotoListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such damage report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Photographs are not switched on in this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/damage-reports/{id}/photos/{photoId}": {
+      "get": {
+        "tags": [
+          "hire"
+        ],
+        "summary": "Return a five minute link that opens one photograph of a damage report",
+        "description": "Return a signed link to the photograph, served as a download.\n\nRaises:\n    NotFound: If there is no such report or photograph. HTTP 404.\n    FeatureSwitchedOff: If photographs are switched off. HTTP 503.",
+        "operationId": "read_damage_photo_link_api_damage_reports__id__photos__photoId__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the damage report, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the damage report, or its reference."
+          },
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the photograph.",
+              "title": "Photoid"
+            },
+            "description": "The key of the photograph."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoLinkResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such report, or it has no such photograph.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Photographs are not switched on in this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -8661,6 +9084,64 @@
         "title": "DamageAssessment",
         "description": "Whether a unit that came back still waits for its damage to be assessed."
       },
+      "DamagePhotoListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DamagePhotoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DamagePhotoListResponse",
+        "description": "The photographs of one report, or of every report on one hire, oldest first."
+      },
+      "DamagePhotoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "damageReportId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Damagereportid"
+          },
+          "damageReportReference": {
+            "type": "string",
+            "title": "Damagereportreference"
+          },
+          "contentType": {
+            "type": "string",
+            "title": "Contenttype"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "title": "Sizebytes"
+          },
+          "uploadedAt": {
+            "type": "string",
+            "title": "Uploadedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "damageReportId",
+          "damageReportReference",
+          "contentType",
+          "sizeBytes",
+          "uploadedAt"
+        ],
+        "title": "DamagePhotoResponse",
+        "description": "One photograph of a damage report."
+      },
       "DamageReportPageResponse": {
         "properties": {
           "items": {
@@ -10221,6 +10702,25 @@
         ],
         "title": "PasswordResetRequest",
         "description": "The address a reset link is asked for."
+      },
+      "PhotoLinkResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expiresAt": {
+            "type": "string",
+            "title": "Expiresat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expiresAt"
+        ],
+        "title": "PhotoLinkResponse",
+        "description": "A signed link that opens one photograph as a download, for five minutes."
       },
       "ProblemDetail": {
         "properties": {

@@ -28,6 +28,7 @@ from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
 from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_photo_ports import DamagePhotoRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
 from app.application.identity.customer_directory import CustomerDirectory
@@ -51,6 +52,7 @@ from app.infrastructure.branch_repository import SqlBranchRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
 from app.infrastructure.closure_days import SqlClosureDayRepository
 from app.infrastructure.customer_search import SqlCustomerDirectory
+from app.infrastructure.damage_photos import SqlDamagePhotoRepository
 from app.infrastructure.damage_reports import SqlDamageReportRepository
 from app.infrastructure.identity import SqlCustomerRepository
 from app.infrastructure.identity_accounts import SqlAccountRepository
@@ -70,6 +72,7 @@ class SqlAlchemyUnitOfWork:
     assets: AssetRepository
     rentals: RentalRepository
     damage_reports: DamageReportRepository
+    damage_photos: DamagePhotoRepository
     branches: BranchRepository
     closure_days: ClosureDayRepository
     product_models: ProductModelRepository
@@ -120,6 +123,7 @@ class SqlAlchemyUnitOfWork:
         self.assets = SqlAssetRepository(session)
         self.rentals = SqlRentalRepository(session)
         self.damage_reports = SqlDamageReportRepository(session)
+        self.damage_photos = SqlDamagePhotoRepository(session)
         self.branches = SqlBranchRepository(session)
         self.closure_days = SqlClosureDayRepository(session)
         self.product_models = SqlProductModelRepository(session)
