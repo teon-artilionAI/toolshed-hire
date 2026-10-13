@@ -172,6 +172,28 @@ jobs:
   # The browser tests run against the real API and a seeded PostgreSQL, the
   # same way a visitor's browser reaches them. The built frontend is served by
   # vite preview, which proxies /api to the API started in this job.
+  # The deploy workflows build this image and only then find out whether it
+  # starts. Building it here, and importing the application inside it, finds a
+  # package left out of the build or a Dockerfile step that hangs before a pull
+  # request merges, not as a staging revision that will not start (#126).
+  image:
+    name: Backend image builds and imports the application
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build the image
+        run: docker build --tag toolshed-api:check .
+
+      - name: Import the application inside the image
+        run: |
+          docker run --rm             --env ENVIRONMENT=test             --env JWT_SECRET=ci_only_image_check_secret_value             toolshed-api:check python -c "import app.main"
+
   frontend:
     name: Frontend build, browser and accessibility tests
     runs-on: ubuntu-latest
@@ -297,7 +319,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: always()
-    needs: [branch-policy, backend, audits, frontend]
+    needs: [branch-policy, backend, audits, image, frontend]
     steps:
       - name: Fail unless every job passed
         env:

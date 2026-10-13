@@ -77,6 +77,11 @@ RUN apt-get update \
 RUN python -m venv "${VIRTUAL_ENV}"
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
+# The build works in a folder of its own. pyproject.toml finds the packages
+# under the current folder, and run from / that search walked the whole file
+# system of the image until the deployment timed out (#126).
+WORKDIR /build
+
 # The whole dependency tree comes from requirements.txt, which pip-compile
 # writes from pyproject.toml with a hash for every file (C-37). With
 # --require-hashes pip refuses any package, direct or indirect, that is not in
