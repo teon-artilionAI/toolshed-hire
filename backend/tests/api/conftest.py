@@ -40,6 +40,7 @@ from tests.support.accounts_api import HOME_BRANCH_CODE, account_client
 from tests.support.booking_api import BookingClient
 from tests.support.clock import FixedClock
 from tests.support.factories import Factory
+from tests.support.memory_photos import MemoryPhotoStore
 from tests.support.request_probe import build_request_probe_app, settings_for
 from tests.support.sessions import session_client
 
@@ -93,10 +94,16 @@ def auth_client(session: Session, still_clock: FixedClock) -> Iterator[TestClien
 
 @pytest.fixture
 def booking(
-    session: Session, still_clock: FixedClock, email_gateway: FakeEmailGateway
+    session: Session,
+    still_clock: FixedClock,
+    email_gateway: FakeEmailGateway,
+    photo_store: MemoryPhotoStore,
 ) -> Iterator[BookingClient]:
-    """Yield the reservation routes on the in memory database and the still clock."""
-    with session_client(session, still_clock) as client:
+    """Yield the reservation routes on the in memory database and the still clock.
+
+    Damage photographs go to the in memory bucket of the `photo_store` fixture.
+    """
+    with session_client(session, still_clock, photo_store=photo_store) as client:
         production_app.dependency_overrides[get_notification_gateway] = lambda: email_gateway
         yield BookingClient(client, still_clock)
 

@@ -243,3 +243,44 @@ class EmailNotVerifiedError(DomainError):
     """
 
     code = "email-not-verified"
+
+
+class PhotoTooLarge(DomainError):
+    """A damage photograph was larger than a photograph may be (C-30).
+
+    The API maps this to HTTP 413.
+    """
+
+    code = "photo-too-large"
+
+
+class UnsupportedPhoto(DomainError):
+    """A file sent as a damage photograph was not a JPEG or a PNG by its content (C-30).
+
+    The file's first bytes decide, never its name or the type the client
+    claimed, so an SVG or a script renamed to end in .jpg is refused here. The
+    API maps this to HTTP 415.
+    """
+
+    code = "unsupported-photo"
+
+
+class PhotoLimitReached(DomainError):
+    """A damage report already holds as many photographs as a report may hold.
+
+    The API maps this to HTTP 409, because the request was well formed and
+    lost to what the report already holds.
+    """
+
+    code = "photo-limit-reached"
+
+
+class FeatureSwitchedOff(DomainError):
+    """A request reached a feature this deployment has not been configured for.
+
+    Damage photographs need a storage bucket. Until one is configured every
+    photograph route answers with this, and the rest of the service works as
+    before. The API maps this to HTTP 503.
+    """
+
+    code = "feature-switched-off"

@@ -22,6 +22,7 @@ from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
 from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_photo_ports import DamagePhotoRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
 from app.application.identity.customer_directory import CustomerDirectory
@@ -62,6 +63,11 @@ class UnitOfWork(Protocol):
     @property
     def damage_reports(self) -> DamageReportRepository:
         """Return the damage report repository of this transaction."""
+        ...
+
+    @property
+    def damage_photos(self) -> DamagePhotoRepository:
+        """Return the records of the photographs attached to damage reports."""
         ...
 
     @property
