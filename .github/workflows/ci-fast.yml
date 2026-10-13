@@ -86,6 +86,20 @@ jobs:
         env:
           ENVIRONMENT: test
 
+      # Every step above runs on an editable install, which reads the source
+      # folders and so finds a package the build would leave out. This installs
+      # the project into a clean environment the way the Dockerfile does and
+      # imports the application from outside the source tree, so a missing
+      # package fails here and not as a revision that will not start (#126).
+      - name: Install the project the way the image does and import it
+        run: |
+          python -m venv "${RUNNER_TEMP}/image-like"
+          "${RUNNER_TEMP}/image-like/bin/pip" install --quiet --require-hashes --no-deps --requirement requirements.txt
+          "${RUNNER_TEMP}/image-like/bin/pip" install --quiet --no-deps --no-build-isolation .
+          cd "${RUNNER_TEMP}"
+          ENVIRONMENT=test JWT_SECRET=ci_only_import_check_secret_value \
+            "${RUNNER_TEMP}/image-like/bin/python" -c "import app.main"
+
   # The lockfiles are compiled from pyproject.toml in the same base image the
   # Dockerfile pins, read from the Dockerfile so the two cannot drift apart.
   # A pin changed in pyproject.toml without the lockfiles compiled again, or a
