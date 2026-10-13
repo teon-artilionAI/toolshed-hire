@@ -36,6 +36,14 @@ dependencies = [
     # The HTTP client behind the Resend adapter. It was already pinned for the
     # test client, so the running application gains no new package.
     "httpx==0.28.1",
+    # The official client for the private bucket damage photographs are kept
+    # in, and for the V4 links that open them. Only app/infrastructure/photo_store.py
+    # imports it.
+    "google-cloud-storage==3.15.0",
+    # Decodes each damage photograph and encodes it again from its pixels, which
+    # drops the EXIF block and any GPS position in it. Only
+    # app/infrastructure/photo_images.py imports it.
+    "pillow==12.3.0",
 ]
 
 [project.optional-dependencies]
@@ -153,6 +161,16 @@ name = "The domain and application layers import no framework and no driver"
 type = "forbidden"
 source_modules = ["app.domain", "app.application"]
 forbidden_modules = ["sqlalchemy", "sqlmodel", "fastapi", "starlette", "pydantic", "httpx", "psycopg"]
+allow_indirect_imports = true
+
+# The image library and the storage client are wrapped by one adapter each in
+# the infrastructure layer. Nothing above it imports either, so replacing one
+# touches one file.
+[[tool.importlinter.contracts]]
+name = "Only the infrastructure layer imports the image library and the storage client"
+type = "forbidden"
+source_modules = ["app.domain", "app.application", "app.api"]
+forbidden_modules = ["PIL", "google"]
 allow_indirect_imports = true
 
 [tool.ruff]
