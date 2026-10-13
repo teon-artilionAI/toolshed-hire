@@ -234,6 +234,17 @@ class AccountOnHoldError(DomainError):
     code = "account-on-hold"
 
 
+class CustomerAnonymisedError(DomainError):
+    """A booking named a customer whose personal details were removed (#113).
+
+    The API maps this to HTTP 403, the status an account on hold is refused
+    with. The profile stays, because its hires are financial records, but it
+    names nobody and can never own a booking again.
+    """
+
+    code = "customer-anonymised"
+
+
 class EmailNotVerifiedError(DomainError):
     """A customer who has not proved their email address tried to confirm (BR-47).
 

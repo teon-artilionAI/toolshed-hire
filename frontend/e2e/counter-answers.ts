@@ -68,6 +68,7 @@ const CUSTOMER = {
   tradeDiscountPercent: '10.00',
   noShowCount: 1,
   homeBranchCode: 'CBD',
+  anonymisedAt: null,
 }
 
 const MODEL = {

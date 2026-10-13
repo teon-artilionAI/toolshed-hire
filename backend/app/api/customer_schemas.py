@@ -22,6 +22,7 @@ from pydantic import Field, StringConstraints
 
 from app.api.account_schemas import ID_DOCUMENT_LAST4_PATTERN, StrictRequest
 from app.api.catalogue_schemas import Percentage
+from app.api.reservation_schemas import Timestamp
 from app.api.schemas import CamelModel, ProblemDetail
 from app.domain.customer_account import (
     BILLING_ADDRESS_LINE1,
@@ -101,6 +102,9 @@ class CustomerSummaryResponse(CamelModel):
     """A customer as the counter sees one.
 
     `email` is null and `hasLogin` is false for a walk-in, who has no account.
+    `anonymisedAt` is when the customer's identifying details were written
+    over, and null while they are still known. An anonymised customer is
+    called "Former customer" and holds no real contact details.
     """
 
     id: UUID
@@ -119,6 +123,7 @@ class CustomerSummaryResponse(CamelModel):
     trade_discount_percent: Percentage = Field(serialization_alias="tradeDiscountPercent")
     no_show_count: int = Field(serialization_alias="noShowCount")
     home_branch_code: str = Field(serialization_alias="homeBranchCode")
+    anonymised_at: Timestamp | None = Field(serialization_alias="anonymisedAt")
 
 
 class CustomerPageResponse(CamelModel):

@@ -6,7 +6,8 @@
  * the moves each customer offers, each asking why and saying what it does to
  * the customer's bookings, releasing a hold saying the count of bookings not
  * collected is kept, the body of every move, a 409, a 403 and a 422, the
- * answer disabled in flight, the list read again, and paging.
+ * answer disabled in flight, the list read again, and paging. Removing a
+ * customer's personal details is tested in SC23-Customer-Anonymise.test.tsx.
  */
 
 import { screen, waitFor, within } from '@testing-library/react'
@@ -72,20 +73,23 @@ describe('reading the customer holds', () => {
     expect(within(blacklisted).getByText('Blacklisted', { selector: '.pill' })).toBeVisible()
   })
 
-  it('offers the two standings each customer is not in', async () => {
+  it('offers the two standings each customer is not in, and then anonymising', async () => {
     await openUsers({}, HOLDS)
 
     expect(movesOf(await findCustomer(ON_HOLD.displayName))).toEqual([
       `Release the hold for ${ON_HOLD.displayName}`,
       `Blacklist for ${ON_HOLD.displayName}`,
+      `Anonymise for ${ON_HOLD.displayName}`,
     ])
     expect(movesOf(await findCustomer(THANDI.displayName))).toEqual([
       `Put on hold for ${THANDI.displayName}`,
       `Blacklist for ${THANDI.displayName}`,
+      `Anonymise for ${THANDI.displayName}`,
     ])
     expect(movesOf(await findCustomer(BLACKLISTED.displayName))).toEqual([
       `Lift the blacklisting for ${BLACKLISTED.displayName}`,
       `Put on hold for ${BLACKLISTED.displayName}`,
+      `Anonymise for ${BLACKLISTED.displayName}`,
     ])
   })
 

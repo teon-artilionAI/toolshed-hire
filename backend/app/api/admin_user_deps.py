@@ -17,6 +17,7 @@ from fastapi import Depends
 
 from app.api.account_deps import AccountMailerDependency, PasswordHasherDependency
 from app.api.deps import ClockDependency, SessionDependency, UnitOfWorkDependency
+from app.application.identity.anonymise_customer import AnonymiseCustomerUseCase
 from app.application.identity.customer_listing import CustomerListing, ReadCustomerList
 from app.application.identity.customer_standing import ChangeCustomerStandingUseCase
 from app.application.identity.staff_access import (
@@ -95,6 +96,13 @@ def get_change_customer_standing_use_case(
     return ChangeCustomerStandingUseCase(uow, clock)
 
 
+def get_anonymise_customer_use_case(
+    uow: UnitOfWorkDependency, clock: ClockDependency
+) -> AnonymiseCustomerUseCase:
+    """Return the use case that anonymises a customer at the owner's request."""
+    return AnonymiseCustomerUseCase(uow, clock)
+
+
 ReadStaffDependency = Annotated[ReadStaff, Depends(get_read_staff)]
 ReadCustomerListDependency = Annotated[ReadCustomerList, Depends(get_read_customer_list)]
 OpenStaffAccount = Annotated[OpenStaffAccountUseCase, Depends(get_open_staff_account_use_case)]
@@ -108,3 +116,4 @@ ReactivateStaffAccount = Annotated[
 ChangeCustomerStanding = Annotated[
     ChangeCustomerStandingUseCase, Depends(get_change_customer_standing_use_case)
 ]
+AnonymiseCustomer = Annotated[AnonymiseCustomerUseCase, Depends(get_anonymise_customer_use_case)]

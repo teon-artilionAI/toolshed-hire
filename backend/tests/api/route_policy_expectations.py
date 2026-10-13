@@ -94,6 +94,7 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "POST /api/admin/users/{id}/reactivation": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/customers": (AccessKind.ROLES, ADMIN_ROLE),
     "POST /api/admin/customers/{id}/status": (AccessKind.ROLES, ADMIN_ROLE),
+    "POST /api/admin/customers/{id}/anonymise": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/closure-days": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/closure-days/impact": (AccessKind.ROLES, ADMIN_ROLE),
     "POST /api/admin/closure-days": (AccessKind.ROLES, ADMIN_ROLE),

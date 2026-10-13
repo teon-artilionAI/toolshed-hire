@@ -18,6 +18,7 @@ most fifty customers, so no request can ask the database for every profile.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Final, Protocol
 from uuid import UUID
@@ -55,6 +56,8 @@ class CustomerSummary:
         trade_discount_percent: The discount a trade customer is given.
         no_show_count: How many bookings they did not collect.
         home_branch_code: The code of the branch that registered them.
+        anonymised_at: When their identifying details were written over, or
+            None while they are still known (#113).
 
     """
 
@@ -74,6 +77,7 @@ class CustomerSummary:
     trade_discount_percent: Decimal
     no_show_count: int
     home_branch_code: str
+    anonymised_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

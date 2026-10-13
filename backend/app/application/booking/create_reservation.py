@@ -83,6 +83,8 @@ class CreateReservationUseCase(UseCase[CreateReservationCommand, ReservationView
             ValidationFailure: If the period, the branch, a line or the
                 customer is refused. The failure names the field.
             BranchScopeError: If counter staff book at another branch.
+            CustomerAnonymisedError: If the customer's personal details were
+                removed (#113).
             AccountOnHoldError: If the customer's account is on hold (BR-18).
 
         """

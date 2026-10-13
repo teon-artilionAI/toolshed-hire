@@ -20,7 +20,7 @@ from typing import Final
 from uuid import UUID
 
 from app.domain.enums import AccountStatus, UserRole
-from app.domain.errors import AccountOnHoldError, BranchScopeError
+from app.domain.errors import AccountOnHoldError, BranchScopeError, CustomerAnonymisedError
 from app.domain.trading_calendar import BranchCalendar
 
 NO_TRADE_DISCOUNT: Final[Decimal] = Decimal("0.00")
@@ -38,6 +38,11 @@ BRANCH_SCOPE_MESSAGE: Final[str] = (
 ACCOUNT_ON_HOLD_MESSAGE: Final[str] = (
     "This customer account is on hold, so it cannot make a reservation. "
     "Please contact a branch."
+)
+# The rule behind the removal of a customer's personal details, for the log.
+ANONYMISED_CUSTOMER_RULE: Final[str] = "NFR-16"
+ANONYMISED_CUSTOMER_MESSAGE: Final[str] = (
+    "This customer's personal details were removed, so no reservation can be made for them."
 )
 
 
@@ -130,6 +135,8 @@ class CustomerProfile:
             the pricing policy takes as an input (BR-21).
         email_verified: True when the holder of the account has proved the
             address. A walk-in has no account, so this is False (BR-47).
+        anonymised: True once the customer's personal details were removed
+            (#113). Such a profile can never own a new booking.
 
     """
 
@@ -140,9 +147,14 @@ class CustomerProfile:
     email: str | None
     trade_discount_percent: Decimal = NO_TRADE_DISCOUNT
     email_verified: bool = False
+    anonymised: bool = False
 
     def ensure_may_book(self) -> None:
-        """Refuse a customer whose account is not in good standing (BR-18).
+        """Refuse a customer who was anonymised, or whose account is not in good standing.
+
+        A customer whose personal details were removed is refused first and
+        whatever their standing, because the profile names nobody and its
+        details cannot be put back (#113).
 
         An account on hold and a blacklisted one are both refused. Only an
         active account may create a reservation or put one on hold. The
@@ -152,9 +164,16 @@ class CustomerProfile:
         with the error.
 
         Raises:
+            CustomerAnonymisedError: If the customer was anonymised.
             AccountOnHoldError: If the account status is anything but ACTIVE.
 
         """
+        if self.anonymised:
+            raise CustomerAnonymisedError(
+                ANONYMISED_CUSTOMER_MESSAGE,
+                {"customer_profile_id": str(self.id)},
+                rule=ANONYMISED_CUSTOMER_RULE,
+            )
         if self.account_status is AccountStatus.ACTIVE:
             return
         raise AccountOnHoldError(

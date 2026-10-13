@@ -63,7 +63,8 @@ NOT_PERMITTED_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": (
         "The caller may not do this. The problem type says why, which is the role, the "
-        "branch, an account on hold or an email address that is not verified."
+        "branch, an account on hold, a customer whose personal details were removed or an "
+        "email address that is not verified."
     ),
 }
 UNKNOWN_RESERVATION_RESPONSE: Final[dict[str, object]] = {

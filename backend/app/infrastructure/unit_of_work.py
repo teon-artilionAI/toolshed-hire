@@ -31,6 +31,7 @@ from app.application.catalogue.ports import ProductModelRepository
 from app.application.hire.damage_photo_ports import DamagePhotoRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
+from app.application.identity.anonymisation_ports import PersonalDataEraser
 from app.application.identity.customer_directory import CustomerDirectory
 from app.application.identity.ports import (
     AccountRepository,
@@ -58,6 +59,7 @@ from app.infrastructure.identity import SqlCustomerRepository
 from app.infrastructure.identity_accounts import SqlAccountRepository
 from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
+from app.infrastructure.personal_data import SqlPersonalDataEraser
 from app.infrastructure.rate_limit import SqlRateLimitStore
 from app.infrastructure.rentals import SqlRentalRepository
 from app.infrastructure.staff_accounts import SqlStaffRepository
@@ -81,6 +83,7 @@ class SqlAlchemyUnitOfWork:
     asset_register: AssetRegisterRepository
     customers: CustomerRepository
     customer_directory: CustomerDirectory
+    personal_data: PersonalDataEraser
     accounts: AccountRepository
     staff: StaffRepository
     sessions: SessionRepository
@@ -132,6 +135,7 @@ class SqlAlchemyUnitOfWork:
         self.asset_register = SqlAssetRegisterRepository(session)
         self.customers = SqlCustomerRepository(session)
         self.customer_directory = SqlCustomerDirectory(session)
+        self.personal_data = SqlPersonalDataEraser(session)
         self.accounts = SqlAccountRepository(session)
         self.staff = SqlStaffRepository(session)
         self.sessions = SqlSessionRepository(session)

@@ -24,6 +24,7 @@ import {
   readFlag,
   readList,
   readNullableText,
+  readNullableTimestamp,
   readObject,
   readOneOf,
   readPercent,
@@ -66,6 +67,7 @@ export function readCustomerSummary(value: unknown, path: string): CustomerSumma
     tradeDiscountPercent: readPercent(record, 'tradeDiscountPercent', path),
     noShowCount: readCount(record, 'noShowCount', path),
     homeBranchCode: readText(record, 'homeBranchCode', path),
+    anonymisedAt: readNullableTimestamp(record, 'anonymisedAt', path),
   }
 }
 

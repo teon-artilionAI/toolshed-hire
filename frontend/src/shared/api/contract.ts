@@ -203,6 +203,8 @@ export type {
   AdminUser,
   AdminUserPage,
   AdminUserQuery,
+  AnonymisedCustomer,
+  CustomerAnonymisationRequest,
   CustomerStandingRequest,
   CustomerWithStanding,
   DeactivationRequest,

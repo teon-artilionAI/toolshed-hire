@@ -55,6 +55,7 @@ from app.application.identity.customer_directory import (
     CustomerSearch,
     CustomerSummary,
 )
+from app.infrastructure.booking_mapping import in_utc
 from app.infrastructure.models import Branch, CustomerProfile, UserAccount
 from app.infrastructure.query_log import logged_query
 from app.infrastructure.schema_ddl import PHONE_PUNCTUATION_REMOVED
@@ -272,4 +273,5 @@ def summary_of(found: SummaryRow) -> CustomerSummary:
         trade_discount_percent=Decimal(profile.trade_discount_percent),
         no_show_count=profile.no_show_count,
         home_branch_code=branch_code,
+        anonymised_at=in_utc(profile.anonymised_at),
     )

@@ -103,6 +103,7 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ix_asset_allocation_released",
     "ix_user_account_staff",
     "ix_customer_profile_standing",
+    "ix_customer_profile_identified",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -147,6 +148,13 @@ DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
 # and counted before another is attached.
 DAMAGE_PHOTO_TABLE: Final[str] = "damage_photo"
 DAMAGE_PHOTO_REPORT_INDEX: Final[str] = "ix_damage_photo_report"
+
+# The two indexes of revision 0015, which the maintenance jobs stand on. The
+# monthly anonymisation reads the customers not yet anonymised in the order of
+# their key through the first, which is partial on that. The weekly pruning
+# finds the refresh sessions that expired long ago through the second.
+CUSTOMER_IDENTIFIED_INDEX: Final[str] = "ix_customer_profile_identified"
+REFRESH_SESSION_EXPIRY_INDEX: Final[str] = "ix_refresh_session_expires_at"
 
 # The five indexes of revision 0007, which the utilisation report reads a
 # period through. The charges raised in a period, the hires still out or back

@@ -1,6 +1,7 @@
 /**
  * One write of SC-23, as one request. Opening a staff account, changing one,
- * deactivating or reactivating one, or moving a customer's standing.
+ * deactivating or reactivating one, moving a customer's standing, or removing
+ * a customer's personal details.
  *
  * It is sent once for each press of the button, and a second press while it is
  * in flight does nothing. It is never repeated by itself, because a request
@@ -29,6 +30,7 @@ export type UserWriteKind =
   | 'staff_deactivated'
   | 'staff_reactivated'
   | 'customer_standing_set'
+  | 'customer_anonymised'
 
 /** What each kind of write puts out of date. */
 const FORGET: Record<UserWriteKind, (client: QueryClient) => void> = {
@@ -37,6 +39,7 @@ const FORGET: Record<UserWriteKind, (client: QueryClient) => void> = {
   staff_deactivated: forgetTheStaff,
   staff_reactivated: forgetTheStaff,
   customer_standing_set: forgetTheHolds,
+  customer_anonymised: forgetTheHolds,
 }
 
 /** What to do with the server's answer. */
