@@ -36,6 +36,11 @@ set -euo pipefail
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT is not set. This script runs inside a GitHub Actions step.}"
 
 USE_CANDIDATE="${USE_CANDIDATE:-false}"
+# The private bucket damage photographs are kept in, made by
+# create-photo-bucket.sh. Left empty, the service starts with photographs
+# switched off and every photograph route answers 503, the way email waits
+# for its key.
+PHOTO_BUCKET="${PHOTO_BUCKET:-}"
 CANDIDATE_TAG="candidate"
 
 CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
@@ -100,7 +105,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --min-instances="${CLOUD_RUN_MIN_INSTANCES}" \
   --max-instances="${CLOUD_RUN_MAX_INSTANCES}" \
   --allow-unauthenticated \
-  --set-env-vars="ENVIRONMENT=${ENVIRONMENT_NAME},CORS_ORIGINS=${FRONTEND_ORIGIN},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},EMAIL_ALLOWED_RECIPIENT=${EMAIL_ALLOWED_RECIPIENT}" \
+  --set-env-vars="ENVIRONMENT=${ENVIRONMENT_NAME},CORS_ORIGINS=${FRONTEND_ORIGIN},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},EMAIL_ALLOWED_RECIPIENT=${EMAIL_ALLOWED_RECIPIENT},PHOTO_BUCKET=${PHOTO_BUCKET}" \
   --set-secrets="DATABASE_URL=${DATABASE_URL_SECRET}:latest,JWT_SECRET=${JWT_SECRET_NAME}:latest,RESEND_API_KEY=${RESEND_API_KEY_SECRET}:latest" \
   --revision-suffix="${revision_suffix}" \
   "${traffic_flags[@]}" \
