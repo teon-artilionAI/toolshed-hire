@@ -257,7 +257,7 @@ class EmailNotVerifiedError(DomainError):
 
 
 class PhotoTooLarge(DomainError):
-    """A damage photograph was larger than a photograph may be (C-30).
+    """A damage photograph was larger than a photograph may be (C-29).
 
     The API maps this to HTTP 413.
     """
@@ -266,7 +266,7 @@ class PhotoTooLarge(DomainError):
 
 
 class UnsupportedPhoto(DomainError):
-    """A file sent as a damage photograph was not a JPEG or a PNG by its content (C-30).
+    """A file sent as a damage photograph was not a JPEG or a PNG by its content (C-29).
 
     The file's first bytes decide, never its name or the type the client
     claimed, so an SVG or a script renamed to end in .jpg is refused here. The

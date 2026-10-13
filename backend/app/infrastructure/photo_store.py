@@ -1,4 +1,4 @@
-"""The private bucket damage photographs are kept in, and the choice of store (C-29, C-31).
+"""The private bucket damage photographs are kept in, and the choice of store (C-31).
 
 `GcsPhotoStore` is the only module that imports the Google Cloud Storage
 client. It writes each photograph once, with `if_generation_match=0`, so an
