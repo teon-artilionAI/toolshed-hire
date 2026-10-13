@@ -114,6 +114,10 @@ class CustomerProfile(SQLModel, table=True):
 
     `late_cancellation_count` is where BR-16 records a late cancellation. The
     design document states the rule and lists no column for it.
+
+    `anonymised_at` is set when the customer's identifying columns were
+    written over (#113). The row stays, because the hires it owns are
+    financial records.
     """
 
     __tablename__ = "customer_profile"
@@ -144,6 +148,8 @@ class CustomerProfile(SQLModel, table=True):
     no_show_count: int = Field(default=0, sa_column=small_int())
     late_cancellation_count: int = Field(default=0, sa_column=small_int())
     registered_branch_id: UUID = Field(sa_column=uuid_fk("branch.id"))
+    # Set once, when the identifying columns were written over (revision 0015).
+    anonymised_at: datetime | None = Field(default=None, sa_column=timestamp())
     created_at: datetime | None = Field(default=None, sa_column=created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=updated_at_column())
 
