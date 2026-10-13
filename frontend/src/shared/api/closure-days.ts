@@ -6,7 +6,8 @@
  * Every route is for an administrator, and the API refuses anyone else with a
  * 403. A closure day closes one branch, or every branch, on one day, with a
  * reason customers read. Closing a day never touches a booking. The owner reads
- * the bookings that start or end on it first and rings each customer, which is
+ * the bookings that start or end on it and the hires due back on it first, and
+ * rings each customer, which is
  * why the impact is a read of its own.
  *
  * The writes are sent once for each press of a button and never repeated by
@@ -45,7 +46,7 @@ const IMPACT_ENDPOINT = `${CLOSURE_DAYS_ENDPOINT}/impact`
 export const CALENDAR_KINDS: readonly CalendarClosedDay['kind'][] = ['public_holiday', 'closure']
 
 /** The two days of a hire a closure can fall on, as the API names them. */
-export const HIRE_DAYS: readonly StrandedBooking['hireDay'][] = ['collection', 'return']
+export const HIRE_DAYS: readonly StrandedBooking['hireDay'][] = ['collection', 'return', 'due_back']
 
 /** The longest reason the API keeps for a closure, in characters. */
 export const CLOSURE_REASON_MAX_LENGTH = 120
@@ -116,7 +117,8 @@ export function listCalendar(query: CalendarQuery, signal?: AbortSignal): Promis
 
 /**
  * GET /api/admin/closure-days/impact. The held and confirmed bookings that
- * start or end on the day at the branch, or at any branch.
+ * start or end on the day at the branch, or at any branch, and the hires still
+ * out whose equipment is due back that day.
  *
  * @throws ApiError with status 422 naming `branchCode` or `day`, and 403 for
  *   anyone but an administrator.

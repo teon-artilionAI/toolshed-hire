@@ -8,8 +8,8 @@
  *
  * The closed days of the next twelve months are one request, grouped by month
  * with the shared loading, failed and empty states. Closing a day first lists
- * the bookings that start or end on it, because closing it cancels none of
- * them and the owner rings each customer. Once the server has answered a
+ * the bookings that start or end on it and the hires due back on it, because
+ * closing it changes none of them and the owner rings each customer. Once the server has answered a
  * close or a cancel, a notice above the form says what was done and takes
  * focus, and the calendar, the branch list every date picker steers by, and
  * the counter's day are read again.
@@ -57,7 +57,7 @@ export default function TradingCalendar() {
     const where = branchWords(closure.branchCode, branches.nameOf)
     setOutcome({
       title: `${where} is closed on ${dayWords(closure.day)}`,
-      line: 'Customers can no longer choose that day to collect or bring equipment back. Ring the customers whose bookings start or end that day.',
+      line: 'Customers can no longer choose that day to collect or bring equipment back. Ring the customers whose bookings or hires fall on that day.',
     })
   }
 

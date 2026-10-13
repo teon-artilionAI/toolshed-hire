@@ -5,7 +5,8 @@
  * The owner chooses the branch, the day and the reason customers read, up to a
  * hundred and twenty characters with a count of what is left. The form checks
  * what it can at once and puts each problem under its field, with focus on the
- * first. Then it asks the server which bookings start or end on that day, and
+ * first. Then it asks the server which bookings start or end on that day and
+ * which hires out are due back on it, and
  * shows the question that lists them before anything is written. Going back
  * from the question keeps what was typed.
  *

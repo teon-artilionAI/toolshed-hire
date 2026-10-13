@@ -39,7 +39,9 @@ export function closedDays() {
   ]
 }
 
-/** The two bookings a closure of `DAY_TO_CLOSE` at Cape Town CBD strands. */
+/** What a closure of `DAY_TO_CLOSE` at Cape Town CBD strands. A booking brought
+ *  back that day, a hire still out and due back that day, and a booking
+ *  collected that day. */
 export const STRANDED = {
   items: [
     {
@@ -52,6 +54,15 @@ export const STRANDED = {
       hireDay: 'return',
     },
     {
+      reference: 'TSH-H-26-000098',
+      branchCode: 'CBD',
+      customerName: 'Marius Pretorius-Vanderwesthuizen Construction and Plant Hire',
+      customerPhone: '083 555 0123',
+      from: dateFromToday(18),
+      to: DAY_TO_CLOSE,
+      hireDay: 'due_back',
+    },
+    {
       reference: 'TSH-R-26-000131',
       branchCode: 'CBD',
       customerName: 'Nomvuyiso Thandiwe Mahlangu-Vanderbijl',
@@ -61,7 +72,7 @@ export const STRANDED = {
       hireDay: 'collection',
     },
   ],
-  total: 2,
+  total: 3,
 }
 
 /** The closure the server answers with once Cape Town CBD is closed on the day. */

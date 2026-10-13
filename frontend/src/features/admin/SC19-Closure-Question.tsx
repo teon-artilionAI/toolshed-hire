@@ -2,10 +2,11 @@
  * The question the trading calendar asks before it closes a day.
  *
  * It names the branch, or every branch, the day and the reason, and lists
- * every held or confirmed booking that starts or ends on that day, with the
- * customer's name and number, or says there are none. It says plainly that
- * closing the day does not cancel those bookings, and that the owner rings
- * each customer to agree another day. Focus moves to its heading, so a screen
+ * every held or confirmed booking that starts or ends on that day and every
+ * hire still out that is due back that day, with the customer's name and
+ * number, or says there are none. It says plainly that
+ * closing the day changes none of them, and that the owner rings each
+ * customer to agree another day. Focus moves to its heading, so a screen
  * reader hears the question first.
  *
  * One press of the answer sends one request, and both buttons are disabled
@@ -90,20 +91,20 @@ export function ClosureQuestion({
         <dt className="text-slate-soft">The reason customers read</dt>
         <dd className="break-words text-ink">{asked.reason}</dd>
       </dl>
-      <h4 className="mt-md text-sm font-semibold text-ink">Bookings on that day</h4>
+      <h4 className="mt-md text-sm font-semibold text-ink">Bookings and hires on that day</h4>
       <p id={`${QUESTION_ID}-impact`} className="mt-xs text-sm text-ink">
         {impactLine(impact)}
       </p>
       {impact.items.length > 0 && (
         <>
-          <ul className="mt-sm flex flex-col gap-sm" aria-label="Bookings that start or end on that day">
+          <ul className="mt-sm flex flex-col gap-sm" aria-label="Bookings and hires on that day">
             {impact.items.map((booking) => (
               <Booking key={booking.reference} booking={booking} everyBranch={asked.branchCode === null} />
             ))}
           </ul>
           <p id={`${QUESTION_ID}-consequence`} className="mt-sm text-sm text-ink">
-            Closing the day does not cancel these bookings. Ring each customer to agree another day, and change
-            the booking at the counter.
+            Closing the day changes none of these. Ring each customer to agree another day to collect or bring the
+            equipment back.
           </p>
         </>
       )}

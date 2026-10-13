@@ -6,9 +6,9 @@
  * The calendar is scanned and measured loaded in accessibility.spec.ts and
  * narrow-screens.spec.ts, from the list of the owner's screens they share.
  * The journey is checked here. The owner closes a day at Cape Town CBD, which
- * first lists the two bookings that start or end on it and says they are not
- * cancelled, and finds it on the calendar. Then they cancel the Bellville
- * closure, which asks first. A day the server refuses comes back under the day
+ * first lists the two bookings that start or end on it and the hire due back on
+ * it and says none of them is changed, and finds it on the calendar. Then they
+ * cancel the Bellville closure, which asks first. A day the server refuses comes back under the day
  * on the form. The calendar with no closed day and with the API down is
  * scanned as well, the states the other owner's screens are scanned in.
  *
@@ -80,8 +80,9 @@ test.describe('the owner closes a day and opens another again', () => {
 
     await askToClose(page)
     await expect(page.getByRole('heading', { level: 3, name: CLOSE_QUESTION })).toBeFocused()
-    await expect(page.getByText('2 bookings start or end on that day.')).toBeVisible()
-    await expect(page.getByText(/Closing the day does not cancel these bookings/)).toBeVisible()
+    await expect(page.getByText('3 bookings and hires fall on that day.')).toBeVisible()
+    await expect(page.getByText('Out on hire, and due back that day', { exact: false })).toBeVisible()
+    await expect(page.getByText(/Closing the day changes none of these/)).toBeVisible()
     expect(await blockingViolations(page)).toEqual([])
 
     await page.getByRole('button', { name: 'Yes, close the day' }).click()

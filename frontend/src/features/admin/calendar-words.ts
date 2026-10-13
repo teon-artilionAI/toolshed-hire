@@ -38,6 +38,7 @@ export const KIND_LABEL: Record<CalendarClosedDay['kind'], string> = {
 export const HIRE_DAY_WORDS: Record<StrandedBooking['hireDay'], string> = {
   collection: 'Collects on that day',
   return: 'Brings the equipment back on that day',
+  due_back: 'Out on hire, and due back that day',
 }
 
 /** The closed days of one month, in the order the server sent them. */
@@ -124,10 +125,10 @@ export function reasonCounter(reason: string): string {
     : `${countOf(-left, 'character', 'characters')} too many.`
 }
 
-/** The line above the bookings a closure would strand. */
+/** The line above the bookings and hires out a closure would strand. */
 export function impactLine(impact: ClosureImpact): string {
-  if (impact.total === 0) return 'No booking starts or ends on that day.'
-  const count = countOf(impact.total, 'booking starts or ends', 'bookings start or end')
+  if (impact.total === 0) return 'No booking or hire falls on that day.'
+  const count = countOf(impact.total, 'booking or hire falls', 'bookings and hires fall')
   const shown = impact.items.length < impact.total ? ` The first ${impact.items.length} are listed.` : ''
   return `${count} on that day.${shown}`
 }

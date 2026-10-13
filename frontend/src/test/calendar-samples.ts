@@ -6,7 +6,8 @@
  * pinned day, Thursday 12 March. A stocktake at Bellville, Human Rights Day and
  * Good Friday, which close every branch, and an election day the owner closed
  * every branch for. Two bookings that a closure of Friday 27 March would
- * strand, one collected and one brought back that day.
+ * strand, one collected and one brought back that day, and a hire out that is
+ * due back that day.
  */
 
 import type { CalendarClosedDay, CalendarClosedDays, ClosureDay, ClosureImpact, StrandedBooking } from '../shared/api/contract'
@@ -82,7 +83,21 @@ export const RETURNING: StrandedBooking = {
   hireDay: 'return',
 }
 
-export function impactOf(items: StrandedBooking[] = [RETURNING, COLLECTING], total = items.length): ClosureImpact {
+/** A hire collected at Cape Town CBD before the day, and still out, due back on it. */
+export const DUE_BACK: StrandedBooking = {
+  reference: 'TSH-H-26-000098',
+  branchCode: 'CBD',
+  customerName: 'Wesley Adonis',
+  customerPhone: '083 555 0123',
+  from: '2026-03-24',
+  to: DAY_TO_CLOSE,
+  hireDay: 'due_back',
+}
+
+export function impactOf(
+  items: StrandedBooking[] = [RETURNING, DUE_BACK, COLLECTING],
+  total = items.length,
+): ClosureImpact {
   return { items, total }
 }
 

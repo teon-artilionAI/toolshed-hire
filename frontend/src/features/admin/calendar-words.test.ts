@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { ELECTION_DAY, GOOD_FRIDAY, HUMAN_RIGHTS_DAY, STOCKTAKE, impactOf } from '../../test/calendar-samples'
+import { DUE_BACK, ELECTION_DAY, GOOD_FRIDAY, HUMAN_RIGHTS_DAY, STOCKTAKE, impactOf } from '../../test/calendar-samples'
 import {
   EVERY_BRANCH_VALUE,
   branchCodeOf,
@@ -74,8 +74,9 @@ describe('the small sayings', () => {
   })
 
   it('says how many bookings a closure strands, and when only some are listed', () => {
-    expect(impactLine(impactOf([]))).toBe('No booking starts or ends on that day.')
-    expect(impactLine(impactOf())).toBe('2 bookings start or end on that day.')
-    expect(impactLine(impactOf(undefined, 250))).toBe('250 bookings start or end on that day. The first 2 are listed.')
+    expect(impactLine(impactOf([]))).toBe('No booking or hire falls on that day.')
+    expect(impactLine(impactOf([DUE_BACK]))).toBe('1 booking or hire falls on that day.')
+    expect(impactLine(impactOf())).toBe('3 bookings and hires fall on that day.')
+    expect(impactLine(impactOf(undefined, 250))).toBe('250 bookings and hires fall on that day. The first 3 are listed.')
   })
 })

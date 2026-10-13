@@ -22,6 +22,7 @@ import {
   CBD_CLOSURE,
   COLLECTING,
   DAY_TO_CLOSE,
+  DUE_BACK,
   ELECTION_DAY,
   IMPACT_ROUTE,
   STOCKTAKE,
@@ -130,12 +131,15 @@ describe('closing a day', () => {
     const question = await screen.findByRole('heading', { level: 3, name: 'Close Cape Town CBD on Friday 27 March 2026?' }, SCREEN_WAIT)
     expect(question).toHaveFocus()
     expect(network.requestsTo(IMPACT_ROUTE).at(-1)?.query.toString()).toBe(`day=${DAY_TO_CLOSE}&branchCode=CBD`)
-    expect(screen.getByText('2 bookings start or end on that day.')).toBeVisible()
-    const bookings = screen.getByRole('list', { name: 'Bookings that start or end on that day' })
-    expect(within(bookings).getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.getByText('3 bookings and hires fall on that day.')).toBeVisible()
+    const bookings = screen.getByRole('list', { name: 'Bookings and hires on that day' })
+    expect(within(bookings).getAllByRole('listitem')).toHaveLength(3)
     expect(within(bookings).getByRole('link', { name: COLLECTING.customerPhone })).toHaveAttribute('href', 'tel:0824417719')
     expect(within(bookings).getByText(COLLECTING.reference).closest('li')).toHaveTextContent('Collects on that day.')
-    expect(screen.getByText(/Closing the day does not cancel these bookings\. Ring each customer/)).toBeVisible()
+    const hire = within(bookings).getByText(DUE_BACK.reference).closest('li')
+    expect(hire).toHaveTextContent(`${DUE_BACK.customerName} ${DUE_BACK.customerPhone}`)
+    expect(hire).toHaveTextContent('24 Mar to 27 Mar. Out on hire, and due back that day.')
+    expect(screen.getByText(/Closing the day changes none of these\. Ring each customer/)).toBeVisible()
     expect(network.requestsTo(ADD_CLOSURE_ROUTE)).toHaveLength(0)
 
     await user.click(screen.getByRole('button', { name: 'Yes, close the day' }))
@@ -158,7 +162,7 @@ describe('closing a day', () => {
     await closeTheDay(user, 'Every branch')
 
     expect(await screen.findByRole('heading', { level: 3, name: 'Close every branch on Friday 27 March 2026?' }, SCREEN_WAIT)).toHaveFocus()
-    expect(screen.getByText('No booking starts or ends on that day.')).toBeVisible()
+    expect(screen.getByText('No booking or hire falls on that day.')).toBeVisible()
     expect(network.requestsTo(IMPACT_ROUTE).at(-1)?.query.toString()).toBe(`day=${DAY_TO_CLOSE}`)
     await user.click(screen.getByRole('button', { name: 'Yes, close the day' }))
 

@@ -69,9 +69,12 @@ export type NewClosureRequest = Refine<BodyOf<ClosureDaysRoute['post']>, { branc
 export type ClosureImpactQuery = QueryOf<ImpactRoute['get']>
 
 /**
- * A held or confirmed booking that starts or ends on the day about to close.
- * `hireDay` is `collection` when the hire starts that day and `return` when it
- * ends that day. A new closure never changes it. The owner rings the customer.
+ * A booking or a hire out that falls on the day about to close. `hireDay` is
+ * `collection` when a held or confirmed booking starts that day, `return` when
+ * it ends that day, and `due_back` when the equipment of a hire still out is
+ * due back that day. A hire carries its own reference, and `from` is the day it
+ * was collected. A new closure never changes any of them. The owner rings the
+ * customer.
  */
 export type StrandedBooking = Refine<JsonOf<ImpactRoute['get']>['items'][number], { from: IsoDate; to: IsoDate }>
 
