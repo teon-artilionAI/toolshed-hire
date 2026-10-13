@@ -1,4 +1,4 @@
-"""The owner's reads of the closure days and of the bookings a closure strands (B9.5).
+"""The owner's reads of the closure days and of the bookings a closure strands.
 
 Nothing here writes. The live closures in a span are one statement through
 `ix_closure_day_live_day`, which holds only the live closures, joined to the

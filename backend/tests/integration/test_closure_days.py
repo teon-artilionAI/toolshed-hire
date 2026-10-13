@@ -1,4 +1,4 @@
-"""The owner's closure days on PostgreSQL (B9.5, revision 0013).
+"""The owner's closure days on PostgreSQL (revision 0013).
 
 The unique index of revision 0013 allows one live closure per branch and day,
 and one for every branch per day through the nil UUID it keys them on. It has

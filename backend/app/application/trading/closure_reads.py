@@ -1,4 +1,4 @@
-"""The owner's reads of the closed days, and of the bookings a closure would strand (B9.5).
+"""The owner's reads of the closed days, and of the bookings a closure would strand.
 
 The list answers every day in a span on which some branch is closed for a
 reason other than its week. It runs from today for a year unless the owner

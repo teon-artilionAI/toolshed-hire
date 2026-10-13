@@ -1,4 +1,4 @@
-"""The SQL repository of the closure days the owner adds and cancels (B9.5).
+"""The SQL repository of the closure days the owner adds and cancels.
 
 It maps the `closure_day` rows to the domain's `ClosureDay` and back, on the
 session of the unit of work that created it. A closure about to be cancelled is

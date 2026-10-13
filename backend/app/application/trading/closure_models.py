@@ -1,4 +1,4 @@
-"""What the reads and the writes of the closure days hand back (B9.5).
+"""What the reads and the writes of the closure days hand back.
 
 The owner's list holds two kinds of closed day. A public holiday closes every
 branch and is listed once, with no branch and no key, because nothing can

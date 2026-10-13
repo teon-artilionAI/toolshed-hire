@@ -1,4 +1,4 @@
-"""The owner's closure days through HTTP (B9.5).
+"""The owner's closure days through HTTP.
 
 The owner closes a branch, or every branch, on a day with a reason, and the
 branch list a date picker reads shows the day closed at once. A closure is

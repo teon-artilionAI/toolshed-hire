@@ -1,4 +1,4 @@
-"""Adding and cancelling a closure day, run against ports and nothing else (B9.5, BR-49, BR-51).
+"""Adding and cancelling a closure day, run against ports and nothing else (BR-49, BR-51).
 
 Adding one holds the reason and the day to the domain's rules, looks the
 branch up among those still trading, and refuses a day that is closed already

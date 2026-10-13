@@ -1,4 +1,4 @@
-"""The use cases by which the owner adds and cancels a closure day (B9.5).
+"""The use cases by which the owner adds and cancels a closure day.
 
 A closure closes one branch, or every branch, on one day, with a reason a
 customer reads. Adding one holds the reason and the day to the rules of

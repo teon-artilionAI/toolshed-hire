@@ -1,4 +1,4 @@
-"""The ports of the closure days, one that writes and one that reads (B9.5).
+"""The ports of the closure days, one that writes and one that reads.
 
 `ClosureDayRepository` is reached through the unit of work, so a closure and
 its audit event commit together (BR-49). A closure about to be cancelled is

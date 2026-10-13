@@ -1,4 +1,4 @@
-"""The owner's closure days, the days a branch does not trade beyond its week (B9.5).
+"""The owner's closure days, the days a branch does not trade beyond its week.
 
 `GET /api/admin/closure-days` answers every day in a span on which a branch is
 closed for a reason other than its week, from today for a year unless `from`

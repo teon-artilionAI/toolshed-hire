@@ -1,4 +1,4 @@
-"""The dependencies of the owner's closure days (B9.5).
+"""The dependencies of the owner's closure days.
 
 This is the part of the composition root behind the trading calendar of the
 admin console. The two reads go through `SqlClosureDayQuery` over the request

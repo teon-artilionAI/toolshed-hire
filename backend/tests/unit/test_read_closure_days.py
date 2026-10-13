@@ -1,4 +1,4 @@
-"""The owner's reads of the closed days and of the bookings a closure strands (B9.5).
+"""The owner's reads of the closed days and of the bookings a closure strands.
 
 The list runs from today for a year unless asked otherwise, lists each public
 holiday once for every branch and each live closure with its branch and key,

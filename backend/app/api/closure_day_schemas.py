@@ -1,4 +1,4 @@
-"""Request and response models of the owner's closure days (B9.5).
+"""Request and response models of the owner's closure days.
 
 Field names on the wire are camelCase, as everywhere else at this boundary. A
 day is an ISO 8601 date and an instant is ISO 8601 with the offset of Cape
