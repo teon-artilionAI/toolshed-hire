@@ -152,6 +152,21 @@ type = "forbidden"
 source_modules = ["app.infrastructure"]
 forbidden_modules = ["app.api"]
 
+# The maintenance jobs are composition roots like the API layer. They put a use
+# case together with its infrastructure, and nothing imports them. They build
+# what they need themselves and borrow nothing from the web process.
+[[tool.importlinter.contracts]]
+name = "Nothing imports the maintenance jobs"
+type = "forbidden"
+source_modules = ["app.domain", "app.application", "app.infrastructure", "app.api"]
+forbidden_modules = ["app.jobs"]
+
+[[tool.importlinter.contracts]]
+name = "The maintenance jobs do not import the API layer"
+type = "forbidden"
+source_modules = ["app.jobs"]
+forbidden_modules = ["app.api"]
+
 # The two inner layers hold rules and orchestration, and both are tested with
 # no database and no network. A framework or a driver imported into either one
 # would end that, however it arrived. allow_indirect_imports keeps the contract
