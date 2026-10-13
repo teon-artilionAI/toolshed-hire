@@ -62,28 +62,15 @@ dev = [
 # Only what the running application imports is packaged. seed.py, seed_data,
 # seeding and scripts are tools I run from this directory against a database.
 # They are linted by `ruff check .` like everything else here, and they are
-# left out of the list below and out of the image on purpose.
-[tool.setuptools]
-packages = [
-    "app",
-    "app.api",
-    "app.api.routers",
-    "app.application",
-    "app.application.availability",
-    "app.application.booking",
-    "app.application.catalogue",
-    "app.application.hire",
-    "app.application.identity",
-    "app.application.money",
-    "app.application.notification",
-    "app.application.reporting",
-    "app.domain",
-    "app.domain.policies",
-    "app.domain.states",
-    "app.infrastructure",
-    "app.infrastructure.models",
-    "app.infrastructure.notification",
-]
+# left out of the image on purpose.
+#
+# The packages are found under app rather than listed by hand. A hand kept list
+# missed app.application.trading when it was added, the image was built without
+# it and staging would not start (#126), while CI, which installs in editable
+# mode, passed. A fast check now installs the project the way the image does.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
