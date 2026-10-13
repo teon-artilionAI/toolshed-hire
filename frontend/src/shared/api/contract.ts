@@ -125,12 +125,15 @@ export type {
 } from './contract-overview'
 export type {
   DamageOutcome,
+  DamagePhoto,
+  DamagePhotoList,
   DamageReport,
   DamageReportListQuery,
   DamageReportPage,
   DamageSeverity,
   DamageStatus,
   FileDamageReportRequest,
+  PhotoLink,
   ResolveDamageReportRequest,
 } from './contract-damage'
 export type {

@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   daysBetween,
+  fileSize,
   formatDate,
   formatDateShort,
   formatDateTime,
@@ -215,5 +216,17 @@ describe('humanise', () => {
 
   it('handles a single word', () => {
     expect(humanise('AVAILABLE')).toBe('Available')
+  })
+})
+
+describe('fileSize', () => {
+  it('writes a file under a megabyte in whole kilobytes, and never as nothing', () => {
+    expect(fileSize(850 * 1024)).toBe('850 KB')
+    expect(fileSize(12)).toBe('1 KB')
+  })
+
+  it('writes a file of a megabyte or more to one decimal, counted the way the 4 MB limit is', () => {
+    expect(fileSize(1_258_291)).toBe('1.2 MB')
+    expect(fileSize(4 * 1024 * 1024)).toBe('4.0 MB')
   })
 })

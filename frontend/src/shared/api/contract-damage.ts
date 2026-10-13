@@ -2,11 +2,11 @@
  * The damage and quarantine wire types.
  *
  * Filing a damage report, listing and reading the reports of a unit, sending a
- * report for repair and resolving it. They are built from the generated schema
- * the way every other wire type is, so a route, a field or a value the backend
- * changes stops the application compiling until it follows. They live apart
- * from contract.ts only to keep each file a size that can be read in one
- * sitting.
+ * report for repair and resolving it, and the photographs of a report. They
+ * are built from the generated schema the way every other wire type is, so a
+ * route, a field or a value the backend changes stops the application
+ * compiling until it follows. They live apart from contract.ts only to keep
+ * each file a size that can be read in one sitting.
  *
  * Nothing imports this file but contract.ts. The application imports these
  * types from there, like every other wire type.
@@ -118,3 +118,37 @@ export type DamageReportListQuery = Refine<
 
 /** `GET /api/damage-reports`. Newest first. */
 export type DamageReportPage = Refine<JsonOf<Paths['/api/damage-reports']['get']>, { items: DamageReport[] }>
+
+/**
+ * One photograph of a damage report (#83, #112). Uploading answers 201 with
+ * it, and both lists answer with it, so this is built from all three.
+ *
+ * Only the facts of the photograph travel here, never its bytes. A screen asks
+ * for a `PhotoLink` to open one.
+ */
+export type DamagePhoto = Refine<
+  CreatedJsonOf<Paths['/api/damage-reports/{id}/photos']['post']> &
+    Schemas['DamagePhotoListResponse']['items'][number],
+  { uploadedAt: IsoTimestamp }
+>
+
+/**
+ * `GET /api/damage-reports/{id}/photos` for staff, and
+ * `GET /api/me/rentals/{id}/damage-photos` for the customer of the hire.
+ * Oldest first.
+ */
+export type DamagePhotoList = Refine<
+  JsonOf<Paths['/api/damage-reports/{id}/photos']['get']> &
+    JsonOf<Paths['/api/me/rentals/{id}/damage-photos']['get']>,
+  { items: DamagePhoto[] }
+>
+
+/**
+ * A signed link that opens one photograph as a download, for five minutes.
+ * Staff and the customer of the hire each have a route that answers with it.
+ */
+export type PhotoLink = Refine<
+  JsonOf<Paths['/api/damage-reports/{id}/photos/{photoId}']['get']> &
+    JsonOf<Paths['/api/me/rentals/{id}/damage-photos/{photoId}']['get']>,
+  { expiresAt: IsoTimestamp }
+>
