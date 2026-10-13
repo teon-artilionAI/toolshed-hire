@@ -68,6 +68,7 @@ export const THANDI: CustomerSummary = {
   tradeDiscountPercent: '0.00',
   noShowCount: 0,
   homeBranchCode: 'BLV',
+  anonymisedAt: null,
 }
 
 /** A trade customer who signs in online. */

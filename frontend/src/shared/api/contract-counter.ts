@@ -31,9 +31,14 @@ import type {
  *
  * `email` is null for a walk in, who has no login. `tradeDiscountPercent` is a
  * string with two decimals like the money, for example "10.00".
+ * `anonymisedAt` is when the customer's personal details were removed, and
+ * null while they are still known. An anonymised customer is called "Former
+ * customer" and holds no real contact details.
  */
-export type CustomerSummary = JsonOf<Paths['/api/customers/{id}']['get']> &
-  CreatedJsonOf<Paths['/api/customers']['post']>
+export type CustomerSummary = Refine<
+  JsonOf<Paths['/api/customers/{id}']['get']> & CreatedJsonOf<Paths['/api/customers']['post']>,
+  { anonymisedAt: IsoTimestamp | null }
+>
 
 /** `GET /api/customers`. Best match first. */
 export type CustomerPage = Refine<JsonOf<Paths['/api/customers']['get']>, { items: CustomerSummary[] }>

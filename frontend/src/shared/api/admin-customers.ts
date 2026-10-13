@@ -1,6 +1,7 @@
 /**
- * The owner's customer holds. Listing the customers by their standing and
- * moving a customer between good standing, on hold and blacklisted.
+ * The owner's customer holds. Listing the customers by their standing, moving
+ * a customer between good standing, on hold and blacklisted, and removing a
+ * customer's personal details when they ask for it (#113).
  *
  * Both routes are for an administrator, and the API refuses anyone else with a
  * 403. A customer reads as the same `CustomerSummary` the counter uses, read by
@@ -10,12 +11,23 @@
  * standing cannot make a new booking, and releasing a hold leaves the count of
  * bookings they did not collect as it is. Those rules are the server's. Asking
  * for the standing a customer already has changes nothing and answers with the
- * customer as they are. The write is sent once for each press of a button and
- * never repeated by the client.
+ * customer as they are. Removing a customer's details writes over their name,
+ * contact details, address and ID digits and closes their sign in, and keeps
+ * their hires, charges and deposits as financial records. It cannot be undone,
+ * and the server refuses it while anything of theirs is still open. Every
+ * write is sent once for each press of a button and never repeated by the
+ * client.
  */
 
 import { api } from './client'
-import type { AdminCustomerPage, AdminCustomerQuery, CustomerStandingRequest, CustomerWithStanding } from './contract'
+import type {
+  AdminCustomerPage,
+  AdminCustomerQuery,
+  AnonymisedCustomer,
+  CustomerAnonymisationRequest,
+  CustomerStandingRequest,
+  CustomerWithStanding,
+} from './contract'
 import { readCustomerSummary } from './customers'
 import { readCount, readList, readObject } from './read'
 
@@ -54,4 +66,17 @@ export function listCustomerHolds(query: AdminCustomerQuery, signal?: AbortSigna
  */
 export function setCustomerStanding(id: string, body: CustomerStandingRequest): Promise<CustomerWithStanding> {
   return api.post(`${CUSTOMERS_ENDPOINT}/${encodeURIComponent(id)}/status`, body, readCustomerSummary)
+}
+
+/**
+ * POST /api/admin/customers/{id}/anonymise. Removes the customer's personal
+ * details, with the reason, and answers with the customer as they now read.
+ *
+ * @throws ApiError with status 422 naming `reason`, 409 with a sentence in
+ *   `detail` when the customer was anonymised already or still has something
+ *   open, 404 when no customer has the key, and 403 for anyone but an
+ *   administrator.
+ */
+export function anonymiseCustomer(id: string, body: CustomerAnonymisationRequest): Promise<AnonymisedCustomer> {
+  return api.post(`${CUSTOMERS_ENDPOINT}/${encodeURIComponent(id)}/anonymise`, body, readCustomerSummary)
 }

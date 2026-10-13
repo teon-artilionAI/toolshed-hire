@@ -42,6 +42,7 @@ type DeactivationRoute = Paths['/api/admin/users/{id}/deactivation']
 type ReactivationRoute = Paths['/api/admin/users/{id}/reactivation']
 type CustomersRoute = Paths['/api/admin/customers']
 type CustomerStatusRoute = Paths['/api/admin/customers/{id}/status']
+type CustomerAnonymiseRoute = Paths['/api/admin/customers/{id}/anonymise']
 
 /** The two roles a staff account can hold, as the API writes them. */
 export type StaffRole = Exclude<Schemas['UserRole'], 'CUSTOMER'>
@@ -160,3 +161,18 @@ export type CustomerStandingRequest = BodyOf<CustomerStatusRoute['post']>
 /** What `POST /api/admin/customers/{id}/status` answers with. The customer as
  *  they now stand, read as the counter reads a customer. */
 export type CustomerWithStanding = Refine<JsonOf<CustomerStatusRoute['post']>, CustomerSummary>
+
+/**
+ * The body `POST /api/admin/customers/{id}/anonymise` accepts. Why the
+ * customer's personal details are being removed, which the audit event keeps.
+ * It is 5 to 200 characters once trimmed, the same rule as the reason for a
+ * move of standing.
+ */
+export type CustomerAnonymisationRequest = BodyOf<CustomerAnonymiseRoute['post']>
+
+/**
+ * What `POST /api/admin/customers/{id}/anonymise` answers with. The customer
+ * with their personal details written over and `anonymisedAt` set, read as
+ * the counter reads a customer. Their hires, charges and deposits stay.
+ */
+export type AnonymisedCustomer = Refine<JsonOf<CustomerAnonymiseRoute['post']>, CustomerSummary>

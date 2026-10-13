@@ -6,7 +6,8 @@
  * contract fails with the name of the field. A new account is read with
  * whether its link could be delivered, a change, a deactivation and a
  * reactivation are each read as the account, and a move of a customer's
- * standing is read as the customer the counter uses.
+ * standing and the removal of their personal details are each read as the
+ * customer the counter uses.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -16,6 +17,8 @@ import {
   OPEN_ACCOUNT_ROUTE,
   THABO_ACCOUNT,
   USERS_ROUTE,
+  anonymiseRoute,
+  anonymised,
   changeAccountRoute,
   deactivationRoute,
   holdPage,
@@ -25,7 +28,7 @@ import {
 } from '../../test/admin-user-samples'
 import { ON_HOLD } from '../../test/counter-samples'
 import { failureOf } from '../../test/session-samples'
-import { listCustomerHolds, setCustomerStanding } from './admin-customers'
+import { anonymiseCustomer, listCustomerHolds, setCustomerStanding } from './admin-customers'
 import {
   changeStaffAccount,
   deactivateStaffAccount,
@@ -112,5 +115,22 @@ describe('the customer holds', () => {
 
     await expect(setCustomerStanding(ON_HOLD.id, { accountStatus: 'ACTIVE', reason: 'Settled up.' })).resolves.toEqual(released)
     expect(network.requests[0].body).toEqual({ accountStatus: 'ACTIVE', reason: 'Settled up.' })
+  })
+
+  it('removes the details of a customer and reads the customer it answers with, when it happened included', async () => {
+    const former = anonymised(ON_HOLD)
+    const network = mockApi({ [anonymiseRoute(ON_HOLD.id)]: () => jsonResponse(former) })
+
+    await expect(anonymiseCustomer(ON_HOLD.id, { reason: 'Asked to be forgotten.' })).resolves.toEqual(former)
+    expect(network.requests[0].body).toEqual({ reason: 'Asked to be forgotten.' })
+  })
+
+  it('refuses a customer whose answer does not say whether their details were removed', async () => {
+    const { anonymisedAt: _left, ...withoutIt } = ON_HOLD
+    mockApi({ [anonymiseRoute(ON_HOLD.id)]: () => jsonResponse(withoutIt) })
+
+    const failure = await failureOf(anonymiseCustomer(ON_HOLD.id, { reason: 'Asked to be forgotten.' }))
+
+    expect(failure.detail).toContain('anonymisedAt')
   })
 })

@@ -1608,6 +1608,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/customers/{id}/anonymise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove a customer's personal details at their request, with the reason
+         * @description Anonymise the customer and record it with the reason, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer with this key. HTTP 404.
+         *         StateTransitionError: If the customer was anonymised already or still
+         *             has something open. HTTP 409.
+         *         ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+         */
+        post: operations["post_customer_anonymisation_api_admin_customers__id__anonymise_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/closure-days": {
         parameters: {
             query?: never;
@@ -2175,6 +2201,14 @@ export interface components {
             lockedUntil: string | null;
             /** Createdat */
             createdAt: string;
+        };
+        /**
+         * AnonymisationRequest
+         * @description Why a customer's personal details are being removed. The audit event keeps the reason.
+         */
+        AnonymisationRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * AssetCreateRequest
@@ -2896,6 +2930,9 @@ export interface components {
          * @description A customer as the counter sees one.
          *
          *     `email` is null and `hasLogin` is false for a walk-in, who has no account.
+         *     `anonymisedAt` is when the customer's identifying details were written
+         *     over, and null while they are still known. An anonymised customer is
+         *     called "Former customer" and holds no real contact details.
          */
         CustomerSummaryResponse: {
             /**
@@ -2930,6 +2967,8 @@ export interface components {
             noShowCount: number;
             /** Homebranchcode */
             homeBranchCode: string;
+            /** Anonymisedat */
+            anonymisedAt: string | null;
         };
         /**
          * CustomerType
@@ -8158,6 +8197,69 @@ export interface operations {
             };
             /** @description There is no customer with this key. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_customer_anonymisation_api_admin_customers__id__anonymise_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnonymisationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The customer was anonymised already, or still has a booking open, a hire not yet settled or money owing. `detail` says which. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

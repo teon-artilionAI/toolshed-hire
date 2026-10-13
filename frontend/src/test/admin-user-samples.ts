@@ -8,6 +8,8 @@
  * until the afternoon of the pinned day. And a counter assistant at Somerset
  * West who was deactivated. The customers are the counter's, one in good
  * standing, one on hold with three bookings not collected, and one blacklisted.
+ * `anonymised` gives any of them back the way the server answers once their
+ * personal details are removed.
  */
 
 import type { AdminUser, AdminUserPage, CustomerPage, CustomerSummary } from '../shared/api/contract'
@@ -32,6 +34,28 @@ export function reactivationRoute(id: string): string {
 
 export function standingRoute(id: string): string {
   return `POST /api/admin/customers/${id}/status`
+}
+
+export function anonymiseRoute(id: string): string {
+  return `POST /api/admin/customers/${id}/anonymise`
+}
+
+/** When the samples' personal details were removed, a morning in branch time. */
+export const ANONYMISED_AT = '2026-10-13T09:15:00+02:00'
+
+/** A customer the way the server answers once their personal details are removed. */
+export function anonymised(customer: CustomerSummary): CustomerSummary {
+  return {
+    ...customer,
+    displayName: 'Former customer',
+    phone: 'Removed',
+    email: customer.hasLogin ? `former-customer-${customer.id}@anonymised.invalid` : null,
+    companyName: customer.customerType === 'TRADE' ? 'Former customer' : null,
+    idDocumentLast4: '0000',
+    billingSuburb: 'Removed',
+    billingCity: 'Removed',
+    anonymisedAt: ANONYMISED_AT,
+  }
 }
 
 /** The signed in owner's own account. */

@@ -11,11 +11,15 @@
  * the screen offers the two the customer is not in. Each move says what it does
  * to the customer's bookings, and releasing a hold says the count of bookings
  * they did not collect is kept, with the server's count.
+ *
+ * A customer's personal details can be removed when they ask for it (#113).
+ * The question says what goes, what stays and that it cannot be undone, and a
+ * customer whose details are gone says so on the day the server gave.
  */
 
 import type { AccountStatus, AdminUser, CustomerSummary, StaffRole } from '../../shared/api/contract'
 import { ACCOUNT_STATUSES } from '../../shared/api/account'
-import { branchDateTime } from '../../shared/today'
+import { branchDateTime, branchDay } from '../../shared/today'
 import { countOf } from '../counter/counter-labels'
 
 /** Each role in words. */
@@ -129,4 +133,78 @@ export function standingMoves(customer: CustomerSummary): AccountStatus[] {
 /** How many bookings the customer did not collect, in words. */
 export function noShowWords(customer: CustomerSummary): string {
   return customer.noShowCount === 0 ? 'None' : countOf(customer.noShowCount, 'booking', 'bookings')
+}
+
+/** How many years a customer's hires, charges and deposits are kept as
+ *  financial records once their personal details are removed. */
+const FINANCIAL_RECORD_YEARS = 5
+
+/** What stays of a customer whose personal details are removed. */
+const RECORDS_KEPT = `Their hires, charges and deposits are kept for ${FINANCIAL_RECORD_YEARS} years as financial records.`
+
+/** The words of removing one customer's personal details. */
+export interface AnonymiseWords {
+  /** The button that opens the question. */
+  action: string
+  question: string
+  /** What is removed. */
+  removed: string
+  /** What stays. */
+  kept: string
+  /** That it cannot be undone. */
+  final: string
+  answer: string
+  pending: string
+  /** The button that puts the question away. */
+  keep: string
+}
+
+/**
+ * The words of the question before a customer's personal details are removed.
+ *
+ * @param customer The customer as the server last sent them.
+ */
+export function anonymiseWords(customer: CustomerSummary): AnonymiseWords {
+  return {
+    action: 'Anonymise',
+    question: `Anonymise ${customer.displayName}?`,
+    removed: 'Their name, phone number, email address, address and ID digits are removed, and they can no longer sign in.',
+    kept: RECORDS_KEPT,
+    final: 'This cannot be undone.',
+    answer: 'Yes, anonymise',
+    pending: 'Anonymising',
+    keep: 'Keep their details',
+  }
+}
+
+/**
+ * The notice once a customer's personal details are removed.
+ *
+ * @param formerName The name the customer had before, from the entry the
+ *   question was asked from, because the server's answer no longer has it.
+ * @param customer The customer as the server answered.
+ */
+export function anonymisedOutcome(formerName: string, customer: CustomerSummary): { title: string; line: string } {
+  return {
+    title: `The personal details of ${formerName} were removed`,
+    line: `They are listed as ${customer.displayName} from now on. ${RECORDS_KEPT} The audit trail keeps the reason.`,
+  }
+}
+
+/** Whether the customer's personal details were removed. */
+export function isAnonymised(customer: CustomerSummary): boolean {
+  return customer.anonymisedAt !== null
+}
+
+/** What an entry says of a customer whose personal details were removed, or
+ *  null while they are still known. */
+export function anonymisedWords(customer: CustomerSummary): string | null {
+  if (customer.anonymisedAt === null) return null
+  return `Their personal details were removed on ${branchDay(customer.anonymisedAt)}. ${RECORDS_KEPT}`
+}
+
+/** The customer's email address, or why there is none to show. */
+export function customerEmailWords(customer: CustomerSummary): string {
+  if (isAnonymised(customer)) return 'Removed'
+  return customer.email ?? 'No online account'
 }
