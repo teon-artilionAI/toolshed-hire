@@ -224,7 +224,7 @@ export default function SignIn() {
         <PageHeader screenId="SC-06" title={TITLE[mode]} subtitle={SUBTITLE[mode]} />
       </div>
 
-      <div className="mx-auto w-full max-w-lg">
+      <div className="mx-auto w-full max-w-(--container-lg)">
         {mode === 'signin' && (
           <>
             <ArrivalNotice expired={endedBecause === 'expired'} hasNext={next !== null} />

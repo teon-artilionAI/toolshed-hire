@@ -33,7 +33,7 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap justify-between gap-x-md gap-y-xs border-b border-line py-sm last:border-0">
       <dt className="text-sm text-slate-soft">{term}</dt>
-      <dd className="min-w-0 break-words text-sm font-medium text-ink">{children}</dd>
+      <dd className="min-w-0 wrap-break-word text-sm font-medium text-ink">{children}</dd>
     </div>
   )
 }

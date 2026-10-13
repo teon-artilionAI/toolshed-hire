@@ -89,7 +89,7 @@ export default function Register() {
           title="Confirm your email address"
           subtitle="The link in your email brought you here. It works once."
         />
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="mx-auto w-full max-w-(--container-2xl)">
           <EmailVerification token={link.token} onSpent={link.forget} />
         </div>
       </>
@@ -103,7 +103,7 @@ export default function Register() {
         title="Create your hire account"
         subtitle="It takes about two minutes. We ask for identification now so that collection at the counter is quick."
       />
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-(--container-2xl)">
         {sent ? (
           <CheckYourEmail email={sent.email} delivery={sent.delivery} />
         ) : (

@@ -54,7 +54,7 @@ export function ReservationRow({ reservation }: { reservation: Reservation }) {
     >
       <td role="cell" className={CELL}>
         <p className="whitespace-nowrap font-mono text-sm font-medium text-ink">{reservation.reference}</p>
-        <p className="mt-xs max-w-xs text-sm text-slate-soft">{itemsSummary(reservation)}</p>
+        <p className="mt-xs max-w-(--container-xs) text-sm text-slate-soft">{itemsSummary(reservation)}</p>
       </td>
       <td role="cell" className={`${LABELLED_CELL} whitespace-nowrap`}>
         <ColumnName>{RESERVATION_COLUMN.dates}</ColumnName>

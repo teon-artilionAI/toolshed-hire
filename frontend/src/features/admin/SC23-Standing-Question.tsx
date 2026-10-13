@@ -68,10 +68,10 @@ export function StandingQuestion({
       aria-labelledby={`${id}-heading`}
       className="min-w-0 rounded-lg border-2 border-ink bg-surface p-md"
     >
-      <h4 id={`${id}-heading`} ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold text-ink">
+      <h4 id={`${id}-heading`} ref={headingRef} tabIndex={-1} className="wrap-break-word text-base font-semibold text-ink">
         {words.question}
       </h4>
-      <p id={`${id}-consequence`} className="mt-xs break-words text-sm text-ink">
+      <p id={`${id}-consequence`} className="mt-xs wrap-break-word text-sm text-ink">
         {words.consequence}
       </p>
       <div className="mt-md">
@@ -92,7 +92,7 @@ export function StandingQuestion({
       {failure !== null && failure.kind !== 'fault' && !reasonOnly && (
         <div className="mt-md">
           <Notice tone="error" title={`The standing of ${customer.displayName} was not changed`}>
-            <p className="break-words">{failure.detail}</p>
+            <p className="wrap-break-word">{failure.detail}</p>
             {otherRefusals.length > 0 && (
               <ul className="mt-xs list-disc pl-lg">
                 {otherRefusals.map(([field, message]) => (

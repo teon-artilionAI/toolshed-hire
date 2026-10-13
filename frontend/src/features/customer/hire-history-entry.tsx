@@ -37,7 +37,7 @@ function amountInWords(amount: string): string {
 function ChargeLine({ charge }: { charge: RentalCharge }) {
   return (
     <li className="flex flex-wrap justify-between gap-x-md gap-y-xs border-b border-line py-xs last:border-0">
-      <span className="min-w-0 break-words text-ink">
+      <span className="min-w-0 wrap-break-word text-ink">
         {HIRE_CHARGE_LABEL[charge.type]}. {charge.description}
         <span className="block text-xs text-slate-soft">{HIRE_CHARGE_STATUS_LABEL[charge.status]}</span>
       </span>
@@ -68,7 +68,7 @@ export function HireHistoryEntry({ rental }: { rental: Rental }) {
         </div>
         <p className="mt-xs text-sm text-ink">From {rental.branchName}</p>
         <p className="tabular text-sm text-slate-soft">{datesOf(rental)}</p>
-        <p className="mt-xs break-words text-sm text-ink">{modelsHired(rental)}</p>
+        <p className="mt-xs wrap-break-word text-sm text-ink">{modelsHired(rental)}</p>
 
         <h4 className="mt-md text-xs font-semibold uppercase tracking-wide text-slate-soft">Charges</h4>
         {rental.charges.length === 0 ? (

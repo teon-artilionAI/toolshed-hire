@@ -166,7 +166,7 @@ export function AccountProfileForm({
           required
         />
       </div>
-      <div className="max-w-[12rem]">
+      <div className="max-w-48">
         <TextField
           {...control('billingPostalCode')}
           label="Postal code"

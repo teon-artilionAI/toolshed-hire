@@ -95,7 +95,7 @@ function Sidebar({ items, heading, subheading, dark = false }: StaffChrome & { i
   const ground = dark ? 'bg-slate text-white border-slate-soft' : 'bg-surface text-ink border-line'
   const edge = dark ? 'border-slate-soft' : 'border-line'
   const idle = dark ? 'text-white hover:bg-slate-soft' : 'text-slate hover:bg-muted hover:text-ink'
-  const size = dark ? 'min-h-[2.75rem] text-sm' : 'min-h-[3rem] text-base'
+  const size = dark ? 'min-h-11 text-sm' : 'min-h-[3rem] text-base'
 
   return (
     <aside className={`hidden w-64 shrink-0 flex-col border-r md:sticky md:top-0 md:flex md:h-dvh ${ground}`}>
@@ -135,7 +135,7 @@ function CustomerHeader({ items }: { items: ScreenDef[] }) {
             rather than inheriting the image's height as its target. */}
         <Link
           to={CATALOGUE_PATH}
-          className="flex min-h-[2.75rem] min-w-[2.75rem] shrink-0 cursor-pointer items-center"
+          className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center"
           aria-label="Toolshed Hire, home"
         >
           <BrandMark full />
@@ -224,12 +224,12 @@ function Main({ screen, children }: { screen?: ScreenDef; children: ReactNode })
  */
 function ShellFooter() {
   return (
-    <footer className="mx-auto w-full max-w-6xl px-md pb-[6.5rem] md:pb-lg">
+    <footer className="mx-auto w-full max-w-6xl px-md pb-26 md:pb-lg">
       <div className="flex flex-wrap items-center justify-between gap-x-md border-t border-line pt-sm text-sm text-slate-soft">
         <p>Toolshed Hire</p>
         <Link
           to={PRIVACY_PATH}
-          className="inline-flex min-h-[2.75rem] cursor-pointer items-center font-medium text-ink underline transition-colors duration-200 hover:text-slate"
+          className="inline-flex min-h-11 cursor-pointer items-center font-medium text-ink underline transition-colors duration-200 hover:text-slate"
         >
           Privacy notice
         </Link>

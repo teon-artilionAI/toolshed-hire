@@ -107,7 +107,7 @@ export function validatePeriod(startIso: string, endIso: string, today: string):
     return 'The return date must be after the collection date. A one day hire comes back the next morning.'
   }
   if (eachDay(startIso, endIso).length > MAX_HIRE_DAYS) {
-    return `Online hires run up to ${MAX_HIRE_DAYS} days. For a longer job, ring your branch and we will arrange it.`
+    return `Online hires run up to ${MAX_HIRE_DAYS} days. For a longer job, ring-3 your branch and we will arrange it.`
   }
   return null
 }

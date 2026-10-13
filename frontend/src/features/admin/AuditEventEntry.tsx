@@ -26,7 +26,7 @@ function Changes({ event }: { event: AuditEvent }) {
       {changes.map((change) => (
         <div key={change.field} className="grid gap-x-md sm:grid-cols-[minmax(8rem,auto)_1fr]">
           <dt className="font-medium text-ink">{change.field}</dt>
-          <dd className="min-w-0 break-words text-ink">{changeWords(change)}</dd>
+          <dd className="min-w-0 wrap-break-word text-ink">{changeWords(change)}</dd>
         </div>
       ))}
     </dl>
@@ -49,12 +49,12 @@ export function AuditEventEntry({
   return (
     <article aria-labelledby={titleId} className="card min-w-0 p-md">
       <div className="flex flex-wrap items-baseline justify-between gap-x-md gap-y-xs">
-        <h3 id={titleId} className="min-w-0 break-words text-base font-semibold text-ink">
+        <h3 id={titleId} className="min-w-0 wrap-break-word text-base font-semibold text-ink">
           {actionWords(event.action)}
         </h3>
         <p className="tabular text-sm text-slate-soft">{branchDateTime(event.occurredAt)}</p>
       </div>
-      <p className="mt-xs break-words text-sm text-ink">By {actorWords(event)}.</p>
+      <p className="mt-xs wrap-break-word text-sm text-ink">By {actorWords(event)}.</p>
       <p className="mt-xs text-sm text-slate-soft">
         {record} <span className="break-all font-mono text-xs text-ink">{event.entityId}</span>
       </p>

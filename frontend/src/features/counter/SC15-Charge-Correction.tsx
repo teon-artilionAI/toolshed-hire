@@ -95,7 +95,7 @@ export function ChargeCorrection({
       <h4 id={headingId} ref={heading} tabIndex={-1} className="text-base font-semibold text-ink">
         {words.verb} the {CHARGE_NOUN[charge.type]} of {amountWords(charge.amountIncVat)}?
       </h4>
-      <p id={consequenceId} className="mt-xs break-words text-sm text-ink">
+      <p id={consequenceId} className="mt-xs wrap-break-word text-sm text-ink">
         {consequence(kind, rental, charge)}
       </p>
       <div className="mt-md">

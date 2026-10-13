@@ -47,7 +47,7 @@ function Labelled({ column, children }: { column: string; children: ReactNode })
 function DamageReports({ unit }: { unit: AdminAsset }) {
   if (unit.openDamageReports === 0) return <span className="text-slate-soft">None</span>
   return (
-    <Link to={damageHref(unit.assetTag)} className="inline-flex min-h-[2.75rem] items-center gap-xs underline">
+    <Link to={damageHref(unit.assetTag)} className="inline-flex min-h-11 items-center gap-xs underline">
       <Wrench className="h-4 w-4 shrink-0" aria-hidden="true" />
       {countOf(unit.openDamageReports, 'open report', 'open reports')}{' '}
       <span className="sr-only">on {unit.assetTag}</span>
@@ -65,11 +65,11 @@ function UnitRow({ unit, href }: { unit: AdminAsset; href: string }) {
         )}
       </th>
       <Labelled column="Model">
-        <span className="block break-words">{unit.modelName}</span>
-        <span className="block break-words text-xs text-slate-soft">{unit.categoryName}</span>
+        <span className="block wrap-break-word">{unit.modelName}</span>
+        <span className="block wrap-break-word text-xs text-slate-soft">{unit.categoryName}</span>
       </Labelled>
       <Labelled column="Branch">
-        <span className="break-words">{unit.branchName}</span>
+        <span className="wrap-break-word">{unit.branchName}</span>
       </Labelled>
       <Labelled column="Status">
         <StatusPill status={unit.status} label={ASSET_STATUS_LABEL[unit.status]} />

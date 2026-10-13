@@ -87,11 +87,11 @@ function ModelRow({
     <>
       <tr role="row" className="block px-md py-sm lg:table-row">
         <th role="rowheader" scope="row" className={`${CELL_BASE} block font-medium text-ink`}>
-          <span className="block break-words">{model.name}</span>
+          <span className="block wrap-break-word">{model.name}</span>
           <span className="mt-xs block break-all font-mono text-xs font-normal text-slate-soft">{model.sku}</span>
         </th>
         <Figure column="Category">
-          <span className="break-words">{model.categoryName}</span>
+          <span className="wrap-break-word">{model.categoryName}</span>
         </Figure>
         <Figure column="Units">{String(model.assetCount)}</Figure>
         <Figure column={MONEY_LABEL.dailyRate}>

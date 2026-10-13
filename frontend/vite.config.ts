@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import type { ProxyOptions } from 'vite'
 
 /**
@@ -144,7 +145,10 @@ function readProductionHeaders(): Record<string, string> {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  // Tailwind 4 compiles src/index.css through its own Vite plugin, which reads
+  // the theme from the CSS itself. There is no PostCSS step and no JavaScript
+  // configuration any more.
+  plugins: [react(), tailwindcss()],
   build: {
     // Returning undefined leaves every other kind of asset to the default rule.
     assetsInlineLimit: (filePath) => (FONT_FILE_PATTERN.test(filePath) ? false : undefined),
