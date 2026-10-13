@@ -117,7 +117,7 @@ function LookupDesk({ branch }: { branch: CounterBranch }) {
   return (
     <>
       <div className="mb-lg flex flex-wrap items-end gap-md">
-        <div className="min-w-[16rem] max-w-xl flex-1">
+        <div className="min-w-[16rem] max-w-(--container-xl) flex-1">
           <Field
             label="Search customers"
             htmlFor="customer-search"
@@ -131,7 +131,7 @@ function LookupDesk({ branch }: { branch: CounterBranch }) {
               <input
                 id="customer-search"
                 type="search"
-                className="field-input pl-[2.75rem] pr-[3rem]"
+                className="field-input pl-11 pr-[3rem]"
                 value={draft}
                 maxLength={MAX_CUSTOMER_SEARCH_LENGTH}
                 placeholder="082 441 7719"

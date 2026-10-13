@@ -23,7 +23,7 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-soft">{term}</dt>
-      <dd className="mt-xs break-words text-sm text-ink">{children}</dd>
+      <dd className="mt-xs wrap-break-word text-sm text-ink">{children}</dd>
     </div>
   )
 }
@@ -53,10 +53,10 @@ export function CustomerEntry({
 
   return (
     <article aria-labelledby={headingId} className="card min-w-0 p-lg">
-      <h3 id={headingId} className="break-words text-base font-semibold text-ink">
+      <h3 id={headingId} className="wrap-break-word text-base font-semibold text-ink">
         {customer.displayName}
       </h3>
-      {customer.companyName !== null && <p className="break-words text-sm text-slate-soft">{customer.companyName}</p>}
+      {customer.companyName !== null && <p className="wrap-break-word text-sm text-slate-soft">{customer.companyName}</p>}
       <dl className="mt-md grid gap-md sm:grid-cols-2 lg:grid-cols-3">
         <Fact term="Standing">
           <StatusPill status={ACCOUNT_STANDING_PILL[customer.accountStatus]} label={ACCOUNT_STANDING_LABEL[customer.accountStatus]} />

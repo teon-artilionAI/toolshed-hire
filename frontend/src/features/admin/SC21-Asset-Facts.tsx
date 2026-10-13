@@ -21,7 +21,7 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-soft">{term}</dt>
-      <dd className="mt-xs break-words text-sm text-ink">{children}</dd>
+      <dd className="mt-xs wrap-break-word text-sm text-ink">{children}</dd>
     </div>
   )
 }
@@ -29,7 +29,7 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
 function OpenReports({ unit }: { unit: AdminAssetDetail }) {
   if (unit.openDamageReports === 0) return <>None</>
   return (
-    <Link to={damageHref(unit.assetTag)} className="inline-flex min-h-[2.75rem] items-center gap-xs underline">
+    <Link to={damageHref(unit.assetTag)} className="inline-flex min-h-11 items-center gap-xs underline">
       <Wrench className="h-4 w-4 shrink-0" aria-hidden="true" />
       {countOf(unit.openDamageReports, 'open damage report', 'open damage reports')}, resolve on the damage screen
     </Link>
@@ -66,7 +66,7 @@ export function AssetFacts({ unit }: { unit: AdminAssetDetail }) {
       </Fact>
       <div className="min-w-0 sm:col-span-2 lg:col-span-3">
         <dt className="text-xs font-semibold uppercase tracking-wide text-slate-soft">Notes</dt>
-        <dd className="mt-xs whitespace-pre-line break-words text-sm text-ink">{unit.notes ?? 'None'}</dd>
+        <dd className="mt-xs whitespace-pre-line wrap-break-word text-sm text-ink">{unit.notes ?? 'None'}</dd>
       </div>
     </dl>
   )

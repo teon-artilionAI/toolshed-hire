@@ -172,7 +172,7 @@ describe('whether cancelling is offered', () => {
     ['RETURNED', 'The equipment has come back and the hire is finished, so there is nothing to cancel.'],
     ['EXPIRED', 'The hold ran out before the booking was confirmed, so there is nothing to cancel.'],
     ['NO_SHOW', 'The equipment was not collected on the day, so the booking was closed. There is nothing to cancel.'],
-  ] as const)('says why a %s booking has nothing to cancel, and never to ring about it', async (status, said) => {
+  ] as const)('says why a %s booking has nothing to cancel, and never to ring-3 about it', async (status, said) => {
     await openBooking({ [DETAIL]: () => jsonResponse({ ...CONFIRMED, status, canCancel: false }) })
 
     expect(screen.getByText(said)).toBeVisible()

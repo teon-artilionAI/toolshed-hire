@@ -87,7 +87,7 @@ function UnitRow({ unit }: { unit: LocatedUnit }) {
       </th>
       <td role="cell" className={LABELLED_CELL}>
         <ColumnName>{COLUMN.model}</ColumnName>
-        <span className="min-w-0 break-words text-right text-ink sm:text-left">
+        <span className="min-w-0 wrap-break-word text-right text-ink sm:text-left">
           {unit.modelName}
           <span className="block text-xs text-slate-soft">{unit.categoryName}</span>
         </span>

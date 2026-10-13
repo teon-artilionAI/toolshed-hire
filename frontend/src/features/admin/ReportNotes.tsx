@@ -24,11 +24,11 @@ export default function ReportNotes({ definitions }: { definitions: ReportDefini
       <dl className="grid gap-md text-sm lg:grid-cols-2">
         <div>
           <dt className="font-semibold text-ink">Utilisation</dt>
-          <dd className="mt-xs break-words text-slate">{definitions.utilisation}</dd>
+          <dd className="mt-xs wrap-break-word text-slate">{definitions.utilisation}</dd>
         </div>
         <div>
           <dt className="font-semibold text-ink">{GROSS_CONTRIBUTION}</dt>
-          <dd className="mt-xs break-words text-slate">{definitions.grossContribution}</dd>
+          <dd className="mt-xs wrap-break-word text-slate">{definitions.grossContribution}</dd>
         </div>
       </dl>
     </section>

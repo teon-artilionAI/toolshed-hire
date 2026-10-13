@@ -44,9 +44,9 @@ export function CounterEntry({
           <span className="font-mono text-sm font-medium text-ink">{reference}</span>
           {status}
         </p>
-        <p className="mt-xs break-words font-medium text-ink">{customerName}</p>
+        <p className="mt-xs wrap-break-word font-medium text-ink">{customerName}</p>
         <p className="tabular text-sm text-slate-soft">{customerPhone}</p>
-        <div className="mt-xs flex flex-col gap-xs break-words text-sm text-ink">{children}</div>
+        <div className="mt-xs flex flex-col gap-xs wrap-break-word text-sm text-ink">{children}</div>
       </div>
       {actions && <div className="flex flex-wrap gap-sm empty:hidden">{actions}</div>}
       {/* A footer that draws nothing leaves its box empty, and an empty box

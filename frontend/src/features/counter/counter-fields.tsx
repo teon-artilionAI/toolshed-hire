@@ -216,7 +216,7 @@ export function ProblemList({ problems }: { problems: readonly { id: string; mes
         <li key={problem.id}>
           <a
             href={`#${problem.id}`}
-            className="inline-flex min-h-[2.75rem] cursor-pointer items-center underline transition-colors duration-200 hover:text-ink"
+            className="inline-flex min-h-11 cursor-pointer items-center underline transition-colors duration-200 hover:text-ink"
           >
             {problem.message}
           </a>

@@ -61,7 +61,7 @@ export function MobileTabBar({ items }: { items: ScreenDef[] }) {
       {sheetOpen && (
         <div
           id="more-nav-sheet"
-          className="fixed inset-x-0 bottom-[4.5rem] z-30 border-t border-line bg-surface p-md shadow-pop md:hidden"
+          className="fixed inset-x-0 bottom-18 z-30 border-t border-line bg-surface p-md shadow-pop md:hidden"
         >
           <div className="mb-sm flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">More</h2>

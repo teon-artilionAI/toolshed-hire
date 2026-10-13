@@ -109,7 +109,7 @@ function ScreenSkeleton() {
       </p>
       <div className="animate-pulse" aria-hidden="true">
         <div className="mb-xs h-3 w-16 rounded bg-muted" />
-        <div className="mb-lg h-8 w-2/3 max-w-sm rounded bg-muted" />
+        <div className="mb-lg h-8 w-2/3 max-w-(--container-sm) rounded bg-muted" />
         <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-28 rounded-lg border border-line bg-surface" />
@@ -119,7 +119,7 @@ function ScreenSkeleton() {
           <div className="h-10 rounded-t-lg bg-muted" />
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="border-t border-line px-md py-md">
-              <div className="h-4 w-full max-w-lg rounded bg-muted" />
+              <div className="h-4 w-full max-w-(--container-lg) rounded bg-muted" />
             </div>
           ))}
         </div>

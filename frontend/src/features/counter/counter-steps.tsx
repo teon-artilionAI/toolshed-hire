@@ -35,7 +35,7 @@ export function StepList({
           <li
             key={step}
             aria-current={index === current ? 'step' : undefined}
-            className={`flex min-h-[2.75rem] items-center gap-sm rounded border px-md py-sm text-sm ${
+            className={`flex min-h-11 items-center gap-sm rounded border px-md py-sm text-sm ${
               here
                 ? 'border-2 border-ink bg-surface font-semibold text-ink'
                 : 'border-line bg-surface text-slate-soft'

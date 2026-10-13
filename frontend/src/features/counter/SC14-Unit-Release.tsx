@@ -91,7 +91,7 @@ export function ReleaseUnit({
       <h4 id={`${id}-heading`} className="text-base font-semibold text-ink">
         Release {unit.assetTag} from {checkout.reference}?
       </h4>
-      <p id={`${id}-consequence`} className="mt-xs break-words text-sm text-ink">
+      <p id={`${id}-consequence`} className="mt-xs wrap-break-word text-sm text-ink">
         {unit.assetTag} goes back on the shelf for anyone to book. {checkout.reference} is then short a unit until it
         is reallocated, and it cannot go out until it is.
       </p>
@@ -154,7 +154,7 @@ export function SetAsideUnits({
         {checkout.units.map((unit) => (
           <li key={unit.allocationId} className="min-w-0 rounded-lg border border-line p-md">
             <p className="font-mono text-sm font-semibold text-ink">{unit.assetTag}</p>
-            <p className="mt-xs break-words text-sm text-slate-soft">
+            <p className="mt-xs wrap-break-word text-sm text-slate-soft">
               {unit.modelName}. Its grade now is {CONDITION_GRADE_LABEL[unit.conditionGrade]}.
             </p>
             <ReleaseUnit checkout={checkout} unit={unit} onReleased={onReleased} />

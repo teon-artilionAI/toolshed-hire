@@ -23,7 +23,7 @@ const UNREACHABLE_ADVICE =
   'We could not reach Toolshed Hire. Check your connection and try again.'
 
 const FAULT_ADVICE =
-  'Something went wrong on our side. Try again in a moment, and ring your branch if it keeps happening.'
+  'Something went wrong on our side. Try again in a moment, and ring-3 your branch if it keeps happening.'
 
 /**
  * Choose the words for a failure.

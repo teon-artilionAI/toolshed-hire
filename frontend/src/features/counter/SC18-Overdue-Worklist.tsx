@@ -77,7 +77,7 @@ function LossRecorded({ outcome }: { outcome: LossOutcome }) {
       {charges.length > 0 && (
         <ul className="mt-xs flex flex-col gap-xs">
           {charges.map((charge) => (
-            <li key={charge.id} className="tabular break-words">
+            <li key={charge.id} className="tabular wrap-break-word">
               {CHARGE_TYPE_LABEL[charge.type]}. {charge.description}{' '}
               {isNegativeMoney(charge.amountIncVat)
                 ? `${unsignedMoney(charge.amountIncVat)} back to the customer`

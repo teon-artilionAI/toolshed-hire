@@ -86,7 +86,7 @@ export function ItemInspection({
   return (
     <fieldset className="min-w-0 rounded-lg border border-line bg-surface p-md shadow-card" disabled={disabled}>
       <legend className="rounded bg-surface px-xs font-mono text-sm font-semibold text-ink">{itemLabel(item)}</legend>
-      <p className="mb-md break-words text-sm text-slate-soft">{wentOut(item)}</p>
+      <p className="mb-md wrap-break-word text-sm text-slate-soft">{wentOut(item)}</p>
       <div className="mb-md">
         <LateFeeToday item={item} />
       </div>
@@ -181,14 +181,14 @@ function LostItem({ item, charges }: { item: RentalItem; charges: readonly Renta
         <p className="font-mono text-sm font-semibold text-ink">{itemLabel(item)}</p>
         <StatusPill status="LOST" label="Recorded as lost" />
       </div>
-      <p className="mt-xs break-words text-sm text-ink">
+      <p className="mt-xs wrap-break-word text-sm text-ink">
         {item.modelName}. Recorded as lost {item.returnedAt === null ? '' : branchDateTime(item.returnedAt)},{' '}
         {countOf(item.daysLate, 'day', 'days')} after it was due back.
       </p>
       {forTheLoss.length > 0 && (
         <ul aria-label={`Charges for the loss of ${itemLabel(item)}`} className="mt-xs flex flex-col gap-xs text-sm">
           {forTheLoss.map((charge) => (
-            <li key={charge.id} className="tabular break-words text-slate-soft">
+            <li key={charge.id} className="tabular wrap-break-word text-slate-soft">
               {CHARGE_TYPE_LABEL[charge.type]}. {charge.description} {amountWords(charge.amountIncVat)}
             </li>
           ))}
@@ -231,7 +231,7 @@ export function ReturnedItem({
         <p className="font-mono text-sm font-semibold text-ink">{itemLabel(item)}</p>
         <StatusPill status="RETURNED" label="Back" />
       </div>
-      <p className="mt-xs break-words text-sm text-ink">
+      <p className="mt-xs wrap-break-word text-sm text-ink">
         {item.modelName}. Back {item.returnedAt === null ? '' : branchDateTime(item.returnedAt)} at{' '}
         {item.conditionIn === null ? 'no grade on record' : CONDITION_GRADE_LABEL[item.conditionIn]}
         {item.hourMeterIn === null ? '' : `, ${item.hourMeterIn} hours on the meter`}

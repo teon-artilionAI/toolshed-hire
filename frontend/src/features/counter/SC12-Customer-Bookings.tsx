@@ -89,7 +89,7 @@ function BookingRow({ reservation, branch, today }: { reservation: Reservation; 
           <span className="font-mono text-sm font-medium text-ink">{reservation.reference}</span>
           <StatusPill status={reservation.status} />
         </p>
-        <p className="mt-xs break-words text-sm text-ink">{linesInWords(reservation)}</p>
+        <p className="mt-xs wrap-break-word text-sm text-ink">{linesInWords(reservation)}</p>
         <p className="tabular text-sm text-slate-soft">
           {formatDate(reservation.from)} to {formatDate(reservation.to)}, {reservation.branchName}
         </p>
@@ -220,11 +220,11 @@ export function ChosenCustomer({
             id="chosen-customer-heading"
             ref={heading}
             tabIndex={-1}
-            className="break-words text-lg font-semibold text-ink"
+            className="wrap-break-word text-lg font-semibold text-ink"
           >
             {chosen.displayName}
           </h2>
-          {chosen.companyName && <p className="break-words text-sm text-slate-soft">{chosen.companyName}</p>}
+          {chosen.companyName && <p className="wrap-break-word text-sm text-slate-soft">{chosen.companyName}</p>}
           <p className="tabular mt-xs text-sm text-ink">{chosen.phone}</p>
           <p className="break-all text-sm text-slate-soft">{chosen.email ?? 'No email on file'}</p>
           <p className="text-sm text-slate-soft">
