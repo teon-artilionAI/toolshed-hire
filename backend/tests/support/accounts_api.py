@@ -22,7 +22,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.api.account_deps import get_password_hasher
+from app.api.account_deps import get_breached_password_checker, get_password_hasher
 from app.api.deps import get_notification_gateway
 from app.config import settings
 from app.infrastructure.notification import FakeEmailGateway
@@ -30,6 +30,7 @@ from app.main import app as production_app
 from tests.support.account_desk import RESET_KEY, VERIFY_KEY, token_in
 from tests.support.clock import FixedClock
 from tests.support.factories import cached_password_hash
+from tests.support.memory_breach import FakeBreachedPasswordChecker
 from tests.support.sessions import session_client
 
 REGISTER_PATH: Final[str] = "/api/auth/register"
@@ -123,10 +124,14 @@ def account_client(
     ) as client:
         application.dependency_overrides[get_notification_gateway] = lambda: gateway
         application.dependency_overrides[get_password_hasher] = CachedBcryptHasher
+        application.dependency_overrides[get_breached_password_checker] = (
+            lambda: FakeBreachedPasswordChecker()
+        )
         try:
             yield client
         finally:
             application.dependency_overrides.pop(get_password_hasher, None)
+            application.dependency_overrides.pop(get_breached_password_checker, None)
 
 
 __all__ = [
