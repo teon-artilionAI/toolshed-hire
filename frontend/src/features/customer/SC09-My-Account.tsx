@@ -27,6 +27,7 @@ import { AccountProfileCard } from './account-profile-card'
 import { isNotFound } from './booking-refusal'
 import { EmailVerificationNotice } from './email-verification-notice'
 import { HireHistory } from './SC09-Hire-History'
+import { AccountStatement } from './SC09-Statement'
 import { MY_RESERVATIONS_PATH } from './reservation-links'
 
 const TITLE = 'My account'
@@ -120,6 +121,8 @@ export default function MyAccount() {
             <HireHistory />
           </div>
         </div>
+
+        <AccountStatement />
       </div>
     </>
   )

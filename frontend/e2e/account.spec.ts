@@ -169,6 +169,22 @@ test.describe('registration and the account screen against the real backend', ()
     await expect(page.getByRole('region', { name: 'Your hires' }).getByText('You have no hires yet.')).toBeVisible()
     expect(await blockingViolations(page)).toEqual([])
 
+    // The statement for the current period is empty for a new account, and
+    // both files download under the name the server gave them.
+    await page.getByRole('button', { name: 'Read this period' }).click()
+    await expect(page.getByText('Nothing in this period')).toBeVisible()
+    expect(await blockingViolations(page)).toEqual([])
+    const [statementFile] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download my statement' }).click(),
+    ])
+    expect(statementFile.suggestedFilename()).toMatch(/^toolshed-statement-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv$/)
+    const [dataFile] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download all my data' }).click(),
+    ])
+    expect(dataFile.suggestedFilename()).toMatch(/^toolshed-my-data-\d{4}-\d{2}-\d{2}\.json$/)
+
     // The phone number is corrected, and the screen shows what the server kept.
     await page.getByRole('button', { name: 'Edit my details' }).click()
     await page.getByLabel('Mobile number').fill(NEW_PHONE)
