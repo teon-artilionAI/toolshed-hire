@@ -33,6 +33,7 @@ from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
 from app.application.identity.anonymisation_ports import PersonalDataEraser
 from app.application.identity.customer_directory import CustomerDirectory
+from app.application.identity.export_ports import PersonalDataExporter
 from app.application.identity.ports import (
     AccountRepository,
     BranchRepository,
@@ -60,6 +61,7 @@ from app.infrastructure.identity_accounts import SqlAccountRepository
 from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
 from app.infrastructure.personal_data import SqlPersonalDataEraser
+from app.infrastructure.personal_data_export import SqlPersonalDataExporter
 from app.infrastructure.rate_limit import SqlRateLimitStore
 from app.infrastructure.rentals import SqlRentalRepository
 from app.infrastructure.staff_accounts import SqlStaffRepository
@@ -84,6 +86,7 @@ class SqlAlchemyUnitOfWork:
     customers: CustomerRepository
     customer_directory: CustomerDirectory
     personal_data: PersonalDataEraser
+    personal_data_export: PersonalDataExporter
     accounts: AccountRepository
     staff: StaffRepository
     sessions: SessionRepository
@@ -136,6 +139,7 @@ class SqlAlchemyUnitOfWork:
         self.customers = SqlCustomerRepository(session)
         self.customer_directory = SqlCustomerDirectory(session)
         self.personal_data = SqlPersonalDataEraser(session)
+        self.personal_data_export = SqlPersonalDataExporter(session)
         self.accounts = SqlAccountRepository(session)
         self.staff = SqlStaffRepository(session)
         self.sessions = SqlSessionRepository(session)

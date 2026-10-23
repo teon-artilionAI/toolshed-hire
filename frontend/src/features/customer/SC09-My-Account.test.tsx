@@ -137,7 +137,6 @@ describe('the loaded profile', () => {
     expect(await screen.findByText(NO_HIRES_TITLE)).toBeVisible()
     expect(screen.getByText('Hire history and charges')).toBeVisible()
     expect(screen.queryByText(/TSH-H-|R \d/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/statement/i)).not.toBeInTheDocument()
   })
 })
 

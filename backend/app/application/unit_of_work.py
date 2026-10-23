@@ -27,6 +27,7 @@ from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
 from app.application.identity.anonymisation_ports import PersonalDataEraser
 from app.application.identity.customer_directory import CustomerDirectory
+from app.application.identity.export_ports import PersonalDataExporter
 from app.application.identity.ports import (
     AccountRepository,
     BranchRepository,
@@ -115,6 +116,11 @@ class UnitOfWork(Protocol):
     @property
     def personal_data(self) -> PersonalDataEraser:
         """Return where a customer's personal details are written over when they are anonymised."""
+        ...
+
+    @property
+    def personal_data_export(self) -> PersonalDataExporter:
+        """Return where everything held about a customer is read for an export."""
         ...
 
     @property
