@@ -29,7 +29,9 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app.api.identity_deps import get_login_rules
 from app.application.identity.sign_in import (
+    DEFAULT_LOGIN_RULES,
     LOGIN_ATTEMPTS_PER_ADDRESS,
     LOGIN_ATTEMPTS_PER_EMAIL,
     LOGIN_WINDOW,
@@ -38,6 +40,7 @@ from app.domain.account import LOCKOUT_DURATION, MAXIMUM_FAILED_LOGINS
 from app.domain.enums import UserRole
 from app.infrastructure import security
 from app.infrastructure.models import RateLimitCounter, UserAccount
+from app.main import app as production_app
 from tests.support.clock import FixedClock
 from tests.support.factories import TEST_PASSWORD, Factory
 from tests.support.http import problem_code, problem_of
@@ -56,10 +59,22 @@ OTHER_CLIENT_ADDRESS: Final[str] = "198.51.100.20"
 SHA256_HEX_LENGTH: Final[int] = 64
 # The fixed clock starts on the hour, which is the start of a window.
 WHOLE_WINDOW_SECONDS: Final[int] = int(LOGIN_WINDOW.total_seconds())
-TIMING_SAMPLES: Final[int] = 5
+TIMING_SAMPLES: Final[int] = 100
 # How far apart the two medians may be, as a ratio. A path that skipped the
 # hash would be out by a factor of a hundred or more.
 TIMING_TOLERANCE: Final[float] = 2.0
+
+
+@pytest.fixture
+def high_login_limits() -> Iterator[None]:
+    """Lift the per-address limit for the 100-sample timing test only."""
+    production_app.dependency_overrides[get_login_rules] = lambda: (
+        DEFAULT_LOGIN_RULES.with_limits(per_email=1000, per_address=1000)
+    )
+    try:
+        yield
+    finally:
+        production_app.dependency_overrides.pop(get_login_rules, None)
 
 
 @pytest.fixture
@@ -190,8 +205,13 @@ class TestEveryPathCostsOneHash:
             counts[name] = len(verified) - before
         assert counts == dict.fromkeys(attempts, 1)
 
+    @pytest.mark.slow
     def test_an_unknown_address_takes_as_long_as_a_wrong_password(
-        self, auth_client: TestClient, session: Session, factory: Factory
+        self,
+        auth_client: TestClient,
+        session: Session,
+        factory: Factory,
+        high_login_limits: None,
     ) -> None:
         # One account for each sample, so no account reaches its fifth failure
         # and turns a wrong password into a locked account part of the way in.
