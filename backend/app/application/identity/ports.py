@@ -244,6 +244,19 @@ class PasswordVerifier(Protocol):
         ...
 
 
+class BreachedPasswordChecker(Protocol):
+    """Checks a chosen password against a service that lists breached passwords."""
+
+    def is_breached(self, plain_password: str) -> bool:
+        """Return True when the password is known to have appeared in a breach.
+
+        An implementation must never send the password itself anywhere. If the
+        service cannot be reached, it returns False and warns, because an
+        outage at a third party must not stop somebody opening an account.
+        """
+        ...
+
+
 class PasswordHasher(Protocol):
     """Turns a chosen password into the hash that is stored."""
 

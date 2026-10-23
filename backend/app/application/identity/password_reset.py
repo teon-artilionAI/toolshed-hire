@@ -34,14 +34,18 @@ from typing import Final
 from app.application.audit import audit_event_for
 from app.application.clock import Clock
 from app.application.identity.account_mail import AccountMailer, MailExpectation
-from app.application.identity.account_rules import ensure_password_may_be_set, normalised_email
+from app.application.identity.account_rules import (
+    ensure_password_may_be_set,
+    ensure_password_not_breached,
+    normalised_email,
+)
 from app.application.identity.attempts import (
     DEFAULT_ACCOUNT_RULES,
     AccountThrottleRules,
     address_subject,
     count_attempt,
 )
-from app.application.identity.ports import PasswordHasher
+from app.application.identity.ports import BreachedPasswordChecker, PasswordHasher
 from app.application.identity.sessions import ACCOUNT_ENTITY_TYPE, ClientDetails
 from app.application.identity.sign_in import UNKNOWN_ACCOUNT_ID
 from app.application.throttle import Throttle
@@ -100,7 +104,8 @@ class RequestPasswordResetUseCase(UseCase[RequestPasswordResetCommand, MailExpec
             clock: Where the current instant comes from.
             throttle: Counts the request for the address and for the client.
             mailer: Sends the message once the transaction has committed.
-            rules: The limits of the windows. The defaults when omitted.
+            rules: The limits of the windows.
+            breaches: Checks the new password against a breach service.
 
         """
         super().__init__(uow, clock)
@@ -181,7 +186,8 @@ class CompletePasswordResetUseCase(UseCase[CompletePasswordResetCommand, None]):
         clock: Clock,
         passwords: PasswordHasher,
         throttle: Throttle,
-        rules: AccountThrottleRules = DEFAULT_ACCOUNT_RULES,
+        rules: AccountThrottleRules,
+        breaches: BreachedPasswordChecker,
     ) -> None:
         """Keep the collaborators the use case works with.
 
@@ -190,13 +196,15 @@ class CompletePasswordResetUseCase(UseCase[CompletePasswordResetCommand, None]):
             clock: Where the current instant comes from.
             passwords: Hashes the new password.
             throttle: Counts the attempt for the client address.
-            rules: The limits of the windows. The defaults when omitted.
+            rules: The limits of the windows.
+            breaches: Checks the new password against a breach service.
 
         """
         super().__init__(uow, clock)
         self._passwords = passwords
         self._throttle = throttle
         self._rules = rules
+        self._breaches = breaches
 
     def execute(self, command: CompletePasswordResetCommand) -> None:
         """Set the new password of the account that holds this token.
@@ -213,6 +221,9 @@ class CompletePasswordResetUseCase(UseCase[CompletePasswordResetCommand, None]):
         counted = ((self._rules.reset_completion_address, address_subject(command.client)),)
         count_attempt(self._uow, self._throttle, counted, now)
         ensure_password_may_be_set(command.new_password, NEW_PASSWORD_PARAMETER)
+        ensure_password_not_breached(
+            self._breaches, command.new_password, NEW_PASSWORD_PARAMETER
+        )
         new_hash = self._passwords.hash(command.new_password)
         with self._uow as uow:
             account = uow.accounts.find_by_password_reset_hash_for_update(
