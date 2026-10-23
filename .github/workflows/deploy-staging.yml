@@ -257,6 +257,11 @@ jobs:
       # The staging run writes no HTML report, because the report names what
       # each step typed. What it keeps is a screenshot of each failure, in
       # test-results, and a password box shows only dots.
+      - name: Scan the failure screenshots for personal information
+        if: failure()
+        working-directory: frontend
+        run: python3 ../infra/scripts/scan_artifacts.py --allow-missing test-results
+
       - name: Keep the failure screenshots when a journey fails
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
