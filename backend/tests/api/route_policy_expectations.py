@@ -21,6 +21,7 @@ NO_ROLES: Final[frozenset[UserRole]] = frozenset()
 
 EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "GET /api/health": (AccessKind.PUBLIC, NO_ROLES),
+    "GET /api/health/live": (AccessKind.PUBLIC, NO_ROLES),
     "POST /api/auth/login": (AccessKind.PUBLIC, NO_ROLES),
     "POST /api/auth/refresh": (AccessKind.REFRESH_COOKIE, NO_ROLES),
     "POST /api/auth/logout": (AccessKind.REFRESH_COOKIE, NO_ROLES),
