@@ -82,6 +82,7 @@ filterwarnings = ["error::DeprecationWarning:app.*"]
 # selected by `-m "not postgres"`, which is the worst of both.
 addopts = ["--strict-markers"]
 markers = [
+    "slow: a timing test that runs 100 real bcrypt verifications.",
     "postgres: requires a real PostgreSQL reached through DATABASE_URL. The pipeline runs these in a separate job, so every test without this marker must pass with no database at all.",
 ]
 
