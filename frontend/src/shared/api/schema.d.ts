@@ -1131,6 +1131,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/reports/charges.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return every charge raised in a calendar month as a CSV file
+         * @description Return the month's charges, streamed, with the totals at the end.
+         *
+         *     Raises:
+         *         ValidationFailure: If the month is not a real YYYY-MM month or the
+         *             branch is unknown. HTTP 422, naming the parameter.
+         */
+        get: operations["export_monthly_charges_api_admin_reports_charges_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/dashboard": {
         parameters: {
             query?: never;
@@ -7089,6 +7113,49 @@ export interface operations {
                 branchCode?: string | null;
                 /** @description Only the units of models in this category and its children. */
                 categorySlug?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_monthly_charges_api_admin_reports_charges_csv_get: {
+        parameters: {
+            query: {
+                /** @description The calendar month, as YYYY-MM. */
+                month: string;
+                /** @description Only the units held at this branch. */
+                branchCode?: string | null;
             };
             header?: never;
             path?: never;

@@ -18,11 +18,13 @@ from app.api.deps import ClockDependency, SessionDependency
 from app.api.sweep_deps import ExpiredHoldSweeper
 from app.application.reporting.dashboard import ReadAdminDashboard
 from app.application.reporting.fleet_figures import FleetFigures
+from app.application.reporting.monthly_charges import ReadMonthlyCharges
 from app.application.reporting.ports import FleetReportQuery
 from app.application.reporting.read_report import ReadUtilisationReport
 from app.infrastructure.admin_dashboard import SqlAdminDashboard
 from app.infrastructure.branch_repository import SqlBranchRepository
 from app.infrastructure.fleet_report import SqlFleetReport
+from app.infrastructure.monthly_charges import SqlMonthlyCharges
 
 
 def get_fleet_report_query(session: SessionDependency) -> FleetReportQuery:
@@ -66,4 +68,12 @@ def get_read_admin_dashboard(
     return ReadAdminDashboard(SqlAdminDashboard(session), figures, clock, lapse_due_bookings)
 
 
+def get_read_monthly_charges(session: SessionDependency) -> ReadMonthlyCharges:
+    """Return the read of one month's charges for the bookkeeper."""
+    return ReadMonthlyCharges(SqlMonthlyCharges(session))
+
+
 ReadAdminDashboardDependency = Annotated[ReadAdminDashboard, Depends(get_read_admin_dashboard)]
+ReadMonthlyChargesDependency = Annotated[
+    ReadMonthlyCharges, Depends(get_read_monthly_charges)
+]

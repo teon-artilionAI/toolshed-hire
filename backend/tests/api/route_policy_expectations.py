@@ -70,6 +70,7 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "GET /api/assets/locator": (AccessKind.ROLES, STAFF_ROLES),
     "GET /api/admin/reports/utilisation": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/reports/utilisation.csv": (AccessKind.ROLES, ADMIN_ROLE),
+    "GET /api/admin/reports/charges.csv": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/dashboard": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/audit-events": (AccessKind.ROLES, ADMIN_ROLE),
     "GET /api/admin/notifications": (AccessKind.ROLES, ADMIN_ROLE),
