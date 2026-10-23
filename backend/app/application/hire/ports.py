@@ -24,7 +24,7 @@ each takes a bounded number of statements however many rows come back.
 from __future__ import annotations
 
 from datetime import date
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
 from app.application.booking.read_models import ReservationKey
@@ -33,6 +33,9 @@ from app.application.hire.overview_models import DashboardRows, DiaryRows
 from app.application.hire.read_models import CheckoutDetail, RentalDetail, RentalKey
 from app.application.ownership import OwnerScope
 from app.domain.rental import Rental
+
+if TYPE_CHECKING:
+    from app.application.hire.statement import StatementLine
 
 
 class CounterOverviewQuery(Protocol):
@@ -129,5 +132,16 @@ class RentalRepository(Protocol):
 
         Overdue rentals come first, the most overdue first, and then the rest,
         newest first.
+        """
+        ...
+
+    def statement_for_customer(
+        self, customer_profile_id: UUID, starts_on: date, ends_on: date
+    ) -> tuple[StatementLine, ...]:
+        """Return every hire of one customer that belongs to a period, oldest first.
+
+        A hire belongs to the period when it went out in it, came back in it,
+        or had a charge raised in it. Every charge on a hire that belongs to
+        the period is returned, even one raised outside it.
         """
         ...

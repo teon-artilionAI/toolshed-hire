@@ -107,8 +107,15 @@ export default function PrivacyNotice() {
 
           <Section title="How long we keep it">
             <p>
-              The period we keep information for is not fixed yet. It will be stated here before
-              this system is used for real customers.
+              Financial records, which are your hires, charges and deposit movements, are kept
+              for five years. Your personal details are removed two years after your last hire,
+              unless your account is still active.
+            </p>
+            <p>
+              Removal is automatic. A monthly job removes the details of accounts that have been
+              dormant for two years, and a branch can remove them sooner when you ask. The
+              financial records stay, linked to an anonymous profile, because they are the record
+              of money taken and returned.
             </p>
           </Section>
 
@@ -116,7 +123,8 @@ export default function PrivacyNotice() {
             <p>
               You may ask to see the information we hold about you, ask us to correct it, and
               object to how we use it. You can see and correct your contact and billing details
-              yourself on your account screen. For anything else, ask at any branch.
+              yourself on your account screen, and download your statement and a copy of
+              everything we hold about you there. For anything else, ask at any branch.
             </p>
           </Section>
 

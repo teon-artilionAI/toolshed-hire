@@ -472,6 +472,137 @@
         }
       }
     },
+    "/api/me/statement": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Return the signed in customer's own statement for a period",
+        "description": "Return the statement, showing the ledger's own rows.\n\nRaises:\n    ValidationFailure: If the period is reversed or longer than ten\n        years. HTTP 422, naming `from` or `to`.",
+        "operationId": "read_statement_api_me_statement_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The first day, included.",
+              "title": "From"
+            },
+            "description": "The first day, included."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The day after the last day, so the period is [from, to).",
+              "title": "To"
+            },
+            "description": "The day after the last day, so the period is [from, to)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The period is reversed or longer than ten years, or the account has no profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/statement.csv": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Return the statement as a CSV file",
+        "description": "Return the same statement as a file a spreadsheet opens.\n\nRaises:\n    ValidationFailure: As for the statement. HTTP 422.",
+        "operationId": "export_statement_api_me_statement_csv_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The first day, included.",
+              "title": "From"
+            },
+            "description": "The first day, included."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "The day after the last day, so the period is [from, to).",
+              "title": "To"
+            },
+            "description": "The day after the last day, so the period is [from, to)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "The period is reversed or longer than ten years, or the account has no profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/export": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Return everything held about the signed in customer as a JSON file",
+        "description": "Return the customer's data as a download and record that it was exported.",
+        "operationId": "export_my_data_api_me_export_get",
+        "responses": {
+          "200": {
+            "description": "Everything held about the signed in customer, as a JSON file. Credential columns are never included.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/rentals": {
       "get": {
         "tags": [
@@ -12488,6 +12619,254 @@
         "type": "object",
         "title": "StaffUpdateRequest",
         "description": "The fields of a staff account to change, any of them. Never the address or a password."
+      },
+      "StatementChargeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "chargeType": {
+            "$ref": "#/components/schemas/ChargeType"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "amountExVat": {
+            "type": "string",
+            "title": "Amountexvat"
+          },
+          "vatAmount": {
+            "type": "string",
+            "title": "Vatamount"
+          },
+          "amountIncVat": {
+            "type": "string",
+            "title": "Amountincvat"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChargeStatus"
+          },
+          "raisedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Raisedat"
+          },
+          "reversesChargeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reverseschargeid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "chargeType",
+          "description",
+          "amountExVat",
+          "vatAmount",
+          "amountIncVat",
+          "status",
+          "raisedAt",
+          "reversesChargeId"
+        ],
+        "title": "StatementChargeResponse",
+        "description": "One money line on a statement."
+      },
+      "StatementLineResponse": {
+        "properties": {
+          "rentalId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rentalid"
+          },
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "branchCode": {
+            "type": "string",
+            "title": "Branchcode"
+          },
+          "branchName": {
+            "type": "string",
+            "title": "Branchname"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RentalStatus"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "dueBackOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Duebackon"
+          },
+          "checkedOutAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checkedoutat"
+          },
+          "returnedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returnedat"
+          },
+          "depositHeld": {
+            "type": "string",
+            "title": "Depositheld"
+          },
+          "depositWithheld": {
+            "type": "string",
+            "title": "Depositwithheld"
+          },
+          "depositRefunded": {
+            "type": "string",
+            "title": "Depositrefunded"
+          },
+          "balanceDue": {
+            "type": "string",
+            "title": "Balancedue"
+          },
+          "chargesTotalIncVat": {
+            "type": "string",
+            "title": "Chargestotalincvat"
+          },
+          "charges": {
+            "items": {
+              "$ref": "#/components/schemas/StatementChargeResponse"
+            },
+            "type": "array",
+            "title": "Charges"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rentalId",
+          "reference",
+          "branchCode",
+          "branchName",
+          "status",
+          "from",
+          "dueBackOn",
+          "checkedOutAt",
+          "returnedAt",
+          "depositHeld",
+          "depositWithheld",
+          "depositRefunded",
+          "balanceDue",
+          "chargesTotalIncVat",
+          "charges"
+        ],
+        "title": "StatementLineResponse",
+        "description": "One hire on a statement, with every charge raised on it."
+      },
+      "StatementResponse": {
+        "properties": {
+          "customerName": {
+            "type": "string",
+            "title": "Customername"
+          },
+          "customerEmail": {
+            "type": "string",
+            "title": "Customeremail"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generatedat"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/StatementTotalsResponse"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StatementLineResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customerName",
+          "customerEmail",
+          "from",
+          "to",
+          "generatedAt",
+          "totals",
+          "items"
+        ],
+        "title": "StatementResponse",
+        "description": "A customer's statement for one period."
+      },
+      "StatementTotalsResponse": {
+        "properties": {
+          "hireCount": {
+            "type": "integer",
+            "title": "Hirecount"
+          },
+          "chargesTotalIncVat": {
+            "type": "string",
+            "title": "Chargestotalincvat"
+          },
+          "depositHeld": {
+            "type": "string",
+            "title": "Depositheld"
+          },
+          "depositWithheld": {
+            "type": "string",
+            "title": "Depositwithheld"
+          },
+          "depositRefunded": {
+            "type": "string",
+            "title": "Depositrefunded"
+          },
+          "balanceDue": {
+            "type": "string",
+            "title": "Balancedue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hireCount",
+          "chargesTotalIncVat",
+          "depositHeld",
+          "depositWithheld",
+          "depositRefunded",
+          "balanceDue"
+        ],
+        "title": "StatementTotalsResponse",
+        "description": "The figures over every line of a statement."
       },
       "StrandedBookingListResponse": {
         "properties": {

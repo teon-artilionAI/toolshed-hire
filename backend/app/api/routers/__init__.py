@@ -40,6 +40,7 @@ from app.api.routers import (
     rentals,
     reservation_reads,
     reservations,
+    statement,
 )
 
 API_PREFIX = "/api"
@@ -50,6 +51,7 @@ api_router.include_router(auth.router)
 api_router.include_router(account.router)
 api_router.include_router(me.router)
 api_router.include_router(profile.router)
+api_router.include_router(statement.router)
 api_router.include_router(my_rentals.router)
 api_router.include_router(my_damage_photos.router)
 api_router.include_router(customers.router)

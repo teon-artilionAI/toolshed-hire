@@ -42,6 +42,7 @@ from sqlmodel import Session, col, select
 from app.application.booking.read_models import ReservationKey
 from app.application.hire.list_models import RentalPage, RentalSearch
 from app.application.hire.read_models import CheckoutDetail, RentalDetail, RentalKey
+from app.application.hire.statement import StatementLine
 from app.application.ownership import OwnerScope
 from app.domain import rental as domain
 from app.domain.enums import RentalStatus
@@ -51,6 +52,7 @@ from app.infrastructure.rental_aggregates import charge_row, rental_aggregates_o
 from app.infrastructure.rental_list_query import SqlRentalList
 from app.infrastructure.rental_query import SqlRentalReads, rental_key_condition
 from app.infrastructure.schema_ddl import RENTAL_REFERENCE_SEQUENCE
+from app.infrastructure.statement_query import SqlStatementReads
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,7 @@ class SqlRentalRepository:
         self._rentals = SqlRentalReads(session)
         self._checkouts = SqlCheckoutReads(session)
         self._list = SqlRentalList(session)
+        self._statement = SqlStatementReads(session)
 
     def next_reference(self, year: int) -> str:
         """Return the next rental reference, for example TSH-H-26-000099."""
@@ -176,6 +179,12 @@ class SqlRentalRepository:
     def search(self, search: RentalSearch, scope: OwnerScope) -> RentalPage:
         """Return one page of the rentals the scope lets the caller see."""
         return self._list.search(search, scope)
+
+    def statement_for_customer(
+        self, customer_profile_id: UUID, starts_on: date, ends_on: date
+    ) -> tuple[StatementLine, ...]:
+        """Return every hire of one customer that belongs to a period, oldest first."""
+        return self._statement.for_customer(customer_profile_id, starts_on, ends_on)
 
 
 def _rental_row(rental: domain.Rental) -> Rental:

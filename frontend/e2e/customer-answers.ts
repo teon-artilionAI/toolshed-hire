@@ -42,6 +42,64 @@ export const CUSTOMER = {
   emailDeliverable: false,
 }
 
+export const STATEMENT = {
+  customerName: CUSTOMER.fullName,
+  customerEmail: CUSTOMER.email,
+  from: '2026-01-01',
+  to: '2026-12-31',
+  generatedAt: '2026-10-23T09:00:00+00:00',
+  totals: {
+    hireCount: 1,
+    chargesTotalIncVat: '795.00',
+    depositHeld: '1200.00',
+    depositWithheld: '240.00',
+    depositRefunded: '960.00',
+    balanceDue: '0.00',
+  },
+  items: [
+    {
+      rentalId: '5f0c2a9e-0000-4000-8000-000000000901',
+      reference: 'TSH-H-26-000901',
+      branchCode: 'SMW',
+      branchName: 'Somerset West',
+      status: 'SETTLED',
+      from: HIRE_FROM,
+      dueBackOn: HIRE_TO,
+      checkedOutAt: '2026-10-03T08:00:00+02:00',
+      returnedAt: '2026-10-07T08:00:00+02:00',
+      depositHeld: '1200.00',
+      depositWithheld: '240.00',
+      depositRefunded: '960.00',
+      balanceDue: '0.00',
+      chargesTotalIncVat: '795.00',
+      charges: [
+        {
+          id: '5f0c2a9e-0000-4000-8000-000000000902',
+          chargeType: 'HIRE',
+          description: 'Hire of the unit',
+          amountExVat: '555.00',
+          vatAmount: '0.00',
+          amountIncVat: '555.00',
+          status: 'SETTLED',
+          raisedAt: '2026-10-03T08:00:00+02:00',
+          reversesChargeId: null,
+        },
+        {
+          id: '5f0c2a9e-0000-4000-8000-000000000903',
+          chargeType: 'LATE_FEE',
+          description: 'Late fee',
+          amountExVat: '240.00',
+          vatAmount: '0.00',
+          amountIncVat: '240.00',
+          status: 'SETTLED',
+          raisedAt: '2026-10-07T08:00:00+02:00',
+          reversesChargeId: null,
+        },
+      ],
+    },
+  ],
+}
+
 export const PROFILE = {
   fullName: CUSTOMER.fullName,
   email: CUSTOMER.email,
@@ -126,6 +184,7 @@ const ANSWERS: Record<string, unknown> = {
   [`GET /api/reservations/${BOOKING_REFERENCE}`]: RESERVATIONS.items[0],
   'GET /api/me/profile': PROFILE,
   'GET /api/me/rentals': MY_RENTALS,
+  'GET /api/me/statement': STATEMENT,
   'POST /api/reservations': new Answered(201, DRAFT),
   [`POST /api/reservations/${BOOKING_ID}/hold`]: () => ({
     ...DRAFT,
