@@ -3608,6 +3608,81 @@
         }
       }
     },
+    "/api/admin/reports/charges.csv": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "Return every charge raised in a calendar month as a CSV file",
+        "description": "Return the month's charges, streamed, with the totals at the end.\n\nRaises:\n    ValidationFailure: If the month is not a real YYYY-MM month or the\n        branch is unknown. HTTP 422, naming the parameter.",
+        "operationId": "export_monthly_charges_api_admin_reports_charges_csv_get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "description": "The calendar month, as YYYY-MM.",
+              "title": "Month"
+            },
+            "description": "The calendar month, as YYYY-MM."
+          },
+          {
+            "name": "branchCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the units held at this branch.",
+              "title": "Branchcode"
+            },
+            "description": "Only the units held at this branch."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A query parameter was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/dashboard": {
       "get": {
         "tags": [
