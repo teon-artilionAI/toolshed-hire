@@ -38,6 +38,14 @@ FullNameText = Annotated[TrimmedText, Field(max_length=EDITABLE_FIELDS[FULL_NAME
 PhoneText = Annotated[str, Field(max_length=EDITABLE_FIELDS[PHONE].max_length)]
 BranchCodeText = Annotated[TrimmedText, Field(max_length=BRANCH_CODE_MAX_LENGTH)]
 
+class TradeDiscountRequest(StrictRequest):
+    """A trade discount as a percentage with at most two decimals."""
+
+    trade_discount_percent: str = Field(
+        validation_alias="tradeDiscountPercent", pattern=r"^\d{1,2}(\.\d{1,2})?$"
+    )
+
+
 UNKNOWN_STAFF_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": "No staff account has this key. A customer's account is not one.",
