@@ -19,7 +19,7 @@ import logging
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import SessionDependency, public_access
-from app.api.schemas import HealthResponse
+from app.api.schemas import HealthResponse, LiveHealthResponse
 from app.config import settings
 from app.infrastructure.database import check_database_reachable, check_extension_installed
 
@@ -28,7 +28,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"], dependencies=[Depends(public_access)])
 
 STATUS_HEALTHY = "healthy"
+LIVE_PATH = "/health/live"
 STATUS_DEGRADED = "degraded"
+
+
+@router.get(
+    LIVE_PATH,
+    response_model=LiveHealthResponse,
+    summary="Report that the process is alive, without opening a session",
+)
+def read_liveness() -> LiveHealthResponse:
+    """Answer from the process alone, so an uptime check never wakes the database.
+
+    The route has no session dependency on purpose. An uptime check calling it
+    every five minutes must not keep Neon's compute awake all month, and this is
+    the proof that it cannot.
+    """
+    logger.debug("health.liveness_checked")
+    return LiveHealthResponse(
+        status=STATUS_HEALTHY,
+        environment=settings.environment.value,
+        revision=settings.revision,
+    )
 
 
 @router.get("/health", response_model=HealthResponse, summary="Report dependency health")
