@@ -266,6 +266,8 @@ class Factory:
             branch: The branch that registered the customer.
             account: The sign in account the profile belongs to. Omit it to
                 build a walk-in, which has a profile and no login.
+            customer_type: Whether the customer hires as an individual or as
+                a trade account.
 
         """
         profile = CustomerProfile(

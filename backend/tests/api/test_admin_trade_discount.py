@@ -16,7 +16,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, col, select
 
-from app.domain.enums import AccountStatus, CustomerType, UserRole
+from app.domain.enums import CustomerType, UserRole
 from app.infrastructure.models import AuditEvent, CustomerProfile, UserAccount
 from tests.support.clock import FixedClock
 from tests.support.factories import Factory
