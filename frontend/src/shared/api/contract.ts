@@ -63,6 +63,14 @@ export type {
   UnitQuote,
 } from './contract-catalogue'
 export type {
+  MyDataExport,
+  MyStatement,
+  MyStatementCharge,
+  MyStatementLine,
+  MyStatementQuery,
+  MyStatementTotals,
+} from './contract-statement'
+export type {
   AccountStatus,
   CompletePasswordResetRequest,
   CustomerType,

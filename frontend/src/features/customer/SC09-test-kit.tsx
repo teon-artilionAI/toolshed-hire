@@ -18,6 +18,25 @@ import { CUSTOMER, signedInAs } from '../../test/session-samples'
 import type { MyProfile, SessionUser } from '../../shared/api/contract'
 
 export const HEADING = 'My account'
+export const STATEMENT_ROUTE = 'GET /api/me/statement'
+
+/** A statement with no hires in the period, for a screen test that is not about it. */
+export const EMPTY_STATEMENT = {
+  customerName: 'Wesley Adonis',
+  customerEmail: 'wesley.adonis@example.co.za',
+  from: '2026-01-01',
+  to: '2026-10-24',
+  generatedAt: '2026-10-23T09:00:00+00:00',
+  totals: {
+    hireCount: 0,
+    chargesTotalIncVat: '0.00',
+    depositHeld: '0.00',
+    depositWithheld: '0.00',
+    depositRefunded: '0.00',
+    balanceDue: '0.00',
+  },
+  items: [],
+}
 export const SAVED_TITLE = 'Your details have been updated'
 
 /**
@@ -30,7 +49,11 @@ export async function openAccount(
   routes: RouteTable,
   account: SessionUser = CUSTOMER,
 ): Promise<{ user: UserEvent; network: ApiMock }> {
-  const network = mockApi({ ...signedInAs(account), ...routes })
+  const network = mockApi({
+    ...signedInAs(account),
+    [STATEMENT_ROUTE]: () => jsonResponse(EMPTY_STATEMENT),
+    ...routes,
+  })
   renderApp('/account')
   await findScreenHeading(HEADING)
   return { user: userEvent.setup(), network }
@@ -42,6 +65,7 @@ export function withProfile(profile: MyProfile, routes: RouteTable = {}): RouteT
   return {
     [PROFILE_ROUTE]: () => jsonResponse(profile),
     [MY_RENTALS_ROUTE]: () => jsonResponse(rentalPage([], { pageSize: 5 })),
+    [STATEMENT_ROUTE]: () => jsonResponse(EMPTY_STATEMENT),
     ...routes,
   }
 }

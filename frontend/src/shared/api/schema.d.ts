@@ -302,6 +302,73 @@ export interface paths {
         patch: operations["patch_profile_api_me_profile_patch"];
         trace?: never;
     };
+    "/api/me/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the signed in customer's own statement for a period
+         * @description Return the statement, showing the ledger's own rows.
+         *
+         *     Raises:
+         *         ValidationFailure: If the period is reversed or longer than ten
+         *             years. HTTP 422, naming `from` or `to`.
+         */
+        get: operations["read_statement_api_me_statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/statement.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the statement as a CSV file
+         * @description Return the same statement as a file a spreadsheet opens.
+         *
+         *     Raises:
+         *         ValidationFailure: As for the statement. HTTP 422.
+         */
+        get: operations["export_statement_api_me_statement_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return everything held about the signed in customer as a JSON file
+         * @description Return the customer's data as a download and record that it was exported.
+         */
+        get: operations["export_my_data_api_me_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/rentals": {
         parameters: {
             query?: never;
@@ -4427,6 +4494,127 @@ export interface components {
             branchCode?: string | null;
         };
         /**
+         * StatementChargeResponse
+         * @description One money line on a statement.
+         */
+        StatementChargeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            chargeType: components["schemas"]["ChargeType"];
+            /** Description */
+            description: string;
+            /** Amountexvat */
+            amountExVat: string;
+            /** Vatamount */
+            vatAmount: string;
+            /** Amountincvat */
+            amountIncVat: string;
+            status: components["schemas"]["ChargeStatus"];
+            /**
+             * Raisedat
+             * Format: date-time
+             */
+            raisedAt: string;
+            /** Reverseschargeid */
+            reversesChargeId: string | null;
+        };
+        /**
+         * StatementLineResponse
+         * @description One hire on a statement, with every charge raised on it.
+         */
+        StatementLineResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            status: components["schemas"]["RentalStatus"];
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /**
+             * Checkedoutat
+             * Format: date-time
+             */
+            checkedOutAt: string;
+            /** Returnedat */
+            returnedAt: string | null;
+            /** Depositheld */
+            depositHeld: string;
+            /** Depositwithheld */
+            depositWithheld: string;
+            /** Depositrefunded */
+            depositRefunded: string;
+            /** Balancedue */
+            balanceDue: string;
+            /** Chargestotalincvat */
+            chargesTotalIncVat: string;
+            /** Charges */
+            charges: components["schemas"]["StatementChargeResponse"][];
+        };
+        /**
+         * StatementResponse
+         * @description A customer's statement for one period.
+         */
+        StatementResponse: {
+            /** Customername */
+            customerName: string;
+            /** Customeremail */
+            customerEmail: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /**
+             * Generatedat
+             * Format: date-time
+             */
+            generatedAt: string;
+            totals: components["schemas"]["StatementTotalsResponse"];
+            /** Items */
+            items: components["schemas"]["StatementLineResponse"][];
+        };
+        /**
+         * StatementTotalsResponse
+         * @description The figures over every line of a statement.
+         */
+        StatementTotalsResponse: {
+            /** Hirecount */
+            hireCount: number;
+            /** Chargestotalincvat */
+            chargesTotalIncVat: string;
+            /** Depositheld */
+            depositHeld: string;
+            /** Depositwithheld */
+            depositWithheld: string;
+            /** Depositrefunded */
+            depositRefunded: string;
+            /** Balancedue */
+            balanceDue: string;
+        };
+        /**
          * StrandedBookingListResponse
          * @description The bookings and hires out a closure would strand, by start, and how many in all.
          *
@@ -5104,6 +5292,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_statement_api_me_statement_get: {
+        parameters: {
+            query: {
+                /** @description The first day, included. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementResponse"];
+                };
+            };
+            /** @description The period is reversed or longer than ten years, or the account has no profile. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_statement_api_me_statement_csv_get: {
+        parameters: {
+            query: {
+                /** @description The first day, included. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The period is reversed or longer than ten years, or the account has no profile. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_my_data_api_me_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everything held about the signed in customer, as a JSON file. Credential columns are never included. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, unknown>;
                 };
             };
         };
