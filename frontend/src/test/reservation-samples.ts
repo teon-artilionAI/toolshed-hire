@@ -125,6 +125,10 @@ export const CONFIRMED: Reservation = {
   canConfirm: false,
 }
 
+export function confirmationResendRoute(id: string): string {
+  return `POST /api/me/reservations/${id}/confirmation/resend`
+}
+
 export const CANCELLED: Reservation = {
   ...CONFIRMED,
   status: 'CANCELLED',

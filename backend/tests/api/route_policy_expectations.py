@@ -51,6 +51,8 @@ EXPECTED_POLICIES: Final[dict[str, tuple[AccessKind, frozenset[UserRole]]]] = {
     "POST /api/rentals/{id}/items/{itemId}/loss": (AccessKind.ROLES, STAFF_ROLES),
     "POST /api/rentals/{id}/balance-payment": (AccessKind.ROLES, STAFF_ROLES),
     "GET /api/me/rentals": (AccessKind.ROLES, CUSTOMER_ROLE),
+    "POST /api/me/reservations/{id}/confirmation/resend": (AccessKind.ROLES, CUSTOMER_ROLE),
+    "POST /api/counter/reservations/{id}/confirmation/resend": (AccessKind.ROLES, STAFF_ROLES),
     "GET /api/me/rentals/{id}/damage-photos": (AccessKind.ROLES, CUSTOMER_ROLE),
     "GET /api/me/rentals/{id}/damage-photos/{photoId}": (AccessKind.ROLES, CUSTOMER_ROLE),
     "POST /api/damage-reports": (AccessKind.ROLES, STAFF_ROLES),

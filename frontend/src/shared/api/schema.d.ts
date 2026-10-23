@@ -589,6 +589,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/reservations/{id}/confirmation/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the signed in customer's own booking confirmation again
+         * @description Queue and send the confirmation again for the caller's own booking.
+         *
+         *     Raises:
+         *         NotFound: If the booking is absent or not the caller's. HTTP 404.
+         *         StateTransitionError: If it is not confirmed or has no address. HTTP 409.
+         *         TooManyAttempts: If three re-sends happened this hour. HTTP 429.
+         */
+        post: operations["post_my_confirmation_resend_api_me_reservations__id__confirmation_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/counter/reservations/{id}/confirmation/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a booking confirmation again from the counter
+         * @description Queue and send the confirmation again for a booking at the caller's branch.
+         *
+         *     Raises:
+         *         NotFound: If the booking is absent. HTTP 404.
+         *         BranchScopeError: If it is at another branch. HTTP 403.
+         *         StateTransitionError: If it is not confirmed or has no address. HTTP 409.
+         *         TooManyAttempts: If three re-sends happened this hour. HTTP 429.
+         */
+        post: operations["post_counter_confirmation_resend_api_counter_reservations__id__confirmation_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations/{id}/checkout": {
         parameters: {
             query?: never;
@@ -2876,6 +2927,14 @@ export interface components {
          * @enum {string}
          */
         ConditionGrade: "A" | "B" | "C";
+        /**
+         * ConfirmationResendResponse
+         * @description Whether the re-sent confirmation can reach the customer's address.
+         */
+        ConfirmationResendResponse: {
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
         /**
          * CreateReservationRequest
          * @description A request for a draft reservation.
@@ -5694,6 +5753,134 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    post_my_confirmation_resend_api_me_reservations__id__confirmation_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationResendResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The booking is not confirmed, or the customer has no email address. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Three re-sends in the last hour. `Retry-After` carries the wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_counter_confirmation_resend_api_counter_reservations__id__confirmation_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationResendResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The booking is not confirmed, or the customer has no email address. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Three re-sends in the last hour. `Retry-After` carries the wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -20,6 +20,7 @@ import { malformedResponse } from '../api-problem'
 import { api } from './client'
 import type {
   CancelReservationRequest,
+  ConfirmationResend,
   CreateReservationRequest,
   NoShowRequest,
   Reservation,
@@ -43,6 +44,8 @@ import {
 } from './read'
 
 const RESERVATIONS_ENDPOINT = '/reservations'
+const MY_RESEND_SEGMENT = '/me/reservations'
+const COUNTER_RESEND_SEGMENT = '/counter/reservations'
 
 /** Every status a reservation can be in, in the order a filter lists them. */
 export const RESERVATION_STATUSES: readonly ReservationStatus[] = [
@@ -237,4 +240,41 @@ export function listReservations(
  */
 export function getReservation(idOrReference: string, signal?: AbortSignal): Promise<Reservation> {
   return api.get(reservationEndpoint(idOrReference), readReservation, { signal })
+}
+
+
+function readConfirmationResend(value: unknown, path: string): ConfirmationResend {
+  const record = readObject(value, path, 'a confirmation re-send answer')
+  return { emailDeliverable: readFlag(record, 'emailDeliverable', path) }
+}
+
+/**
+ * POST /api/me/reservations/{id}/confirmation/resend. Sends the signed in
+ * customer's own confirmation again.
+ *
+ * @throws ApiError with status 404 for another customer's booking, 409 when
+ *   the booking is not confirmed or has no address, and 429 with the wait when
+ *   three re-sends have happened in an hour.
+ */
+export function resendMyConfirmation(id: string): Promise<ConfirmationResend> {
+  return api.post(
+    `${MY_RESEND_SEGMENT}/${encodeURIComponent(id)}/confirmation/resend`,
+    undefined,
+    readConfirmationResend,
+  )
+}
+
+/**
+ * POST /api/counter/reservations/{id}/confirmation/resend. Sends a booking's
+ * confirmation again from the counter, for a booking at the caller's branch.
+ *
+ * @throws ApiError with status 403 for another branch, 404 when no booking has
+ *   the key, 409 when it is not confirmed, and 429 with the wait.
+ */
+export function resendCounterConfirmation(id: string): Promise<ConfirmationResend> {
+  return api.post(
+    `${COUNTER_RESEND_SEGMENT}/${encodeURIComponent(id)}/confirmation/resend`,
+    undefined,
+    readConfirmationResend,
+  )
 }
