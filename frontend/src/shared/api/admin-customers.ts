@@ -27,6 +27,7 @@ import type {
   CustomerAnonymisationRequest,
   CustomerStandingRequest,
   CustomerWithStanding,
+  TradeDiscountRequest,
 } from './contract'
 import { readCustomerSummary } from './customers'
 import { readCount, readList, readObject } from './read'
@@ -66,6 +67,18 @@ export function listCustomerHolds(query: AdminCustomerQuery, signal?: AbortSigna
  */
 export function setCustomerStanding(id: string, body: CustomerStandingRequest): Promise<CustomerWithStanding> {
   return api.post(`${CUSTOMERS_ENDPOINT}/${encodeURIComponent(id)}/status`, body, readCustomerSummary)
+}
+
+/**
+ * POST /api/admin/customers/{id}/trade-discount. Sets the discount a trade
+ * customer carries from the next booking, and answers with the customer.
+ *
+ * @throws ApiError with status 422 naming `tradeDiscountPercent` when the
+ *   customer is not a trade account or the value is out of range, 404 when no
+ *   customer has the key, and 403 for anyone but an administrator.
+ */
+export function setTradeDiscount(id: string, body: TradeDiscountRequest): Promise<CustomerWithStanding> {
+  return api.post(`${CUSTOMERS_ENDPOINT}/${encodeURIComponent(id)}/trade-discount`, body, readCustomerSummary)
 }
 
 /**

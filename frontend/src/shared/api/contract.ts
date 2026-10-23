@@ -206,6 +206,7 @@ export type {
   AnonymisedCustomer,
   CustomerAnonymisationRequest,
   CustomerStandingRequest,
+  TradeDiscountRequest,
   CustomerWithStanding,
   DeactivationRequest,
   NewStaffAccountRequest,

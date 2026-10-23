@@ -254,7 +254,11 @@ class Factory:
         return account
 
     def customer_profile(
-        self, *, branch: Branch, account: UserAccount | None = None
+        self,
+        *,
+        branch: Branch,
+        account: UserAccount | None = None,
+        customer_type: CustomerType = CustomerType.INDIVIDUAL,
     ) -> CustomerProfile:
         """Create the hire profile of a customer.
 
@@ -266,8 +270,9 @@ class Factory:
         """
         profile = CustomerProfile(
             user_account_id=account.id if account else None,
-            customer_type=CustomerType.INDIVIDUAL,
+            customer_type=customer_type,
             display_name=account.full_name if account else "Nomsa Dlamini",
+            company_name="Dlamini Plant Hire" if customer_type is CustomerType.TRADE else None,
             id_document_type=IdDocType.SA_ID,
             id_document_last4="4189",
             contact_phone="082 441 7719",

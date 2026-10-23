@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
-from app.domain.enums import AccountStatus, UserRole
+from app.domain.enums import AccountStatus, CustomerType, UserRole
 from app.domain.errors import AccountOnHoldError, BranchScopeError, CustomerAnonymisedError
 from app.domain.trading_calendar import BranchCalendar
 
@@ -129,6 +129,7 @@ class CustomerProfile:
         user_account_id: The sign in account, or None for a walk-in.
         display_name: The name staff see.
         account_status: The standing of the customer (BR-18).
+        customer_type: Whether the customer hires as an individual or as a trade account.
         email: The address of the sign in account, or None for a walk-in. A
             booking confirmation can only be sent when there is one.
         trade_discount_percent: The discount a trade customer is given, which
@@ -144,7 +145,8 @@ class CustomerProfile:
     user_account_id: UUID | None
     display_name: str
     account_status: AccountStatus
-    email: str | None
+    customer_type: CustomerType = CustomerType.INDIVIDUAL
+    email: str | None = None
     trade_discount_percent: Decimal = NO_TRADE_DISCOUNT
     email_verified: bool = False
     anonymised: bool = False

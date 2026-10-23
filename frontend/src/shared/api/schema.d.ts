@@ -1610,6 +1610,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/customers/{id}/trade-discount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a trade customer's discount from the next booking
+         * @description Set the discount and record the old and new value, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer with this key. HTTP 404.
+         *         ValidationFailure: If the customer is not a trade account, or the
+         *             value is out of range or has more than two decimals. HTTP 422,
+         *             naming `tradeDiscountPercent`.
+         */
+        post: operations["post_trade_discount_api_admin_customers__id__trade_discount_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/customers/{id}/anonymise": {
         parameters: {
             query?: never;
@@ -4404,6 +4430,14 @@ export interface components {
             /** Expiresin */
             expiresIn: number;
             user: components["schemas"]["UserResponse"];
+        };
+        /**
+         * TradeDiscountRequest
+         * @description A trade discount as a percentage with at most two decimals.
+         */
+        TradeDiscountRequest: {
+            /** Tradediscountpercent */
+            tradeDiscountPercent: string;
         };
         /**
          * TradingDayResponse
@@ -8176,6 +8210,60 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CustomerStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_trade_discount_api_admin_customers__id__trade_discount_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeDiscountRequest"];
             };
         };
         responses: {

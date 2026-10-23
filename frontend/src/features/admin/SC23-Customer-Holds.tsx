@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ACCOUNT_STATUSES } from '../../shared/api/account'
 import { adminQueries } from '../../shared/api/admin-queries'
 import type { AccountStatus, CustomerPage, CustomerSummary } from '../../shared/api/contract'
@@ -62,6 +62,7 @@ function Customers({
   onEvery,
   onMoved,
   onAnonymised,
+  onDiscountChanged,
 }: {
   page: CustomerPage
   filters: HoldFilters
@@ -70,6 +71,7 @@ function Customers({
   onEvery: () => void
   onMoved: (customer: CustomerSummary, to: AccountStatus) => void
   onAnonymised: (customer: CustomerSummary, formerName: string) => void
+  onDiscountChanged: (customer: CustomerSummary) => void
 }) {
   if (page.items.length === 0) {
     const pastTheEnd = page.total > 0
@@ -107,7 +109,7 @@ function Customers({
       <ol className="flex flex-col gap-md" aria-label="Customers">
         {page.items.map((customer) => (
           <li key={customer.id}>
-            <CustomerEntry customer={customer} branchName={branchName} onMoved={onMoved} onAnonymised={onAnonymised} />
+            <CustomerEntry customer={customer} branchName={branchName} onMoved={onMoved} onAnonymised={onAnonymised} onDiscountChanged={onDiscountChanged} />
           </li>
         ))}
       </ol>
@@ -121,6 +123,7 @@ export default function CustomerHolds() {
   const filters = readHoldFilters(params)
   const branches = useBranchList()
   const list = useQuery(adminQueries.customerHolds(holdQueryFor(filters)))
+  const client = useQueryClient()
   const phase = queryPhase(list)
   const refused = phase === 'failed' && isRefusal(list.error)
   const fieldErrors = fieldErrorsFromProblem(list.error)
@@ -157,6 +160,19 @@ export default function CustomerHolds() {
    *  it showed before the request. */
   function anonymised(customer: CustomerSummary, formerName: string) {
     setOutcome(anonymisedOutcome(formerName, customer))
+  }
+
+  function discountChanged(customer: CustomerSummary) {
+    const key = adminQueries.customerHolds(holdQueryFor(filters)).queryKey
+    client.setQueryData(key, (current: CustomerPage | undefined) =>
+      current === undefined
+        ? current
+        : { ...current, items: current.items.map((item) => (item.id === customer.id ? customer : item)) },
+    )
+    setOutcome({
+      title: `The trade discount for ${customer.displayName} is now ${customer.tradeDiscountPercent}%`,
+      line: 'Bookings made from now on use the new discount. Existing bookings keep the discount they were made with.',
+    })
   }
 
   return (
@@ -225,6 +241,7 @@ export default function CustomerHolds() {
               onEvery={() => show({ status: null, q: null })}
               onMoved={moved}
               onAnonymised={anonymised}
+              onDiscountChanged={discountChanged}
             />
           </div>
         )}

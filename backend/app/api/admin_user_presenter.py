@@ -11,6 +11,7 @@ a field left out is told apart from a field sent as null.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated, Final
 from uuid import UUID
 
@@ -26,6 +27,7 @@ from app.api.admin_user_schemas import (
     StaffCreatedResponse,
     StaffCreateRequest,
     StaffUpdateRequest,
+    TradeDiscountRequest,
 )
 from app.api.booking_deps import actor_of
 from app.application.catalogue.admin_commands import Change
@@ -40,6 +42,7 @@ from app.application.identity.staff_commands import (
     StaffChanges,
 )
 from app.application.identity.staff_read_models import StaffMember, StaffPage
+from app.application.identity.trade_discount import ChangeTradeDiscountCommand
 from app.domain.staff_account import BRANCH_CODE, ROLE, STAFF_FULL_NAME, STAFF_PHONE
 from app.infrastructure.models import UserAccount
 
@@ -120,6 +123,17 @@ def anonymisation_command(
     """Return the command that anonymises a customer at the owner's request."""
     return AnonymiseCustomerCommand(
         actor=actor_of(user), customer_profile_id=customer_id, reason=request.reason
+    )
+
+
+def trade_discount_command(
+    user: UserAccount, customer_id: UUID, request: TradeDiscountRequest
+) -> ChangeTradeDiscountCommand:
+    """Return the command that sets a customer's trade discount."""
+    return ChangeTradeDiscountCommand(
+        actor=actor_of(user),
+        customer_profile_id=customer_id,
+        percent=Decimal(request.trade_discount_percent),
     )
 
 
