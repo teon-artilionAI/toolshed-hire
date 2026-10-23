@@ -22,11 +22,11 @@ import {
   downloadMyStatementCsv,
   getMyStatement,
 } from '../../shared/api/statement'
-import type { MyStatement, MyStatementLine } from '../../shared/api/contract'
+import type { MyStatement } from '../../shared/api/contract'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { formatDate, money } from '../../shared/format'
 import { saveFile } from '../../shared/save-file'
-import { Card, DataTable, EmptyState, Notice } from '../../shared/ui'
+import { Card, EmptyState, Notice } from '../../shared/ui'
 
 type DownloadState =
   | { step: 'waiting' }
@@ -48,10 +48,6 @@ function firstDayOfYear(): string {
 
 function tomorrow(): string {
   return isoDay(new Date(Date.now() + ONE_DAY_MS))
-}
-
-function lineLabel(line: MyStatementLine): string {
-  return `${line.reference}, ${line.branchName}`
 }
 
 export function AccountStatement() {
@@ -220,63 +216,59 @@ function StatementBody({ statement }: { statement: MyStatement }) {
   }
   return (
     <section className="flex flex-col gap-md" aria-label="Your statement">
-      <div className="grid gap-sm sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="grid gap-sm sm:grid-cols-2 lg:grid-cols-4">
         <Figure term="Hires" value={String(statement.totals.hireCount)} />
         <Figure term="Charges with VAT" value={money(statement.totals.chargesTotalIncVat)} />
         <Figure term="Deposits held" value={money(statement.totals.depositHeld)} />
         <Figure term="Balance due" value={money(statement.totals.balanceDue)} />
-      </div>
+      </dl>
       <p className="text-sm text-slate-soft">
         {formatDate(statement.from)} up to but not including {formatDate(statement.to)}. The
         statement was read on {formatDate(statement.generatedAt.slice(0, 10))}.
       </p>
-      <DataTable
-        columns={['Hire', 'Branch', 'Dates', 'Status', 'Deposit', 'Charges']}
-        caption={`Statement for ${statement.customerName}`}
-      >
+      <ol className="flex flex-col gap-md" aria-label="Hires on the statement">
         {statement.items.map((line) => (
-          <tr key={line.rentalId}>
-            <td className="td whitespace-nowrap font-medium">{line.reference}</td>
-            <td className="td whitespace-nowrap">{line.branchCode}</td>
-            <td className="td whitespace-nowrap">
-              {formatDate(line.from)} to {formatDate(line.dueBackOn)}
-            </td>
-            <td className="td whitespace-nowrap">{line.status.replaceAll('_', ' ')}</td>
-            <td className="td whitespace-nowrap">
-              <span className="block">Held {money(line.depositHeld)}</span>
-              <span className="block text-sm text-slate-soft">
-                Withheld {money(line.depositWithheld)}, refunded {money(line.depositRefunded)}
-              </span>
-            </td>
-            <td className="td">
-              <ul className="flex flex-col gap-xs">
-                {line.charges.map((charge) => (
-                  <li key={charge.id} className="text-sm">
-                    <span className="block text-ink">{charge.description}</span>
-                    <span className="tabular block text-slate-soft">
-                      {money(charge.amountIncVat)} with VAT, {charge.status.toLowerCase()}
-                    </span>
-                  </li>
-                ))}
-                {line.charges.length === 0 && (
-                  <li className="text-sm text-slate-soft">No charges on this hire yet.</li>
-                )}
-              </ul>
-            </td>
-          </tr>
+          <li key={line.rentalId} className="rounded-md border border-line p-md">
+            <div className="flex flex-wrap items-baseline justify-between gap-sm">
+              <h3 className="font-semibold text-ink">{line.reference}</h3>
+              <span className="text-sm text-slate-soft">{line.status.replaceAll('_', ' ')}</span>
+            </div>
+            <p className="mt-xs text-sm text-slate-soft">
+              {line.branchName} ({line.branchCode}), {formatDate(line.from)} to{' '}
+              {formatDate(line.dueBackOn)}
+            </p>
+            <dl className="mt-sm grid gap-sm sm:grid-cols-2">
+              <Figure term="Deposit held" value={money(line.depositHeld)} />
+              <Figure
+                term="Deposit withheld and refunded"
+                value={`${money(line.depositWithheld)} / ${money(line.depositRefunded)}`}
+              />
+              <Figure term="Balance due" value={money(line.balanceDue)} />
+              <Figure term="Charges with VAT" value={money(line.chargesTotalIncVat)} />
+            </dl>
+            <h4 className="mt-sm text-sm font-semibold text-ink">Charges</h4>
+            <ul className="mt-xs flex flex-col gap-xs">
+              {line.charges.map((charge) => (
+                <li key={charge.id} className="text-sm">
+                  <span className="block text-ink">{charge.description}</span>
+                  <span className="tabular block text-slate-soft">
+                    {money(charge.amountIncVat)} with VAT, {charge.status.toLowerCase()}
+                  </span>
+                </li>
+              ))}
+              {line.charges.length === 0 && (
+                <li className="text-sm text-slate-soft">No charges on this hire yet.</li>
+              )}
+            </ul>
+          </li>
         ))}
-      </DataTable>
+      </ol>
       <Notice tone="info" title="Where the figures come from">
         <p>
           Every amount is a row the branch recorded: a charge raised, a deposit taken, withheld
           or given back. Nothing on this page is worked out again from a rate.
         </p>
       </Notice>
-      <ul className="sr-only" aria-label="Every hire on the statement">
-        {statement.items.map((line) => (
-          <li key={`spoken-${line.rentalId}`}>{lineLabel(line)}</li>
-        ))}
-      </ul>
     </section>
   )
 }
