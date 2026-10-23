@@ -40,6 +40,7 @@ import {
 
 const REPORT_ENDPOINT = '/admin/reports/utilisation'
 const CSV_ENDPOINT = '/admin/reports/utilisation.csv'
+const CHARGES_ENDPOINT = '/admin/reports/charges.csv'
 
 /** What the CSV route sends, and the problem document it sends instead when it refuses. */
 const CSV_ACCEPT = 'text/csv, application/problem+json'
@@ -129,4 +130,22 @@ export function getUtilisationReport(query: UtilisationReportQuery, signal?: Abo
  */
 export function downloadUtilisationCsv(query: UtilisationCsvQuery): Promise<ApiFile> {
   return api.getFile(CSV_ENDPOINT, CSV_ACCEPT, { query })
+}
+
+
+/** The month and optional branch for the bookkeeper's charge file. */
+export interface MonthlyChargesQuery {
+  month: string
+  branchCode?: string
+}
+
+/**
+ * GET /api/admin/reports/charges.csv. Every charge in a calendar month, with
+ * the totals at the end, as a file.
+ *
+ * @throws ApiError with status 422 when the month or branch is refused, and
+ *   403 for anyone but an administrator.
+ */
+export function downloadMonthlyCharges(query: MonthlyChargesQuery): Promise<ApiFile> {
+  return api.getFile(CHARGES_ENDPOINT, CSV_ACCEPT, { query })
 }
