@@ -67,6 +67,19 @@ describe('after a 202', () => {
 })
 
 describe('a registration the API does not accept', () => {
+  it('puts the breach message under the password field, and keeps the form', async () => {
+    const breachMessage = 'This password has appeared in a known data breach. Choose a different one.'
+    const { user } = await openRegister(() => refusedFields({ password: breachMessage }))
+    await fillInEverything(user)
+
+    await user.click(screen.getByRole('button', { name: SUBMIT }))
+
+    const password = screen.getByLabelText('Password', { exact: true })
+    await waitFor(() => expect(password).toBeInvalid())
+    expect(password).toHaveAccessibleDescription(new RegExp(breachMessage.replace('.', '\\.')))
+    expect(screen.queryByRole('heading', { name: CHECK_YOUR_EMAIL_HEADING })).not.toBeInTheDocument()
+  })
+
   it('puts each message of a 422 under the field it names, and keeps the form', async () => {
     const { user, network } = await openRegister(() =>
       refusedFields({
