@@ -35,6 +35,7 @@ dependencies = [
     "bcrypt==4.0.1",
     # The HTTP client behind the Resend adapter. It was already pinned for the
     # test client, so the running application gains no new package.
+    "certifi==2026.10.19",
     "httpx==0.28.1",
     # The official client for the private bucket damage photographs are kept
     # in, and for the V4 links that open them. Only app/infrastructure/photo_store.py
@@ -43,7 +44,7 @@ dependencies = [
     # Decodes each damage photograph and encodes it again from its pixels, which
     # drops the EXIF block and any GPS position in it. Only
     # app/infrastructure/photo_images.py imports it.
-    "pillow==12.3.0",
+    "pillow==13.0.0",
 ]
 
 [project.optional-dependencies]
