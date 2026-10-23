@@ -94,8 +94,15 @@ export default function PrivacyNotice() {
               <li>The service that answers the website runs on Google Cloud in London.</li>
               <li>The website itself is served by Vercel.</li>
               <li>Email is sent through Resend.</li>
+              <li>
+                Passwords are checked against Have I Been Pwned, run by Superlative Enterprises
+                Pty Ltd, a business based in Queensland, Australia. Only the first five
+                characters of a password's SHA-1 digest are sent. The full password, your account
+                and your email address are not sent. Have I Been Pwned stores its data in a
+                Microsoft Azure data centre in the western United States.
+              </li>
             </Points>
-            <p>Each of them handles the information only to run this system for us.</p>
+            <p>Each service handles the information only to run this system for us.</p>
           </Section>
 
           <Section title="Marketing">
