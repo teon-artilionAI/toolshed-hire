@@ -33,11 +33,12 @@ from app.application.identity.password_reset import (
     CompletePasswordResetUseCase,
     RequestPasswordResetUseCase,
 )
-from app.application.identity.ports import PasswordHasher
+from app.application.identity.ports import BreachedPasswordChecker, PasswordHasher
 from app.application.identity.profile import ReadProfileUseCase, UpdateProfileUseCase
 from app.application.identity.register import RegisterCustomerUseCase
 from app.application.throttle import Throttle
 from app.config import Settings, settings
+from app.infrastructure.breach_check import HttpBreachedPasswordChecker
 from app.infrastructure.identity_accounts import BcryptPasswordHasher
 
 # The attribute of the application state that holds the origin the account
@@ -45,6 +46,7 @@ from app.infrastructure.identity_accounts import BcryptPasswordHasher
 FRONTEND_ORIGIN_STATE_KEY: Final[str] = "frontend_origin"
 
 _PASSWORD_HASHER = BcryptPasswordHasher()
+_BREACH_CHECKER = HttpBreachedPasswordChecker()
 
 
 def account_rules_for(configuration: Settings) -> AccountThrottleRules:
@@ -73,6 +75,11 @@ def get_password_hasher() -> PasswordHasher:
     return _PASSWORD_HASHER
 
 
+def get_breached_password_checker() -> BreachedPasswordChecker:
+    """Return the Have I Been Pwned checker. A test overrides this with a fake."""
+    return _BREACH_CHECKER
+
+
 def get_account_mailer(request: Request, gateway: NotificationGatewayDependency) -> AccountMailer:
     """Return the mailer of the account messages, linked to the configured frontend.
 
@@ -94,6 +101,9 @@ def get_account_mailer(request: Request, gateway: NotificationGatewayDependency)
 ThrottleDependency = Annotated[Throttle, Depends(get_throttle)]
 AccountRulesDependency = Annotated[AccountThrottleRules, Depends(get_account_rules)]
 PasswordHasherDependency = Annotated[PasswordHasher, Depends(get_password_hasher)]
+BreachedPasswordCheckerDependency = Annotated[
+    BreachedPasswordChecker, Depends(get_breached_password_checker)
+]
 AccountMailerDependency = Annotated[AccountMailer, Depends(get_account_mailer)]
 
 
@@ -104,9 +114,10 @@ def get_register_use_case(
     throttle: ThrottleDependency,
     mailer: AccountMailerDependency,
     rules: AccountRulesDependency,
+    breaches: BreachedPasswordCheckerDependency,
 ) -> RegisterCustomerUseCase:
     """Return the registration use case, wired to its collaborators and the limits."""
-    return RegisterCustomerUseCase(uow, clock, passwords, throttle, mailer, rules)
+    return RegisterCustomerUseCase(uow, clock, passwords, throttle, mailer, rules, breaches)
 
 
 def get_verify_email_use_case(
@@ -147,9 +158,10 @@ def get_complete_password_reset_use_case(
     passwords: PasswordHasherDependency,
     throttle: ThrottleDependency,
     rules: AccountRulesDependency,
+    breaches: BreachedPasswordCheckerDependency,
 ) -> CompletePasswordResetUseCase:
     """Return the use case that redeems a reset token."""
-    return CompletePasswordResetUseCase(uow, clock, passwords, throttle, rules)
+    return CompletePasswordResetUseCase(uow, clock, passwords, throttle, rules, breaches)
 
 
 def get_read_profile_use_case(

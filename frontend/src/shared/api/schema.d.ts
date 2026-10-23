@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/api/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report that the process is alive, without opening a session
+         * @description Answer from the process alone, so an uptime check never wakes the database.
+         *
+         *     The route has no session dependency on purpose. An uptime check calling it
+         *     every five minutes must not keep Neon's compute awake all month, and this is
+         *     the proof that it cannot.
+         */
+        get: operations["read_liveness_api_health_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -3354,6 +3378,18 @@ export interface components {
          */
         IdDocType: "SA_ID" | "PASSPORT" | "DRIVING_LICENCE";
         /**
+         * LiveHealthResponse
+         * @description What the liveness endpoint reports without touching a dependency.
+         */
+        LiveHealthResponse: {
+            /** Status */
+            status: string;
+            /** Environment */
+            environment: string;
+            /** Revision */
+            revision: string;
+        };
+        /**
          * LoginRequest
          * @description Credentials posted to the sign in endpoint.
          *
@@ -4624,6 +4660,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    read_liveness_api_health_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveHealthResponse"];
+                };
+            };
+        };
+    };
     read_health_api_health_get: {
         parameters: {
             query?: never;
