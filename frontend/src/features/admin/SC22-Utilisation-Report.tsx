@@ -41,10 +41,12 @@ import {
 import type { ReportFilters as Filters } from './report-address'
 import ReportFilters from './ReportFilters'
 import ReportResults from './ReportResults'
+import { MonthCharges } from './SC22-Month-Charges'
 
 export default function UtilisationReport() {
   const [params, setParams] = useSearchParams()
   const [today] = useState(() => todayInBranchTime())
+  const [month, setMonth] = useState(() => today.slice(0, 7))
   const filters = useMemo(() => readReportFilters(params, today), [params, today])
 
   // The address is written out in full whenever it does not already say what
@@ -87,6 +89,14 @@ export default function UtilisationReport() {
         onPage={(page) => update({ page })}
         onClearFilters={() => update({ branchCode: null, categorySlug: null })}
       />
+      <div className="mt-lg">
+        <MonthCharges
+          month={month}
+          branchCode={filters.branchCode}
+          branchName={filters.branchCode ?? 'every branch'}
+          onMonth={setMonth}
+        />
+      </div>
     </>
   )
 }

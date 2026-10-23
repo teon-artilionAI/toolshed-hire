@@ -25,8 +25,13 @@ from fastapi.responses import StreamingResponse
 
 from app.api.booking_deps import actor_of
 from app.api.deps import AdminUser
+from app.api.monthly_charge_csv import monthly_charge_csv_lines, monthly_charge_filename
 from app.api.report_csv import report_csv_lines, report_filename
-from app.api.report_deps import ReadAdminDashboardDependency, ReadUtilisationReportDependency
+from app.api.report_deps import (
+    ReadAdminDashboardDependency,
+    ReadMonthlyChargesDependency,
+    ReadUtilisationReportDependency,
+)
 from app.api.report_presenter import dashboard_response, report_page_response
 from app.api.report_schemas import (
     ADMIN_ONLY_RESPONSE,
@@ -36,6 +41,7 @@ from app.api.report_schemas import (
 )
 from app.api.reservation_schemas import BRANCH_CODE_MAX_LENGTH, REFUSED_QUERY_RESPONSE
 from app.application.catalogue.read_models import FIRST_PAGE, MAXIMUM_PAGE
+from app.application.reporting.monthly_charges import MonthlyChargeQuery
 from app.application.reporting.read_report import (
     DEFAULT_PAGE_SIZE,
     MAXIMUM_PAGE_SIZE,
@@ -166,6 +172,42 @@ def export_utilisation_report(
         media_type=CSV_MEDIA_TYPE,
         headers={
             CONTENT_DISPOSITION_HEADER: f'attachment; filename="{report_filename(report)}"'
+        },
+    )
+
+
+@router.get(
+    "/reports/charges.csv",
+    response_class=StreamingResponse,
+    summary="Return every charge raised in a calendar month as a CSV file",
+    responses={status.HTTP_200_OK: CSV_RESPONSE, **READ_RESPONSES},
+)
+def export_monthly_charges(
+    user: AdminUser,
+    reads: ReadMonthlyChargesDependency,
+    month: Annotated[
+        str,
+        Query(pattern=r"^\d{4}-\d{2}$", description="The calendar month, as YYYY-MM."),
+    ],
+    branch_code: BranchCode = None,
+) -> StreamingResponse:
+    """Return the month's charges, streamed, with the totals at the end.
+
+    Raises:
+        ValidationFailure: If the month is not a real YYYY-MM month or the
+            branch is unknown. HTTP 422, naming the parameter.
+
+    """
+    charges = reads.execute(
+        MonthlyChargeQuery(actor=actor_of(user), month=month, branch_code=branch_code)
+    )
+    return StreamingResponse(
+        monthly_charge_csv_lines(charges),
+        media_type=CSV_MEDIA_TYPE,
+        headers={
+            CONTENT_DISPOSITION_HEADER: (
+                f'attachment; filename="{monthly_charge_filename(charges)}"'
+            )
         },
     )
 
