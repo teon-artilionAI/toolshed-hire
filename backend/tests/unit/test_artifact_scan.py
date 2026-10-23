@@ -64,7 +64,7 @@ def test_a_seed_phone_number_is_allowed_and_another_is_not() -> None:
 def test_a_private_key_and_a_github_token_are_findings() -> None:
     """The credential patterns refuse a private key and a token."""
     assert {"private-key", "github-token"} <= kinds(
-        "-----BEGIN PRIVATE KEY-----\nghp_abcdefghijklmnopqrstuvwxyz0123456789"
+        "-----BEGIN " + "PRIVATE KEY-----\n" + "ghp_" + "a" * 36
     )
 
 
