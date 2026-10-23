@@ -40,6 +40,10 @@ export function anonymiseRoute(id: string): string {
   return `POST /api/admin/customers/${id}/anonymise`
 }
 
+export function tradeDiscountRoute(id: string): string {
+  return `POST /api/admin/customers/${id}/trade-discount`
+}
+
 /** When the samples' personal details were removed, a morning in branch time. */
 export const ANONYMISED_AT = '2026-10-13T09:15:00+02:00'
 

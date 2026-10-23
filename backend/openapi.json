@@ -5883,6 +5883,82 @@
         }
       }
     },
+    "/api/admin/customers/{id}/trade-discount": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Set a trade customer's discount from the next booking",
+        "description": "Set the discount and record the old and new value, in one transaction.\n\nRaises:\n    NotFound: If there is no customer with this key. HTTP 404.\n    ValidationFailure: If the customer is not a trade account, or the\n        value is out of range or has more than two decimals. HTTP 422,\n        naming `tradeDiscountPercent`.",
+        "operationId": "post_trade_discount_api_admin_customers__id__trade_discount_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The key of the customer.",
+              "title": "Id"
+            },
+            "description": "The key of the customer."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeDiscountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummaryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no customer with this key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A field was refused. `errors.fields` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/customers/{id}/anonymise": {
       "post": {
         "tags": [
@@ -13105,6 +13181,22 @@
         ],
         "title": "TokenResponse",
         "description": "The access token and the account it belongs to.\n\nSigning in and refreshing both return this. The refresh token is not in\nit. That travels in a cookie the page cannot read."
+      },
+      "TradeDiscountRequest": {
+        "properties": {
+          "tradeDiscountPercent": {
+            "type": "string",
+            "pattern": "^\\d{1,2}(\\.\\d{1,2})?$",
+            "title": "Tradediscountpercent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tradeDiscountPercent"
+        ],
+        "title": "TradeDiscountRequest",
+        "description": "A trade discount as a percentage with at most two decimals."
       },
       "TradingDayResponse": {
         "properties": {

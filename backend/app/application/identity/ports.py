@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
@@ -115,6 +116,10 @@ class CustomerRepository(Protocol):
 
     def save_account_status(self, customer_profile_id: UUID, status: AccountStatus) -> None:
         """Write the standing of a customer (BR-18)."""
+        ...
+
+    def save_trade_discount(self, customer_profile_id: UUID, percent: Decimal) -> None:
+        """Write the trade discount of a customer (BR-21)."""
         ...
 
     def add_registered(
