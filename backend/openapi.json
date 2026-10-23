@@ -1688,6 +1688,152 @@
         }
       }
     },
+    "/api/me/reservations/{id}/confirmation/resend": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Send the signed in customer's own booking confirmation again",
+        "description": "Queue and send the confirmation again for the caller's own booking.\n\nRaises:\n    NotFound: If the booking is absent or not the caller's. HTTP 404.\n    StateTransitionError: If it is not confirmed or has no address. HTTP 409.\n    TooManyAttempts: If three re-sends happened this hour. HTTP 429.",
+        "operationId": "post_my_confirmation_resend_api_me_reservations__id__confirmation_resend_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationResendResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The booking is not confirmed, or the customer has no email address."
+          },
+          "429": {
+            "description": "Three re-sends in the last hour. `Retry-After` carries the wait."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/counter/reservations/{id}/confirmation/resend": {
+      "post": {
+        "tags": [
+          "booking"
+        ],
+        "summary": "Send a booking confirmation again from the counter",
+        "description": "Queue and send the confirmation again for a booking at the caller's branch.\n\nRaises:\n    NotFound: If the booking is absent. HTTP 404.\n    BranchScopeError: If it is at another branch. HTTP 403.\n    StateTransitionError: If it is not confirmed or has no address. HTTP 409.\n    TooManyAttempts: If three re-sends happened this hour. HTTP 429.",
+        "operationId": "post_counter_confirmation_resend_api_counter_reservations__id__confirmation_resend_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
+              "description": "The key of the reservation, or its reference.",
+              "title": "Id"
+            },
+            "description": "The key of the reservation, or its reference."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationResendResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such reservation, or it is not the caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The booking is not confirmed, or the customer has no email address."
+          },
+          "429": {
+            "description": "Three re-sends in the last hour. `Retry-After` carries the wait."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reservations/{id}/checkout": {
       "get": {
         "tags": [
@@ -9255,6 +9401,20 @@
         ],
         "title": "ConditionGrade",
         "description": "Condition grade recorded at checkout and return. A is best."
+      },
+      "ConfirmationResendResponse": {
+        "properties": {
+          "emailDeliverable": {
+            "type": "boolean",
+            "title": "Emaildeliverable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "emailDeliverable"
+        ],
+        "title": "ConfirmationResendResponse",
+        "description": "Whether the re-sent confirmation can reach the customer's address."
       },
       "CreateReservationRequest": {
         "properties": {

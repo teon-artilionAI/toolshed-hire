@@ -15,6 +15,8 @@ import { CalendarPlus, PackageCheck } from 'lucide-react'
 import type { CustomerSummary, Reservation } from '../../shared/api/contract'
 import { formatDate, money } from '../../shared/format'
 import { Card, Notice } from '../../shared/ui'
+import { ResendConfirmation } from '../../shared/resend-confirmation'
+import { resendCounterConfirmation } from '../../shared/api/reservations'
 import { BookingLines, BookingTotals } from './booking-figures'
 import { checkoutHref, customerHref } from './counter-links'
 import { StepHeading } from './counter-steps'
@@ -72,6 +74,10 @@ export function BookingConfirmed({
               <Link to={customerHref(customer.id)} className="btn-ghost w-full">
                 Back to {customer.displayName}
               </Link>
+              <ResendConfirmation
+                bookingReference={reservation.reference}
+                onSend={() => resendCounterConfirmation(reservation.id)}
+              />
             </div>
           </Card>
         </div>

@@ -84,6 +84,7 @@ export type {
 } from './contract-account'
 export type {
   CancelReservationRequest,
+  ConfirmationResend,
   CreateReservationRequest,
   Reservation,
   ReservationLine,
