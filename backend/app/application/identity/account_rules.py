@@ -13,12 +13,16 @@ from __future__ import annotations
 
 from typing import Final
 
+from app.application.identity.ports import BreachedPasswordChecker
 from app.application.refusal import refused
 from app.domain.customer_account import REFUSED_FIELD
 from app.domain.errors import ValidationFailure
 from app.domain.password_policy import ensure_password_may_be_chosen
 
 WORD_SEPARATOR: Final[str] = "_"
+BREACHED_PASSWORD_MESSAGE: Final[str] = (
+    "This password has appeared in a known data breach. Choose a different one."
+)
 
 
 def normalised_email(email: str) -> str:
@@ -59,3 +63,23 @@ def ensure_password_may_be_set(plain_password: str, parameter: str) -> None:
         ensure_password_may_be_chosen(plain_password)
     except ValidationFailure as failure:
         raise refused(parameter, failure.message, failure.detail, rule=failure.rule) from failure
+
+
+def ensure_password_not_breached(
+    checker: BreachedPasswordChecker, plain_password: str, parameter: str
+) -> None:
+    """Refuse a password the breach service knows, naming its field.
+
+    Args:
+        checker: The service adapter. It answers False when it cannot be
+            reached, so this never turns a third party outage into a refusal.
+        plain_password: The password as it was typed. Never logged.
+        parameter: The name the password has in the request.
+
+    Raises:
+        ValidationFailure: If the password is known to have appeared in a
+            breach. The detail names the parameter.
+
+    """
+    if checker.is_breached(plain_password):
+        raise refused(parameter, BREACHED_PASSWORD_MESSAGE)
