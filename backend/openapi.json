@@ -6,6 +6,28 @@
     "version": "0.4.2"
   },
   "paths": {
+    "/api/health/live": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Report that the process is alive, without opening a session",
+        "description": "Answer from the process alone, so an uptime check never wakes the database.\n\nThe route has no session dependency on purpose. An uptime check calling it\nevery five minutes must not keep Neon's compute awake all month, and this is\nthe proof that it cannot.",
+        "operationId": "read_liveness_api_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -10030,6 +10052,30 @@
         ],
         "title": "IdDocType",
         "description": "The identity document a customer presented. Only its last four digits are kept."
+      },
+      "LiveHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "environment",
+          "revision"
+        ],
+        "title": "LiveHealthResponse",
+        "description": "What the liveness endpoint reports without touching a dependency."
       },
       "LoginRequest": {
         "properties": {

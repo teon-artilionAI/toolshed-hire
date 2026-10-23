@@ -13,3 +13,8 @@
 # The comment that first explained it quoted that line and was flagged in turn.
 f3b7c85319ad765120fe45ade5b796323e2720cc:frontend/src/test/report-samples.ts:generic-api-key:38
 306e4450e11db35ca276dbe4aa73540e1bfaac6f:.gitleaksignore:generic-api-key:12
+
+# The planted GitHub token in the artifact scanner test was written as one
+# literal in its first commit. The test now builds the token at run time, and
+# this fingerprint names the one commit where the literal remains.
+c53ee2676d92a853a3baac7a0516aef2af9817c6:backend/tests/unit/test_artifact_scan.py:github-pat:67

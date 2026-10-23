@@ -113,6 +113,10 @@ jobs:
       - name: Run all tests with the coverage gate
         run: pytest tests --cov --cov-report=term-missing --cov-report=xml
 
+      - name: Scan the coverage report for personal information
+        if: always()
+        run: python ../infra/scripts/scan_artifacts.py --allow-missing coverage.xml
+
       - name: Keep the coverage report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -298,6 +302,11 @@ jobs:
 
       - name: Run browser and accessibility tests
         run: npm run test:e2e
+
+      - name: Scan the browser report for personal information
+        if: failure()
+        working-directory: frontend
+        run: python ../infra/scripts/scan_artifacts.py --allow-missing playwright-report
 
       - name: Keep the browser test report
         if: failure()
