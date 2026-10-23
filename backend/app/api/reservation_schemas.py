@@ -183,6 +183,12 @@ class ReservationResponse(CamelModel):
     created_at: Timestamp = Field(serialization_alias="createdAt")
 
 
+class ConfirmationResendResponse(CamelModel):
+    """Whether the re-sent confirmation can reach the customer's address."""
+
+    email_deliverable: bool = Field(serialization_alias="emailDeliverable")
+
+
 class ReservationPageResponse(CamelModel):
     """One page of reservations, newest first."""
 

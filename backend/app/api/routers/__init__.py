@@ -38,6 +38,7 @@ from app.api.routers import (
     profile,
     quote,
     rentals,
+    resend,
     reservation_reads,
     reservations,
     statement,
@@ -57,6 +58,7 @@ api_router.include_router(my_damage_photos.router)
 api_router.include_router(customers.router)
 api_router.include_router(reservations.router)
 api_router.include_router(reservation_reads.router)
+api_router.include_router(resend.router)
 api_router.include_router(checkout.router)
 api_router.include_router(rentals.router)
 api_router.include_router(damage_reports.router)

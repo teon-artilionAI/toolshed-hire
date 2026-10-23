@@ -22,11 +22,13 @@ import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react'
 import type { Reservation, ReservationStatus } from '../../shared/api/contract'
 import { queryPhase } from '../../shared/api/query-phase'
 import { rememberReservation, reservationQueries } from '../../shared/api/reservation-queries'
+import { resendMyConfirmation } from '../../shared/api/reservations'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { formatDate } from '../../shared/format'
 import { ACCOUNT_PATH } from '../../shared/navigation'
 import { branchDateTime } from '../../shared/today'
 import { Card, EmptyState, PageHeader, StatusPill } from '../../shared/ui'
+import { ResendConfirmation } from '../../shared/resend-confirmation'
 import { isNotFound } from './booking-refusal'
 import { RESERVATION_STATUS_LABEL } from './customer-labels'
 import { CancellationPanel } from './reservation-cancel-panel'
@@ -35,6 +37,8 @@ import { MY_RESERVATIONS_PATH } from './reservation-links'
 
 /** A booking that has not gone out yet and still may. */
 const UPCOMING_STATUSES: readonly ReservationStatus[] = ['DRAFT', 'HELD', 'CONFIRMED']
+/** A booking whose confirmation may be sent again. */
+const CONFIRMED_STATUSES: readonly ReservationStatus[] = ['CONFIRMED', 'COLLECTED']
 
 /** Where the charges of a booking are, by where the booking stands. The
  *  charges belong to the hire, so once the equipment has gone out they are
@@ -152,6 +156,15 @@ export default function ReservationDetail() {
           </Card>
 
           <ChargesCard reservation={booking} />
+
+          {CONFIRMED_STATUSES.includes(booking.status) && (
+            <Card title="Confirmation email">
+              <ResendConfirmation
+                bookingReference={booking.reference}
+                onSend={() => resendMyConfirmation(booking.id)}
+              />
+            </Card>
+          )}
 
           <CancellationPanel
             reservation={booking}
