@@ -32,16 +32,20 @@ from app.application.clock import Clock
 from app.application.identity.account_mail import AccountMailer, MailExpectation
 from app.application.identity.account_rules import (
     ensure_password_may_be_set,
+    ensure_password_not_breached,
     normalised_email,
     refused_field,
 )
 from app.application.identity.attempts import (
-    DEFAULT_ACCOUNT_RULES,
     AccountThrottleRules,
     address_subject,
     count_attempt,
 )
-from app.application.identity.ports import EmailAlreadyRegistered, PasswordHasher
+from app.application.identity.ports import (
+    BreachedPasswordChecker,
+    EmailAlreadyRegistered,
+    PasswordHasher,
+)
 from app.application.identity.sessions import ACCOUNT_ENTITY_TYPE, ClientDetails
 from app.application.refusal import refused
 from app.application.throttle import Throttle
@@ -112,7 +116,8 @@ class RegisterCustomerUseCase(UseCase[RegisterCustomerCommand, MailExpectation])
         passwords: PasswordHasher,
         throttle: Throttle,
         mailer: AccountMailer,
-        rules: AccountThrottleRules = DEFAULT_ACCOUNT_RULES,
+        rules: AccountThrottleRules,
+        breaches: BreachedPasswordChecker,
     ) -> None:
         """Keep the collaborators the use case works with.
 
@@ -122,7 +127,8 @@ class RegisterCustomerUseCase(UseCase[RegisterCustomerCommand, MailExpectation])
             passwords: Hashes the chosen password.
             throttle: Counts the attempt for the address and for the client.
             mailer: Sends the message once the transaction has committed.
-            rules: The limits of the windows. The defaults when omitted.
+            rules: The limits of the windows.
+            breaches: Checks the chosen password against a breach service.
 
         """
         super().__init__(uow, clock)
@@ -130,6 +136,7 @@ class RegisterCustomerUseCase(UseCase[RegisterCustomerCommand, MailExpectation])
         self._throttle = throttle
         self._mailer = mailer
         self._rules = rules
+        self._breaches = breaches
 
     def execute(self, command: RegisterCustomerCommand) -> MailExpectation:
         """Register the person, and send the message their address is owed.
@@ -155,6 +162,7 @@ class RegisterCustomerUseCase(UseCase[RegisterCustomerCommand, MailExpectation])
         )
         count_attempt(self._uow, self._throttle, counted, now)
         customer = _checked_customer(command)
+        ensure_password_not_breached(self._breaches, command.password, PASSWORD_PARAMETER)
         # One hash and one token on every path, whether or not the address is free.
         account = Account.registered_customer(
             email=email,

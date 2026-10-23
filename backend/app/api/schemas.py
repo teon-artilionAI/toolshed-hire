@@ -157,6 +157,14 @@ class HealthResponse(CamelModel):
     revision: str
 
 
+class LiveHealthResponse(CamelModel):
+    """What the liveness endpoint reports without touching a dependency."""
+
+    status: str
+    environment: str
+    revision: str
+
+
 class ProblemDetail(BaseModel):
     """An RFC 9457 problem document.
 
