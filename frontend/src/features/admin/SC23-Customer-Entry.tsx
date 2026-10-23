@@ -24,13 +24,15 @@ import { StatusPill } from '../../shared/ui'
 import { ACCOUNT_STANDING_LABEL, ACCOUNT_STANDING_PILL, CUSTOMER_TYPE_LABEL } from '../counter/counter-labels'
 import { AnonymiseQuestion } from './SC23-Anonymise-Question'
 import { StandingQuestion } from './SC23-Standing-Question'
+import { TradeDiscountQuestion } from './SC23-Trade-Discount-Question'
 import { anonymiseWords, anonymisedWords, customerEmailWords, noShowWords, standingMoveWords, standingMoves } from './staff-words'
 
 /** What the anonymise button asks, beside the standings a customer can be moved to. */
 const ANONYMISE = 'ANONYMISE'
+const TRADE_DISCOUNT = 'TRADE_DISCOUNT'
 
 /** A question an entry can open in place of its buttons. */
-type Question = AccountStatus | typeof ANONYMISE
+type Question = AccountStatus | typeof ANONYMISE | typeof TRADE_DISCOUNT
 
 function Fact({ term, children }: { term: string; children: ReactNode }) {
   return (
@@ -46,6 +48,7 @@ export function CustomerEntry({
   branchName,
   onMoved,
   onAnonymised,
+  onDiscountChanged,
 }: {
   customer: CustomerSummary
   branchName: (code: string) => string
@@ -53,6 +56,7 @@ export function CustomerEntry({
   onMoved: (customer: CustomerSummary, to: AccountStatus) => void
   /** Called with the customer the server answered with, and the name they had before. */
   onAnonymised: (customer: CustomerSummary, formerName: string) => void
+  onDiscountChanged: (customer: CustomerSummary) => void
 }) {
   const [asking, setAsking] = useState<Question | null>(null)
   const buttons = useRef(new Map<Question, HTMLButtonElement>())
@@ -99,6 +103,9 @@ export function CustomerEntry({
         </Fact>
         <Fact term="Phone">{customer.phone}</Fact>
         <Fact term="Home branch">{branchName(customer.homeBranchCode)}</Fact>
+        {customer.customerType === 'TRADE' && (
+          <Fact term="Trade discount">{customer.tradeDiscountPercent}% from the next booking</Fact>
+        )}
       </dl>
       <div className="mt-md">
         {removed !== null ? (
@@ -109,6 +116,15 @@ export function CustomerEntry({
             onAnonymised={(anonymised) => {
               setAsking(null)
               onAnonymised(anonymised, customer.displayName)
+            }}
+            onCancel={putQuestionAway}
+          />
+        ) : asking === TRADE_DISCOUNT ? (
+          <TradeDiscountQuestion
+            customer={customer}
+            onChanged={(changed) => {
+              setAsking(null)
+              onDiscountChanged(changed)
             }}
             onCancel={putQuestionAway}
           />
@@ -139,6 +155,14 @@ export function CustomerEntry({
                 </button>
               </li>
             ))}
+            {customer.customerType === 'TRADE' && (
+              <li>
+                <button ref={rememberButton(TRADE_DISCOUNT)} type="button" className="btn-secondary px-md" onClick={() => setAsking(TRADE_DISCOUNT)}>
+                  Set trade discount
+                  <span className="sr-only"> for {customer.displayName}</span>
+                </button>
+              </li>
+            )}
             <li>
               <button ref={rememberButton(ANONYMISE)} type="button" className="btn-danger px-md" onClick={() => setAsking(ANONYMISE)}>
                 {anonymiseWords(customer).action}

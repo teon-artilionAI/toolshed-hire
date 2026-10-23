@@ -34,6 +34,7 @@ from app.api.admin_presenter import ADMIN_PREFIX
 from app.api.admin_user_deps import (
     AnonymiseCustomer,
     ChangeCustomerStanding,
+    ChangeTradeDiscount,
     ReadCustomerListDependency,
 )
 from app.api.admin_user_presenter import (
@@ -42,11 +43,13 @@ from app.api.admin_user_presenter import (
     CustomerPathKey,
     anonymisation_command,
     standing_command,
+    trade_discount_command,
 )
 from app.api.admin_user_schemas import (
     ANONYMISATION_REFUSED_RESPONSE,
     AnonymisationRequest,
     CustomerStatusRequest,
+    TradeDiscountRequest,
 )
 from app.api.booking_deps import actor_of
 from app.api.customer_schemas import (
@@ -161,6 +164,35 @@ def post_customer_status(
 
     """
     summary = use_case.execute(standing_command(user, customer_id, payload))
+    return CustomerSummaryResponse.model_validate(summary)
+
+
+@router.post(
+    "/{id}/trade-discount",
+    response_model=CustomerSummaryResponse,
+    summary="Set a trade customer's discount from the next booking",
+    responses={
+        status.HTTP_403_FORBIDDEN: ADMIN_ONLY_RESPONSE,
+        status.HTTP_404_NOT_FOUND: UNKNOWN_CUSTOMER_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: REFUSED_BODY_RESPONSE,
+    },
+)
+def post_trade_discount(
+    customer_id: CustomerPathKey,
+    payload: TradeDiscountRequest,
+    user: FreshAdminUser,
+    use_case: ChangeTradeDiscount,
+) -> CustomerSummaryResponse:
+    """Set the discount and record the old and new value, in one transaction.
+
+    Raises:
+        NotFound: If there is no customer with this key. HTTP 404.
+        ValidationFailure: If the customer is not a trade account, or the
+            value is out of range or has more than two decimals. HTTP 422,
+            naming `tradeDiscountPercent`.
+
+    """
+    summary = use_case.execute(trade_discount_command(user, customer_id, payload))
     return CustomerSummaryResponse.model_validate(summary)
 
 

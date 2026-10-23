@@ -43,6 +43,7 @@ type ReactivationRoute = Paths['/api/admin/users/{id}/reactivation']
 type CustomersRoute = Paths['/api/admin/customers']
 type CustomerStatusRoute = Paths['/api/admin/customers/{id}/status']
 type CustomerAnonymiseRoute = Paths['/api/admin/customers/{id}/anonymise']
+type CustomerTradeDiscountRoute = Paths['/api/admin/customers/{id}/trade-discount']
 
 /** The two roles a staff account can hold, as the API writes them. */
 export type StaffRole = Exclude<Schemas['UserRole'], 'CUSTOMER'>
@@ -169,6 +170,9 @@ export type CustomerWithStanding = Refine<JsonOf<CustomerStatusRoute['post']>, C
  * move of standing.
  */
 export type CustomerAnonymisationRequest = BodyOf<CustomerAnonymiseRoute['post']>
+
+/** The body `POST /api/admin/customers/{id}/trade-discount` accepts. */
+export type TradeDiscountRequest = BodyOf<CustomerTradeDiscountRoute['post']>
 
 /**
  * What `POST /api/admin/customers/{id}/anonymise` answers with. The customer

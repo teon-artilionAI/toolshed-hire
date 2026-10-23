@@ -14,7 +14,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CustomerSummary } from '../../shared/api/contract'
 import { jsonResponse, neverAnswers, problemResponse } from '../../test/api-mock'
-import { BLACKLISTED, CUSTOMER_HOLDS_ROUTE, holdPage, standingRoute } from '../../test/admin-user-samples'
+import { BLACKLISTED, CUSTOMER_HOLDS_ROUTE, holdPage, standingRoute, tradeDiscountRoute } from '../../test/admin-user-samples'
 import { TEST_NOW } from '../../test/catalogue-samples'
 import { ON_HOLD, THANDI } from '../../test/counter-samples'
 import { SCREEN_WAIT, currentAddress } from '../../test/render-app'
@@ -57,6 +57,42 @@ describe('the two views', () => {
   })
 })
 
+describe('a trade customer\'s discount', () => {
+  it('sets the discount, says it applies from the next booking, and updates the entry', async () => {
+    const { user, network } = await openUsers(
+      {
+        [tradeDiscountRoute(BLACKLISTED.id)]: () =>
+          jsonResponse({ ...BLACKLISTED, tradeDiscountPercent: '12.50' }),
+      },
+      HOLDS,
+    )
+    const entry = await findCustomer(BLACKLISTED.displayName)
+    expect(within(entry).getByText(/0.00% from the next booking/)).toBeVisible()
+
+    await user.click(
+      within(entry).getByRole('button', {
+        name: new RegExp(`Set trade discount.*${BLACKLISTED.displayName}`),
+      }),
+    )
+    const input = within(entry).getByLabelText('Trade discount percent')
+    await user.clear(input)
+    await user.type(input, '12.50')
+    await user.click(within(entry).getByRole('button', { name: 'Set the discount' }))
+
+    expect(
+      await screen.findByText(
+        `The trade discount for ${BLACKLISTED.displayName} is now 12.50%`,
+        {},
+        SCREEN_WAIT,
+      ),
+    ).toBeVisible()
+    expect(lastBody(network, tradeDiscountRoute(BLACKLISTED.id))).toEqual({
+      tradeDiscountPercent: '12.50',
+    })
+    expect(within(entry).getByText(/12.50% from the next booking/)).toBeVisible()
+  })
+})
+
 describe('reading the customer holds', () => {
   it('shows each customer as the server sent them, in words', async () => {
     await openUsers({}, HOLDS)
@@ -89,6 +125,7 @@ describe('reading the customer holds', () => {
     expect(movesOf(await findCustomer(BLACKLISTED.displayName))).toEqual([
       `Lift the blacklisting for ${BLACKLISTED.displayName}`,
       `Put on hold for ${BLACKLISTED.displayName}`,
+      `Set trade discount for ${BLACKLISTED.displayName}`,
       `Anonymise for ${BLACKLISTED.displayName}`,
     ])
   })
