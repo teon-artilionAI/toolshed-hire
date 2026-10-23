@@ -253,6 +253,7 @@ module = [
     "app.api.damage_schemas",
     "app.api.damage_photo_schemas",
     "app.api.report_schemas",
+    "app.api.statement_schemas",
     "app.api.admin_schemas",
     "app.api.admin_catalogue_schemas",
     "app.api.admin_asset_schemas",

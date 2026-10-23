@@ -26,7 +26,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
-from typing import Any, Final
+from typing import Final, cast
 from uuid import UUID
 
 from sqlalchemy import Column, Select, Table
@@ -124,7 +124,7 @@ class SqlPersonalDataExporter(PersonalDataExporter):
 
 def _select_from(
     table: Table, columns: Sequence[Column[object]], path: Sequence[_Edge]
-) -> Select[Any]:
+) -> Select[tuple[object, ...]]:
     """Return the select of a table's columns, joined along the key path."""
     statement = _select_columns(columns).select_from(table)
     for edge in path:
@@ -132,12 +132,12 @@ def _select_from(
     return statement
 
 
-def _select_columns(columns: Sequence[Column[object]]) -> Select[Any]:
+def _select_columns(columns: Sequence[Column[object]]) -> Select[tuple[object, ...]]:
     """Return a select of the columns, using a literal when a table has none left."""
     from sqlalchemy import literal, select
 
     if not columns:
-        return select(literal(1).label("empty"))
+        return cast(Select[tuple[object, ...]], select(literal(1).label("empty")))
     return select(*columns)
 
 
