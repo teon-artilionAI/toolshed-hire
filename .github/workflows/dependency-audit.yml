@@ -1,0 +1,52 @@
+﻿# Weekly dependency audit.
+#
+# The pull request audit already runs on every change. This workflow runs the
+# same script on a Monday morning even when nobody pushed, so a new advisory is
+# found within a week. It deploys nothing and uses no deployment secrets.
+#
+# It can also be started by hand from the Actions tab. A manual run is the safe
+# way to verify a change to the audit before waiting for the schedule.
+
+name: Weekly dependency audit
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-dependency-audit
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  audit:
+    name: Audit Python and Node dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run the shared dependency audit
+        run: bash infra/scripts/audit-dependencies.sh
