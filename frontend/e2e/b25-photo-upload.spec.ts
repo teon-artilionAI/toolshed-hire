@@ -75,12 +75,19 @@ interface Candidate {
 
 let createdReport: DamageReport | null = null
 
-function returnedItems(pageBody: RentalPage): Candidate[] {
+async function returnedItems(page: import('@playwright/test').Page): Promise<Candidate[]> {
   const candidates: Candidate[] = []
-  for (const rental of pageBody.items) {
-    for (const item of rental.items) {
-      if (item.assetTag !== null && item.returnedAt !== null && item.damageAssessment !== 'REQUIRED') {
-        candidates.push({ rental, item })
+  for (const status of ['SETTLED', 'RETURNED']) {
+    const response = await page.request.get(
+      `/api/rentals?status=${status}&branchCode=${BRANCH_CODE}&pageSize=50`,
+    )
+    expect(response.ok()).toBe(true)
+    const pageBody = (await response.json()) as RentalPage
+    for (const rental of pageBody.items) {
+      for (const item of rental.items) {
+        if (item.assetTag !== null && item.returnedAt !== null && item.damageAssessment !== 'REQUIRED') {
+          candidates.push({ rental, item })
+        }
       }
     }
   }
@@ -167,12 +174,8 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
   expect(healthBody.revision).toMatch(/^toolshed-api-staging-/)
 
   await signInAsStaff(page, staffFor(testInfo.project.name))
-  const rentals = await page.request.get(
-    `/api/rentals?status=RETURNED&branchCode=${BRANCH_CODE}&pageSize=50`,
-  )
-  expect(rentals.ok()).toBe(true)
-  const candidates = returnedItems((await rentals.json()) as RentalPage)
-  expect(candidates.length, 'a returned Cape Town CBD item is needed for the photograph check').toBeGreaterThan(0)
+  const candidates = await returnedItems(page)
+  expect(candidates.length, 'a settled or returned Cape Town CBD item is needed for the photograph check').toBeGreaterThan(0)
 
   const { report, assetTag } = await fileTaskOwnedReport(page, candidates)
   createdReport = report
