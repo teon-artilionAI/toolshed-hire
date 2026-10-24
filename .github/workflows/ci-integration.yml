@@ -141,20 +141,6 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
-      # pip-audit checks everything installed, including pip itself, so pip is
-      # brought up to date first. Otherwise the runner's own pip can fail the
-      # audit for a reason that has nothing to do with this project.
-      - name: Install the backend and its development dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install --require-hashes --requirement requirements-dev.txt
-          pip install --no-deps --no-build-isolation --editable .
-
-      - name: Audit Python dependencies
-        working-directory: backend
-        run: pip-audit
-
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -162,16 +148,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      # High and critical findings block the merge unless audit-exceptions.json
-      # holds a reviewed, unexpired exception for that advisory. Lower ones are
-      # reported.
-      - name: Audit Node dependencies
-        working-directory: frontend
-        run: npm run audit:check
+      # The same script is used by the weekly scheduled audit, so the two
+      # checks cannot drift apart. It updates pip before pip-audit, installs
+      # the backend and frontend from their locks, and runs both audits.
+      - name: Run the shared dependency audit
+        run: bash infra/scripts/audit-dependencies.sh
 
   # The browser tests run against the real API and a seeded PostgreSQL, the
   # same way a visitor's browser reaches them. The built frontend is served by
