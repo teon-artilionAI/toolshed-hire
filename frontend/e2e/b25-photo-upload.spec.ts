@@ -16,6 +16,10 @@ import { signInAsOwner, signInAsStaff, staffFor } from './staff.ts'
 import { note, onStaging } from './staging.ts'
 
 const BRANCH_CODE = 'CBD'
+const WORKED_EXAMPLE_RENTAL = 'TSH-H-26-000098'
+const WORKED_EXAMPLE_ASSET = 'TSH-DR-0042'
+const PAGE_SIZE = 50
+const CANDIDATE_LIMIT = 20
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024
 const PHOTO_ACTION = 'damage_report.photo_added'
 const RESOLUTION_COST = '120.00'
@@ -75,18 +79,47 @@ interface Candidate {
 
 let createdReport: DamageReport | null = null
 
-async function returnedItems(page: import('@playwright/test').Page): Promise<Candidate[]> {
+function candidateOf(rental: Rental, item: RentalItem): Candidate | null {
+  if (item.assetTag === null || item.returnedAt === null || item.damageAssessment === 'REQUIRED') return null
+  return { rental, item }
+}
+
+async function workedExampleCandidate(page: import('@playwright/test').Page): Promise<Candidate | null> {
+  const response = await page.request.get(`/api/rentals/${WORKED_EXAMPLE_RENTAL}`)
+  if (response.status() === 404) return null
+  if (!response.ok()) {
+    throw new Error(`GET /api/rentals/${WORKED_EXAMPLE_RENTAL} returned ${response.status()}: ${await response.text()}`)
+  }
+  const rental = (await response.json()) as Rental
+  const item = rental.items.find((each) => each.assetTag === WORKED_EXAMPLE_ASSET)
+  return item === undefined ? null : candidateOf(rental, item)
+}
+
+async function listedCandidates(page: import('@playwright/test').Page): Promise<Candidate[]> {
+  const firstResponse = await page.request.get(
+    `/api/rentals?branchCode=${BRANCH_CODE}&page=1&pageSize=${PAGE_SIZE}`,
+  )
+  if (!firstResponse.ok()) {
+    throw new Error(`GET /api/rentals page 1 returned ${firstResponse.status()}: ${await firstResponse.text()}`)
+  }
+  const firstPage = (await firstResponse.json()) as RentalPage & { total: number }
+  const lastPage = Math.max(1, Math.ceil(firstPage.total / PAGE_SIZE))
   const candidates: Candidate[] = []
-  for (const status of ['SETTLED', 'RETURNED']) {
-    const response = await page.request.get(
-      `/api/rentals?status=${status}&branchCode=${BRANCH_CODE}&pageSize=50`,
-    )
-    expect(response.ok()).toBe(true)
-    const pageBody = (await response.json()) as RentalPage
-    for (const rental of pageBody.items) {
+  const seen = new Set<string>()
+  for (let pageNumber = lastPage; pageNumber >= 1 && candidates.length < CANDIDATE_LIMIT; pageNumber -= 1) {
+    const response = pageNumber === 1
+      ? firstResponse
+      : await page.request.get(`/api/rentals?branchCode=${BRANCH_CODE}&page=${pageNumber}&pageSize=${PAGE_SIZE}`)
+    if (!response.ok()) {
+      throw new Error(`GET /api/rentals page ${pageNumber} returned ${response.status()}: ${await response.text()}`)
+    }
+    const body = pageNumber === 1 ? firstPage : (await response.json()) as RentalPage
+    for (const rental of body.items) {
       for (const item of rental.items) {
-        if (item.assetTag !== null && item.returnedAt !== null && item.damageAssessment !== 'REQUIRED') {
-          candidates.push({ rental, item })
+        const candidate = candidateOf(rental, item)
+        if (candidate !== null && !seen.has(item.id)) {
+          seen.add(item.id)
+          candidates.push(candidate)
         }
       }
     }
@@ -97,8 +130,8 @@ async function returnedItems(page: import('@playwright/test').Page): Promise<Can
 async function fileTaskOwnedReport(
   page: import('@playwright/test').Page,
   candidates: Candidate[],
-): Promise<{ report: DamageReport; assetTag: string }> {
-  const refusals: string[] = []
+  refusals: string[],
+): Promise<{ report: DamageReport; assetTag: string } | null> {
   for (const { rental, item } of candidates) {
     const response = await page.request.post('/api/damage-reports', {
       data: {
@@ -117,7 +150,7 @@ async function fileTaskOwnedReport(
     }
     refusals.push(`${rental.reference}/${item.assetTag}: ${response.status()}`)
   }
-  throw new Error(`Could not file a task-owned damage report. ${refusals.join('; ')}`)
+  return null
 }
 
 test.afterEach(async ({ browser }, testInfo) => {
@@ -174,10 +207,17 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
   expect(healthBody.revision).toMatch(/^toolshed-api-staging-/)
 
   await signInAsStaff(page, staffFor(testInfo.project.name))
-  const candidates = await returnedItems(page)
-  expect(candidates.length, 'a settled or returned Cape Town CBD item is needed for the photograph check').toBeGreaterThan(0)
-
-  const { report, assetTag } = await fileTaskOwnedReport(page, candidates)
+  const refusals: string[] = []
+  const known = await workedExampleCandidate(page)
+  let filed = known === null ? null : await fileTaskOwnedReport(page, [known], refusals)
+  if (filed === null) {
+    const listed = await listedCandidates(page)
+    filed = await fileTaskOwnedReport(page, listed, refusals)
+  }
+  if (filed === null) {
+    throw new Error(`Could not file a task-owned damage report. ${refusals.join('; ')}`)
+  }
+  const { report, assetTag } = filed
   createdReport = report
   expect(report.reference).toMatch(/^TSH-D-\d{2}-\d{6}$/)
 
