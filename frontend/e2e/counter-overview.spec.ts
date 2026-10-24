@@ -145,7 +145,8 @@ test.describe('the counter overview against the real backend', () => {
     await expect(
       page
         .getByRole('heading', { level: 2, name: new RegExp(`^${dayInWords(today)}`) })
-        .or(page.getByText('Nothing goes out or comes back on this day')),
+        .or(page.getByText('Nothing goes out or comes back on this day'))
+        .or(page.getByText(`${branch} is closed on this day`)),
     ).toBeVisible()
     expect(await blockingViolations(page)).toEqual([])
 
