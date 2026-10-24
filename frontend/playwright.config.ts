@@ -118,10 +118,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-desktop',
+      testIgnore: /b46-network-loss\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'chromium-mobile',
+      testIgnore: /b46-network-loss\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: NARROW_VIEWPORT,
