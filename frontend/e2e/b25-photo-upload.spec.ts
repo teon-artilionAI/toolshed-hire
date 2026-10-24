@@ -11,6 +11,7 @@
  */
 
 import { expect, test } from '@playwright/test'
+import type { APIRequestContext } from '@playwright/test'
 import { nearCapPng } from './near-cap-photo.ts'
 import { signInAsOwner, signInAsStaff, staffFor } from './staff.ts'
 import { note, onStaging } from './staging.ts'
@@ -77,15 +78,29 @@ interface Candidate {
   item: RentalItem
 }
 
+type AuthHeaders = { Authorization: string }
+
 let createdReport: DamageReport | null = null
+
+async function bearer(request: APIRequestContext): Promise<AuthHeaders> {
+  const response = await request.post('/api/auth/refresh')
+  if (!response.ok()) {
+    throw new Error(`POST /api/auth/refresh returned ${response.status()}: ${await response.text()}`)
+  }
+  const body = (await response.json()) as { accessToken?: string }
+  if (body.accessToken === undefined || body.accessToken === '') {
+    throw new Error('The refresh answer carried no access token.')
+  }
+  return { Authorization: `Bearer ${body.accessToken}` }
+}
 
 function candidateOf(rental: Rental, item: RentalItem): Candidate | null {
   if (item.assetTag === null || item.returnedAt === null || item.damageAssessment === 'REQUIRED') return null
   return { rental, item }
 }
 
-async function workedExampleCandidate(page: import('@playwright/test').Page): Promise<Candidate | null> {
-  const response = await page.request.get(`/api/rentals/${WORKED_EXAMPLE_RENTAL}`)
+async function workedExampleCandidate(page: import('@playwright/test').Page, headers: AuthHeaders): Promise<Candidate | null> {
+  const response = await page.request.get(`/api/rentals/${WORKED_EXAMPLE_RENTAL}`, { headers })
   if (response.status() === 404) return null
   if (!response.ok()) {
     throw new Error(`GET /api/rentals/${WORKED_EXAMPLE_RENTAL} returned ${response.status()}: ${await response.text()}`)
@@ -95,9 +110,10 @@ async function workedExampleCandidate(page: import('@playwright/test').Page): Pr
   return item === undefined ? null : candidateOf(rental, item)
 }
 
-async function listedCandidates(page: import('@playwright/test').Page): Promise<Candidate[]> {
+async function listedCandidates(page: import('@playwright/test').Page, headers: AuthHeaders): Promise<Candidate[]> {
   const firstResponse = await page.request.get(
     `/api/rentals?branchCode=${BRANCH_CODE}&page=1&pageSize=${PAGE_SIZE}`,
+    { headers },
   )
   if (!firstResponse.ok()) {
     throw new Error(`GET /api/rentals page 1 returned ${firstResponse.status()}: ${await firstResponse.text()}`)
@@ -109,7 +125,7 @@ async function listedCandidates(page: import('@playwright/test').Page): Promise<
   for (let pageNumber = lastPage; pageNumber >= 1 && candidates.length < CANDIDATE_LIMIT; pageNumber -= 1) {
     const response = pageNumber === 1
       ? firstResponse
-      : await page.request.get(`/api/rentals?branchCode=${BRANCH_CODE}&page=${pageNumber}&pageSize=${PAGE_SIZE}`)
+      : await page.request.get(`/api/rentals?branchCode=${BRANCH_CODE}&page=${pageNumber}&pageSize=${PAGE_SIZE}`, { headers })
     if (!response.ok()) {
       throw new Error(`GET /api/rentals page ${pageNumber} returned ${response.status()}: ${await response.text()}`)
     }
@@ -131,9 +147,11 @@ async function fileTaskOwnedReport(
   page: import('@playwright/test').Page,
   candidates: Candidate[],
   refusals: string[],
+  headers: AuthHeaders,
 ): Promise<{ report: DamageReport; assetTag: string } | null> {
   for (const { rental, item } of candidates) {
     const response = await page.request.post('/api/damage-reports', {
+      headers,
       data: {
         assetTag: item.assetTag,
         rentalItemId: item.id,
@@ -164,7 +182,9 @@ test.afterEach(async ({ browser }, testInfo) => {
   try {
     const owner = await context.newPage()
     await signInAsOwner(owner)
+    const headers = await bearer(owner.request)
     const response = await owner.request.post(`/api/damage-reports/${createdReport.id}/resolution`, {
+      headers,
       data: {
         outcome: 'RESOLVED',
         actualRepairCost: RESOLUTION_COST,
@@ -207,12 +227,13 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
   expect(healthBody.revision).toMatch(/^toolshed-api-staging-/)
 
   await signInAsStaff(page, staffFor(testInfo.project.name))
+  const headers = await bearer(page.request)
   const refusals: string[] = []
-  const known = await workedExampleCandidate(page)
-  let filed = known === null ? null : await fileTaskOwnedReport(page, [known], refusals)
+  const known = await workedExampleCandidate(page, headers)
+  let filed = known === null ? null : await fileTaskOwnedReport(page, [known], refusals, headers)
   if (filed === null) {
-    const listed = await listedCandidates(page)
-    filed = await fileTaskOwnedReport(page, listed, refusals)
+    const listed = await listedCandidates(page, headers)
+    filed = await fileTaskOwnedReport(page, listed, refusals, headers)
   }
   if (filed === null) {
     throw new Error(`Could not file a task-owned damage report. ${refusals.join('; ')}`)
@@ -239,7 +260,7 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
     timeout: 60_000,
   })
 
-  const photoResponse = await page.request.get(`/api/damage-reports/${report.id}/photos`)
+  const photoResponse = await page.request.get(`/api/damage-reports/${report.id}/photos`, { headers })
   expect(photoResponse.ok()).toBe(true)
   const photos = (await photoResponse.json()) as PhotoList
   expect(photos.items).toHaveLength(1)
@@ -248,7 +269,7 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
   expect(photo.sizeBytes).toBeGreaterThan(0)
   expect(photo.uploadedAt).toBeTruthy()
 
-  const linkResponse = await page.request.get(`/api/damage-reports/${report.id}/photos/${photo.id}`)
+  const linkResponse = await page.request.get(`/api/damage-reports/${report.id}/photos/${photo.id}`, { headers })
   expect(linkResponse.ok()).toBe(true)
   const link = (await linkResponse.json()) as PhotoLink
   expect(link.url).toContain('X-Goog-Signature')
@@ -266,20 +287,21 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
   try {
     const owner = await ownerContext.newPage()
     await signInAsOwner(owner)
+    const ownerHeaders = await bearer(owner.request)
     const auditUrl =
       `/api/admin/audit-events?entityType=damage_report&entityId=${report.id}` +
       `&action=${PHOTO_ACTION}&pageSize=10`
     await expect
       .poll(
         async () => {
-          const response = await owner.request.get(auditUrl)
+          const response = await owner.request.get(auditUrl, { headers: ownerHeaders })
           if (!response.ok()) return 0
           return ((await response.json()) as AuditPage).items.length
         },
         { timeout: 20_000 },
       )
       .toBeGreaterThan(0)
-    const auditResponse = await owner.request.get(auditUrl)
+    const auditResponse = await owner.request.get(auditUrl, { headers: ownerHeaders })
     expect(auditResponse.ok()).toBe(true)
     const audit = (await auditResponse.json()) as AuditPage
     const event = audit.items[0]
@@ -288,6 +310,7 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
     expect(event.requestId).toBeTruthy()
 
     const resolution = await owner.request.post(`/api/damage-reports/${report.id}/resolution`, {
+      headers: ownerHeaders,
       data: {
         outcome: 'RESOLVED',
         actualRepairCost: RESOLUTION_COST,
