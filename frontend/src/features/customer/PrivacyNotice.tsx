@@ -74,6 +74,22 @@ export default function PrivacyNotice() {
                 returned, and what was charged. We keep it so that a deposit and any fee can be
                 accounted for.
               </li>
+              <li>
+                Damage reports and photographs, which are the description, severity, repair
+                estimate and cost, the resolution notes and photographs of the damage. We keep
+                them so that a deposit and any repair charge can be settled.
+              </li>
+              <li>
+                Notification records, which are the address, subject, delivery status and
+                provider error for messages about your account and bookings. We keep them so
+                that those messages can be sent and a failed delivery can be investigated.
+              </li>
+              <li>
+                Security and audit records, which are the browser user agent, IP address,
+                sign-in and lockout state, and the actor and before and after state of each
+                recorded change. We keep them to secure the service and to meet our
+                accountability duties.
+              </li>
             </Points>
           </Section>
 
@@ -91,7 +107,7 @@ export default function PrivacyNotice() {
           <Section title="Who handles it and where">
             <Points>
               <li>The database is held by Neon in London, in the United Kingdom.</li>
-              <li>The service that answers the website runs on Google Cloud in London.</li>
+              <li>The service that answers the website and the private bucket that holds damage photographs run on Google Cloud in London.</li>
               <li>The website itself is served by Vercel.</li>
               <li>Email is sent through Resend.</li>
               <li>
