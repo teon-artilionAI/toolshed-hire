@@ -240,7 +240,7 @@ test('a signed-in assistant uploads a near-cap photograph and opens its signed l
   }
   const { report, assetTag } = filed
   createdReport = report
-  expect(report.reference).toMatch(/^TSH-D-\d{2}-\d{6}$/)
+  expect(report.reference).toMatch(/^TSH-D-\d{2}-\d{5}$/)
 
   await page.goto(`/counter/damage/${encodeURIComponent(assetTag)}`)
   await expect(page.getByRole('heading', { level: 1, name: 'Record damage' })).toBeVisible()
