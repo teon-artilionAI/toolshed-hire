@@ -13,6 +13,15 @@ on:
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
+  # A change to the audit itself or to either lockfile is audited on the branch,
+  # so the weekly workflow can be proved before it reaches the default branch.
+  push:
+    paths:
+      - ".github/workflows/dependency-audit.yml"
+      - "infra/scripts/audit-dependencies.sh"
+      - "backend/requirements.txt"
+      - "backend/requirements-dev.txt"
+      - "frontend/package-lock.json"
 
 concurrency:
   group: weekly-dependency-audit
