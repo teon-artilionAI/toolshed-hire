@@ -223,16 +223,29 @@ function Main({ screen, children }: { screen?: ScreenDef; children: ReactNode })
  * target.
  */
 function ShellFooter() {
+  const guideUrl = (import.meta.env.VITE_USER_GUIDE_URL ?? "").trim()
   return (
     <footer className="mx-auto w-full max-w-6xl px-md pb-26 md:pb-lg">
       <div className="flex flex-wrap items-center justify-between gap-x-md border-t border-line pt-sm text-sm text-slate-soft">
         <p>Toolshed Hire</p>
-        <Link
-          to={PRIVACY_PATH}
-          className="inline-flex min-h-11 cursor-pointer items-center font-medium text-ink underline transition-colors duration-200 hover:text-slate"
-        >
-          Privacy notice
-        </Link>
+        <div className="flex flex-wrap items-center gap-md">
+          {guideUrl !== "" && (
+            <a
+              href={guideUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 cursor-pointer items-center font-medium text-ink underline transition-colors duration-200 hover:text-slate"
+            >
+              Help
+            </a>
+          )}
+          <Link
+            to={PRIVACY_PATH}
+            className="inline-flex min-h-11 cursor-pointer items-center font-medium text-ink underline transition-colors duration-200 hover:text-slate"
+          >
+            Privacy notice
+          </Link>
+        </div>
       </div>
     </footer>
   )
