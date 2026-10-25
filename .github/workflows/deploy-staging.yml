@@ -269,3 +269,32 @@ jobs:
           name: staging-journeys-failures
           path: frontend/test-results
           retention-days: 7
+
+      - name: Set up Python for the audit check
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the audit check dependency
+        run: pip install "psycopg[binary]==3.2.3"
+
+      - name: Authenticate to Google Cloud for the audit check
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up the gcloud CLI for the audit check
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # The browser journey creates the reservation. Its audit event must carry
+      # the runner's public address, not the function's private or egress one.
+      - name: Check the audit trail carries the real client address
+        env:
+          DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET_NAME }}
+        run: |
+          EXPECTED_CLIENT_IP="$(curl -fsS https://api.ipify.org)"
+          STAGING_DATABASE_URL="$(gcloud secrets versions access latest --secret="${DATABASE_URL_SECRET}")" \
+            python backend/scripts/check_staging_audit_ip.py "${EXPECTED_CLIENT_IP}"
