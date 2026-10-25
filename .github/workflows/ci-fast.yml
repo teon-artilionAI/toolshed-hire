@@ -164,6 +164,20 @@ jobs:
       - name: Check the generated API types are current
         run: npm run api:types:check
 
+  # The B4.6 staging drill must be a no-deploy route. This job checks the two
+  # workflow files that make that true, so a future edit cannot quietly add a
+  # deployment job, dependency, action, script, secret or write permission.
+  staging-route:
+    name: Staging no-deploy route guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check the B4.6 route cannot deploy
+        run: python3 infra/scripts/check_staging_b46_route.py
+
   # One job that always runs and reports a single result. Branch protection
   # requires this job, so a skipped or cancelled job above can never leave a
   # required check waiting forever.
@@ -172,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: always()
-    needs: [secrets, backend, lockfiles, frontend]
+    needs: [secrets, backend, lockfiles, frontend, staging-route]
     steps:
       - name: Fail unless every job passed
         env:
