@@ -50,7 +50,9 @@ test('a controlled clock sees the public holiday in the browser and the API', as
   await page.getByLabel('Collect on').fill(HOLIDAY)
   await page.getByLabel('Bring back on').fill('2026-12-17')
   await expect(page.getByText(/closed for Day of Reconciliation/).first()).toBeVisible()
-  await expect(page.getByText(/The next open day is 17 Dec 2026/).first()).toBeVisible()
+  const nextOpenDay = page.getByText(/The next open day is 17 Dec 2026/).first()
+  await expect(nextOpenDay).toBeVisible()
+  const nextOpenDayText = await nextOpenDay.innerText()
 
   const screenshot = testInfo.outputPath('holiday-browser.png')
   mkdirSync(dirname(screenshot), { recursive: true })
@@ -61,6 +63,7 @@ test('a controlled clock sees the public holiday in the browser and the API', as
     apiTrading: trading,
     closedDays: closed,
     browserRefusal: 'closed for Day of Reconciliation',
+    browserNextOpenDay: nextOpenDayText,
   }
   const evidencePath = testInfo.outputPath('holiday-qualification.json')
   writeFileSync(evidencePath, JSON.stringify(evidence, null, 2))
