@@ -103,6 +103,9 @@ jobs:
           pip install --require-hashes --requirement requirements-dev.txt
           pip install --no-deps --no-build-isolation --editable .
 
+      - name: Install gitleaks for artifact scans
+        run: bash ../infra/scripts/install-gitleaks.sh
+
       # Every migration is applied to an empty database on every run, so a
       # migration that only works on my machine is caught here.
       - name: Apply migrations from empty
@@ -114,11 +117,12 @@ jobs:
         run: pytest tests --cov --cov-report=term-missing --cov-report=xml
 
       - name: Scan the coverage report for personal information
+        id: coverage_scan
         if: always()
-        run: python ../infra/scripts/scan_artifacts.py --allow-missing coverage.xml
+        run: python ../infra/scripts/scan_artifacts.py --gitleaks --allow-missing coverage.xml
 
       - name: Keep the coverage report
-        if: always()
+        if: always() && steps.coverage_scan.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-coverage
@@ -272,6 +276,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install gitleaks for artifact scans
+        run: bash ../infra/scripts/install-gitleaks.sh
+
       - name: Build the production bundle
         run: npm run build
 
@@ -285,12 +292,13 @@ jobs:
         run: npm run test:e2e
 
       - name: Scan the browser report for personal information
+        id: browser_scan
         if: failure()
         working-directory: frontend
-        run: python ../infra/scripts/scan_artifacts.py --allow-missing playwright-report
+        run: python ../infra/scripts/scan_artifacts.py --gitleaks --allow-missing playwright-report
 
       - name: Keep the browser test report
-        if: failure()
+        if: failure() && steps.browser_scan.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report

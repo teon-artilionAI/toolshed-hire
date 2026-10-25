@@ -11,9 +11,9 @@ real bcrypt, because the work factor is what they are about.
 Timing is proved twice. The first test counts bcrypt verifications and is
 exact. Every path, the four refusals and the success, runs one. The second
 measures. It interleaves refusals for an unknown address with refusals for a
-wrong password and compares the two medians, with a tolerance wide enough that
-a busy machine does not fail it and narrow enough that a path which skipped the
-hash, and so answered a hundred times faster, would.
+wrong password and asserts that the medians are within the 50 ms absolute
+difference NFR-08 specifies. A ratio alone would let a materially different
+response time pass on a slow machine.
 """
 
 from __future__ import annotations
@@ -60,9 +60,8 @@ SHA256_HEX_LENGTH: Final[int] = 64
 # The fixed clock starts on the hour, which is the start of a window.
 WHOLE_WINDOW_SECONDS: Final[int] = int(LOGIN_WINDOW.total_seconds())
 TIMING_SAMPLES: Final[int] = 100
-# How far apart the two medians may be, as a ratio. A path that skipped the
-# hash would be out by a factor of a hundred or more.
-TIMING_TOLERANCE: Final[float] = 2.0
+# The absolute median difference NFR-08 permits, in seconds.
+TIMING_ABSOLUTE_TOLERANCE_SECONDS: Final[float] = 0.050
 
 
 @pytest.fixture
@@ -233,9 +232,15 @@ class TestEveryPathCostsOneHash:
         for number, email in enumerate(emails):
             wrong_password.append(timed(email))
             unknown_email.append(timed(f"nobody{number}@toolshedhire.co.za"))
-        ratio = statistics.median(unknown_email) / statistics.median(wrong_password)
-        assert 1 / TIMING_TOLERANCE < ratio < TIMING_TOLERANCE, (
-            f"An unknown address answered in {statistics.median(unknown_email):.4f}s and a "
-            f"wrong password in {statistics.median(wrong_password):.4f}s. The two must cost "
-            "the same, or the time gives the reason away."
+        unknown_median = statistics.median(unknown_email)
+        wrong_median = statistics.median(wrong_password)
+        difference = abs(unknown_median - wrong_median)
+        print(
+            f"timing medians: unknown={unknown_median:.4f}s wrong={wrong_median:.4f}s "
+            f"absolute_difference={difference:.4f}s"
+        )
+        assert difference < TIMING_ABSOLUTE_TOLERANCE_SECONDS, (
+            f"An unknown address answered in {unknown_median:.4f}s and a wrong password "
+            f"in {wrong_median:.4f}s. The absolute median difference is {difference:.4f}s, "
+            "which is not under the 0.050s NFR-08 threshold."
         )
