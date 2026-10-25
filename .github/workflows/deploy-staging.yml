@@ -178,6 +178,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           API_ORIGIN: ${{ steps.api.outputs.service_url }}
+          VITE_USER_GUIDE_URL: https://teon-artilionai.github.io/toolshed-hire/
         run: bash infra/scripts/deploy-frontend.sh
 
       # The same health check, this time through the frontend domain. It only

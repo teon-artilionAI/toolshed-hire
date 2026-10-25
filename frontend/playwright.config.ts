@@ -118,12 +118,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-desktop',
-      testIgnore: /(b46-network-loss|b25-photo-upload|b124-staging-report-csv)\.spec\.ts/,
+      testIgnore: /(b46-network-loss|b25-photo-upload|b124-staging-report-csv|d6-guide-link)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'chromium-mobile',
-      testIgnore: /(b46-network-loss|b25-photo-upload|b124-staging-report-csv)\.spec\.ts/,
+      testIgnore: /(b46-network-loss|b25-photo-upload|b124-staging-report-csv|d6-guide-link)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: NARROW_VIEWPORT,
