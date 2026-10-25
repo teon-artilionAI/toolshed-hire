@@ -16,7 +16,7 @@ import os
 import sys
 from ipaddress import ip_address
 
-import psycopg
+from sqlalchemy import create_engine, text
 
 QUERY = """
 SELECT id, action, request_id, ip_address
@@ -50,11 +50,17 @@ def main() -> int:
     if database_url == "":
         return fail("STAGING_DATABASE_URL is not set")
 
-    with psycopg.connect(database_url, connect_timeout=15) as connection:
-        connection.read_only = True
-        with connection.cursor() as cursor:
-            cursor.execute(QUERY)
-            row = cursor.fetchone()
+    if database_url.startswith("postgresql://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgresql://") :]
+    elif database_url.startswith("postgres://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgres://") :]
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(text(QUERY)).fetchone()
+    finally:
+        engine.dispose()
 
     if row is None:
         return fail("no recent reservation.created audit event with a client address")
