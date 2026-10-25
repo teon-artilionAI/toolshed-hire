@@ -1,0 +1,137 @@
+﻿# Calendar qualification.
+#
+# A test-only workflow_dispatch route for the B9.3 controlled-clock checks. It
+# starts a local API and a seeded PostgreSQL in the job, sets the test-only
+# business date, and runs only the selected browser scenarios. It never deploys
+# staging or production and it uploads no artifacts.
+
+name: Calendar qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Which controlled clock scenario to run"
+        required: true
+        type: choice
+        options:
+          - holiday
+          - open-day
+      test_business_date:
+        description: "Test-only date, for example 2026-12-16"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  qualification:
+    name: "Calendar qualification (${{ inputs.scenario }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: toolshed
+          POSTGRES_PASSWORD: toolshed_ci_local_only
+          POSTGRES_DB: toolshed_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=toolshed --dbname=toolshed_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://toolshed:toolshed_ci_local_only@localhost:5432/toolshed_test
+      JWT_SECRET: ci_only_jwt_secret_value_not_used_outside_this_job
+      API_PORT: "8000"
+      CORS_ORIGINS: http://127.0.0.1:4173
+      FRONTEND_ORIGIN: http://127.0.0.1:4173
+      LOGIN_ATTEMPTS_PER_EMAIL: "200"
+      LOGIN_ATTEMPTS_PER_ADDRESS: "400"
+      TEST_BUSINESS_TIME: "10:00"
+      TEST_BUSINESS_DATE: ${{ inputs.test_business_date }}
+      E2E_REQUIRE_BACKEND: "1"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python for the API
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install the backend
+        working-directory: backend
+        run: |
+          pip install --require-hashes --requirement requirements.txt
+          pip install --no-deps --no-build-isolation --editable .
+
+      - name: Migrate and seed the local database
+        working-directory: backend
+        run: |
+          alembic upgrade head
+          python seed.py
+
+      - name: Start the local API on the controlled clock
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 127.0.0.1 --port "${API_PORT}" > "${RUNNER_TEMP}/api.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "http://127.0.0.1:${API_PORT}/api/health" > /dev/null; then
+              echo "The API answered on attempt ${attempt}."
+              break
+            fi
+            sleep 1
+          done
+          grep --fixed-strings "\"test_business_time\": \"10:00:00\"" "${RUNNER_TEMP}/api.log"
+          grep --fixed-strings "\"test_business_date\": \"${TEST_BUSINESS_DATE}\"" "${RUNNER_TEMP}/api.log"
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build the production bundle
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install the browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the holiday scenario
+        if: inputs.scenario == 'holiday'
+        working-directory: frontend
+        run: |
+          npx playwright test e2e/calendar-qualification.spec.ts --project=chromium-desktop --workers=1 --reporter=json > "${RUNNER_TEMP}/calendar-result.json"
+          node -e "const r=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/calendar-result.json')); if (r.stats.expected !== 1 || r.stats.skipped !== 0 || r.stats.unexpected !== 0) { console.error(r.stats); process.exit(1) }"
+          find test-results -name 'holiday-qualification.json' -print -exec cat {} \;
+
+      - name: Run the open-day scenario
+        if: inputs.scenario == 'open-day'
+        working-directory: frontend
+        run: |
+          npx playwright test e2e/open-day-clock.spec.ts e2e/counter.spec.ts --project=chromium-desktop --workers=1 --reporter=json > "${RUNNER_TEMP}/calendar-result.json"
+          node -e "const r=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/calendar-result.json')); if (r.stats.expected !== 4 || r.stats.skipped !== 0 || r.stats.unexpected !== 0) { console.error(r.stats); process.exit(1) }"
+          find test-results -name 'open-day-clock.json' -print -exec cat {} \;
+
+      - name: Show the API log when a check fails
+        if: failure()
+        run: tail -n 200 "${RUNNER_TEMP}/api.log" || true
