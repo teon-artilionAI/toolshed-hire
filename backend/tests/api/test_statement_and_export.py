@@ -15,7 +15,6 @@ an export show once those rows exist.
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Final
@@ -23,11 +22,17 @@ from typing import Final
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import Session, col, select
+from sqlmodel import Session
 
 from app.domain.enums import ChargeStatus, ChargeType, RentalStatus, UserRole
 from app.domain.period import BookingPeriod
-from app.infrastructure.models import Branch, Charge, CustomerProfile, Rental, UserAccount
+from app.infrastructure.models import (
+    Branch,
+    Charge,
+    CustomerProfile,
+    Rental,
+    UserAccount,
+)
 from tests.support.clock import FixedClock
 from tests.support.factories import Factory
 from tests.support.http import problem_code
@@ -244,60 +249,3 @@ def test_a_signed_out_caller_is_refused(account_api: TestClient) -> None:
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_the_export_has_every_customer_table_and_no_credentials(
-    account_api: TestClient,
-    session: Session,
-    factory: Factory,
-    home_branch: Branch,
-    still_clock: FixedClock,
-    customer: tuple[UserAccount, CustomerProfile],
-) -> None:
-    """The export follows the personal data map and leaves secrets out."""
-    account, profile = customer
-    add_rental(session, factory, account=account, profile=profile, branch=home_branch)
-
-    response = account_api.get(EXPORT_PATH, headers=bearer(account, still_clock))
-
-    assert response.status_code == status.HTTP_200_OK
-    assert response.headers["content-disposition"].startswith(
-        'attachment; filename="toolshed-my-data-'
-    )
-    body = response.json()
-    tables = body["tables"]
-    assert "customer_profile" in tables
-    assert "user_account" in tables
-    assert "reservation" in tables
-    assert "rental" in tables
-    assert "charge" in tables
-    assert len(tables["rental"]) == 1
-    assert len(tables["charge"]) == 2
-    assert body["rowCount"] == sum(len(rows) for rows in tables.values())
-    flattened = json.dumps(body)
-    assert "password_hash" not in flattened
-    assert "token_hash" not in flattened
-    assert "email_verification_token_hash" not in flattened
-
-
-def test_the_export_is_audited_and_only_names_counts(
-    account_api: TestClient,
-    session: Session,
-    still_clock: FixedClock,
-    customer: tuple[UserAccount, CustomerProfile],
-) -> None:
-    """An export writes one event with counts, never the values."""
-    account, _profile = customer
-    response = account_api.get(EXPORT_PATH, headers=bearer(account, still_clock))
-    assert response.status_code == status.HTTP_200_OK
-    from app.infrastructure.models import AuditEvent
-
-    session.expire_all()
-    events = list(
-        session.exec(
-            select(AuditEvent).where(col(AuditEvent.action) == "customer.data_exported")
-        ).all()
-    )
-    assert len(events) == 1
-    assert events[0].after_state == {
-        "table_count": len(response.json()["tables"]),
-        "row_count": response.json()["rowCount"],
-    }

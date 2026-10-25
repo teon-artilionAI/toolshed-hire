@@ -12,6 +12,13 @@ the map classifies as customer data but which has no path raises at export
 time rather than silently returning nothing, because an incomplete answer to
 a right of access is worse than a loud failure.
 
+The audit trail is the one polymorphic table. Its `entity_type` and `entity_id`
+columns can name a customer, a booking, a hire, a charge, a damage report or a
+notification, and a staff actor is not the customer. The map therefore names
+the subject entity types explicitly, and this module reads those subjects while
+redacting the actor identity and address of a staff member. The generic
+foreign-key walk cannot infer that relationship.
+
 This is deliberately not a per-table list. The map owns the classification,
 and this module owns only the traversal and the JSON conversion.
 """
@@ -29,10 +36,11 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import Final, cast
 from uuid import UUID
 
-from sqlalchemy import Column, Select, Table
+from sqlalchemy import Column, Select, Table, literal, select
 from sqlmodel import Session, SQLModel
 
 from app.application.identity.export_ports import ExportedRows, JsonValue, PersonalDataExporter
+from app.infrastructure.personal_data_audit import AUDIT_EVENT_TABLE, audit_rows
 from app.infrastructure.personal_data_map import PERSONAL_DATA_MAP, CustomerData
 
 logger = logging.getLogger(__name__)
@@ -50,7 +58,7 @@ CUSTOMER_PROFILE_TABLE: Final[str] = "customer_profile"
 USER_ACCOUNT_TABLE: Final[str] = "user_account"
 # The tables that hang off the account rather than the customer profile.
 ACCOUNT_ROOTED_TABLES: Final[frozenset[str]] = frozenset(
-    {USER_ACCOUNT_TABLE, "refresh_session", "audit_event"}
+    {USER_ACCOUNT_TABLE, "refresh_session"}
 )
 
 
@@ -92,6 +100,13 @@ class SqlPersonalDataExporter(PersonalDataExporter):
                 f"The personal data map names table {table_name}, and the metadata does not "
                 "define it. Every customer data table must exist in the ORM metadata."
             )
+        if table_name == AUDIT_EVENT_TABLE:
+            return tuple(
+                {name: _json_value(value) for name, value in row.items()}
+                for row in audit_rows(
+                    self._session, self._tables, customer_profile_id, user_account_id
+                )
+            )
         root_name = self._root_for(table_name)
         path = _path_to(table, root_name)
         if path is None:
@@ -112,6 +127,7 @@ class SqlPersonalDataExporter(PersonalDataExporter):
         return tuple(
             {name: _json_value(value) for name, value in row.items()} for row in rows
         )
+
 
     def _root_for(self, table_name: str) -> str:
         """Return the table the customer's rows are reached through."""
@@ -134,8 +150,6 @@ def _select_from(
 
 def _select_columns(columns: Sequence[Column[object]]) -> Select[tuple[object, ...]]:
     """Return a select of the columns, using a literal when a table has none left."""
-    from sqlalchemy import literal, select
-
     if not columns:
         return cast(Select[tuple[object, ...]], select(literal(1).label("empty")))
     return select(*columns)
