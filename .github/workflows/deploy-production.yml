@@ -149,6 +149,13 @@ jobs:
       FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      # Stage 3 keeps the same function and IAM path that staging proves. The
+      # production edge identity and these variables must exist before the
+      # release; this workflow does not create them.
+      API_ACCESS: iam
+      API_ROUTE: function
+      GCP_WORKLOAD_AUDIENCE: ${{ vars.GCP_WORKLOAD_AUDIENCE }}
+      GCP_INVOKER_ACCOUNT: ${{ vars.GCP_INVOKER_ACCOUNT }}
       RELEASE_TAG: ${{ github.ref_name }}
 
     steps:
@@ -217,10 +224,29 @@ jobs:
           USE_CANDIDATE: "true"
         run: bash infra/scripts/deploy-api.sh
 
+      - name: Get an ID token for the candidate smoke test
+        id: smoke_identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.api.outputs.service_url }}
+          id_token_include_email: true
+
       - name: Smoke test the candidate revision
         env:
           SERVICE_URL: ${{ steps.api.outputs.check_url }}
+          SMOKE_TEST_ID_TOKEN: ${{ steps.smoke_identity.outputs.id_token }}
         run: bash infra/scripts/smoke-test.sh
+
+      # The ID token step changes the active gcloud credential. Put the
+      # deployer back before traffic is shifted or any later gcloud step runs.
+      - name: Restore the deployer identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Shift traffic to the candidate revision
         if: steps.api.outputs.used_candidate == 'true'
@@ -248,6 +274,7 @@ jobs:
       - name: Check the security headers and TLS of the deployed site
         env:
           SITE_URL: ${{ env.FRONTEND_ORIGIN }}
+          IAM_ONLY_SERVICE_URL: ${{ steps.api.outputs.service_url }}
         run: bash infra/scripts/check-security-headers.sh
 
       - name: Record the deployment in the run summary
