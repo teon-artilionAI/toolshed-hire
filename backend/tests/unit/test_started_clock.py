@@ -20,6 +20,7 @@ from app.infrastructure.clock import StartedAtBusinessTimeClock, SystemClock, cl
 from tests.support.request_probe import settings_for
 
 TEN_IN_THE_MORNING: Final[time] = time(10, 0)
+HOLIDAY: Final[date] = date(2026, 12, 16)
 # 20:30 in Cape Town on Monday the second of March 2026, after every branch has closed.
 EVENING: Final[datetime] = datetime(2026, 3, 2, 18, 30, tzinfo=UTC)
 # 01:30 in Cape Town on Tuesday the third, while it is still the second in UTC.
@@ -57,9 +58,19 @@ class TestTheClock:
         assert clock.today() == date(2026, 3, 3)
         assert clock.now() == datetime(2026, 3, 3, 8, 0, tzinfo=UTC)
 
+    def test_it_can_start_on_a_chosen_date(self) -> None:
+        clock = StartedAtBusinessTimeClock(
+            TEN_IN_THE_MORNING, MovingSource(EVENING), business_date=HOLIDAY
+        )
+        assert clock.now() == datetime(2026, 12, 16, 8, 0, tzinfo=UTC)
+        assert clock.today() == HOLIDAY
+
     def test_the_real_clock_is_chosen_when_nothing_is_set(self) -> None:
         assert isinstance(clock_for(None), SystemClock)
         assert isinstance(clock_for(TEN_IN_THE_MORNING), StartedAtBusinessTimeClock)
+        assert isinstance(
+            clock_for(TEN_IN_THE_MORNING, HOLIDAY), StartedAtBusinessTimeClock
+        )
 
 
 class TestTheSetting:
@@ -73,7 +84,22 @@ class TestTheSetting:
     def test_a_blank_value_is_no_test_clock(self) -> None:
         loaded = settings_for(Environment.TEST, TEST_BUSINESS_TIME="  ")
         assert loaded.test_business_time is None
+        assert loaded.test_business_date is None
         assert loaded.redacted()["test_business_time"] == "off"
+        assert loaded.redacted()["test_business_date"] == "off"
+
+    def test_the_test_environment_reads_a_date_beside_the_time(self) -> None:
+        loaded = settings_for(
+            Environment.TEST,
+            TEST_BUSINESS_TIME="10:00",
+            TEST_BUSINESS_DATE="2026-12-16",
+        )
+        assert loaded.test_business_date == HOLIDAY
+        assert loaded.redacted()["test_business_date"] == "2026-12-16"
+
+    def test_a_date_without_a_time_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="TEST_BUSINESS_DATE needs TEST_BUSINESS_TIME"):
+            settings_for(Environment.TEST, TEST_BUSINESS_DATE="2026-12-16")
 
     @pytest.mark.parametrize(
         "environment",
@@ -82,6 +108,18 @@ class TestTheSetting:
     def test_any_other_environment_refuses_it(self, environment: Environment) -> None:
         with pytest.raises(ValidationError, match="honoured only when ENVIRONMENT=test"):
             settings_for(environment, TEST_BUSINESS_TIME="10:00")
+
+    @pytest.mark.parametrize(
+        "environment",
+        [Environment.DEVELOPMENT, Environment.STAGING, Environment.PRODUCTION],
+    )
+    def test_any_other_environment_refuses_a_date(self, environment: Environment) -> None:
+        with pytest.raises(ValidationError, match="honoured only when ENVIRONMENT=test"):
+            settings_for(
+                environment,
+                TEST_BUSINESS_TIME="10:00",
+                TEST_BUSINESS_DATE="2026-12-16",
+            )
 
     def test_start_up_refuses_it_outside_test(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENVIRONMENT", "production")

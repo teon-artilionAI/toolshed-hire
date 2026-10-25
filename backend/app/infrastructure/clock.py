@@ -9,8 +9,10 @@ Town belongs to the new day even though UTC is still on the old one.
 `TEST_BUSINESS_TIME`. It reads today's real date in Cape Town when it is built,
 starts at the chosen time of day on it, and from then on runs in real time, so
 a browser test can book for today and check out whatever time CI happens to
-run. The settings refuse to start any environment but test with it, and
-`clock_for` is the one place that chooses between the two.
+run. `TEST_BUSINESS_DATE` moves that starting date as well, for a controlled
+test-only calendar qualification. The settings refuse to start any environment
+but test with either setting, and `clock_for` is the one place that chooses
+between the two.
 """
 
 from __future__ import annotations
@@ -55,28 +57,34 @@ class SystemClock:
 
 
 class StartedAtBusinessTimeClock:
-    """A test clock that starts at a time of day on today's real date and runs in real time."""
+    """A test clock that starts at a chosen time and date and runs in real time."""
 
     def __init__(
-        self, business_time: time, instant_source: Callable[[], datetime] = _utc_now
+        self,
+        business_time: time,
+        instant_source: Callable[[], datetime] = _utc_now,
+        business_date: date | None = None,
     ) -> None:
-        """Start the clock at a time of day in Cape Town on the real date of this moment.
+        """Start the clock at a time of day in Cape Town on the chosen date.
 
         Args:
             business_time: The time of day the clock starts at, on a clock in
                 Cape Town.
             instant_source: Where the real instant is read from. The operating
                 system by default.
+            business_date: The date to report instead of the real Cape Town
+                date. Test only, and normally None.
 
         """
         started = instant_source().astimezone(UTC)
-        self._offset = business_instant(business_day(started), business_time) - started
+        day = business_date if business_date is not None else business_day(started)
+        self._offset = business_instant(day, business_time) - started
         self._instant_source = instant_source
         logger.warning(
             "clock.test_business_time_in_use",
             extra={
                 "business_time": business_time.isoformat(),
-                "business_day": business_day(started).isoformat(),
+                "business_day": day.isoformat(),
                 "offset_seconds": int(self._offset.total_seconds()),
             },
         )
@@ -90,14 +98,18 @@ class StartedAtBusinessTimeClock:
         return business_day(self.now())
 
 
-def clock_for(test_business_time: time | None) -> Clock:
+def clock_for(test_business_time: time | None, test_business_date: date | None = None) -> Clock:
     """Return the clock the API uses, the real one unless a test clock was configured.
 
     Args:
         test_business_time: The setting `TEST_BUSINESS_TIME`, which the
             settings only allow in the test environment.
+        test_business_date: The setting `TEST_BUSINESS_DATE`, which moves the
+            date and is only allowed beside a time in the test environment.
 
     """
     if test_business_time is None:
         return SystemClock()
-    return StartedAtBusinessTimeClock(test_business_time)
+    return StartedAtBusinessTimeClock(
+        test_business_time, business_date=test_business_date
+    )

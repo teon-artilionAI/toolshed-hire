@@ -22,7 +22,7 @@ from app.config_checks import (
     force_psycopg_driver,
     resolve_frontend_origin,
 )
-from app.config_clock import ClockSettings, check_test_business_time
+from app.config_clock import ClockSettings, check_test_clock
 from app.config_environment import ConfigurationError as ConfigurationError
 from app.config_environment import Environment as Environment
 from app.config_limits import AttemptLimitSettings
@@ -235,8 +235,9 @@ class Settings(AttemptLimitSettings, ClockSettings):
     @model_validator(mode="after")
     def honour_the_test_clock_in_test_only(self) -> Settings:
         """Refuse to start any environment but test with its clock moved."""
-        check_test_business_time(
+        check_test_clock(
             self.test_business_time,
+            self.test_business_date,
             environment=self.environment.value,
             is_test=self.environment is Environment.TEST,
         )
@@ -306,6 +307,7 @@ class Settings(AttemptLimitSettings, ClockSettings):
             "email_recipient_restriction": "on" if self.email_allowed_recipient else "off",
             "photo_storage": "configured" if self.photos_configured else "not-configured",
             "test_business_time": str(self.test_business_time or "off"),
+            "test_business_date": str(self.test_business_date or "off"),
             **self.attempt_limit_values(),
         }
 

@@ -66,8 +66,9 @@ BEARER_PREFIX = "Bearer "
 NOTIFICATION_GATEWAY_STATE_KEY = "notification_gateway"
 
 # Chosen once, at start-up. It is the real clock, unless a test process set
-# TEST_BUSINESS_TIME, which the settings refuse in every other environment.
-_CLOCK = clock_for(settings.test_business_time)
+# TEST_BUSINESS_TIME and TEST_BUSINESS_DATE, which the settings refuse in every
+# other environment.
+_CLOCK = clock_for(settings.test_business_time, settings.test_business_date)
 
 SessionDependency = Annotated[Session, Depends(get_session)]
 

@@ -23,8 +23,14 @@ import { dateFromToday } from './hire-dates.ts'
 /** The variable the API reads its starting time of day from. */
 const API_CLOCK_VARIABLE = 'TEST_BUSINESS_TIME'
 
+/** The variable that moves the test clock's starting date. */
+const API_DATE_VARIABLE = 'TEST_BUSINESS_DATE'
+
 /** A time of day the way the API reads the variable, `HH:MM` or `HH:MM:SS`. */
 const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/
+
+/** A date the way the API reads `TEST_BUSINESS_DATE`. */
+const BUSINESS_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /** How long `HH:MM` is. A value this long has no seconds yet. */
 const HOURS_AND_MINUTES_LENGTH = 5
@@ -41,13 +47,26 @@ const BRANCH_UTC_OFFSET = '+02:00'
  */
 export async function startBrowserClockWithTheApi(page: Page): Promise<void> {
   const timeOfDay = process.env[API_CLOCK_VARIABLE]
-  if (!timeOfDay) return
+  const businessDate = process.env[API_DATE_VARIABLE]
+  if (!timeOfDay && !businessDate) return
+  if (!timeOfDay) {
+    throw new Error(
+      `${API_DATE_VARIABLE} needs ${API_CLOCK_VARIABLE}. Set both, or unset the date.`,
+    )
+  }
   if (!TIME_OF_DAY.test(timeOfDay)) {
     throw new Error(
       `${API_CLOCK_VARIABLE} is "${timeOfDay}", and the browser clock can only be started at a time of day ` +
         'such as 10:00. Set it to the value the API was started with.',
     )
   }
+  if (businessDate !== undefined && !BUSINESS_DATE.test(businessDate)) {
+    throw new Error(
+      `${API_DATE_VARIABLE} is "${businessDate}", and the browser clock can only be started on a date ` +
+        'such as 2026-12-16. Set it to the value the API was started with.',
+    )
+  }
   const seconds = timeOfDay.length === HOURS_AND_MINUTES_LENGTH ? ':00' : ''
-  await page.clock.install({ time: new Date(`${dateFromToday(0)}T${timeOfDay}${seconds}${BRANCH_UTC_OFFSET}`) })
+  const day = businessDate ?? dateFromToday(0)
+  await page.clock.install({ time: new Date(`${day}T${timeOfDay}${seconds}${BRANCH_UTC_OFFSET}`) })
 }
