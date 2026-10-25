@@ -11,8 +11,9 @@
 # The actual cloud policy changes are operational. Run this only after the
 # signed-in Google Cloud configuration has the Monitoring Admin role. The
 # script is idempotent for the email channel and metrics. An existing policy is
-# left alone by default; set REPLACE_EXISTING=1 to delete and recreate it with
-# the corrected definition.
+# left alone by default; set REPLACE_EXISTING=1 to create the corrected
+# replacement first and delete the old policy only after the new one exists.
+# A discovery failure is an error, never evidence that a resource is absent.
 #
 #   PROJECT=toolshed-hire OWNER=teon@sulako.com \
 #     REPLACE_EXISTING=1 sh infra/scripts/create-alert-policies.sh
@@ -29,13 +30,21 @@ REPLACE_EXISTING="${REPLACE_EXISTING:-0}"
 CHANNEL_NAME="Toolshed Hire owner email"
 
 channel_id() {
-  gcloud beta monitoring channels list \
-    --project="$PROJECT" --configuration="$CONFIGURATION" \
-    --filter="displayName=\"$CHANNEL_NAME\"" \
-    --format="value(name)" 2>/dev/null | head -n 1
+  local output
+  if ! output="$(gcloud beta monitoring channels list \
+      --project="$PROJECT" --configuration="$CONFIGURATION" \
+      --filter="displayName=\"$CHANNEL_NAME\"" \
+      --format="value(name)" 2>&1)"; then
+    echo "::error title=Channel discovery failed::Could not list notification channels. A denied or unavailable discovery is not a missing channel, so nothing was created." >&2
+    printf '%s\n' "$output" >&2
+    return 1
+  fi
+  printf '%s\n' "$output" | head -n 1
 }
 
-CHANNEL="$(channel_id)"
+if ! CHANNEL="$(channel_id)"; then
+  exit 1
+fi
 if [ -z "$CHANNEL" ]; then
   echo "Creating the email notification channel for $OWNER"
   CHANNEL="$(gcloud beta monitoring channels create \
@@ -46,12 +55,32 @@ if [ -z "$CHANNEL" ]; then
 fi
 echo "Notification channel: $CHANNEL"
 
+metric_state() {
+  local output
+  if output="$(gcloud logging metrics describe "$1" --project="$PROJECT" \
+      --configuration="$CONFIGURATION" 2>&1)"; then
+    echo present
+    return 0
+  fi
+  case "$output" in
+    *NOT_FOUND*|*"not found"*|*"does not exist"*|*"NOT FOUND"*)
+      echo absent
+      return 0
+      ;;
+    *)
+      echo "::error title=Metric discovery failed::Could not read metric $1. A denied or unavailable discovery is not a missing metric, so nothing was created." >&2
+      printf '%s\n' "$output" >&2
+      return 1
+      ;;
+  esac
+}
+
 metric() {
   name="$1"
   description="$2"
   filter="$3"
-  if gcloud logging metrics describe "$name" --project="$PROJECT" \
-      --configuration="$CONFIGURATION" >/dev/null 2>&1; then
+  state="$(metric_state "$name")" || exit 1
+  if [ "$state" = "present" ]; then
     echo "Metric already exists: $name"
   else
     gcloud logging metrics create "$name" \
@@ -60,32 +89,25 @@ metric() {
   fi
 }
 
-policy_exists() {
-  gcloud monitoring policies list \
-    --project="$PROJECT" --configuration="$CONFIGURATION" \
-    --filter="displayName=\"$1\"" --format="value(name)" 2>/dev/null | head -n 1
+policy_name() {
+  local output
+  if ! output="$(gcloud monitoring policies list \
+      --project="$PROJECT" --configuration="$CONFIGURATION" \
+      --filter="displayName=\"$1\"" --format="value(name)" 2>&1)"; then
+    echo "::error title=Policy discovery failed::Could not list alert policies. A denied or unavailable discovery is not a missing policy, so nothing was created or deleted." >&2
+    printf '%s\n' "$output" >&2
+    return 1
+  fi
+  printf '%s\n' "$output" | head -n 1
 }
 
-policy() {
+create_policy() {
   name="$1"
   metric_name="$2"
   window_seconds="$3"
   comparison="$4"
   threshold="$5"
   documentation="$6"
-  if [ "$METRICS_ONLY" = "1" ]; then
-    return 0
-  fi
-  existing="$(policy_exists "$name")"
-  if [ -n "$existing" ]; then
-    if [ "$REPLACE_EXISTING" != "1" ]; then
-      echo "Policy already exists: $name (set REPLACE_EXISTING=1 to replace it)"
-      return 0
-    fi
-    echo "Replacing policy: $name"
-    gcloud monitoring policies delete "$existing" \
-      --project="$PROJECT" --configuration="$CONFIGURATION" --quiet
-  fi
   gcloud monitoring policies create \
     --project="$PROJECT" --configuration="$CONFIGURATION" \
     --display-name="$name" \
@@ -98,6 +120,35 @@ policy() {
     --if="$comparison $threshold" \
     --trigger-count=1 \
     --documentation="$documentation"
+}
+
+policy() {
+  name="$1"
+  metric_name="$2"
+  window_seconds="$3"
+  comparison="$4"
+  threshold="$5"
+  documentation="$6"
+  if [ "$METRICS_ONLY" = "1" ]; then
+    return 0
+  fi
+  existing="$(policy_name "$name")" || exit 1
+  if [ -n "$existing" ]; then
+    if [ "$REPLACE_EXISTING" != "1" ]; then
+      echo "Policy already exists: $name (set REPLACE_EXISTING=1 to replace it)"
+      return 0
+    fi
+    echo "Creating the replacement policy before deleting the old one: $name"
+    create_policy "$name" "$metric_name" "$window_seconds" "$comparison" "$threshold" "$documentation"
+    echo "Deleting the old policy only after the replacement exists: $existing"
+    if ! gcloud monitoring policies delete "$existing" \
+        --project="$PROJECT" --configuration="$CONFIGURATION" --quiet; then
+      echo "::error title=Old policy still present::The replacement was created, but the old policy $existing could not be deleted. Remove the duplicate only after checking which policy is enabled." >&2
+      return 1
+    fi
+    return 0
+  fi
+  create_policy "$name" "$metric_name" "$window_seconds" "$comparison" "$threshold" "$documentation"
 }
 
 # A refresh token presented twice is a stolen or reused cookie. Any occurrence

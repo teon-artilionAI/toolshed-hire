@@ -43,10 +43,16 @@ fi
 liveness_names() {
   gcloud monitoring uptime list-configs \
     --project="$PROJECT" --configuration="$CONFIGURATION" \
-    --format="value(displayName)" 2>/dev/null || true
+    --format="value(displayName)"
 }
 
-if liveness_names | grep -Fxq "$LIVE_NAME"; then
+if ! names="$(liveness_names 2>&1)"; then
+  echo "::error title=Liveness discovery failed::Could not list uptime checks. A denied or unavailable discovery is not a missing check, so nothing was created." >&2
+  printf '%s\n' "$names" >&2
+  exit 1
+fi
+
+if printf '%s\n' "$names" | grep -Fxq "$LIVE_NAME"; then
   echo "Already present: $LIVE_NAME"
 else
   echo "Creating $LIVE_NAME every 5 minutes from $REGIONS"
@@ -80,9 +86,29 @@ scheduler_args() {
     "--max-retry-duration=0s"
 }
 
-if gcloud scheduler jobs describe "$JOB_NAME" \
-    --project="$PROJECT" --configuration="$CONFIGURATION" \
-    --location="$LOCATION" >/dev/null 2>&1; then
+scheduler_state() {
+  local output
+  if output="$(gcloud scheduler jobs describe "$JOB_NAME" \
+      --project="$PROJECT" --configuration="$CONFIGURATION" \
+      --location="$LOCATION" 2>&1)"; then
+    echo present
+    return 0
+  fi
+  case "$output" in
+    *NOT_FOUND*|*"not found"*|*"does not exist"*|*"NOT FOUND"*)
+      echo absent
+      return 0
+      ;;
+    *)
+      echo "::error title=Scheduler discovery failed::Could not read the job. A denied or unavailable discovery is not a missing job, so nothing was created." >&2
+      printf '%s\n' "$output" >&2
+      return 1
+      ;;
+  esac
+}
+
+state="$(scheduler_state)" || exit 1
+if [ "$state" = "present" ]; then
   echo "Updating Cloud Scheduler job: $JOB_NAME"
   # shellcheck disable=SC2046
   gcloud scheduler jobs update http "$JOB_NAME" --schedule="$SCHEDULE" $(scheduler_args)
