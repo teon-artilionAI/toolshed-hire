@@ -19,6 +19,11 @@ on:
   push:
     branches:
       - develop
+    # The B4.6 no-deploy drill is requested by changing only this file. It does
+    # not contain application code, and the drill workflow proves the staging
+    # revision is unchanged before and after the run.
+    paths-ignore:
+      - .github/b46-drill/trigger.json
 
 # Two deployments must never run at once, and a queued deployment must never be
 # cancelled part way through a migration.
