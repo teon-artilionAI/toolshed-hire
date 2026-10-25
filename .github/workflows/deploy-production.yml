@@ -91,10 +91,18 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Install gitleaks for the SBOM scan
+        run: bash infra/scripts/install-gitleaks.sh
+
       - name: Generate the backend and frontend SBOMs
         run: bash infra/scripts/generate-sboms.sh sbom
 
+      - name: Scan the SBOMs for personal information and credentials
+        id: sbom_scan
+        run: python infra/scripts/scan_artifacts.py --gitleaks sbom
+
       - name: Keep the backend SBOM
+        if: steps.sbom_scan.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-backend
@@ -103,6 +111,7 @@ jobs:
           retention-days: 90
 
       - name: Keep the frontend SBOM
+        if: steps.sbom_scan.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-frontend
@@ -140,6 +149,13 @@ jobs:
       FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      # Stage 3 keeps the same function and IAM path that staging proves. The
+      # production edge identity and these variables must exist before the
+      # release; this workflow does not create them.
+      API_ACCESS: iam
+      API_ROUTE: function
+      GCP_WORKLOAD_AUDIENCE: ${{ vars.GCP_WORKLOAD_AUDIENCE }}
+      GCP_INVOKER_ACCOUNT: ${{ vars.GCP_INVOKER_ACCOUNT }}
       RELEASE_TAG: ${{ github.ref_name }}
 
     steps:
@@ -208,10 +224,29 @@ jobs:
           USE_CANDIDATE: "true"
         run: bash infra/scripts/deploy-api.sh
 
+      - name: Get an ID token for the candidate smoke test
+        id: smoke_identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.api.outputs.service_url }}
+          id_token_include_email: true
+
       - name: Smoke test the candidate revision
         env:
           SERVICE_URL: ${{ steps.api.outputs.check_url }}
+          SMOKE_TEST_ID_TOKEN: ${{ steps.smoke_identity.outputs.id_token }}
         run: bash infra/scripts/smoke-test.sh
+
+      # The ID token step changes the active gcloud credential. Put the
+      # deployer back before traffic is shifted or any later gcloud step runs.
+      - name: Restore the deployer identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Shift traffic to the candidate revision
         if: steps.api.outputs.used_candidate == 'true'
@@ -239,6 +274,7 @@ jobs:
       - name: Check the security headers and TLS of the deployed site
         env:
           SITE_URL: ${{ env.FRONTEND_ORIGIN }}
+          IAM_ONLY_SERVICE_URL: ${{ steps.api.outputs.service_url }}
         run: bash infra/scripts/check-security-headers.sh
 
       - name: Record the deployment in the run summary
@@ -276,17 +312,26 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ github.ref_name }}
     steps:
+      - name: Install gitleaks for the release artifact scan
+        run: bash infra/scripts/install-gitleaks.sh
+
       - name: Download the backend SBOM
-        run: gh run download "${GITHUB_RUN_ID}" --name sbom-backend --dir sbom
+        run: gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name sbom-backend --dir sbom
 
       - name: Download the frontend SBOM
-        run: gh run download "${GITHUB_RUN_ID}" --name sbom-frontend --dir sbom
+        run: gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name sbom-frontend --dir sbom
+
+      - name: Scan the release artifacts for personal information and credentials
+        id: release_scan
+        run: python infra/scripts/scan_artifacts.py --gitleaks sbom
 
       - name: Create a draft Release if it does not exist
+        if: steps.release_scan.outcome == 'success'
         run: |
-          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}"               --notes "Draft created by the release workflow. Add the final notes before publishing."
+          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft --title "${RELEASE_TAG}" --notes "Draft created by the release workflow. Add the final notes before publishing."
           fi
 
       - name: Upload the two SBOMs
-        run: gh release upload "${RELEASE_TAG}" sbom/*.cdx.json --clobber
+        if: steps.release_scan.outcome == 'success'
+        run: gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" sbom/*.cdx.json --clobber

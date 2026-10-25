@@ -41,12 +41,16 @@ class CustomerData:
         identifying_columns: Columns that name, reach or describe a person.
         free_text_columns: Columns someone types into, which can hold personal
             information although their name does not say so.
+        subject_entity_types: For a polymorphic table such as `audit_event`,
+            the entity types whose rows describe this customer. The exporter
+            uses this explicit list rather than guessing a polymorphic key.
 
     """
 
     reached_through: str
     identifying_columns: tuple[str, ...] = ()
     free_text_columns: tuple[str, ...] = ()
+    subject_entity_types: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +129,15 @@ _MAP: dict[str, TableClassification] = {
         reached_through="actor_user_id",
         identifying_columns=("ip_address",),
         free_text_columns=("before_state", "after_state"),
+        subject_entity_types=(
+            "user_account",
+            "customer_profile",
+            "reservation",
+            "rental",
+            "charge",
+            "damage_report",
+            "notification",
+        ),
     ),
     # Nothing about a customer.
     "rate_limit_counter": NoCustomerData(

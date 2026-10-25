@@ -23,6 +23,7 @@ from app.application.reporting.monthly_charges import (
     MonthlyChargeLine,
     MonthlyCharges,
 )
+from app.domain.business_time import business_instant
 from app.domain.errors import ValidationFailure
 from app.infrastructure.booking_mapping import in_utc, required_utc
 from app.infrastructure.models import (
@@ -126,6 +127,6 @@ def _line_of(row: tuple[Charge, str, str, str]) -> MonthlyChargeLine:
 
 def _start_of(day: date) -> datetime:
     """Return the first instant of a business day, as the database stores instants."""
-    return datetime.combine(day, time.min, tzinfo=UTC)
+    return business_instant(day, time.min).astimezone(UTC)
 
 __all__ = ["SqlMonthlyCharges"]
