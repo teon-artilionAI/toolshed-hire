@@ -68,12 +68,45 @@ def test_a_private_key_and_a_github_token_are_findings() -> None:
     )
 
 
-def test_a_directory_is_scanned_and_binary_files_are_skipped(tmp_path: Path) -> None:
-    """A text file is read and a binary one is left alone."""
+def test_a_directory_is_scanned_and_a_binary_file_is_refused(tmp_path: Path) -> None:
+    """A text file is read and a binary file stops publication instead of being skipped."""
     (tmp_path / "report.html").write_text("mail jane@private-domain.co.za", encoding="utf-8")
     (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\nnot text")
     found = scanner.scan_path(tmp_path)
-    assert [finding.kind for finding in found] == ["email"]
+    assert {finding.kind for finding in found} == {"email", "unsupported"}
+
+
+def test_an_oversized_text_file_is_refused(tmp_path: Path, monkeypatch) -> None:
+    """A file that cannot be read whole is not silently accepted."""
+    monkeypatch.setattr(scanner, "MAXIMUM_FILE_BYTES", 4)
+    (tmp_path / "large.txt").write_text("more than four bytes", encoding="utf-8")
+    found = scanner.scan_path(tmp_path)
+    assert any(finding.kind == "oversized" for finding in found)
+
+
+def test_a_finding_preview_does_not_copy_the_value(tmp_path: Path) -> None:
+    """The log line names the kind and location, not the personal value."""
+    (tmp_path / "report.txt").write_text("jane.doe@private-domain.co.za", encoding="utf-8")
+    finding = scanner.scan_path(tmp_path)[0]
+    assert "jane" not in finding.preview
+    assert "private-domain" not in finding.preview
+
+
+def test_gitleaks_directory_scan_maps_a_redacted_hit(tmp_path: Path) -> None:
+    """The required gitleaks component is invoked and its value is never logged."""
+    stub = tmp_path / "gitleaks_stub.py"
+    stub.write_text(
+        "import json\n"
+        "print(json.dumps([{'RuleID': 'github-pat', 'File': 'secret.txt', 'StartLine': 2}]))\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "secret.txt").write_text("not read by the stub", encoding="utf-8")
+    found = scanner.gitleaks_findings([tmp_path], [sys.executable, str(stub)])
+    assert len(found) == 1
+    assert found[0].kind == "gitleaks"
+    assert found[0].line == 2
+    assert found[0].preview == "<redacted>"
 
 
 def test_the_planted_example_self_test_passes() -> None:

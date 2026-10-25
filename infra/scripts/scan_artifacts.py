@@ -22,10 +22,18 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import sys
-from dataclasses import dataclass
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Final, Iterable
+from typing import Final
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from artifact_findings import Finding  # noqa: E402
+from artifact_gitleaks import gitleaks_findings  # noqa: E402
 
 ALLOWED_EMAIL_DOMAINS: Final[frozenset[str]] = frozenset(
     {
@@ -48,6 +56,7 @@ ALLOWED_PHONE_DIGITS: Final[frozenset[str]] = frozenset(
     }
 )
 MAXIMUM_FILE_BYTES: Final[int] = 5 * 1024 * 1024
+REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
         ".html",
@@ -90,16 +99,6 @@ SECRET_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
     ("slack-token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b")),
 )
-
-
-@dataclass(frozen=True, slots=True)
-class Finding:
-    """One reason an artifact may not be uploaded."""
-
-    path: str
-    line: int
-    kind: str
-    preview: str
 
 
 def sa_id_is_valid(value: str) -> bool:
@@ -168,8 +167,8 @@ def _secret_findings(line: str, path: str, line_number: int) -> list[Finding]:
 
 
 def _preview(value: str) -> str:
-    """Return enough of a hit to find it without copying the whole value."""
-    return value if len(value) <= 24 else f"{value[:12]}..."
+    """Return the shape of a hit without copying the value into a log."""
+    return f"<redacted {len(value)} chars>"
 
 
 def scan_path(root: Path) -> list[Finding]:
@@ -182,8 +181,24 @@ def scan_path(root: Path) -> list[Finding]:
         if any(part in {".git", "node_modules"} for part in path.parts):
             continue
         if path.suffix.lower() not in TEXT_SUFFIXES:
+            findings.append(
+                Finding(
+                    str(path),
+                    0,
+                    "unsupported",
+                    "binary or unsupported artifact is not safe to publish",
+                )
+            )
             continue
         if path.stat().st_size > MAXIMUM_FILE_BYTES:
+            findings.append(
+                Finding(
+                    str(path),
+                    0,
+                    "oversized",
+                    f"{path.stat().st_size} bytes is too large to inspect",
+                )
+            )
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         findings.extend(scan_text(text, str(path)))
@@ -202,7 +217,10 @@ def _self_test() -> int:
     kinds = {finding.kind for finding in found}
     required = {"email", "sa-id", "phone", "private-key"}
     if not required <= kinds:
-        print(f"Self-test failed. Expected {sorted(required)} and found {sorted(kinds)}.", file=sys.stderr)
+        print(
+            f"Self-test failed. Expected {sorted(required)} and found {sorted(kinds)}.",
+            file=sys.stderr,
+        )
         return 1
 
     clean = scan_text(
@@ -227,12 +245,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip a path that does not exist, for an artifact an earlier step may not write.",
     )
+    parser.add_argument(
+        "--gitleaks",
+        action="store_true",
+        help="Also run the directory gitleaks scan the plan requires.",
+    )
     arguments = parser.parse_args(argv)
     if arguments.self_test:
         return _self_test()
     if not arguments.paths:
         parser.error("Give at least one file or directory to scan.")
     findings: list[Finding] = []
+    existing: list[Path] = []
     for path in arguments.paths:
         if not path.exists():
             if arguments.allow_missing:
@@ -240,7 +264,18 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             print(f"Artifact path does not exist: {path}", file=sys.stderr)
             return 2
+        existing.append(path)
         findings.extend(scan_path(path))
+    if arguments.gitleaks:
+        binary = shutil.which("gitleaks")
+        if binary is None:
+            print(
+                "gitleaks is required for the artifact check. Run "
+                "infra/scripts/install-gitleaks.sh first.",
+                file=sys.stderr,
+            )
+            return 2
+        findings.extend(gitleaks_findings(existing, [binary]))
     if findings:
         for finding in findings:
             print(f"{finding.path}:{finding.line}: {finding.kind}: {finding.preview}")

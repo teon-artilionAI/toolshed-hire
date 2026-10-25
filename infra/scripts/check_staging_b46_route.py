@@ -31,7 +31,11 @@ ALLOWED_USES = (
 )
 ALLOWED_SECRETS = {"E2E_CUSTOMER_PASSWORD", "E2E_STAFF_PASSWORD"}
 ALLOWED_VARIABLES = {"FRONTEND_ORIGIN"}
-ALLOWED_SCRIPTS = {"check_staging_b46_route.py", "scan_artifacts.py"}
+ALLOWED_SCRIPTS = {
+    "check_staging_b46_route.py",
+    "install-gitleaks.sh",
+    "scan_artifacts.py",
+}
 FORBIDDEN_RUN_TOKENS = (
     "deploy-api.sh",
     "deploy-frontend.sh",
