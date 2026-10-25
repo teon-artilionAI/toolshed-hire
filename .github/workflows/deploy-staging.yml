@@ -293,8 +293,8 @@ jobs:
       # the runner's public address, not the function's private or egress one.
       - name: Check the audit trail carries the real client address
         env:
-          DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET_NAME }}
+          DATABASE_MIGRATION_URL_SECRET: ${{ vars.DATABASE_MIGRATION_URL_SECRET_NAME }}
         run: |
           EXPECTED_CLIENT_IP="$(curl -fsS https://api.ipify.org)"
-          STAGING_DATABASE_URL="$(gcloud secrets versions access latest --secret="${DATABASE_URL_SECRET}")" \
+          STAGING_DATABASE_URL="$(gcloud secrets versions access latest --secret="${DATABASE_MIGRATION_URL_SECRET}")" \
             python backend/scripts/check_staging_audit_ip.py "${EXPECTED_CLIENT_IP}"
