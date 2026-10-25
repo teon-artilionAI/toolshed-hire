@@ -21,11 +21,15 @@ Run the planted-example check with:
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import shutil
+import subprocess
 import sys
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Iterable
+from typing import Final
 
 ALLOWED_EMAIL_DOMAINS: Final[frozenset[str]] = frozenset(
     {
@@ -48,6 +52,8 @@ ALLOWED_PHONE_DIGITS: Final[frozenset[str]] = frozenset(
     }
 )
 MAXIMUM_FILE_BYTES: Final[int] = 5 * 1024 * 1024
+REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+GITLEAKS_CONFIG: Final[Path] = REPOSITORY_ROOT / ".gitleaks.toml"
 TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
         ".html",
@@ -168,8 +174,8 @@ def _secret_findings(line: str, path: str, line_number: int) -> list[Finding]:
 
 
 def _preview(value: str) -> str:
-    """Return enough of a hit to find it without copying the whole value."""
-    return value if len(value) <= 24 else f"{value[:12]}..."
+    """Return the shape of a hit without copying the value into a log."""
+    return f"<redacted {len(value)} chars>"
 
 
 def scan_path(root: Path) -> list[Finding]:
@@ -182,11 +188,95 @@ def scan_path(root: Path) -> list[Finding]:
         if any(part in {".git", "node_modules"} for part in path.parts):
             continue
         if path.suffix.lower() not in TEXT_SUFFIXES:
+            findings.append(
+                Finding(
+                    str(path),
+                    0,
+                    "unsupported",
+                    "binary or unsupported artifact is not safe to publish",
+                )
+            )
             continue
         if path.stat().st_size > MAXIMUM_FILE_BYTES:
+            findings.append(
+                Finding(
+                    str(path),
+                    0,
+                    "oversized",
+                    f"{path.stat().st_size} bytes is too large to inspect",
+                )
+            )
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         findings.extend(scan_text(text, str(path)))
+    return findings
+
+
+def gitleaks_findings(paths: Iterable[Path], binary: Sequence[str]) -> list[Finding]:
+    """Run the directory gitleaks scan over the artifact paths.
+
+    Gitleaks is the component the plan names for secret detection. The text
+    scan above covers personal data; this covers the credential rules that a
+    hand-written regex set can miss. A missing or broken gitleaks binary is a
+    finding, never a silent pass.
+    """
+    findings: list[Finding] = []
+    for path in paths:
+        if not path.exists():
+            continue
+        completed = subprocess.run(
+            [
+                *binary,
+                "dir",
+                str(path),
+                "--config",
+                str(GITLEAKS_CONFIG),
+                "--no-banner",
+                "--redact",
+                "--exit-code",
+                "1",
+                "--report-format",
+                "json",
+                "--report-path",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            continue
+        if completed.returncode != 1:
+            findings.append(
+                Finding(
+                    str(path),
+                    0,
+                    "gitleaks-error",
+                    f"gitleaks exited with code {completed.returncode}",
+                )
+            )
+            continue
+        try:
+            report = json.loads(completed.stdout or "[]")
+        except json.JSONDecodeError:
+            findings.append(
+                Finding(str(path), 0, "gitleaks-error", "gitleaks returned an unreadable report")
+            )
+            continue
+        if not isinstance(report, list) or not report:
+            findings.append(
+                Finding(str(path), 0, "gitleaks-error", "gitleaks failed without a finding")
+            )
+            continue
+        for item in report:
+            findings.append(
+                Finding(
+                    str(item.get("File", path)),
+                    int(item.get("StartLine", 0)),
+                    "gitleaks",
+                    "<redacted>",
+                )
+            )
     return findings
 
 
@@ -202,7 +292,10 @@ def _self_test() -> int:
     kinds = {finding.kind for finding in found}
     required = {"email", "sa-id", "phone", "private-key"}
     if not required <= kinds:
-        print(f"Self-test failed. Expected {sorted(required)} and found {sorted(kinds)}.", file=sys.stderr)
+        print(
+            f"Self-test failed. Expected {sorted(required)} and found {sorted(kinds)}.",
+            file=sys.stderr,
+        )
         return 1
 
     clean = scan_text(
@@ -227,12 +320,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip a path that does not exist, for an artifact an earlier step may not write.",
     )
+    parser.add_argument(
+        "--gitleaks",
+        action="store_true",
+        help="Also run the directory gitleaks scan the plan requires.",
+    )
     arguments = parser.parse_args(argv)
     if arguments.self_test:
         return _self_test()
     if not arguments.paths:
         parser.error("Give at least one file or directory to scan.")
     findings: list[Finding] = []
+    existing: list[Path] = []
     for path in arguments.paths:
         if not path.exists():
             if arguments.allow_missing:
@@ -240,7 +339,18 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             print(f"Artifact path does not exist: {path}", file=sys.stderr)
             return 2
+        existing.append(path)
         findings.extend(scan_path(path))
+    if arguments.gitleaks:
+        binary = shutil.which("gitleaks")
+        if binary is None:
+            print(
+                "gitleaks is required for the artifact check. Run "
+                "infra/scripts/install-gitleaks.sh first.",
+                file=sys.stderr,
+            )
+            return 2
+        findings.extend(gitleaks_findings(existing, [binary]))
     if findings:
         for finding in findings:
             print(f"{finding.path}:{finding.line}: {finding.kind}: {finding.preview}")
