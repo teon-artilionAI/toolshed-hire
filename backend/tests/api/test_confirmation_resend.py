@@ -151,7 +151,11 @@ def test_the_fourth_resend_in_an_hour_is_a_429(
         assert account_api.post(my_path(reservation.id), headers=headers).status_code == 202
     response = account_api.post(my_path(reservation.id), headers=headers)
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
-    assert response.headers["Retry-After"]
+    assert problem_code(response) == "too-many-attempts"
+    body = response.json()
+    assert "three times in the last hour" in body["detail"]
+    assert body["requestId"]
+    assert int(response.headers["Retry-After"]) > 0
 
 
 def test_counter_staff_can_send_a_booking_at_their_branch_and_not_another(
