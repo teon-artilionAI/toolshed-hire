@@ -39,7 +39,7 @@ def test_the_script_creates_the_liveness_and_hourly_scheduler_definitions(
         "  touch \"$GCLOUD_LIVE_MARKER\"; exit 0; fi\n"
         "if [[ \"$1 $2 $3\" == \"scheduler jobs describe\" ]]; then\n"
         "  if [[ -f \"$GCLOUD_JOB_MARKER\" ]]; then echo 'state: ENABLED'; exit 0; fi\n"
-        "  exit 1\n"
+        "  echo 'NOT_FOUND' >&2; exit 1\n"
         "fi\n"
         "if [[ \"$1 $2 $3\" == \"scheduler jobs create\" ]]; then\n"
         "  touch \"$GCLOUD_JOB_MARKER\"; exit 0; fi\n"

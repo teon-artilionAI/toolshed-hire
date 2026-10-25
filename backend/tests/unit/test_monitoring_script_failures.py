@@ -23,47 +23,48 @@ ALERTS = REPOSITORY_ROOT / "infra" / "scripts" / "create-alert-policies.sh"
 FAKE_GCLOUD = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$GCLOUD_CALLS"
 mode="${GCLOUD_MODE:-existing}"
-case "$1 $2 $3" in
-  "beta monitoring channels list")
+case "$*" in
+  "beta monitoring channels list"*)
     [ "$mode" = discovery-fail ] && exit 77
     echo 'projects/toolshed-hire/notificationChannels/1'
     ;;
-  "beta monitoring channels create") echo 'projects/toolshed-hire/notificationChannels/2' ;;
-  "logging metrics describe")
+  "beta monitoring channels create"*) echo 'projects/toolshed-hire/notificationChannels/2' ;;
+  "logging metrics describe"*)
     [ "$mode" = metric-discovery-fail ] && exit 77
     [ "$mode" = absent ] && { echo 'NOT_FOUND' >&2; exit 1; }
     echo 'metric exists'
     ;;
-  "logging metrics create")
+  "logging metrics create"*)
     [ "$mode" = create-fail ] && exit 77
     echo 'metric created'
     ;;
-  "monitoring policies list")
+  "monitoring policies list"*)
     [ "$mode" = policy-discovery-fail ] && exit 77
     [ "$mode" = absent ] && exit 0
     echo 'projects/toolshed-hire/alertPolicies/1'
     ;;
-  "monitoring policies create")
+  "monitoring policies create"*)
     [ "$mode" = policy-create-fail ] && exit 77
     echo 'policy created'
     ;;
-  "monitoring policies delete")
+  "monitoring policies delete"*)
     [ "$mode" = policy-delete-fail ] && exit 77
     echo 'policy deleted'
     ;;
-  "monitoring uptime list-configs")
+  "monitoring uptime list-configs"*)
     [ "$mode" = discovery-fail ] && exit 77
-    [ "$mode" = absent ] && exit 0
+    if [ "$mode" = absent ] && [ ! -f "$GCLOUD_LIVE_MARKER" ]; then exit 0; fi
     echo 'Toolshed Hire liveness (toolshed-hire-staging.vercel.app)'
     ;;
-  "monitoring uptime create") echo 'uptime created' ;;
-  "scheduler jobs describe")
+  "monitoring uptime create"*) touch "$GCLOUD_LIVE_MARKER"; echo 'uptime created' ;;
+  "scheduler jobs describe"*)
     [ "$mode" = discovery-fail ] && exit 77
-    [ "$mode" = absent ] && { echo 'NOT_FOUND' >&2; exit 1; }
+    [ "$mode" = scheduler-discovery-fail ] && exit 77
+    if [ "$mode" = absent ] && [ ! -f "$GCLOUD_JOB_MARKER" ]; then echo 'NOT_FOUND' >&2; exit 1; fi
     echo 'state: ENABLED'
     ;;
-  "scheduler jobs create") echo 'job created' ;;
-  "scheduler jobs update") echo 'job updated' ;;
+  "scheduler jobs create"*) touch "$GCLOUD_JOB_MARKER"; echo 'job created' ;;
+  "scheduler jobs update"*) echo 'job updated' ;;
   *) echo "unexpected gcloud call: $*" >&2; exit 99 ;;
 esac
 """
@@ -91,6 +92,8 @@ def run_script(
             "PATH": f"{stub}{os.pathsep}{env['PATH']}",
             "GCLOUD_CALLS": str(calls),
             "GCLOUD_MODE": mode,
+            "GCLOUD_LIVE_MARKER": str(stub / "live.marker"),
+            "GCLOUD_JOB_MARKER": str(stub / "job.marker"),
             "GCLOUD_CONFIGURATION": "toolshed",
             "UPTIME_HOST": "toolshed-hire-staging.vercel.app",
             "GCP_PROJECT": "toolshed-hire",
