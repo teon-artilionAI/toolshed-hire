@@ -60,6 +60,17 @@ esac
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPOSITORY_ROOT}/frontend"
 
+# The Help link reads one build setting. It stays hidden when the setting is
+# empty, so production shows no broken link until its own publication decision.
+# The staging deployment sets a public guide address; the value is inlined into
+# the bundle, not treated as a secret.
+rm -f .env.production.local
+if [ -n "${VITE_USER_GUIDE_URL:-}" ]; then
+  printf 'VITE_USER_GUIDE_URL=%s\n' "${VITE_USER_GUIDE_URL}" > .env.production.local
+  echo "The Help link will point at ${VITE_USER_GUIDE_URL}."
+  trap 'rm -f .env.production.local' EXIT
+fi
+
 vercel() {
   npx --yes "vercel@${VERCEL_CLI_VERSION}" "$@" --token="${VERCEL_TOKEN}"
 }
