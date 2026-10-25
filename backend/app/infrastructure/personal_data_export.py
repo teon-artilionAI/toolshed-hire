@@ -28,7 +28,7 @@ from __future__ import annotations
 import base64
 import logging
 from collections import deque
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
@@ -36,11 +36,11 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import Final, cast
 from uuid import UUID
 
-from sqlalchemy import Column, ColumnElement, Select, Table, and_, literal, or_, select
-from sqlalchemy.engine import RowMapping
+from sqlalchemy import Column, Select, Table, literal, select
 from sqlmodel import Session, SQLModel
 
 from app.application.identity.export_ports import ExportedRows, JsonValue, PersonalDataExporter
+from app.infrastructure.personal_data_audit import AUDIT_EVENT_TABLE, audit_rows
 from app.infrastructure.personal_data_map import PERSONAL_DATA_MAP, CustomerData
 
 logger = logging.getLogger(__name__)
@@ -59,13 +59,6 @@ USER_ACCOUNT_TABLE: Final[str] = "user_account"
 # The tables that hang off the account rather than the customer profile.
 ACCOUNT_ROOTED_TABLES: Final[frozenset[str]] = frozenset(
     {USER_ACCOUNT_TABLE, "refresh_session"}
-)
-AUDIT_EVENT_TABLE: Final[str] = "audit_event"
-STAFF_REDACTED_AUDIT_COLUMNS: Final[tuple[str, ...]] = (
-    "actor_user_id",
-    "actor_role",
-    "ip_address",
-    "request_id",
 )
 
 
@@ -108,7 +101,12 @@ class SqlPersonalDataExporter(PersonalDataExporter):
                 "define it. Every customer data table must exist in the ORM metadata."
             )
         if table_name == AUDIT_EVENT_TABLE:
-            return self._audit_rows(customer_profile_id, user_account_id)
+            return tuple(
+                {name: _json_value(value) for name, value in row.items()}
+                for row in audit_rows(
+                    self._session, self._tables, customer_profile_id, user_account_id
+                )
+            )
         root_name = self._root_for(table_name)
         path = _path_to(table, root_name)
         if path is None:
@@ -130,127 +128,6 @@ class SqlPersonalDataExporter(PersonalDataExporter):
             {name: _json_value(value) for name, value in row.items()} for row in rows
         )
 
-
-    def _audit_rows(
-        self, customer_profile_id: UUID, user_account_id: UUID
-    ) -> ExportedRows:
-        """Return the audit events whose subject is this customer.
-
-        A customer's own events are selected by actor. Staff and system events
-        are selected only when their polymorphic entity belongs to this
-        customer. A staff actor's id, role, address and request id are redacted
-        before the row leaves the service, because those belong to the staff
-        member and not to the customer.
-        """
-        table = self._tables[AUDIT_EVENT_TABLE]
-        kind = PERSONAL_DATA_MAP[AUDIT_EVENT_TABLE]
-        if not isinstance(kind, CustomerData):
-            raise RuntimeError("The audit_event table must be classified as customer data.")
-        builders: dict[str, Callable[[], ColumnElement[bool]]] = {
-            "user_account": lambda: and_(
-                table.c["entity_type"] == "user_account",
-                table.c["entity_id"] == user_account_id,
-            ),
-            "customer_profile": lambda: and_(
-                table.c["entity_type"] == "customer_profile",
-                table.c["entity_id"] == customer_profile_id,
-            ),
-            "reservation": lambda: and_(
-                table.c["entity_type"] == "reservation",
-                table.c["entity_id"].in_(self._reservation_ids(customer_profile_id)),
-            ),
-            "rental": lambda: and_(
-                table.c["entity_type"] == "rental",
-                table.c["entity_id"].in_(self._rental_ids(customer_profile_id)),
-            ),
-            "charge": lambda: and_(
-                table.c["entity_type"] == "charge",
-                table.c["entity_id"].in_(self._charge_ids(customer_profile_id)),
-            ),
-            "damage_report": lambda: and_(
-                table.c["entity_type"] == "damage_report",
-                table.c["entity_id"].in_(self._damage_ids(customer_profile_id)),
-            ),
-            "notification": lambda: and_(
-                table.c["entity_type"] == "notification",
-                table.c["entity_id"].in_(self._notification_ids(customer_profile_id)),
-            ),
-        }
-        conditions = [table.c["actor_user_id"] == user_account_id]
-        for entity_type in kind.subject_entity_types:
-            build = builders.get(entity_type)
-            if build is None:
-                raise RuntimeError(
-                    f"The personal data map names audit subject {entity_type}, and the "+
-                    "exporter has no subject query for it. Add the query or remove the map entry."
-                )
-            conditions.append(build())
-        columns = [column for column in table.columns if column.name not in SECRET_COLUMNS]
-        statement = (
-            select(*columns)
-            .select_from(table)
-            .where(or_(*conditions))
-            .order_by(table.c["id"])
-        )
-        rows = self._session.execute(statement).mappings().all()
-        return tuple(_audit_export_row(row, user_account_id) for row in rows)
-
-    def _reservation_ids(self, customer_profile_id: UUID) -> Select[tuple[UUID]]:
-        """Return the reservations owned by this customer profile."""
-        reservations = self._tables["reservation"]
-        return select(reservations.c["id"]).where(
-            reservations.c["customer_profile_id"] == customer_profile_id
-        )
-
-    def _rental_ids(self, customer_profile_id: UUID) -> Select[tuple[UUID]]:
-        """Return the hires reached through this customer's reservations."""
-        rentals = self._tables["rental"]
-        reservations = self._tables["reservation"]
-        return (
-            select(rentals.c["id"])
-            .select_from(rentals)
-            .join(reservations, rentals.c["reservation_id"] == reservations.c["id"])
-            .where(reservations.c["customer_profile_id"] == customer_profile_id)
-        )
-
-    def _charge_ids(self, customer_profile_id: UUID) -> Select[tuple[UUID]]:
-        """Return the charges on this customer's hires."""
-        charges = self._tables["charge"]
-        rentals = self._tables["rental"]
-        reservations = self._tables["reservation"]
-        return (
-            select(charges.c["id"])
-            .select_from(charges)
-            .join(rentals, charges.c["rental_id"] == rentals.c["id"])
-            .join(reservations, rentals.c["reservation_id"] == reservations.c["id"])
-            .where(reservations.c["customer_profile_id"] == customer_profile_id)
-        )
-
-    def _damage_ids(self, customer_profile_id: UUID) -> Select[tuple[UUID]]:
-        """Return the damage reports on this customer's hires."""
-        reports = self._tables["damage_report"]
-        items = self._tables["rental_item"]
-        rentals = self._tables["rental"]
-        reservations = self._tables["reservation"]
-        return (
-            select(reports.c["id"])
-            .select_from(reports)
-            .join(items, reports.c["rental_item_id"] == items.c["id"])
-            .join(rentals, items.c["rental_id"] == rentals.c["id"])
-            .join(reservations, rentals.c["reservation_id"] == reservations.c["id"])
-            .where(reservations.c["customer_profile_id"] == customer_profile_id)
-        )
-
-    def _notification_ids(self, customer_profile_id: UUID) -> Select[tuple[UUID]]:
-        """Return the notifications about this customer's reservations."""
-        notifications = self._tables["notification"]
-        reservations = self._tables["reservation"]
-        return (
-            select(notifications.c["id"])
-            .select_from(notifications)
-            .join(reservations, notifications.c["reservation_id"] == reservations.c["id"])
-            .where(reservations.c["customer_profile_id"] == customer_profile_id)
-        )
 
     def _root_for(self, table_name: str) -> str:
         """Return the table the customer's rows are reached through."""
@@ -310,18 +187,6 @@ def _path_to(table: Table, root_name: str) -> tuple[_Edge, ...] | None:
             visited.add(target.name)
             queue.append((target, (*path, edge)))
     return None
-
-
-def _audit_export_row(
-    row: RowMapping, user_account_id: UUID
-) -> dict[str, JsonValue]:
-    """Return one audit row, redacting a staff actor's identity and address."""
-    values = dict(row)
-    if values.get("actor_user_id") != user_account_id:
-        for column in STAFF_REDACTED_AUDIT_COLUMNS:
-            if column in values:
-                values[column] = None
-    return {name: _json_value(value) for name, value in values.items()}
 
 
 def _json_value(value: object) -> JsonValue:
