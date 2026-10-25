@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { Mail } from 'lucide-react'
 import type { ConfirmationResend } from './api/contract'
 import { ErrorState } from './async-states'
+import { describeResendFailure } from './resend-failure'
 import { Notice } from './ui'
 
 type State =
@@ -29,6 +30,7 @@ export function ResendConfirmation({
   onSend: () => Promise<ConfirmationResend>
 }) {
   const [state, setState] = useState<State>({ step: 'waiting' })
+  const failure = state.step === 'failed' ? describeResendFailure(state.error) : null
 
   async function send() {
     setState({ step: 'sending' })
@@ -68,10 +70,21 @@ export function ResendConfirmation({
           </p>
         </Notice>
       )}
-      {state.step === 'failed' && (
+      {failure?.kind === 'wait' && (
+        <Notice tone="error" title="Too many confirmation re-sends">
+          <p>{failure.message}</p>
+          {failure.reference && (
+            <p className="mt-sm text-xs text-slate-soft">
+              Reference to quote if you ring us{' '}
+              <span className="select-all break-all font-mono text-ink">{failure.reference}</span>
+            </p>
+          )}
+        </Notice>
+      )}
+      {failure?.kind === 'fault' && (
         <ErrorState
           heading="We could not send the confirmation again"
-          error={state.error}
+          error={failure.error}
           onRetry={() => void send()}
         />
       )}

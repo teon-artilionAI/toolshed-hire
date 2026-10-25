@@ -12,11 +12,12 @@
 import { isApiError } from '../../shared/api-problem'
 import { TOO_MANY_ATTEMPTS } from '../../shared/api/auth'
 import { problemTypeEndsWith } from '../../shared/api/session-seam'
+import { waitInWords } from '../../shared/wait-words'
+
+export { waitInWords }
 
 const HTTP_UNAUTHORIZED = 401
 const HTTP_TOO_MANY_REQUESTS = 429
-const SECONDS_PER_MINUTE = 60
-
 /** The one sentence for every refused sign in. */
 export const REFUSED_MESSAGE =
   'That email address and password do not match an account. Check them both and try again.'
@@ -28,20 +29,6 @@ export type SignInFailure =
   | { kind: 'wait'; message: string }
   /** The API could not be reached, or something else went wrong. */
   | { kind: 'fault'; error: unknown }
-
-/**
- * How long to wait, in words.
- *
- * @param seconds The wait from `Retry-After`, or null when the API named none.
- * @returns Seconds below a minute, and whole minutes rounded up above it, so
- *   the person is never told a time that is shorter than the real one.
- */
-export function waitInWords(seconds: number | null): string {
-  if (seconds === null) return 'a few minutes'
-  if (seconds < SECONDS_PER_MINUTE) return seconds === 1 ? '1 second' : `${seconds} seconds`
-  const minutes = Math.ceil(seconds / SECONDS_PER_MINUTE)
-  return minutes === 1 ? '1 minute' : `${minutes} minutes`
-}
 
 /**
  * Sort a failed sign in into one of the three answers.
