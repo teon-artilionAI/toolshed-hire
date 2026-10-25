@@ -21,15 +21,19 @@ Run the planted-example check with:
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import shutil
-import subprocess
 import sys
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Final
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from artifact_findings import Finding  # noqa: E402
+from artifact_gitleaks import gitleaks_findings  # noqa: E402
 
 ALLOWED_EMAIL_DOMAINS: Final[frozenset[str]] = frozenset(
     {
@@ -53,7 +57,6 @@ ALLOWED_PHONE_DIGITS: Final[frozenset[str]] = frozenset(
 )
 MAXIMUM_FILE_BYTES: Final[int] = 5 * 1024 * 1024
 REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
-GITLEAKS_CONFIG: Final[Path] = REPOSITORY_ROOT / ".gitleaks.toml"
 TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
         ".html",
@@ -96,16 +99,6 @@ SECRET_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
     ("slack-token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b")),
 )
-
-
-@dataclass(frozen=True, slots=True)
-class Finding:
-    """One reason an artifact may not be uploaded."""
-
-    path: str
-    line: int
-    kind: str
-    preview: str
 
 
 def sa_id_is_valid(value: str) -> bool:
@@ -209,74 +202,6 @@ def scan_path(root: Path) -> list[Finding]:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         findings.extend(scan_text(text, str(path)))
-    return findings
-
-
-def gitleaks_findings(paths: Iterable[Path], binary: Sequence[str]) -> list[Finding]:
-    """Run the directory gitleaks scan over the artifact paths.
-
-    Gitleaks is the component the plan names for secret detection. The text
-    scan above covers personal data; this covers the credential rules that a
-    hand-written regex set can miss. A missing or broken gitleaks binary is a
-    finding, never a silent pass.
-    """
-    findings: list[Finding] = []
-    for path in paths:
-        if not path.exists():
-            continue
-        completed = subprocess.run(
-            [
-                *binary,
-                "dir",
-                str(path),
-                "--config",
-                str(GITLEAKS_CONFIG),
-                "--no-banner",
-                "--redact",
-                "--exit-code",
-                "1",
-                "--report-format",
-                "json",
-                "--report-path",
-                "-",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode == 0:
-            continue
-        if completed.returncode != 1:
-            findings.append(
-                Finding(
-                    str(path),
-                    0,
-                    "gitleaks-error",
-                    f"gitleaks exited with code {completed.returncode}",
-                )
-            )
-            continue
-        try:
-            report = json.loads(completed.stdout or "[]")
-        except json.JSONDecodeError:
-            findings.append(
-                Finding(str(path), 0, "gitleaks-error", "gitleaks returned an unreadable report")
-            )
-            continue
-        if not isinstance(report, list) or not report:
-            findings.append(
-                Finding(str(path), 0, "gitleaks-error", "gitleaks failed without a finding")
-            )
-            continue
-        for item in report:
-            findings.append(
-                Finding(
-                    str(item.get("File", path)),
-                    int(item.get("StartLine", 0)),
-                    "gitleaks",
-                    "<redacted>",
-                )
-            )
     return findings
 
 
