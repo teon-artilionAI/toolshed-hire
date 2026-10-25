@@ -1,75 +1,133 @@
 #!/bin/sh
-# Create the two uptime checks for Toolshed Hire (B3.1, NFR-05, C-43).
+# Recreate the Toolshed Hire liveness check and the hourly full-health job (B3.1).
 #
-# The live check calls /api/health/live, which answers from the process and
-# never opens a database session. It runs every five minutes from three
-# regions, so a database that is asleep does not make the site look down.
+# The liveness check calls /api/health/live every five minutes from three
+# regions. It does not open a database session, so a sleeping Neon database
+# does not make the service look down.
 #
-# The full check calls /api/health, which queries Neon and confirms btree_gist.
-# It runs once an hour, or once every three hours when the free compute
-# allowance cannot carry an hourly wake. Check the Neon usage page before
-# choosing, as B3.1 says, and pass FULL_PERIOD_SECONDS=10800 for the fallback.
-#
-# Both checks point at the hostname people use, not the Cloud Run run.app
-# address, because the frontend is the only supported entrance.
+# The full check calls /api/health hourly through Cloud Scheduler. Cloud
+# Monitoring uptime checks accept only 1, 5, 10 or 15 minute periods, so an
+# hourly check cannot be an uptime check. The scheduler job is the chosen
+# design recorded in results/B3/B3.1-uptime-partial.md.
 #
 # Usage:
-#   UPTIME_HOST=toolshed-hire.vercel.app sh infra/scripts/create-uptime-checks.sh
-#   UPTIME_HOST=toolshed-hire-staging.vercel.app FULL_PERIOD_SECONDS=10800 \
+#   UPTIME_HOST=toolshed-hire-staging.vercel.app \
 #     sh infra/scripts/create-uptime-checks.sh
 #
-# Requires: gcloud authenticated for the toolshed configuration, and the
-# Monitoring Admin role on the project.
+# The script is idempotent: an existing liveness check is left alone, and an
+# existing scheduler job is updated in place. A failed read-back exits non-zero.
+#
+# Requires gcloud authenticated for the toolshed configuration, with
+# Monitoring Admin and Cloud Scheduler Admin on the project.
 
 set -eu
 
 PROJECT="${GCP_PROJECT:-toolshed-hire}"
 CONFIGURATION="${GCLOUD_CONFIGURATION:-toolshed}"
-HOST="${UPTIME_HOST:?Set UPTIME_HOST to the deployed hostname, for example toolshed-hire.vercel.app}"
-FULL_PERIOD_SECONDS="${FULL_PERIOD_SECONDS:-3600}"
-LIVE_PERIOD_SECONDS=300
-TIMEOUT_SECONDS=10
-REGIONS="usa-iowa,europe-west1,asia-pacific"
-PROTOCOL="https"
+HOST="${UPTIME_HOST:?Set UPTIME_HOST to the deployed hostname, for example toolshed-hire-staging.vercel.app}"
+ENVIRONMENT_NAME="${ENVIRONMENT_NAME:-staging}"
+LOCATION="${SCHEDULER_LOCATION:-europe-west2}"
+SCHEDULE="${FULL_SCHEDULE:-0 * * * *}"
+TIME_ZONE="${FULL_TIME_ZONE:-Africa/Johannesburg}"
+LIVE_NAME="Toolshed Hire liveness (${HOST})"
+JOB_NAME="toolshed-full-health-${ENVIRONMENT_NAME}"
 LIVE_PATH="/api/health/live"
 FULL_PATH="/api/health"
+REGIONS="usa-iowa,europe,asia-pacific"
 
-if [ "$FULL_PERIOD_SECONDS" != "3600" ] && [ "$FULL_PERIOD_SECONDS" != "10800" ]; then
-  echo "FULL_PERIOD_SECONDS must be 3600 or 10800, got $FULL_PERIOD_SECONDS." >&2
+if [ -z "$SCHEDULE" ]; then
+  echo "FULL_SCHEDULE must not be empty." >&2
   exit 2
 fi
 
-existing() {
+liveness_names() {
   gcloud monitoring uptime list-configs \
     --project="$PROJECT" --configuration="$CONFIGURATION" \
-    --format="value(displayName)" 2>/dev/null || true
+    --format="value(displayName)"
 }
 
-create_check() {
-  name="$1"
-  path="$2"
-  period="$3"
-  reason="$4"
-  if existing | grep -Fxq "$name"; then
-    echo "Already present: $name"
-    return 0
-  fi
-  echo "Creating $name every ${period}s against ${PROTOCOL}://${HOST}${path}"
-  gcloud monitoring uptime create "$name" \
+if ! names="$(liveness_names 2>&1)"; then
+  echo "::error title=Liveness discovery failed::Could not list uptime checks. A denied or unavailable discovery is not a missing check, so nothing was created." >&2
+  printf '%s\n' "$names" >&2
+  exit 1
+fi
+
+if printf '%s\n' "$names" | grep -Fxq "$LIVE_NAME"; then
+  echo "Already present: $LIVE_NAME"
+else
+  echo "Creating $LIVE_NAME every 5 minutes from $REGIONS"
+  gcloud monitoring uptime create "$LIVE_NAME" \
     --project="$PROJECT" --configuration="$CONFIGURATION" \
     --resource-type=uptime-url \
     --resource-labels="host=${HOST},project_id=${PROJECT}" \
-    --protocol="$PROTOCOL" \
-    --path="$path" \
-    --period="$period" \
-    --timeout="$TIMEOUT_SECONDS" \
+    --protocol=https \
+    --path="$LIVE_PATH" \
+    --period=5 \
+    --timeout=10 \
     --regions="$REGIONS" \
     --status-codes=200 \
-    --user-labels="application=toolshed-hire,purpose=${reason}"
+    --user-labels="application=toolshed-hire,purpose=liveness"
+fi
+
+scheduler_args() {
+  printf '%s\n' \
+    "--project=$PROJECT" \
+    "--configuration=$CONFIGURATION" \
+    "--location=$LOCATION" \
+    "--time-zone=$TIME_ZONE" \
+    "--uri=https://${HOST}${FULL_PATH}" \
+    "--http-method=GET" \
+    "--headers=User-Agent=Google-Cloud-Scheduler" \
+    "--attempt-deadline=60s" \
+    "--max-retry-attempts=5" \
+    "--min-backoff=5s" \
+    "--max-backoff=3600s" \
+    "--max-doublings=5" \
+    "--max-retry-duration=0s"
 }
 
-create_check "Toolshed Hire liveness (${HOST})" "$LIVE_PATH" "$LIVE_PERIOD_SECONDS" "liveness"
-create_check "Toolshed Hire full health (${HOST})" "$FULL_PATH" "$FULL_PERIOD_SECONDS" "full-health"
+scheduler_state() {
+  local output
+  if output="$(gcloud scheduler jobs describe "$JOB_NAME" \
+      --project="$PROJECT" --configuration="$CONFIGURATION" \
+      --location="$LOCATION" 2>&1)"; then
+    echo present
+    return 0
+  fi
+  case "$output" in
+    *NOT_FOUND*|*"not found"*|*"does not exist"*|*"NOT FOUND"*)
+      echo absent
+      return 0
+      ;;
+    *)
+      echo "::error title=Scheduler discovery failed::Could not read the job. A denied or unavailable discovery is not a missing job, so nothing was created." >&2
+      printf '%s\n' "$output" >&2
+      return 1
+      ;;
+  esac
+}
 
-echo "Done. The full health check wakes Neon every ${FULL_PERIOD_SECONDS}s."
-echo "Record the check names and the first availability figure in the pending operations note."
+state="$(scheduler_state)" || exit 1
+if [ "$state" = "present" ]; then
+  echo "Updating Cloud Scheduler job: $JOB_NAME"
+  # shellcheck disable=SC2046
+  gcloud scheduler jobs update http "$JOB_NAME" --schedule="$SCHEDULE" $(scheduler_args)
+else
+  echo "Creating Cloud Scheduler job: $JOB_NAME"
+  # shellcheck disable=SC2046
+  gcloud scheduler jobs create http "$JOB_NAME" --schedule="$SCHEDULE" $(scheduler_args)
+fi
+
+echo "Liveness check:"
+gcloud monitoring uptime list-configs \
+  --project="$PROJECT" --configuration="$CONFIGURATION" \
+  --filter="displayName=\"$LIVE_NAME\"" \
+  --format="value(displayName,period,httpCheck.path)"
+
+echo "Full-health scheduler job:"
+gcloud scheduler jobs describe "$JOB_NAME" \
+  --project="$PROJECT" --configuration="$CONFIGURATION" \
+  --location="$LOCATION" \
+  --format="value(state,schedule,timeZone,httpTarget.uri)"
+
+echo "Done. The full health job wakes Neon on schedule ${SCHEDULE} (${TIME_ZONE})."
