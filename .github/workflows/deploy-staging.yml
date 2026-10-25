@@ -275,8 +275,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install the audit check dependency
-        run: pip install "psycopg[binary]==3.2.3"
+      - name: Install the audit check dependencies
+        run: pip install "psycopg[binary]==3.2.3" "sqlalchemy==2.0.36"
 
       - name: Authenticate to Google Cloud for the audit check
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
