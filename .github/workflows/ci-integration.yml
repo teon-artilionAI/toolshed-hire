@@ -310,6 +310,137 @@ jobs:
         if: failure()
         run: tail -n 200 "${RUNNER_TEMP}/api.log" || true
 
+  # Test-only controlled-clock qualification. It runs only on the branch that
+  # carries the test business-date setting, starts a local API and a seeded
+  # PostgreSQL in the job, and asserts both selected scenarios pass with no
+  # skips. It never deploys staging or production.
+  calendar-qualification:
+    name: Calendar qualification (controlled dates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'test/b93-test-business-date'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: toolshed
+          POSTGRES_PASSWORD: toolshed_ci_local_only
+          POSTGRES_DB: toolshed_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=toolshed --dbname=toolshed_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://toolshed:toolshed_ci_local_only@localhost:5432/toolshed_test
+      JWT_SECRET: ci_only_jwt_secret_value_not_used_outside_this_job
+      API_PORT: "8000"
+      CORS_ORIGINS: http://127.0.0.1:4173
+      FRONTEND_ORIGIN: http://127.0.0.1:4173
+      LOGIN_ATTEMPTS_PER_EMAIL: "200"
+      LOGIN_ATTEMPTS_PER_ADDRESS: "400"
+      TEST_BUSINESS_TIME: "10:00"
+      E2E_REQUIRE_BACKEND: "1"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python for the API
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install the backend
+        working-directory: backend
+        run: |
+          pip install --require-hashes --requirement requirements.txt
+          pip install --no-deps --no-build-isolation --editable .
+
+      - name: Migrate and seed the local database
+        working-directory: backend
+        run: |
+          alembic upgrade head
+          python seed.py
+
+      - name: Start the API on the holiday clock
+        working-directory: backend
+        run: |
+          TEST_BUSINESS_DATE=2026-12-16 nohup uvicorn app.main:app --host 127.0.0.1 --port "${API_PORT}" > "${RUNNER_TEMP}/api-holiday.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/api-holiday.pid"
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "http://127.0.0.1:${API_PORT}/api/health" > /dev/null; then
+              echo "Holiday API answered on attempt ${attempt}."
+              break
+            fi
+            sleep 1
+          done
+          grep --fixed-strings '"test_business_time": "10:00:00"' "${RUNNER_TEMP}/api-holiday.log"
+          grep --fixed-strings '"test_business_date": "2026-12-16"' "${RUNNER_TEMP}/api-holiday.log"
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install the browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the holiday scenario and assert no skips
+        working-directory: frontend
+        env:
+          TEST_BUSINESS_DATE: "2026-12-16"
+        run: |
+          npx playwright test e2e/calendar-qualification.spec.ts --project=chromium-desktop --workers=1 --reporter=json > "${RUNNER_TEMP}/holiday-result.json"
+          node -e "const r=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/holiday-result.json')); if (r.stats.expected !== 1 || r.stats.skipped !== 0 || r.stats.unexpected !== 0) { console.error(r.stats); process.exit(1) }"
+          find test-results -name 'holiday-qualification.json' -print -exec cat {} \;
+
+      - name: Stop the holiday API
+        run: |
+          kill "$(cat "${RUNNER_TEMP}/api-holiday.pid")" || true
+          sleep 1
+
+      - name: Start the API on the open-day clock
+        working-directory: backend
+        run: |
+          TEST_BUSINESS_DATE=2026-12-15 nohup uvicorn app.main:app --host 127.0.0.1 --port "${API_PORT}" > "${RUNNER_TEMP}/api-open.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/api-open.pid"
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "http://127.0.0.1:${API_PORT}/api/health" > /dev/null; then
+              echo "Open-day API answered on attempt ${attempt}."
+              break
+            fi
+            sleep 1
+          done
+          grep --fixed-strings '"test_business_time": "10:00:00"' "${RUNNER_TEMP}/api-open.log"
+          grep --fixed-strings '"test_business_date": "2026-12-15"' "${RUNNER_TEMP}/api-open.log"
+
+      - name: Run the open-day scenario and assert no skips
+        working-directory: frontend
+        env:
+          TEST_BUSINESS_DATE: "2026-12-15"
+        run: |
+          npx playwright test e2e/open-day-clock.spec.ts e2e/counter.spec.ts --project=chromium-desktop --workers=1 --reporter=json > "${RUNNER_TEMP}/open-result.json"
+          node -e "const r=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/open-result.json')); if (r.stats.expected !== 4 || r.stats.skipped !== 0 || r.stats.unexpected !== 0) { console.error(r.stats); process.exit(1) }"
+          find test-results -name 'open-day-clock.json' -print -exec cat {} \;
+
+      - name: Show the API logs when a check fails
+        if: failure()
+        run: |
+          tail -n 200 "${RUNNER_TEMP}/api-holiday.log" || true
+          tail -n 200 "${RUNNER_TEMP}/api-open.log" || true
+
   # The single required check for a pull request. See the note on the matching
   # job in ci-fast.yml.
   outcome:

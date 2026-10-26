@@ -9,8 +9,20 @@
 /** The time zone the branches trade in. */
 const BRANCH_TIME_ZONE = 'Africa/Johannesburg'
 
+/** A test-only date, when the run moves the API and browser clock. */
+const TEST_BUSINESS_DATE = /^\d{4}-\d{2}-\d{2}$/
+
 /** A date some days from today in branch time, as `YYYY-MM-DD`. */
 export function dateFromToday(days: number): string {
+  const fixed = process.env.TEST_BUSINESS_DATE
+  if (fixed !== undefined) {
+    if (!TEST_BUSINESS_DATE.test(fixed)) {
+      throw new Error(`TEST_BUSINESS_DATE is "${fixed}", not a date such as 2026-12-16.`)
+    }
+    const date = new Date(`${fixed}T00:00:00Z`)
+    date.setUTCDate(date.getUTCDate() + days)
+    return date.toISOString().slice(0, 10)
+  }
   const parts = new Map(
     new Intl.DateTimeFormat('en-ZA', {
       timeZone: BRANCH_TIME_ZONE,

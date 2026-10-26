@@ -39,6 +39,7 @@
 
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { startBrowserClockWithTheApi } from './api-clock.ts'
 import { blockingViolations } from './axe.ts'
 import { RETURN_ROUTES_NEEDED, returnRoutesArePresent } from './backend.ts'
 import { RAND, REFERENCE, figure } from './booking.ts'
@@ -64,6 +65,10 @@ const HELD_STEP = 'Step 3 of 4. Confirm the booking'
 const CONFIRMED_STEP = 'Step 4 of 4. The booking is confirmed'
 const CHECKOUT_STEP = 'Step 1 of 3. Check each unit and take the deposit'
 const RETURN_HEADING = 'Return and condition inspection'
+
+test.beforeEach(async ({ page }) => {
+  await startBrowserClockWithTheApi(page)
+})
 
 /** The amount on one line of the deposit settlement on SC-15. */
 async function settlementAmount(page: Page, line: string): Promise<string> {

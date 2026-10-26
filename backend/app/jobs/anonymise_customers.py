@@ -154,7 +154,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
         totals = anonymise_dormant_customers(
             lambda: SqlAlchemyUnitOfWork(lambda: Session(engine)),
-            clock_for(settings.test_business_time),
+            clock_for(settings.test_business_time, settings.test_business_date),
             report_only=options.report,
             batch_size=options.batch_size,
         )
