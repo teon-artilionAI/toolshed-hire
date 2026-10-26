@@ -13,6 +13,7 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOWS = REPOSITORY_ROOT / ".github" / "workflows"
+PINNED_CHECKOUT = "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
 
 
 def workflow_documents() -> list[tuple[Path, dict]]:
@@ -66,3 +67,26 @@ def test_release_assets_have_repository_context_and_a_scan() -> None:
         name = step.get("name", "")
         if name == "Create a draft Release if it does not exist" or name == "Upload the two SBOMs":
             assert "steps.release_scan.outcome == 'success'" in step.get("if", "")
+
+
+def test_release_assets_check_out_the_release_revision_before_local_helpers() -> None:
+    """The release job can read its own scripts before installing or scanning."""
+    path = WORKFLOWS / "deploy-production.yml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = document["jobs"]["release-assets"]["steps"]
+    checkout_index = next(
+        index for index, step in enumerate(steps) if step.get("uses") == PINNED_CHECKOUT
+    )
+    checkout = steps[checkout_index]
+    assert checkout.get("with", {}).get("ref") == "${{ github.sha }}"
+    install_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "install-gitleaks.sh" in step.get("run", "")
+    )
+    scan_index = next(
+        index for index, step in enumerate(steps) if "scan_artifacts.py" in step.get("run", "")
+    )
+    assert checkout_index < install_index < scan_index, (
+        "release-assets must check out the release revision before both local helpers"
+    )

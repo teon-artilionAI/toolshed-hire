@@ -3,8 +3,11 @@
 The audit table is polymorphic. A customer's own events have the customer as
 actor, while a staff event about the customer names the customer profile, a
 booking, a hire, a charge, a damage report or a notification as its subject.
-The subject types are explicit in the personal data map. A staff actor's id,
-role, address and request id are not the customer's data and are redacted.
+The subject types are explicit in the personal data map. A staff-authored asset
+event is included only when its payload names one of this customer's hire
+references, so another customer's use of the same unit stays out. A staff
+actor's id, role, address and request id are not the customer's data and are
+redacted.
 """
 
 from __future__ import annotations
@@ -68,6 +71,12 @@ def audit_rows(
             table.c["entity_type"] == "notification",
             table.c["entity_id"].in_(_notification_ids(tables, customer_profile_id)),
         ),
+        "asset": lambda: and_(
+            table.c["entity_type"] == "asset",
+            table.c["after_state"]["rental_reference"].as_string().in_(
+                _rental_references(tables, customer_profile_id)
+            ),
+        ),
     }
     conditions = [table.c["actor_user_id"] == user_account_id]
     for entity_type in kind.subject_entity_types:
@@ -95,6 +104,20 @@ def _reservation_ids(tables: Mapping[str, Table], customer_profile_id: UUID) -> 
     reservations = tables["reservation"]
     return select(reservations.c["id"]).where(
         reservations.c["customer_profile_id"] == customer_profile_id
+    )
+
+
+def _rental_references(
+    tables: Mapping[str, Table], customer_profile_id: UUID
+) -> Select[tuple[str]]:
+    """Return the references of this customer's hires, and nobody else's."""
+    rentals = tables["rental"]
+    reservations = tables["reservation"]
+    return (
+        select(rentals.c["reference"])
+        .select_from(rentals)
+        .join(reservations, rentals.c["reservation_id"] == reservations.c["id"])
+        .where(reservations.c["customer_profile_id"] == customer_profile_id)
     )
 
 

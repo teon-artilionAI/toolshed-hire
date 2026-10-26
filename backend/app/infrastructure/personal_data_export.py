@@ -13,11 +13,12 @@ time rather than silently returning nothing, because an incomplete answer to
 a right of access is worse than a loud failure.
 
 The audit trail is the one polymorphic table. Its `entity_type` and `entity_id`
-columns can name a customer, a booking, a hire, a charge, a damage report or a
-notification, and a staff actor is not the customer. The map therefore names
-the subject entity types explicitly, and this module reads those subjects while
-redacting the actor identity and address of a staff member. The generic
-foreign-key walk cannot infer that relationship.
+columns can name a customer, a booking, a hire, a charge, a damage report, a
+notification or a hire-linked asset event, and a staff actor is not the
+customer. The map therefore names the subject entity types explicitly, and
+this module reads those subjects while redacting the actor identity and
+address of a staff member. The generic foreign-key walk cannot infer that
+relationship.
 
 This is deliberately not a per-table list. The map owns the classification,
 and this module owns only the traversal and the JSON conversion.

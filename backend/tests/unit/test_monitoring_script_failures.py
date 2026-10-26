@@ -127,9 +127,12 @@ class TestUptimeDiscovery:
 
     def test_a_failed_scheduler_read_stops_before_create(self, fake_gcloud) -> None:
         stub, calls = fake_gcloud
-        result = run_script(UPTIME, stub, calls, "discovery-fail")
+        result = run_script(UPTIME, stub, calls, "scheduler-discovery-fail")
+        log = called(calls)
         assert result.returncode != 0
-        assert not any("scheduler jobs create" in line for line in called(calls))
+        assert any("scheduler jobs describe" in line for line in log)
+        assert not any("scheduler jobs create" in line for line in log)
+        assert not any("scheduler jobs update" in line for line in log)
 
     def test_confirmed_absence_creates_the_liveness_and_job(self, fake_gcloud) -> None:
         stub, calls = fake_gcloud
