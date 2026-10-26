@@ -315,11 +315,8 @@ starts, starts at that time of day on it, and runs on in real time, which is
 `StartedAtBusinessTimeClock` in `app/infrastructure/clock.py`. The browser
 tests book for today and check out, and a hire can only start today while the
 branch is open, so without it they would fail whenever CI ran after closing
-time. `TEST_BUSINESS_DATE`, for example `2026-12-16`, moves that starting
-date as well, and requires `TEST_BUSINESS_TIME`. It exists for a controlled
-calendar qualification, not for ordinary browser tests. Both settings are
-honoured only when `ENVIRONMENT=test`, and every other environment refuses to
-start with either set.
+time. The setting is honoured only when `ENVIRONMENT=test`, and every other
+environment refuses to start with it set.
 
 ## The read side
 
@@ -2635,12 +2632,10 @@ The key is never logged and never appears in a receipt or an error message.
 
 `TEST_BUSINESS_TIME`, for example `10:00`, starts the clock of a test process
 at that time of day in Cape Town on today's real date, and lets it run on in
-real time from there (see The clock). `TEST_BUSINESS_DATE`, for example
-`2026-12-16`, moves the starting date as well and requires the time. Both are
-honoured only when `ENVIRONMENT=test`. Development, staging and production
-refuse to start with either set, so no deployed service can run on a clock
-that lies. The start-up log shows them as `test_business_time` and
-`test_business_date`, or `off`.
+real time from there (see The clock). It is honoured only when
+`ENVIRONMENT=test`. Development, staging and production refuse to start with
+it set, so no deployed service can run on a clock that lies. The start-up log
+shows it as `test_business_time`, or `off`.
 
 ## Checks
 
