@@ -1,0 +1,6 @@
+{
+  "expected_sha": "37f85809f128c8171f5fbd8d822753b55a47591d",
+  "expected_revision": "toolshed-api-staging-37f8580-83-1",
+  "window_date": "2026-10-26",
+  "purpose": "B4.6 signed-in browser network-loss"
+}
