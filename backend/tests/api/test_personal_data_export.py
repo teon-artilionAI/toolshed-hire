@@ -8,6 +8,7 @@ redacts staff actor metadata. The query runs against real SQL in the API tests.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -29,8 +30,11 @@ from tests.api.test_statement_and_export import (
     add_rental,
     bearer,
 )
+from tests.support.booking_api import BookingClient, answered, build_booking_world, created
+from tests.support.checkout_api import checked_out
 from tests.support.clock import FixedClock
 from tests.support.factories import Factory
+from tests.support.rental_api import item_ids, on_hire, return_body, take_back
 
 
 @pytest.fixture
@@ -197,3 +201,62 @@ def test_the_export_is_audited_and_only_names_counts(
         "table_count": len(response.json()["tables"]),
         "row_count": response.json()["rowCount"],
     }
+
+
+def test_actual_checkout_and_return_asset_events_are_owned_and_scoped(
+    booking: BookingClient,
+    account_api: TestClient,
+    session: Session,
+    factory: Factory,
+    still_clock: FixedClock,
+) -> None:
+    """The actual hire producers export only this customer's hire-linked asset events."""
+    world = build_booking_world(factory, asset_count=1)
+    assistant = factory.user(role=UserRole.COUNTER_STAFF, branch=world.branch)
+    other = factory.user(email="other-shared-asset@example.co.za")
+    factory.customer_profile(branch=world.branch, account=other)
+    session.commit()
+
+    first = on_hire(booking, world, assistant)
+    answered(take_back(booking, assistant, first["id"], return_body(*item_ids(first))))
+
+    booking.clock.advance(timedelta(days=7))
+    second_draft = created(booking.create(other, world.payload()))
+    answered(booking.hold(other, second_draft["id"]))
+    answered(booking.confirm(assistant, second_draft["id"]))
+    second = checked_out(booking, assistant, second_draft["id"])
+    answered(take_back(booking, assistant, second["id"], return_body(*item_ids(second))))
+
+    unrelated_asset_id = uuid4()
+    session.add(
+        AuditEvent(
+            occurred_at=booking.clock.now(),
+            actor_user_id=assistant.id,
+            actor_role=assistant.role,
+            entity_type="asset",
+            entity_id=unrelated_asset_id,
+            action="asset.status_changed",
+            after_state={"status": "AVAILABLE"},
+            ip_address="198.51.100.8",
+        )
+    )
+    session.commit()
+
+    response = account_api.get(EXPORT_PATH, headers=bearer(world.customer, still_clock))
+
+    assert response.status_code == status.HTTP_200_OK
+    asset_rows = [
+        row for row in response.json()["tables"]["audit_event"] if row["entity_type"] == "asset"
+    ]
+    assert len(asset_rows) == 2
+    assert {row["after_state"]["status"] for row in asset_rows} == {"ON_HIRE", "AVAILABLE"}
+    assert all(row["entity_id"] == str(world.assets[0].id) for row in asset_rows)
+    assert all(row["after_state"]["rental_reference"] == first["reference"] for row in asset_rows)
+    exported = json.dumps(response.json())
+    assert str(second["reference"]) not in exported
+    assert str(unrelated_asset_id) not in exported
+    for row in asset_rows:
+        assert row["actor_user_id"] is None
+        assert row["actor_role"] is None
+        assert row["ip_address"] is None
+        assert row["request_id"] is None

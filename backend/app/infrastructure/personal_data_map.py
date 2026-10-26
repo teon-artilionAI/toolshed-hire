@@ -137,6 +137,7 @@ _MAP: dict[str, TableClassification] = {
             "charge",
             "damage_report",
             "notification",
+            "asset",
         ),
     ),
     # Nothing about a customer.
