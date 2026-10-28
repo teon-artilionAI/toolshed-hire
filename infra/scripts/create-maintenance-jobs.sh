@@ -169,6 +169,14 @@ gcloud secrets add-iam-policy-binding "${operator_secret}" \
   --member="serviceAccount:${operator_account}" \
   --role="${SECRET_ROLE}" > /dev/null
 
+# Every deploy points both jobs at the image it just deployed
+# (update-job-images.sh), so a job never waits on an image the cleanup policy
+# has deleted. Updating a job's image means acting as the identity the job runs
+# as, so the deployer of this environment may act as the operator account.
+deployer_account="github-deployer-${environment}@${project}.iam.gserviceaccount.com"
+echo "Letting ${deployer_account} act as ${operator_name}, so a deploy can update the job's image."
+gcloud iam service-accounts add-iam-policy-binding "${operator_account}"   --configuration=toolshed --quiet --project="${project}"   --member="serviceAccount:${deployer_account}"   --role="roles/iam.serviceAccountUser" > /dev/null
+
 echo "Deploying ${anonymise_job}."
 gcloud run jobs deploy "${anonymise_job}" \
   --configuration=toolshed --quiet --project="${project}" \

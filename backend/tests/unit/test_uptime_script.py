@@ -30,20 +30,23 @@ def test_the_script_creates_the_liveness_and_hourly_scheduler_definitions(
     stub = tmp_path / "gcloud"
     stub.write_text(
         "#!/usr/bin/env bash\n"
-        "printf '%s\\n' \"$*\" >> \"$GCLOUD_CALLS\"\n"
-        "if [[ \"$1 $2 $3\" == \"monitoring uptime list-configs\" ]]; then\n"
-        "  if [[ -f \"$GCLOUD_LIVE_MARKER\" ]]; then printf '%s\\n' \"$GCLOUD_LIVE_NAME\"; fi\n"
+        'printf \'%s\\n\' "$*" >> "$GCLOUD_CALLS"\n'
+        'if [[ "$1 $2 $3" == "monitoring uptime list-configs" ]]; then\n'
+        '  if [[ -f "$GCLOUD_LIVE_MARKER" ]]; then printf \'%s\\n\' "$GCLOUD_LIVE_NAME"; fi\n'
         "  exit 0\n"
         "fi\n"
-        "if [[ \"$1 $2 $3\" == \"monitoring uptime create\" ]]; then\n"
-        "  touch \"$GCLOUD_LIVE_MARKER\"; exit 0; fi\n"
-        "if [[ \"$1 $2 $3\" == \"scheduler jobs describe\" ]]; then\n"
+        'if [[ "$1 $2 $3" == "beta monitoring channels" ]]; then\n'
+        "  echo 'projects/toolshed-hire/notificationChannels/1'; exit 0; fi\n"
+        'if [[ "$1 $2 $3" == "monitoring policies list" ]]; then exit 0; fi\n'
+        'if [[ "$1 $2 $3" == "monitoring uptime create" ]]; then\n'
+        '  touch "$GCLOUD_LIVE_MARKER"; exit 0; fi\n'
+        'if [[ "$1 $2 $3" == "scheduler jobs describe" ]]; then\n'
         "  if [[ -f \"$GCLOUD_JOB_MARKER\" ]]; then echo 'state: ENABLED'; exit 0; fi\n"
         "  echo 'NOT_FOUND' >&2; exit 1\n"
         "fi\n"
-        "if [[ \"$1 $2 $3\" == \"scheduler jobs create\" ]]; then\n"
-        "  touch \"$GCLOUD_JOB_MARKER\"; exit 0; fi\n"
-        "if [[ \"$1 $2 $3\" == \"scheduler jobs update\" ]]; then exit 0; fi\n"
+        'if [[ "$1 $2 $3" == "scheduler jobs create" ]]; then\n'
+        '  touch "$GCLOUD_JOB_MARKER"; exit 0; fi\n'
+        'if [[ "$1 $2 $3" == "scheduler jobs update" ]]; then exit 0; fi\n'
         "exit 0\n",
         encoding="utf-8",
     )
@@ -77,3 +80,7 @@ def test_the_script_creates_the_liveness_and_hourly_scheduler_definitions(
     assert "--uri=https://toolshed-hire-staging.vercel.app/api/health" in log
     assert "--location=europe-west2" in log
     assert "europe-west1" not in log
+    assert "--headers=User-Agent=Google-Cloud-Scheduler" in log
+    assert "monitoring policies create" in log
+    assert "uptime_check/check_passed" in log
+    assert "--notification-channels=projects/toolshed-hire/notificationChannels/1" in log
