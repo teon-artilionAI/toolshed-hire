@@ -79,8 +79,10 @@ describe('when the tool can be added', () => {
 
     await user.click(button)
 
-    const announced = regionsBefore.find((region) =>
-      region.textContent?.includes('Added to your hire basket. 1 unit of CP 100 Plate Compactor'),
+    const announced = regionsBefore.find(
+      (region) =>
+        region.textContent?.includes(ADDED) &&
+        region.textContent.includes('1 unit of CP 100 Plate Compactor'),
     )
     expect(announced).toBeDefined()
   })

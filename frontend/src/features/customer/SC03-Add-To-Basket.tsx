@@ -179,27 +179,18 @@ export default function AddToBasket({
         </div>
       )}
 
+      {/* One status region that is always on the page. A live region that
+          appears already holding its words is not announced, so the notice
+          is put inside this one rather than arriving with a region of its
+          own. Keeping one copy also stops browse mode reading it twice. */}
       <div role="status" className="mt-md">
-        {/* The notice below is a status region of its own, but it arrives
-            already holding its words, and a live region that appears filled
-            is not announced. This region is always on the page, so a screen
-            reader reads what changes in it. */}
-        {added && (
-          <p className="sr-only">
-            Added to your hire basket. {added.summary}
-            {added.nowHolds !== null && ` Your basket now holds ${added.nowHolds} of this tool.`}
-          </p>
-        )}
         {matched && !added && (
           <p className="text-sm text-slate-soft">
             The dates and the branch above now match your basket. Add the tool once it shows as
             free.
           </p>
         )}
-      </div>
-
-      {added && (
-        <div className="mt-md">
+        {added && (
           <Notice tone="success" title="Added to your hire basket">
             <p>{added.summary}</p>
             {added.nowHolds !== null && (
@@ -209,8 +200,8 @@ export default function AddToBasket({
               Go to my basket
             </Link>
           </Notice>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
