@@ -9,6 +9,54 @@ the whole design document.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-28
+
+The final release. The built system now matches the whole design document,
+apart from the deviations recorded in the report.
+
+### Added
+
+- Customers can download a statement and every piece of data held about them,
+  and the owner can remove a customer's personal details on request. Customers
+  who have been quiet for two years are anonymised by a monthly job.
+- Damage photographs can be attached to a damage report at the counter, and
+  the owner and the customer can see them. Photographs live in a private
+  bucket in London and are deleted after five years.
+- Bookings are held to the days a branch trades. Public holidays are closed,
+  and the owner can close a branch on a day of their choosing.
+- The owner can set a trade customer's discount, and the bookkeeper can export
+  a month of charges as CSV.
+- A customer or the counter can send a booking confirmation again, with a
+  limit on how often.
+- Passwords that appear in a known breach are refused.
+- The footer links to the user guide.
+- A liveness route answers without waking the database, and uptime checks and
+  alert policies watch the service.
+- Each release carries bills of materials for the backend and the frontend, and
+  a weekly audit checks the dependencies.
+- A weekly job removes refresh sessions that ended more than ninety days ago.
+
+### Changed
+
+- The API accepts only callers with a Google identity. The site reaches it
+  through a function in London that holds no stored key.
+- The frontend moved to Tailwind CSS 4 and requires Trusted Types.
+- The backend installs from a lockfile with hashes, on pydantic 2.14 and
+  uvicorn 0.54.
+- The privacy notice names every category of personal data and every
+  processor, including Have I Been Pwned.
+- Every release image is kept, so a rollback always has the previous release
+  to go back to.
+
+### Fixed
+
+- The customer export is limited to the customer's own records, and the month
+  boundaries of the charges export follow Cape Town time.
+- Signing in takes the same time whether or not the account exists.
+- The confirmation re-send limit is shown as a plain refusal.
+- Build artifacts that carry personal information are refused before they are
+  published.
+
 ## [0.4.2] - 2026-10-04
 
 A fix found by testing 0.4.1 by hand on production, as a customer, a counter
