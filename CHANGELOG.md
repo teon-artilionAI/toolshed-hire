@@ -9,6 +9,18 @@ the whole design document.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-28
+
+The 1.0.0 deployment stopped before it changed anything, because the check
+that keeps personal information out of published files refused the bills of
+materials. Nothing in them was personal.
+
+### Fixed
+
+- A package named with its version, such as `name@1.0.0`, is no longer taken
+  for an email address.
+- Digits inside a hash are no longer taken for a phone number.
+
 ## [1.0.0] - 2026-10-28
 
 The final release. The built system now matches the whole design document,
