@@ -47,6 +47,9 @@ import { RESET_LINK_NAME, useLinkToken } from './use-link-token'
  */
 type Mode = 'signin' | 'resetRequest' | 'resetComplete'
 
+const EMAIL_FIELD_ID = 'signin-email'
+const PASSWORD_FIELD_ID = 'signin-password'
+
 /** The query parameter that opens this screen on asking for a reset link. */
 const RESET_PARAMETER = 'reset'
 
@@ -82,7 +85,13 @@ function SignInPanel({ onForgot }: { onForgot: () => void }) {
 
   async function attempt(): Promise<void> {
     setSubmitted(true)
-    if (emailError || passwordError || inFlight.current) return
+    if (emailError || passwordError) {
+      // A screen reader says nothing when a form is refused where it stands.
+      // Moving to the first field in error reads its label and its message.
+      document.getElementById(emailError ? EMAIL_FIELD_ID : PASSWORD_FIELD_ID)?.focus()
+      return
+    }
+    if (inFlight.current) return
     inFlight.current = true
     setBusy(true)
     setFailure(null)
@@ -124,7 +133,7 @@ function SignInPanel({ onForgot }: { onForgot: () => void }) {
           />
         )}
         <TextField
-          id="signin-email"
+          id={EMAIL_FIELD_ID}
           label="Email address"
           type="email"
           inputMode="email"
@@ -136,7 +145,7 @@ function SignInPanel({ onForgot }: { onForgot: () => void }) {
           required
         />
         <PasswordField
-          id="signin-password"
+          id={PASSWORD_FIELD_ID}
           label="Password"
           autoComplete="current-password"
           value={password}

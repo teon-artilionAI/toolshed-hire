@@ -6,7 +6,8 @@
  * branch can supply that many for the whole period. Until then there is
  * nothing honest to add.
  *
- * A press that works says so, names what went in, and offers the basket.
+ * A press that works says so, names what went in, and offers the basket. The
+ * same words go to the status region, so a screen reader announces them.
  *
  * A basket is for one period at one branch. When the card is on other dates or
  * another branch than the basket, nothing is added. The person is asked which
@@ -178,6 +179,10 @@ export default function AddToBasket({
         </div>
       )}
 
+      {/* One status region that is always on the page. A live region that
+          appears already holding its words is not announced, so the notice
+          is put inside this one rather than arriving with a region of its
+          own. Keeping one copy also stops browse mode reading it twice. */}
       <div role="status" className="mt-md">
         {matched && !added && (
           <p className="text-sm text-slate-soft">
@@ -185,10 +190,7 @@ export default function AddToBasket({
             free.
           </p>
         )}
-      </div>
-
-      {added && (
-        <div className="mt-md">
+        {added && (
           <Notice tone="success" title="Added to your hire basket">
             <p>{added.summary}</p>
             {added.nowHolds !== null && (
@@ -198,8 +200,8 @@ export default function AddToBasket({
               Go to my basket
             </Link>
           </Notice>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
