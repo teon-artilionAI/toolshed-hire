@@ -9,6 +9,21 @@ the whole design document.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-28
+
+Fixes from a screen reader pass with NVDA, and a safer order for the
+production deployment.
+
+### Fixed
+
+- Signing in with an empty field moves to the first field in error, so a
+  screen reader says what is wrong.
+- Adding a tool to the hire basket is announced, and the confirmation is read
+  once.
+- The production deployment moves the maintenance jobs only after the site is
+  on the new request path, so a failure there cannot leave the site
+  unreachable. A job that does not exist yet is recognised as missing.
+
 ## [1.0.1] - 2026-10-28
 
 The 1.0.0 deployment stopped before it changed anything, because the check
