@@ -33,7 +33,8 @@ fi
 for job in "toolshed-anonymise-customers-${environment}" "toolshed-prune-sessions-${environment}"; do
   if ! output="$(gcloud run jobs describe "${job}" --region="${REGION}" --format="value(name)" 2>&1)"; then
     case "${output}" in
-      *NOT_FOUND* | *"not found"* | *"could not be found"*)
+      # gcloud says "Cannot find job [name]" for a job that does not exist.
+      *"Cannot find job"* | *NOT_FOUND* | *"not found"* | *"could not be found"*)
         echo "::notice title=Job not created yet::${job} does not exist, so its image was not updated. Run create-maintenance-jobs.sh to create it."
         continue
         ;;
