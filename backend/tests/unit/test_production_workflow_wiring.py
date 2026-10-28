@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 WORKFLOW = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "deploy-production.yml"
+BUILD_SCRIPT = Path(__file__).resolve().parents[3] / "infra" / "scripts" / "build-and-push-image.sh"
 
 
 def deploy_job() -> dict:
@@ -46,8 +47,7 @@ def test_candidate_smoke_uses_an_id_token_and_the_headers_check_direct_refusal()
     headers = step(job, "Check the security headers and TLS of the deployed site")
     assert headers["env"]["IAM_ONLY_SERVICE_URL"] == "${{ steps.api.outputs.service_url }}"
     assert any(
-        candidate.get("name") == "Restore the deployer identity"
-        for candidate in job["steps"]
+        candidate.get("name") == "Restore the deployer identity" for candidate in job["steps"]
     )
 
 
@@ -57,5 +57,5 @@ def test_the_release_image_is_pushed_under_its_release_tag() -> None:
     assert job["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
     build = step(job, "Build and push the image")
     assert "RELEASE_TAG" not in build.get("env", {})
-    script = (WORKFLOW.parents[2] / "infra" / "scripts" / "build-and-push-image.sh").read_text(encoding="utf-8")
+    script = BUILD_SCRIPT.read_text(encoding="utf-8")
     assert 'docker push "${repository}:${RELEASE_TAG}"' in script
