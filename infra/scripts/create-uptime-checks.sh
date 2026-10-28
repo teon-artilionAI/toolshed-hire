@@ -10,6 +10,10 @@
 # hourly check cannot be an uptime check. The scheduler job is the chosen
 # design recorded in results/B3/B3.1-uptime-partial.md.
 #
+# It also creates the alert policy that emails the owner when the liveness
+# check fails from more than one region, which is Google's recommended
+# condition. One region failing alone is usually that region's network.
+#
 # Usage:
 #   UPTIME_HOST=toolshed-hire-staging.vercel.app \
 #     sh infra/scripts/create-uptime-checks.sh
@@ -69,6 +73,33 @@ else
     --user-labels="application=toolshed-hire,purpose=liveness"
 fi
 
+CHANNEL_NAME="Toolshed Hire owner email"
+UPTIME_POLICY_NAME="Toolshed Hire: liveness failing (${HOST})"
+# A failure from two or more of the three regions fires the alert.
+FAILING_REGIONS_THRESHOLD=1
+
+check_id="$(gcloud monitoring uptime list-configs   --project="$PROJECT" --configuration="$CONFIGURATION"   --filter="displayName=\"$LIVE_NAME\"" --format="value(name.basename())" | head -n 1)"
+if [ -z "$check_id" ]; then
+  echo "::error title=Liveness check missing::The liveness check $LIVE_NAME could not be read back, so no alert policy was created." >&2
+  exit 1
+fi
+
+channel="$(gcloud beta monitoring channels list   --project="$PROJECT" --configuration="$CONFIGURATION"   --filter="displayName=\"$CHANNEL_NAME\"" --format="value(name)" | head -n 1)"
+if [ -z "$channel" ]; then
+  echo "::error title=Channel missing::Run create-alert-policies.sh first, which creates the owner email channel." >&2
+  exit 1
+fi
+
+existing_policy="$(gcloud monitoring policies list   --project="$PROJECT" --configuration="$CONFIGURATION"   --filter="displayName=\"$UPTIME_POLICY_NAME\"" --format="value(name)" | head -n 1)"
+if [ -n "$existing_policy" ]; then
+  echo "Already present: $UPTIME_POLICY_NAME"
+else
+  echo "Creating $UPTIME_POLICY_NAME"
+  gcloud monitoring policies create     --project="$PROJECT" --configuration="$CONFIGURATION"     --display-name="$UPTIME_POLICY_NAME"     --notification-channels="$channel"     --combiner=OR     --condition-display-name="$UPTIME_POLICY_NAME"     --condition-filter="metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"$check_id\" AND resource.type=\"uptime_url\""     --aggregation="{\"alignmentPeriod\":\"1200s\",\"perSeriesAligner\":\"ALIGN_NEXT_OLDER\",\"crossSeriesReducer\":\"REDUCE_COUNT_FALSE\",\"groupByFields\":[\"resource.label.host\"]}"     --duration=60s     --if="> $FAILING_REGIONS_THRESHOLD"     --trigger-count=1     --documentation="The liveness route of $HOST failed from more than one region. Open $HOST/api/health/live, then the Cloud Run revision's logs. The incident procedure says what to do next."
+fi
+
+SCHEDULER_HEADER="User-Agent=Google-Cloud-Scheduler"
+
 scheduler_args() {
   printf '%s\n' \
     "--project=$PROJECT" \
@@ -77,7 +108,7 @@ scheduler_args() {
     "--time-zone=$TIME_ZONE" \
     "--uri=https://${HOST}${FULL_PATH}" \
     "--http-method=GET" \
-    "--headers=User-Agent=Google-Cloud-Scheduler" \
+\
     "--attempt-deadline=60s" \
     "--max-retry-attempts=5" \
     "--min-backoff=5s" \
@@ -111,11 +142,12 @@ state="$(scheduler_state)" || exit 1
 if [ "$state" = "present" ]; then
   echo "Updating Cloud Scheduler job: $JOB_NAME"
   # shellcheck disable=SC2046
-  gcloud scheduler jobs update http "$JOB_NAME" --schedule="$SCHEDULE" $(scheduler_args)
+  # update names the header flag --update-headers where create uses --headers.
+  gcloud scheduler jobs update http "$JOB_NAME" --schedule="$SCHEDULE"     --update-headers="$SCHEDULER_HEADER" $(scheduler_args)
 else
   echo "Creating Cloud Scheduler job: $JOB_NAME"
   # shellcheck disable=SC2046
-  gcloud scheduler jobs create http "$JOB_NAME" --schedule="$SCHEDULE" $(scheduler_args)
+  gcloud scheduler jobs create http "$JOB_NAME" --schedule="$SCHEDULE"     --headers="$SCHEDULER_HEADER" $(scheduler_args)
 fi
 
 echo "Liveness check:"
