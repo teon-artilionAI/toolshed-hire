@@ -151,6 +151,14 @@ jobs:
       - name: Make sure the new revision is the one serving
         run: bash infra/scripts/promote-api.sh
 
+      # The scheduled jobs run from an image named by digest. Moving them to
+      # the image now serving keeps them on the same code and on an image the
+      # cleanup policy keeps.
+      - name: Point the maintenance jobs at the deployed image
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+        run: bash infra/scripts/update-job-images.sh
+
       # The service requires IAM, so the smoke test carries an ID token of the
       # deploy account, which create-edge-identity.sh lets invoke it.
       - name: Get an ID token for the smoke test

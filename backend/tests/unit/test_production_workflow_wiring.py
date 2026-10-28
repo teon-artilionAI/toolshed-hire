@@ -59,3 +59,13 @@ def test_the_release_image_is_pushed_under_its_release_tag() -> None:
     assert "RELEASE_TAG" not in build.get("env", {})
     script = BUILD_SCRIPT.read_text(encoding="utf-8")
     assert 'docker push "${repository}:${RELEASE_TAG}"' in script
+
+
+def test_both_deploys_point_the_maintenance_jobs_at_the_deployed_image() -> None:
+    """A job left on an old image fails once the cleanup policy deletes it (B9.2, B9.6)."""
+    for name in ("deploy-production.yml", "deploy-staging.yml"):
+        document = yaml.safe_load((WORKFLOW.parent / name).read_text(encoding="utf-8"))
+        job = document["jobs"]["deploy"]
+        update = step(job, "Point the maintenance jobs at the deployed image")
+        assert update["run"] == "bash infra/scripts/update-job-images.sh"
+        assert update["env"]["IMAGE_DIGEST"] == "${{ steps.build.outputs.image_digest }}"
