@@ -11,6 +11,7 @@
  */
 
 import type {
+  AcceptedJsonOf,
   BodyOf,
   IsoDate,
   IsoTimestamp,
@@ -105,6 +106,11 @@ export type CancelReservationRequest = Schemas['CancellationRequest']
  * out.
  */
 export type ReservationListQuery = QueryOf<Paths['/api/reservations']['get']>
+
+/** What both re-send routes answer with. */
+export type ConfirmationResend = AcceptedJsonOf<
+  Paths['/api/me/reservations/{id}/confirmation/resend']['post']
+> & AcceptedJsonOf<Paths['/api/counter/reservations/{id}/confirmation/resend']['post']>
 
 /** `GET /api/reservations`. Newest first. */
 export type ReservationPage = Refine<

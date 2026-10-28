@@ -108,6 +108,8 @@ def post_reservation(
         AuthorisationFailure: If a customer names a customer profile. HTTP 403.
         BranchScopeError: If counter staff book at another branch. HTTP 403.
         AccountOnHoldError: If the customer's account is on hold. HTTP 403.
+        CustomerAnonymisedError: If the customer's personal details were
+            removed. HTTP 403.
         ValidationFailure: If a field is refused. HTTP 422, naming the field.
 
     """

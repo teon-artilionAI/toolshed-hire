@@ -15,6 +15,7 @@
 import { MAX_QUANTITY, MIN_QUANTITY } from '../../shared/api/catalogue'
 import type { CreateReservationRequest } from '../../shared/api/contract'
 import { formatDate } from '../../shared/format'
+import { closedDayProblem, openPeriod, type ClosedDays } from '../../shared/trading-days'
 
 /** A walk in at the counter usually wants the tool for the day. */
 export const DEFAULT_HIRE_DAYS = 1
@@ -54,9 +55,13 @@ export function isIsoDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
-/** The draft a booking opens with. Out today, back tomorrow, no tools yet. */
-export function emptyDraft(today: string): BookingDraft {
-  return { from: today, to: addDays(today, DEFAULT_HIRE_DAYS), lines: [] }
+/**
+ * The draft a booking opens with. Out today, back tomorrow, no tools yet, each
+ * moved on to the branch's next open day when it falls on a day it is closed.
+ */
+export function emptyDraft(today: string, closed: ClosedDays = new Map()): BookingDraft {
+  const { startIso, endIso } = openPeriod(today, DEFAULT_HIRE_DAYS, closed)
+  return { from: startIso, to: endIso, lines: [] }
 }
 
 /** Whether the period can be asked about at all. The server judges the rest. */
@@ -69,8 +74,14 @@ export function periodIsUsable(draft: Pick<BookingDraft, 'from' | 'to'>): boolea
  * has the last word.
  *
  * @param today The earliest day a hire may start, as `YYYY-MM-DD`.
+ * @param closed The days the branch is closed. A hire cannot go out or come
+ *   back on one of them.
  */
-export function draftProblems(draft: BookingDraft, today: string): DraftProblems {
+export function draftProblems(
+  draft: BookingDraft,
+  today: string,
+  closed: ClosedDays = new Map(),
+): DraftProblems {
   const problems: DraftProblems = {}
   if (!isIsoDate(draft.from)) {
     problems.from = 'Choose the day the equipment goes out.'
@@ -82,6 +93,10 @@ export function draftProblems(draft: BookingDraft, today: string): DraftProblems
   } else if (isIsoDate(draft.from) && draft.to <= draft.from) {
     problems.to = 'The day it comes back must be after the day it goes out. A one day hire comes back the next morning.'
   }
+  const closedOut = problems.from === undefined ? closedDayProblem(draft.from, closed, true) : null
+  if (closedOut !== null) problems.from = closedOut
+  const closedBack = problems.to === undefined ? closedDayProblem(draft.to, closed, false) : null
+  if (closedBack !== null) problems.to = closedBack
   if (draft.lines.length === 0) {
     problems.lines = 'Add at least one tool to the booking.'
   }

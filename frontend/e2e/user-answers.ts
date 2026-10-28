@@ -7,7 +7,9 @@
  * standing. They answer beside the dashboard and the report in
  * admin-answers.ts, with long names, long addresses and a company name that
  * runs on, which are what break a layout. One account is the owner's own, one
- * is locked and has never signed in, and one is deactivated.
+ * is locked and has never signed in, and one is deactivated. The customer on
+ * hold can also be read back with their personal details removed, the way the
+ * server answers once they are anonymised.
  */
 
 /** The owner's key, the same one the session in admin-answers.ts carries. */
@@ -18,6 +20,9 @@ export const LOCKED_ACCOUNT_NAME = 'Nomvuyiso Thandiwe Mahlangu-Vanderbijl'
 
 /** The customer the scans move, by the name at the head of the entry. */
 export const HELD_CUSTOMER_NAME = 'Bartholomew Christiaan van der Westhuizen-Mokoena'
+
+/** The key of that customer. */
+export const HELD_CUSTOMER_ID = '7a1d0c4e-0000-4000-8000-000000000401'
 
 /** A year, in milliseconds. */
 const A_YEAR_MS = 31_536_000_000
@@ -84,9 +89,23 @@ function customer(id: string, overrides: Record<string, unknown>) {
     tradeDiscountPercent: '10.00',
     noShowCount: 3,
     homeBranchCode: 'SMW',
+    anonymisedAt: null,
     ...overrides,
   }
 }
+
+/** The customer on hold once their personal details are removed. Their
+ *  standing, bookings not collected and home branch stay as they were. */
+export const ANONYMISED_HELD_CUSTOMER = customer('401', {
+  displayName: 'Former customer',
+  email: `former-customer-${HELD_CUSTOMER_ID}@anonymised.invalid`,
+  phone: 'Removed',
+  companyName: 'Former customer',
+  idDocumentLast4: '0000',
+  billingSuburb: 'Removed',
+  billingCity: 'Removed',
+  anonymisedAt: '2026-10-13T09:15:00+02:00',
+})
 
 const CUSTOMERS = {
   items: [
@@ -98,6 +117,9 @@ const CUSTOMERS = {
   pageSize: 20,
   total: 45,
 }
+
+/** The customers once the customer on hold is anonymised. */
+export const CUSTOMERS_AFTER_ANONYMISING = { ...CUSTOMERS, items: [ANONYMISED_HELD_CUSTOMER, ...CUSTOMERS.items.slice(1)] }
 
 /** What the routes of SC-23 answer. */
 export const USER_ANSWERS: Record<string, unknown> = {

@@ -10,7 +10,8 @@
  * phone held at the counter never has to scroll sideways. Each says who it is,
  * how the account stands, and whether there is a login, and offers a booking
  * when the account may book. An account that may not says why, and offers
- * none.
+ * none. A customer whose personal details were removed is still listed, so
+ * the owner can find them, and is never offered a booking.
  *
  * The line above the list is a polite status. It says that the search is
  * running and then how many matched, so a person who cannot see the list
@@ -33,8 +34,7 @@ import {
   ACCOUNT_STANDING_LABEL,
   ACCOUNT_STANDING_PILL,
   ID_DOCUMENT_LABEL,
-  NO_BOOKING_BECAUSE,
-  canBookFor,
+  noBookingReason,
 } from './counter-labels'
 import { bookingHref } from './counter-links'
 
@@ -66,13 +66,14 @@ function CustomerRow({
   onChoose: (customer: CustomerSummary) => void
 }) {
   const status = customer.accountStatus
+  const noBooking = noBookingReason(customer)
   return (
     <li className="rounded border border-line bg-surface p-md">
       <div className="flex flex-wrap items-start justify-between gap-md">
         <div className="min-w-0">
-          <p className="break-words font-medium text-ink">{customer.displayName}</p>
+          <p className="wrap-break-word font-medium text-ink">{customer.displayName}</p>
           {customer.companyName && (
-            <p className="break-words text-sm text-slate-soft">{customer.companyName}</p>
+            <p className="wrap-break-word text-sm text-slate-soft">{customer.companyName}</p>
           )}
           <p className="tabular mt-xs text-sm text-ink">{customer.phone}</p>
           <p className="break-all text-sm text-slate-soft">{customer.email ?? 'No email on file'}</p>
@@ -94,7 +95,7 @@ function CustomerRow({
             Show bookings{' '}
             <span className="sr-only">for {customer.displayName}</span>
           </button>
-          {canBookFor(status) && (
+          {noBooking === null && (
             <Link to={bookingHref(customer.id)} className="btn-primary px-md">
               <CalendarPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
               New booking{' '}
@@ -103,9 +104,7 @@ function CustomerRow({
           )}
         </div>
       </div>
-      {!canBookFor(status) && (
-        <p className="mt-sm text-sm font-medium text-status-overdue">{NO_BOOKING_BECAUSE[status]}</p>
-      )}
+      {noBooking !== null && <p className="mt-sm text-sm font-medium text-status-overdue">{noBooking}</p>}
     </li>
   )
 }

@@ -27,6 +27,10 @@
 #   SMOKE_TEST_MAX_ATTEMPTS              default 12
 #   SMOKE_TEST_RETRY_DELAY_SECONDS       default 10
 #   SMOKE_TEST_REQUEST_TIMEOUT_SECONDS   default 20
+#   SMOKE_TEST_ID_TOKEN                  a Google ID token for a service that
+#                                        requires IAM authentication (#96). It
+#                                        is sent as a bearer token and never
+#                                        printed.
 
 # -e is deliberately not set. A failing curl is an expected outcome of an
 # attempt, not a reason to abandon the retry loop.
@@ -38,6 +42,13 @@ HEALTH_PATH="${HEALTH_PATH:-/api/health}"
 SMOKE_TEST_MAX_ATTEMPTS="${SMOKE_TEST_MAX_ATTEMPTS:-12}"
 SMOKE_TEST_RETRY_DELAY_SECONDS="${SMOKE_TEST_RETRY_DELAY_SECONDS:-10}"
 SMOKE_TEST_REQUEST_TIMEOUT_SECONDS="${SMOKE_TEST_REQUEST_TIMEOUT_SECONDS:-20}"
+SMOKE_TEST_ID_TOKEN="${SMOKE_TEST_ID_TOKEN:-}"
+
+identity_header=()
+if [ -n "${SMOKE_TEST_ID_TOKEN}" ]; then
+  echo "::add-mask::${SMOKE_TEST_ID_TOKEN}"
+  identity_header=(--header "Authorization: Bearer ${SMOKE_TEST_ID_TOKEN}")
+fi
 
 EXPECTED_STATUS_CODE="200"
 EXPECTED_BODY_PATTERN='"status"[[:space:]]*:[[:space:]]*"healthy"'
@@ -55,7 +66,7 @@ while [ "${attempt}" -le "${SMOKE_TEST_MAX_ATTEMPTS}" ]; do
     --silent \
     --show-error \
     --location \
-    --max-time "${SMOKE_TEST_REQUEST_TIMEOUT_SECONDS}" \
+    --max-time "${SMOKE_TEST_REQUEST_TIMEOUT_SECONDS}"     "${identity_header[@]}" \
     --output "${response_body}" \
     --write-out '%{http_code}' \
     "${url}" || echo "000")"

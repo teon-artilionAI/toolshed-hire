@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools==84.0.0", "wheel==0.46.3"]
+requires = ["setuptools==84.2.1", "wheel==0.46.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "toolshed-hire-backend"
-version = "0.4.2"
+version = "1.0.0"
 description = "Toolshed Hire rental system backend, FastAPI and PostgreSQL walking skeleton"
 readme = "README.md"
 # Cloud Run and CI both run 3.12. The upper bound is left open so a developer
@@ -20,13 +20,13 @@ dependencies = [
     # FastAPI only sets a floor for Starlette. I pin it so the version that
     # serves requests is one I chose, and so the audit sees a fixed target.
     "starlette==1.7.0",
-    "uvicorn[standard]==0.34.0",
+    "uvicorn[standard]==0.54.0",
     "sqlmodel==0.0.22",
     "sqlalchemy==2.0.36",
     "alembic==1.14.0",
     "psycopg[binary]==3.2.3",
-    "pydantic==2.10.4",
-    "pydantic-settings==2.7.0",
+    "pydantic==2.14.0",
+    "pydantic-settings==2.15.0",
     "pyjwt==2.15.1",
     "passlib[bcrypt]==1.7.4",
     # passlib 1.7.4 reads bcrypt.__about__, which bcrypt 4.1 removed. 4.0.1 is
@@ -35,7 +35,16 @@ dependencies = [
     "bcrypt==4.0.1",
     # The HTTP client behind the Resend adapter. It was already pinned for the
     # test client, so the running application gains no new package.
+    "certifi==2026.10.19",
     "httpx==0.28.1",
+    # The official client for the private bucket damage photographs are kept
+    # in, and for the V4 links that open them. Only app/infrastructure/photo_store.py
+    # imports it.
+    "google-cloud-storage==3.15.0",
+    # Decodes each damage photograph and encodes it again from its pixels, which
+    # drops the EXIF block and any GPS position in it. Only
+    # app/infrastructure/photo_images.py imports it.
+    "pillow==13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -54,28 +63,15 @@ dev = [
 # Only what the running application imports is packaged. seed.py, seed_data,
 # seeding and scripts are tools I run from this directory against a database.
 # They are linted by `ruff check .` like everything else here, and they are
-# left out of the list below and out of the image on purpose.
-[tool.setuptools]
-packages = [
-    "app",
-    "app.api",
-    "app.api.routers",
-    "app.application",
-    "app.application.availability",
-    "app.application.booking",
-    "app.application.catalogue",
-    "app.application.hire",
-    "app.application.identity",
-    "app.application.money",
-    "app.application.notification",
-    "app.application.reporting",
-    "app.domain",
-    "app.domain.policies",
-    "app.domain.states",
-    "app.infrastructure",
-    "app.infrastructure.models",
-    "app.infrastructure.notification",
-]
+# left out of the image on purpose.
+#
+# The packages are found under app rather than listed by hand. A hand kept list
+# missed app.application.trading when it was added, the image was built without
+# it and staging would not start (#126), while CI, which installs in editable
+# mode, passed. A fast check now installs the project the way the image does.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -86,6 +82,7 @@ filterwarnings = ["error::DeprecationWarning:app.*"]
 # selected by `-m "not postgres"`, which is the worst of both.
 addopts = ["--strict-markers"]
 markers = [
+    "slow: a timing test that runs 100 real bcrypt verifications.",
     "postgres: requires a real PostgreSQL reached through DATABASE_URL. The pipeline runs these in a separate job, so every test without this marker must pass with no database at all.",
 ]
 
@@ -144,6 +141,21 @@ type = "forbidden"
 source_modules = ["app.infrastructure"]
 forbidden_modules = ["app.api"]
 
+# The maintenance jobs are composition roots like the API layer. They put a use
+# case together with its infrastructure, and nothing imports them. They build
+# what they need themselves and borrow nothing from the web process.
+[[tool.importlinter.contracts]]
+name = "Nothing imports the maintenance jobs"
+type = "forbidden"
+source_modules = ["app.domain", "app.application", "app.infrastructure", "app.api"]
+forbidden_modules = ["app.jobs"]
+
+[[tool.importlinter.contracts]]
+name = "The maintenance jobs do not import the API layer"
+type = "forbidden"
+source_modules = ["app.jobs"]
+forbidden_modules = ["app.api"]
+
 # The two inner layers hold rules and orchestration, and both are tested with
 # no database and no network. A framework or a driver imported into either one
 # would end that, however it arrived. allow_indirect_imports keeps the contract
@@ -153,6 +165,16 @@ name = "The domain and application layers import no framework and no driver"
 type = "forbidden"
 source_modules = ["app.domain", "app.application"]
 forbidden_modules = ["sqlalchemy", "sqlmodel", "fastapi", "starlette", "pydantic", "httpx", "psycopg"]
+allow_indirect_imports = true
+
+# The image library and the storage client are wrapped by one adapter each in
+# the infrastructure layer. Nothing above it imports either, so replacing one
+# touches one file.
+[[tool.importlinter.contracts]]
+name = "Only the infrastructure layer imports the image library and the storage client"
+type = "forbidden"
+source_modules = ["app.domain", "app.application", "app.api"]
+forbidden_modules = ["PIL", "google"]
 allow_indirect_imports = true
 
 [tool.ruff]
@@ -202,14 +224,22 @@ warn_unreachable = true
 module = ["passlib.*"]
 ignore_missing_imports = true
 
-# disallow_any_explicit is left on everywhere else, and off in exactly the seventeen
+# google-cloud-storage ships no type information and has no stub package on
+# PyPI. The one module that imports it, app/infrastructure/photo_store.py, calls
+# it through two small protocols of its own and wraps the signed URL in str(),
+# so the Any stops at that module.
+[[tool.mypy.overrides]]
+module = ["google.cloud", "google.cloud.*"]
+ignore_missing_imports = true
+
+# disallow_any_explicit is left on everywhere else, and off in exactly the nineteen
 # modules that declare pydantic models. The Any it objects to is not in this
 # source. pydantic marks BaseModel with @dataclass_transform, and for every
 # such class mypy synthesises a hidden "__mypy-replace" member whose keyword
 # parameters are typed Any. The flag then reports that synthesised member
 # against the class statement itself, so the only ways to satisfy it are to
 # stop using pydantic or to switch the flag off for the file. Narrowing it to
-# these seventeen modules keeps the check live across the domain, the application
+# these nineteen modules keeps the check live across the domain, the application
 # layer and the routers, which is where an Any written by hand would actually
 # do damage.
 [[tool.mypy.overrides]]
@@ -223,11 +253,14 @@ module = [
     "app.api.return_schemas",
     "app.api.counter_schemas",
     "app.api.damage_schemas",
+    "app.api.damage_photo_schemas",
     "app.api.report_schemas",
+    "app.api.statement_schemas",
     "app.api.admin_schemas",
     "app.api.admin_catalogue_schemas",
     "app.api.admin_asset_schemas",
     "app.api.admin_user_schemas",
+    "app.api.closure_day_schemas",
     "app.config",
     "app.config_limits",
     "app.config_clock",

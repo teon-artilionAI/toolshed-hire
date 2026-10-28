@@ -42,7 +42,7 @@ function FormFrame({ title, children }: { title: string; children: ReactNode }) 
   }, [])
   return (
     <section aria-labelledby={FORM_HEADING_ID} className="mb-lg min-w-0 rounded-lg border border-line p-md">
-      <h3 id={FORM_HEADING_ID} ref={heading} tabIndex={-1} className="mb-md break-words text-base font-semibold text-ink">
+      <h3 id={FORM_HEADING_ID} ref={heading} tabIndex={-1} className="mb-md wrap-break-word text-base font-semibold text-ink">
         {title}
       </h3>
       {children}

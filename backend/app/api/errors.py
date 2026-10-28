@@ -60,16 +60,21 @@ from app.domain.errors import (
     AuthenticationFailure,
     AuthorisationFailure,
     BranchScopeError,
+    CustomerAnonymisedError,
     DomainError,
     EmailNotVerifiedError,
+    FeatureSwitchedOff,
     InactiveAccount,
     InvalidCredentials,
     NotFound,
     OriginNotAllowed,
+    PhotoLimitReached,
+    PhotoTooLarge,
     ResetLinkInvalid,
     SessionExpired,
     StateTransitionError,
     TooManyAttempts,
+    UnsupportedPhoto,
     ValidationFailure,
     VerificationLinkInvalid,
 )
@@ -103,9 +108,14 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     InactiveAccount: status.HTTP_403_FORBIDDEN,
     BranchScopeError: status.HTTP_403_FORBIDDEN,
     AccountOnHoldError: status.HTTP_403_FORBIDDEN,
+    CustomerAnonymisedError: status.HTTP_403_FORBIDDEN,
     EmailNotVerifiedError: status.HTTP_403_FORBIDDEN,
     AllocationConflictError: status.HTTP_409_CONFLICT,
     StateTransitionError: status.HTTP_409_CONFLICT,
+    PhotoLimitReached: status.HTTP_409_CONFLICT,
+    PhotoTooLarge: status.HTTP_413_CONTENT_TOO_LARGE,
+    UnsupportedPhoto: status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+    FeatureSwitchedOff: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 # Returned to the caller in place of any unhandled exception detail. The
@@ -206,7 +216,12 @@ async def handle_domain_error(request: Request, exc: Exception) -> Response:
             refused_because={"code": exc.code, "rule": exc.rule, "detail": exc.detail},
         )
     status_code = DOMAIN_ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
-    log = logger.warning if status_code < status.HTTP_500_INTERNAL_SERVER_ERROR else logger.error
+    # A feature this deployment has not switched on is a known state and not a
+    # fault, so it is a warning like any other refusal.
+    expected = status_code < status.HTTP_500_INTERNAL_SERVER_ERROR or isinstance(
+        exc, FeatureSwitchedOff
+    )
+    log = logger.warning if expected else logger.error
     log(
         "api.domain_error",
         extra={

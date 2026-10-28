@@ -28,10 +28,12 @@ from app.application.ownership import owner_scope_for
 from app.application.unit_of_work import UnitOfWork
 from app.domain.audit import StateValue
 from app.domain.booking import Reservation
+from app.domain.business_time import in_business_time
 from app.domain.enums import UserRole
 from app.domain.errors import NotFound
 from app.domain.identity import Actor, CustomerProfile, ensure_branch_scope
 from app.domain.period import ensure_branch_open_for_start
+from app.domain.trading_calendar import ensure_hire_days_open
 
 logger = logging.getLogger(__name__)
 
@@ -142,10 +144,15 @@ def customer_of(uow: UnitOfWork, reservation: Reservation) -> CustomerProfile:
 def ensure_collection_branch_open(
     uow: UnitOfWork, reservation: Reservation, now: datetime
 ) -> None:
-    """Refuse a move that books a hire for today once its branch has closed for the day (BR-04).
+    """Refuse a move on a hire its branch cannot hand over or take back.
+
+    The collection day and the return day have to be days the branch trades,
+    and a hire for today cannot be held or confirmed once today's closing time
+    has passed (BR-04).
 
     Raises:
-        ValidationFailure: If the hire starts today and the branch has closed.
+        ValidationFailure: If the branch is closed on the collection or the
+            return day, or if the hire starts today and the branch has closed.
         LookupError: If the collection branch cannot be read. A reservation
             carries a foreign key to its branch and nothing is ever deleted,
             so this is a fault in the data.
@@ -157,7 +164,11 @@ def ensure_collection_branch_open(
             f"Attempted to read collection branch {reservation.branch_id} of reservation "
             f"{reservation.reference}, and it could not be read."
         )
-    ensure_branch_open_for_start(reservation.period, now=now, closes_at=branch.closes_at)
+    ensure_hire_days_open(reservation.period, branch.calendar)
+    today = in_business_time(now).date()
+    ensure_branch_open_for_start(
+        reservation.period, now=now, hours_today=branch.calendar.hours_on(today)
+    )
 
 
 def state_of(reservation: Reservation) -> dict[str, StateValue]:

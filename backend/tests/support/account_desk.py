@@ -46,9 +46,10 @@ from app.domain.customer_account import CustomerDetails
 from app.domain.enums import IdDocType, UserRole
 from app.domain.identity import Actor, Branch
 from app.domain.notification import EmailMessage
+from app.domain.trading_calendar import BranchCalendar
 from app.infrastructure.notification import FakeEmailGateway
-from tests.support.factories import CLOSES_AT
 from tests.support.identity_desk import CLIENT, Desk
+from tests.support.memory_breach import FakeBreachedPasswordChecker
 from tests.support.memory_crypto import CountingPasswordHasher
 from tests.support.memory_identity import KNOWN_EMAIL
 
@@ -102,10 +103,12 @@ class AccountDesk(Desk):
     gateway: FakeEmailGateway = field(default_factory=FakeEmailGateway)
     gateway_override: NotificationGateway | None = None
     hasher: CountingPasswordHasher = field(default_factory=CountingPasswordHasher)
+    breaches: FakeBreachedPasswordChecker = field(default_factory=FakeBreachedPasswordChecker)
     account_rules: AccountThrottleRules = DEFAULT_ACCOUNT_RULES
     branch: Branch = field(
         default_factory=lambda: Branch(
-            id=uuid4(), code=HOME_BRANCH_CODE, name="Cape Town CBD", closes_at=CLOSES_AT
+            id=uuid4(), code=HOME_BRANCH_CODE, name="Cape Town CBD",
+            calendar=BranchCalendar.standard()
         )
     )
 
@@ -120,7 +123,13 @@ class AccountDesk(Desk):
     def register(self, **overrides: object) -> MailExpectation:
         """Run the registration use case once, with any field of the command replaced."""
         use_case = RegisterCustomerUseCase(
-            self._uow(), self.clock, self.hasher, self.throttle, self.mailer(), self.account_rules
+            self._uow(),
+            self.clock,
+            self.hasher,
+            self.throttle,
+            self.mailer(),
+            self.account_rules,
+            self.breaches,
         )
         return use_case.execute(registration(**overrides))
 
@@ -152,7 +161,12 @@ class AccountDesk(Desk):
     ) -> None:
         """Run the use case that redeems a reset token."""
         use_case = CompletePasswordResetUseCase(
-            self._uow(), self.clock, self.hasher, self.throttle, self.account_rules
+            self._uow(),
+            self.clock,
+            self.hasher,
+            self.throttle,
+            self.account_rules,
+            self.breaches,
         )
         use_case.execute(
             CompletePasswordResetCommand(token=token, new_password=new_password, client=client)

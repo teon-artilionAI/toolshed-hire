@@ -13,7 +13,7 @@ import { jsonResponse, problemResponse } from '../../test/api-mock'
 import type { RouteHandler } from '../../test/api-mock'
 import { TEST_NOW, TEST_TODAY } from '../../test/catalogue-samples'
 import { THANDI } from '../../test/counter-samples'
-import { DIARY_ROUTE, DUE_OUT, MARKED_NO_SHOW, noShowRoute } from '../../test/overview-samples'
+import { DIARY_ROUTE, DUE_OUT, MARKED_NO_SHOW, noShowRoute, OPEN_DAY } from '../../test/overview-samples'
 import { SCREEN_WAIT } from '../../test/render-app'
 import { REFERENCE } from '../../test/reservation-samples'
 import { diaryAnswering, openDiary } from './SC11-test-kit'
@@ -22,11 +22,11 @@ const MARK = `Mark as no show ${REFERENCE}`
 const REASON_BOX = 'Why did the booking not go out?'
 
 /** The diary with Thandi's booking due out today. */
-const DUE_TODAY: RouteHandler = diaryAnswering([{ date: TEST_TODAY, collections: [DUE_OUT], returns: [] }])
+const DUE_TODAY: RouteHandler = diaryAnswering([{ date: TEST_TODAY, trading: OPEN_DAY, collections: [DUE_OUT], returns: [] }])
 
 /** The same diary once the server has the booking down as a no show. */
 const MISSED_TODAY: RouteHandler = diaryAnswering([
-  { date: TEST_TODAY, collections: [{ ...DUE_OUT, status: 'NO_SHOW', canMarkNoShow: false }], returns: [] },
+  { date: TEST_TODAY, trading: OPEN_DAY, collections: [{ ...DUE_OUT, status: 'NO_SHOW', canMarkNoShow: false }], returns: [] },
 ])
 
 beforeEach(() => {

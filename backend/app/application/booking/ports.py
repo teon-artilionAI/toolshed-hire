@@ -42,9 +42,10 @@ class DueNoShow:
 
     Attributes:
         reservation: The reservation with its lines and allocations.
-        branch_closes_at: When its collection branch closes, on a clock in
-            Cape Town. The sweep turns it into the instant the branch closed
-            on the first day of the hire.
+        branch_closes_at: When its collection branch closes today, on a clock
+            in Cape Town, which is what chose it. The sweep reads the closing
+            time of the hire's own first day from the branch's trading
+            calendar, because the first day may be an earlier weekday.
 
     """
 

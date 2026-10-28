@@ -10,6 +10,7 @@ hole that would otherwise stay invisible until it is exploited.
 from __future__ import annotations
 
 import logging
+import re
 
 from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -45,6 +46,9 @@ LOCAL_REVISION = "local"
 RESEND_API_KEY_PLACEHOLDER = "not-configured-yet"
 # The sender Resend accepts without a verified domain.
 DEFAULT_EMAIL_FROM = "Toolshed Hire <onboarding@resend.dev>"
+# What Cloud Storage allows in a bucket name: 3 to 63 lower case letters,
+# digits, dashes, underscores and dots, starting and ending with a letter or digit.
+BUCKET_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$")
 
 
 class Settings(AttemptLimitSettings, ClockSettings):
@@ -116,6 +120,11 @@ class Settings(AttemptLimitSettings, ClockSettings):
         validation_alias="EMAIL_ALLOWED_RECIPIENT",
         description="When set, the only address the service will send email to",
     )
+    photo_bucket: str | None = Field(
+        default=None,
+        validation_alias="PHOTO_BUCKET",
+        description="The private bucket for damage photographs. Unset means photographs are off",
+    )
 
     @field_validator("database_url")
     @classmethod
@@ -153,6 +162,20 @@ class Settings(AttemptLimitSettings, ClockSettings):
         if value is None:
             return None
         return value.strip().lower() or None
+
+    @field_validator("photo_bucket")
+    @classmethod
+    def check_photo_bucket(cls, value: str | None) -> str | None:
+        """Read a blank bucket as none, and refuse a name Cloud Storage would never accept."""
+        if value is None or not value.strip():
+            return None
+        bucket = value.strip()
+        if not BUCKET_NAME_PATTERN.match(bucket):
+            raise ValueError(
+                "PHOTO_BUCKET must be a Cloud Storage bucket name of 3 to 63 lower case "
+                "letters, digits, dashes, underscores and dots."
+            )
+        return bucket
 
     @field_validator("jwt_algorithm")
     @classmethod
@@ -246,6 +269,11 @@ class Settings(AttemptLimitSettings, ClockSettings):
         )
 
     @property
+    def photos_configured(self) -> bool:
+        """Return True when there is a bucket to keep damage photographs in."""
+        return self.photo_bucket is not None
+
+    @property
     def email_configured(self) -> bool:
         """Return True when there is an API key to send email with."""
         return self.resend_api_key is not None
@@ -276,6 +304,7 @@ class Settings(AttemptLimitSettings, ClockSettings):
             "email_delivery": "configured" if self.email_configured else "not-configured",
             "email_sender": self.email_from,
             "email_recipient_restriction": "on" if self.email_allowed_recipient else "off",
+            "photo_storage": "configured" if self.photos_configured else "not-configured",
             "test_business_time": str(self.test_business_time or "off"),
             **self.attempt_limit_values(),
         }

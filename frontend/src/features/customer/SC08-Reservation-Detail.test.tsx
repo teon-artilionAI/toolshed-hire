@@ -13,7 +13,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Reservation } from '../../shared/api/contract'
-import { jsonResponse, mockApi, neverAnswers, problemResponse } from '../../test/api-mock'
+import { acceptedResponse, jsonResponse, mockApi, neverAnswers, problemResponse } from '../../test/api-mock'
 import type { ApiMock, RouteTable } from '../../test/api-mock'
 import { TEST_NOW } from '../../test/catalogue-samples'
 import { findScreenHeading, renderApp } from '../../test/render-app'
@@ -23,6 +23,7 @@ import {
   HELD,
   REFERENCE,
   cancelRoute,
+  confirmationResendRoute,
   detailRoute,
 } from '../../test/reservation-samples'
 import { CUSTOMER, signedInAs } from '../../test/session-samples'
@@ -56,6 +57,83 @@ async function openQuestion(user: ReturnType<typeof userEvent.setup>): Promise<v
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: TEST_NOW })
+})
+
+describe('sending the confirmation again', () => {
+  it('says the message was sent, and sends nothing else', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const route = confirmationResendRoute(CONFIRMED.id)
+    const network = await openBooking({
+      [DETAIL]: () => jsonResponse(CONFIRMED),
+      [route]: () => acceptedResponse({ emailDeliverable: true }),
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Send the confirmation again' }))
+
+    expect(
+      await screen.findByText(`The confirmation for ${REFERENCE} has been sent again.`),
+    ).toBeVisible()
+    expect(network.requestsTo(route)).toHaveLength(1)
+  })
+
+  it('says plainly when restricted email cannot reach the customer', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const route = confirmationResendRoute(CONFIRMED.id)
+    await openBooking({
+      [DETAIL]: () => jsonResponse(CONFIRMED),
+      [route]: () => acceptedResponse({ emailDeliverable: false }),
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Send the confirmation again' }))
+
+    expect(
+      await screen.findByText(/will not reach the customer/),
+    ).toBeVisible()
+    expect(screen.getByText('Restricted email')).toBeVisible()
+  })
+
+  it('says the three-per-hour limit in plain words with the wait', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const route = confirmationResendRoute(CONFIRMED.id)
+    await openBooking({
+      [DETAIL]: () => jsonResponse(CONFIRMED),
+      [route]: () =>
+        problemResponse(429, {
+          slug: 'too-many-attempts',
+          detail:
+            'This booking has had its confirmation sent again three times in the last hour. Try again later.',
+          requestId: 'req-resend-429',
+          headers: { 'Retry-After': '90' },
+        }),
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Send the confirmation again' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Too many confirmation re-sends')
+    expect(alert).toHaveTextContent('three times in the last hour')
+    expect(alert).toHaveTextContent('Wait 2 minutes and try again.')
+    expect(alert).toHaveTextContent('req-resend-429')
+    expect(alert).not.toHaveTextContent('/api/')
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('keeps an unrelated server fault generic', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const route = confirmationResendRoute(CONFIRMED.id)
+    await openBooking({
+      [DETAIL]: () => jsonResponse(CONFIRMED),
+      [route]: () => problemResponse(500, { requestId: 'req-resend-500' }),
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Send the confirmation again' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('We could not send the confirmation again')
+    expect(alert).toHaveTextContent('Something went wrong on our side')
+    expect(alert).toHaveTextContent('req-resend-500')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible()
+  })
 })
 
 describe('the booking', () => {

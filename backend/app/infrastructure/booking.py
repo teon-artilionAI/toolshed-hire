@@ -40,7 +40,7 @@ from datetime import date, datetime
 from typing import Final
 from uuid import UUID
 
-from sqlalchemy import func, literal_column, or_, text
+from sqlalchemy import and_, func, literal_column, or_, text
 from sqlmodel import Session, col, select
 
 from app.application.booking.ports import DueNoShow
@@ -56,7 +56,13 @@ from app.domain.business_time import in_business_time
 from app.domain.enums import ReservationStatus
 from app.infrastructure.booking_mapping import aggregates_of, line_row, reservation_row
 from app.infrastructure.booking_query import SqlReservationReads, key_condition
-from app.infrastructure.models import AssetAllocation, Branch, CustomerProfile, Reservation
+from app.infrastructure.models import (
+    AssetAllocation,
+    Branch,
+    BranchTradingHours,
+    CustomerProfile,
+    Reservation,
+)
 from app.infrastructure.schema_ddl import REFERENCE_SEQUENCE
 
 logger = logging.getLogger(__name__)
@@ -183,18 +189,31 @@ class SqlReservationRepository:
 
         A first day before today is always past its closing time. A first day
         of today is past it once the clock in Cape Town is later than the time
-        the branch closes. The range on the first day is stated on its own as
-        well, so the partial index can bound the scan.
+        the branch closes today, read from its trading hours for today's
+        weekday. A day with no hours falls back to the branch's old single
+        closing time, so a booking made for such a day before the calendar
+        existed is still found, and the sweep then asks the calendar whether to
+        mark it. The weekday is today's, worked out here, so the statement needs
+        no date function of the database. The range on the first day is stated
+        on its own as well, so the partial index can bound the scan.
         """
         local = in_business_time(now)
         today, time_of_day = local.date(), local.time()
+        closes_at = func.coalesce(col(BranchTradingHours.closes_at), col(Branch.closes_at))
         statement = (
-            select(Reservation, col(Branch.closes_at))
+            select(Reservation, closes_at)
             .join(Branch, col(Branch.id) == col(Reservation.branch_id))
+            .outerjoin(
+                BranchTradingHours,
+                and_(
+                    col(BranchTradingHours.branch_id) == col(Reservation.branch_id),
+                    col(BranchTradingHours.weekday) == today.isoweekday(),
+                ),
+            )
             .where(
                 col(Reservation.status) == literal_column(CONFIRMED_STATUS_LITERAL),
                 col(Reservation.start_date) <= today,
-                or_(col(Reservation.start_date) < today, col(Branch.closes_at) < time_of_day),
+                or_(col(Reservation.start_date) < today, closes_at < time_of_day),
             )
             .order_by(col(Reservation.start_date), col(Reservation.id))
             .limit(limit)

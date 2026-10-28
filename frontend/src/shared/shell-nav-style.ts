@@ -11,7 +11,7 @@ export const MAX_TAB_BAR_ITEMS = 5
 /** One tab. 56px tall with 8px between neighbours, which is what a thumb
  *  at a counter needs. */
 export const TAB_CLASS =
-  'flex min-h-[3.5rem] flex-1 cursor-pointer flex-col items-center justify-center gap-xs rounded px-xs py-sm text-xs leading-tight transition-colors'
+  'flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-xs rounded px-xs py-sm text-xs leading-tight transition-colors'
 
 /** Active state is amber with ink text, which passes contrast where amber
  *  with white would not. */

@@ -35,6 +35,7 @@ from tests.support.counter_api import (
     DIARY_DAY_MEMBERS,
     DIARY_MEMBERS,
     DIARY_RETURN_MEMBERS,
+    MONDAY_TRADING,
     mark_no_show,
     read_diary,
 )
@@ -78,8 +79,32 @@ class TestTheShape:
         assert diary.keys() == DIARY_MEMBERS
         assert (diary["branchCode"], diary["branchName"]) == (world.branch.code, world.branch.name)
         (day,) = diary["days"]
-        assert day == {"date": "2026-03-02", "collections": [], "returns": []}
+        assert day == {
+            "date": "2026-03-02",
+            "trading": MONDAY_TRADING,
+            "collections": [],
+            "returns": [],
+        }
         assert day.keys() == DIARY_DAY_MEMBERS
+
+    def test_a_sunday_is_shown_closed_with_its_reason(
+        self, booking: BookingClient, assistant: UserAccount
+    ) -> None:
+        diary = answered(read_diary(booking, assistant, **{"from": "2026-03-08", "days": 1}))
+        (sunday,) = diary["days"]
+        assert sunday["trading"] == {
+            "open": False,
+            "opensAt": None,
+            "closesAt": None,
+            "closedReason": "is closed on Sundays",
+            "closedKind": "weekly",
+        }
+
+    def test_a_saturday_shows_the_early_close(
+        self, booking: BookingClient, assistant: UserAccount
+    ) -> None:
+        diary = answered(read_diary(booking, assistant, **{"from": "2026-03-07", "days": 1}))
+        assert diary["days"][0]["trading"]["closesAt"] == "13:00"
 
     def test_a_run_of_days_has_one_entry_for_each_day_in_order(
         self, booking: BookingClient, assistant: UserAccount

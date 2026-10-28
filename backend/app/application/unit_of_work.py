@@ -22,9 +22,12 @@ from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
 from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_photo_ports import DamagePhotoRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
+from app.application.identity.anonymisation_ports import PersonalDataEraser
 from app.application.identity.customer_directory import CustomerDirectory
+from app.application.identity.export_ports import PersonalDataExporter
 from app.application.identity.ports import (
     AccountRepository,
     BranchRepository,
@@ -34,6 +37,7 @@ from app.application.identity.ports import (
 from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
+from app.application.trading.closure_ports import ClosureDayRepository
 
 
 class UnitOfWork(Protocol):
@@ -65,8 +69,18 @@ class UnitOfWork(Protocol):
         ...
 
     @property
+    def damage_photos(self) -> DamagePhotoRepository:
+        """Return the records of the photographs attached to damage reports."""
+        ...
+
+    @property
     def branches(self) -> BranchRepository:
         """Return the branch repository of this transaction."""
+        ...
+
+    @property
+    def closure_days(self) -> ClosureDayRepository:
+        """Return the closure days the owner adds and cancels."""
         ...
 
     @property
@@ -97,6 +111,16 @@ class UnitOfWork(Protocol):
     @property
     def customer_directory(self) -> CustomerDirectory:
         """Return the customer lookup of this transaction."""
+        ...
+
+    @property
+    def personal_data(self) -> PersonalDataEraser:
+        """Return where a customer's personal details are written over when they are anonymised."""
+        ...
+
+    @property
+    def personal_data_export(self) -> PersonalDataExporter:
+        """Return where everything held about a customer is read for an export."""
         ...
 
     @property

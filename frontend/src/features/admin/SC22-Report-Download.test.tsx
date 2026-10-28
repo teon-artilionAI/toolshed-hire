@@ -9,7 +9,7 @@
  * server sent. A failure is shown, and a second press tries again.
  */
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock, MockInstance } from 'vitest'
 import { neverAnswers, problemResponse } from '../../test/api-mock'
@@ -20,6 +20,8 @@ import { ACCESS_TOKEN, bearerOf } from '../../test/session-samples'
 import { findRows, openReport } from './SC22-test-kit'
 
 const TEMPORARY_ADDRESS = 'blob:toolshed-test/report'
+const CHARGES_ROUTE = 'GET /api/admin/reports/charges.csv'
+const CHARGES_NAME = 'toolshed-charges-2026-09.csv'
 
 interface SavedFile {
   name: string
@@ -121,5 +123,30 @@ describe('downloading the CSV', () => {
 
     expect(await screen.findByRole('alert', {}, SCREEN_WAIT)).toHaveTextContent('We could not download the CSV')
     expect(saved).toEqual([])
+  })
+})
+
+
+describe('downloading the month end charges', () => {
+  it('sends the chosen month and branch and saves the server file', async () => {
+    const { user, network } = await openReport({
+      [CHARGES_ROUTE]: () =>
+        new Response('# Charges\r\n', {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/csv',
+            'Content-Disposition': `attachment; filename="${CHARGES_NAME}"`,
+          },
+        }),
+    }, '/admin/reports?from=2026-09-01&to=2026-10-01&groupBy=asset&branchCode=CBD')
+    await findRows()
+
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-09' } })
+    await user.click(screen.getByRole('button', { name: "Download the month's charges" }))
+
+    expect(await screen.findByText(`Downloaded ${CHARGES_NAME}.`, {}, SCREEN_WAIT)).toBeVisible()
+    const [request] = network.requestsTo(CHARGES_ROUTE)
+    expect(Object.fromEntries(request.query)).toEqual({ month: '2026-09', branchCode: 'CBD' })
+    expect(saved).toEqual([{ name: CHARGES_NAME, href: TEMPORARY_ADDRESS }])
   })
 })

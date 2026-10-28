@@ -54,8 +54,9 @@ export const OPEN_DAMAGE_STATUSES: readonly DamageStatus[] = ['OPEN', 'UNDER_REP
 /** The page size the list of a unit's reports asks for. The API's own default. */
 export const DAMAGE_REPORT_PAGE_SIZE = 20
 
-/** An instant the contract never sends as null. */
-function readTimestamp(record: Record<string, unknown>, key: string, path: string): IsoTimestamp {
+/** An instant the contract never sends as null. damage-photos.ts reads its
+ *  instants with it too. */
+export function readTimestamp(record: Record<string, unknown>, key: string, path: string): IsoTimestamp {
   const value = readNullableTimestamp(record, key, path)
   if (value === null) {
     throw malformedResponse(path, `Expected field ${key} from ${path} to be an instant, got null.`)

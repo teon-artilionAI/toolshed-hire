@@ -12,6 +12,12 @@ refused a booking by the rule every booking already asks. Releasing a hold
 keeps the count of bookings the customer did not collect. Asking for the
 standing a customer already has changes nothing.
 
+`POST /api/admin/customers/{id}/anonymise` removes a customer's personal
+details when they ask (#113), with a reason the audit event keeps, and answers
+200 with the `CustomerSummary`, which is now a "Former customer". Their hires,
+charges and deposits stay. A customer anonymised already, or with a booking
+open, a hire not yet settled or money owing, is refused with 409.
+
 Every route is for an administrator alone, and the write reads the account
 again under a row lock for the length of the change (`FreshAdminUser`).
 Counter staff and customers are refused with 403.
@@ -25,14 +31,26 @@ from fastapi import APIRouter, Query, status
 from pydantic import StringConstraints
 
 from app.api.admin_presenter import ADMIN_PREFIX
-from app.api.admin_user_deps import ChangeCustomerStanding, ReadCustomerListDependency
+from app.api.admin_user_deps import (
+    AnonymiseCustomer,
+    ChangeCustomerStanding,
+    ChangeTradeDiscount,
+    ReadCustomerListDependency,
+)
 from app.api.admin_user_presenter import (
     CUSTOMERS_PATH,
     IDENTITY_TAG,
     CustomerPathKey,
+    anonymisation_command,
     standing_command,
+    trade_discount_command,
 )
-from app.api.admin_user_schemas import CustomerStatusRequest
+from app.api.admin_user_schemas import (
+    ANONYMISATION_REFUSED_RESPONSE,
+    AnonymisationRequest,
+    CustomerStatusRequest,
+    TradeDiscountRequest,
+)
 from app.api.booking_deps import actor_of
 from app.api.customer_schemas import (
     UNKNOWN_CUSTOMER_RESPONSE,
@@ -146,4 +164,63 @@ def post_customer_status(
 
     """
     summary = use_case.execute(standing_command(user, customer_id, payload))
+    return CustomerSummaryResponse.model_validate(summary)
+
+
+@router.post(
+    "/{id}/trade-discount",
+    response_model=CustomerSummaryResponse,
+    summary="Set a trade customer's discount from the next booking",
+    responses={
+        status.HTTP_403_FORBIDDEN: ADMIN_ONLY_RESPONSE,
+        status.HTTP_404_NOT_FOUND: UNKNOWN_CUSTOMER_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: REFUSED_BODY_RESPONSE,
+    },
+)
+def post_trade_discount(
+    customer_id: CustomerPathKey,
+    payload: TradeDiscountRequest,
+    user: FreshAdminUser,
+    use_case: ChangeTradeDiscount,
+) -> CustomerSummaryResponse:
+    """Set the discount and record the old and new value, in one transaction.
+
+    Raises:
+        NotFound: If there is no customer with this key. HTTP 404.
+        ValidationFailure: If the customer is not a trade account, or the
+            value is out of range or has more than two decimals. HTTP 422,
+            naming `tradeDiscountPercent`.
+
+    """
+    summary = use_case.execute(trade_discount_command(user, customer_id, payload))
+    return CustomerSummaryResponse.model_validate(summary)
+
+
+@router.post(
+    "/{id}/anonymise",
+    response_model=CustomerSummaryResponse,
+    summary="Remove a customer's personal details at their request, with the reason",
+    responses={
+        status.HTTP_403_FORBIDDEN: ADMIN_ONLY_RESPONSE,
+        status.HTTP_404_NOT_FOUND: UNKNOWN_CUSTOMER_RESPONSE,
+        status.HTTP_409_CONFLICT: ANONYMISATION_REFUSED_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: REFUSED_BODY_RESPONSE,
+    },
+)
+def post_customer_anonymisation(
+    customer_id: CustomerPathKey,
+    payload: AnonymisationRequest,
+    user: FreshAdminUser,
+    use_case: AnonymiseCustomer,
+) -> CustomerSummaryResponse:
+    """Anonymise the customer and record it with the reason, in one transaction.
+
+    Raises:
+        NotFound: If there is no customer with this key. HTTP 404.
+        StateTransitionError: If the customer was anonymised already or still
+            has something open. HTTP 409.
+        ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+
+    """
+    summary = use_case.execute(anonymisation_command(user, customer_id, payload))
     return CustomerSummaryResponse.model_validate(summary)

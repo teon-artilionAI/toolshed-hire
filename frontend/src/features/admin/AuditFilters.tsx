@@ -173,7 +173,7 @@ export default function AuditFilters({
       {filters.actorUserId !== null && (
         <p className="mt-md flex flex-wrap items-center gap-sm rounded bg-muted px-md py-xs text-sm text-ink">
           <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 break-words">
+          <span className="min-w-0 wrap-break-word">
             Only what {actorName ?? 'one person'} did.
           </span>
           <button

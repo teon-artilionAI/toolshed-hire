@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field, replace
-from datetime import datetime, time
+from datetime import datetime
 from decimal import Decimal
 from types import TracebackType
 from typing import Final, Self
@@ -31,6 +31,7 @@ from app.domain.asset_register import ASSET_TAG, RegisteredUnit
 from app.domain.audit import AuditEvent
 from app.domain.catalogue import Asset, ProductModel
 from app.domain.identity import Branch
+from app.domain.trading_calendar import BranchCalendar
 from tests.support.memory_outbox import StoreFault
 from tests.support.memory_register_reads import NO_HISTORY, MemoryAssetRegister
 
@@ -108,7 +109,7 @@ class RegisterStore:
 
 def a_branch(code: str = "CBD", name: str = "Cape Town CBD") -> Branch:
     """Return a trading branch."""
-    return Branch(id=uuid4(), code=code, name=name, closes_at=time(17, 0))
+    return Branch(id=uuid4(), code=code, name=name, calendar=BranchCalendar.standard())
 
 
 def a_model(name: str = "Bosch GBH 2-26 DRE rotary hammer") -> ProductModel:

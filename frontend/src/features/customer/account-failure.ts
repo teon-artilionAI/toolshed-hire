@@ -14,7 +14,7 @@ import { isApiError } from '../../shared/api-problem'
 import { fieldErrorsFromProblem, isRefusal } from '../../shared/api/problem-fields'
 import type { FieldErrors } from '../../shared/api/problem-fields'
 import { problemTypeEndsWith } from '../../shared/api/session-seam'
-import { waitInWords } from './sign-in-failure'
+import { waitInWords } from '../../shared/wait-words'
 
 const HTTP_BAD_REQUEST = 400
 const HTTP_TOO_MANY_REQUESTS = 429

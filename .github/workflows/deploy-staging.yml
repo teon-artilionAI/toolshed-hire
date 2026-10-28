@@ -19,6 +19,11 @@ on:
   push:
     branches:
       - develop
+    # The B4.6 no-deploy drill is requested by changing only this file. It does
+    # not contain application code, and the drill workflow proves the staging
+    # revision is unchanged before and after the run.
+    paths-ignore:
+      - .github/b46-drill/trigger.json
 
 # Two deployments must never run at once, and a queued deployment must never be
 # cancelled part way through a migration.
@@ -65,6 +70,13 @@ jobs:
       FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      # Staging accepts only callers with a Google identity, and the browser's
+      # /api requests reach it through the function in frontend/api (C-02,
+      # #96). Setting these two back to public and rewrite is the way back.
+      API_ACCESS: iam
+      API_ROUTE: function
+      GCP_WORKLOAD_AUDIENCE: ${{ vars.GCP_WORKLOAD_AUDIENCE }}
+      GCP_INVOKER_ACCOUNT: ${{ vars.GCP_INVOKER_ACCOUNT }}
 
     steps:
       - name: Check out the repository
@@ -89,7 +101,7 @@ jobs:
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up the gcloud CLI
-        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         with:
           project_id: ${{ env.PROJECT_ID }}
 
@@ -105,11 +117,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install backend dependencies
         working-directory: backend
-        run: pip install .
+        run: |
+          pip install --require-hashes --requirement requirements.txt
+          pip install --no-deps --no-build-isolation .
 
       # Migrations run here, from the runner, before any new revision exists.
       # If this step fails, the running service is untouched.
@@ -127,6 +141,7 @@ jobs:
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
           EMAIL_ALLOWED_RECIPIENT: ${{ secrets.EMAIL_ALLOWED_RECIPIENT }}
+          PHOTO_BUCKET: ${{ vars.PHOTO_BUCKET }}
         run: bash infra/scripts/deploy-api.sh
 
       # A new revision normally takes traffic as it is deployed. If traffic was
@@ -136,15 +151,36 @@ jobs:
       - name: Make sure the new revision is the one serving
         run: bash infra/scripts/promote-api.sh
 
+      # The scheduled jobs run from an image named by digest. Moving them to
+      # the image now serving keeps them on the same code and on an image the
+      # cleanup policy keeps.
+      - name: Point the maintenance jobs at the deployed image
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+        run: bash infra/scripts/update-job-images.sh
+
+      # The service requires IAM, so the smoke test carries an ID token of the
+      # deploy account, which create-edge-identity.sh lets invoke it.
+      - name: Get an ID token for the smoke test
+        id: smoke_identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.api.outputs.service_url }}
+          id_token_include_email: true
+
       # Without this, a green run would mean only that gcloud accepted the
       # request, which is a much weaker claim than it looks.
       - name: Smoke test the API
         env:
           SERVICE_URL: ${{ steps.api.outputs.check_url }}
+          SMOKE_TEST_ID_TOKEN: ${{ steps.smoke_identity.outputs.id_token }}
         run: bash infra/scripts/smoke-test.sh
 
       - name: Set up Node for the frontend build
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -155,6 +191,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           API_ORIGIN: ${{ steps.api.outputs.service_url }}
+          VITE_USER_GUIDE_URL: https://teon-artilionai.github.io/toolshed-hire/
         run: bash infra/scripts/deploy-frontend.sh
 
       # The same health check, this time through the frontend domain. It only
@@ -170,6 +207,7 @@ jobs:
       - name: Check the security headers and TLS of the deployed site
         env:
           SITE_URL: ${{ env.FRONTEND_ORIGIN }}
+          IAM_ONLY_SERVICE_URL: ${{ steps.api.outputs.service_url }}
         run: bash infra/scripts/check-security-headers.sh
 
       - name: Record the deployment in the run summary
@@ -208,11 +246,14 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Install gitleaks for the failure scan
+        run: bash infra/scripts/install-gitleaks.sh
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -233,10 +274,45 @@ jobs:
       # The staging run writes no HTML report, because the report names what
       # each step typed. What it keeps is a screenshot of each failure, in
       # test-results, and a password box shows only dots.
-      - name: Keep the failure screenshots when a journey fails
+      - name: Scan the failure screenshots for personal information
+        id: staging_scan
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        working-directory: frontend
+        run: python3 ../infra/scripts/scan_artifacts.py --gitleaks --allow-missing test-results
+
+      - name: Keep the failure screenshots when a journey fails
+        if: failure() && steps.staging_scan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: staging-journeys-failures
           path: frontend/test-results
           retention-days: 7
+
+      - name: Set up Python for the audit check
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the audit check dependencies
+        run: pip install "psycopg[binary]==3.2.3" "sqlalchemy==2.0.36"
+
+      - name: Authenticate to Google Cloud for the audit check
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up the gcloud CLI for the audit check
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # The browser journey creates the reservation. Its audit event must carry
+      # the runner's public address, not the function's private or egress one.
+      - name: Check the audit trail carries the real client address
+        env:
+          DATABASE_MIGRATION_URL_SECRET: ${{ vars.DATABASE_MIGRATION_URL_SECRET_NAME }}
+        run: |
+          EXPECTED_CLIENT_IP="$(curl -fsS https://api.ipify.org)"
+          STAGING_DATABASE_URL="$(gcloud secrets versions access latest --secret="${DATABASE_MIGRATION_URL_SECRET}")" \
+            python backend/scripts/check_staging_audit_ip.py "${EXPECTED_CLIENT_IP}"

@@ -33,7 +33,7 @@ function Detail({ term, children }: { term: string; children: string }) {
   return (
     <div className="flex flex-wrap gap-x-sm">
       <dt className="text-slate-soft">{term}</dt>
-      <dd className="min-w-0 break-words text-ink">{children}</dd>
+      <dd className="min-w-0 wrap-break-word text-ink">{children}</dd>
     </div>
   )
 }
@@ -90,7 +90,7 @@ function SendAgain({ notification }: { notification: EmailNotification }) {
       <h4 id={headingId} ref={questionRef} tabIndex={-1} className="text-base font-semibold text-ink">
         Send the {what} again?
       </h4>
-      <p className="mt-xs break-words text-sm text-ink">
+      <p className="mt-xs wrap-break-word text-sm text-ink">
         A new email goes to {notification.recipientEmail}. This failed attempt stays in the log as it is, so the
         failure and the second attempt can both be read later.
       </p>
@@ -143,7 +143,7 @@ export function NotificationEntry({
   return (
     <article aria-labelledby={titleId} className="card min-w-0 p-md">
       <div className="flex flex-wrap items-start justify-between gap-sm">
-        <h3 id={titleId} className="min-w-0 break-words text-base font-semibold text-ink">
+        <h3 id={titleId} className="min-w-0 wrap-break-word text-base font-semibold text-ink">
           {NOTIFICATION_TYPE_LABEL[notification.type]} for {notification.reservationReference}
         </h3>
         <StatusPill
@@ -170,7 +170,7 @@ export function NotificationEntry({
       {failed && (
         <div className="mt-sm rounded border-l-4 border-status-overdue bg-status-overdue-wash p-sm text-sm">
           <p className="font-semibold text-status-overdue">What went wrong</p>
-          <p className="mt-xs break-words text-ink">{notification.lastError ?? NO_ERROR_GIVEN}</p>
+          <p className="mt-xs wrap-break-word text-ink">{notification.lastError ?? NO_ERROR_GIVEN}</p>
         </div>
       )}
       {failed && <SendAgain notification={notification} />}

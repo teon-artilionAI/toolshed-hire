@@ -18,7 +18,7 @@ export function AssetHistory({ unit }: { unit: AdminAssetDetail }) {
     <>
       <p className="text-sm text-slate-soft">
         The newest first.{' '}
-        <Link to={unitTrailHref(unit)} className="inline-flex min-h-[2.75rem] items-center underline">
+        <Link to={unitTrailHref(unit)} className="inline-flex min-h-11 items-center underline">
           Open the events of {unit.assetTag} in the audit trail
         </Link>
       </p>
@@ -34,9 +34,9 @@ export function AssetHistory({ unit }: { unit: AdminAssetDetail }) {
                   <span className="font-semibold text-ink">{HISTORY_KIND_LABEL[entry.kind]}</span>
                   <span className="tabular text-slate-soft">{branchDateTime(entry.at)}</span>
                 </p>
-                <p className="mt-xs break-words text-sm text-ink">{entry.summary}</p>
+                <p className="mt-xs wrap-break-word text-sm text-ink">{entry.summary}</p>
                 {link !== null && (
-                  <Link to={link.href} className="inline-flex min-h-[2.75rem] items-center text-sm underline">
+                  <Link to={link.href} className="inline-flex min-h-11 items-center text-sm underline">
                     {link.label}
                   </Link>
                 )}

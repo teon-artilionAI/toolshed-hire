@@ -32,6 +32,7 @@ import { DAYS_IN_WEEK, addDays, dayName, readIsoDate, startOfWeek } from './diar
 import { DiaryDaySection } from './SC11-Diary-Day'
 import { WorkBranchGate } from './work-branch-gate'
 import type { CounterBranch } from './work-branch-gate'
+import { closedText } from './trading-day'
 
 type DiaryView = 'day' | 'week'
 
@@ -120,6 +121,13 @@ function DiaryDesk({ branch }: { branch: CounterBranch }) {
         <ErrorState what="the diary" error={diary.error} onRetry={() => void diary.refetch()} />
       ) : data === undefined ? (
         <LoadingState label="Loading the diary" shape="rows" count={DIARY_SKELETON_COUNT} />
+      ) : isEmpty(data) && view === 'day' && closedText(data.days[0].trading) !== null ? (
+        <div className="card">
+          <EmptyState
+            title={`${data.branchName} is closed on this day`}
+            body={`${closedText(data.days[0].trading)}. Nothing can be collected or brought back. Use the arrows to look at another ${unit}.`}
+          />
+        </div>
       ) : isEmpty(data) ? (
         <div className="card">
           <EmptyState

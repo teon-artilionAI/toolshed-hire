@@ -15,13 +15,13 @@ sign in account and its lockout rule are in `app.domain.account`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import time
 from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
-from app.domain.enums import AccountStatus, UserRole
-from app.domain.errors import AccountOnHoldError, BranchScopeError
+from app.domain.enums import AccountStatus, CustomerType, UserRole
+from app.domain.errors import AccountOnHoldError, BranchScopeError, CustomerAnonymisedError
+from app.domain.trading_calendar import BranchCalendar
 
 NO_TRADE_DISCOUNT: Final[Decimal] = Decimal("0.00")
 ACCOUNT_STANDING_RULE: Final[str] = "BR-18"
@@ -38,6 +38,11 @@ BRANCH_SCOPE_MESSAGE: Final[str] = (
 ACCOUNT_ON_HOLD_MESSAGE: Final[str] = (
     "This customer account is on hold, so it cannot make a reservation. "
     "Please contact a branch."
+)
+# The rule behind the removal of a customer's personal details, for the log.
+ANONYMISED_CUSTOMER_RULE: Final[str] = "NFR-16"
+ANONYMISED_CUSTOMER_MESSAGE: Final[str] = (
+    "This customer's personal details were removed, so no reservation can be made for them."
 )
 
 
@@ -103,15 +108,16 @@ class Branch:
         id: The branch key.
         code: The short code staff use, for example CBD.
         name: The display name.
-        closes_at: When the counter closes, on a clock in Cape Town. A hire
-            can no longer start on a day once it has passed (BR-04).
+        calendar: The days and hours the branch trades. A hire starts and
+            ends on a day it is open, and can no longer start on a day once
+            that day's closing time has passed (BR-04).
 
     """
 
     id: UUID
     code: str
     name: str
-    closes_at: time
+    calendar: BranchCalendar
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,12 +129,15 @@ class CustomerProfile:
         user_account_id: The sign in account, or None for a walk-in.
         display_name: The name staff see.
         account_status: The standing of the customer (BR-18).
+        customer_type: Whether the customer hires as an individual or as a trade account.
         email: The address of the sign in account, or None for a walk-in. A
             booking confirmation can only be sent when there is one.
         trade_discount_percent: The discount a trade customer is given, which
             the pricing policy takes as an input (BR-21).
         email_verified: True when the holder of the account has proved the
             address. A walk-in has no account, so this is False (BR-47).
+        anonymised: True once the customer's personal details were removed
+            (#113). Such a profile can never own a new booking.
 
     """
 
@@ -136,12 +145,18 @@ class CustomerProfile:
     user_account_id: UUID | None
     display_name: str
     account_status: AccountStatus
-    email: str | None
+    customer_type: CustomerType = CustomerType.INDIVIDUAL
+    email: str | None = None
     trade_discount_percent: Decimal = NO_TRADE_DISCOUNT
     email_verified: bool = False
+    anonymised: bool = False
 
     def ensure_may_book(self) -> None:
-        """Refuse a customer whose account is not in good standing (BR-18).
+        """Refuse a customer who was anonymised, or whose account is not in good standing.
+
+        A customer whose personal details were removed is refused first and
+        whatever their standing, because the profile names nobody and its
+        details cannot be put back (#113).
 
         An account on hold and a blacklisted one are both refused. Only an
         active account may create a reservation or put one on hold. The
@@ -151,9 +166,16 @@ class CustomerProfile:
         with the error.
 
         Raises:
+            CustomerAnonymisedError: If the customer was anonymised.
             AccountOnHoldError: If the account status is anything but ACTIVE.
 
         """
+        if self.anonymised:
+            raise CustomerAnonymisedError(
+                ANONYMISED_CUSTOMER_MESSAGE,
+                {"customer_profile_id": str(self.id)},
+                rule=ANONYMISED_CUSTOMER_RULE,
+            )
         if self.account_status is AccountStatus.ACTIVE:
             return
         raise AccountOnHoldError(

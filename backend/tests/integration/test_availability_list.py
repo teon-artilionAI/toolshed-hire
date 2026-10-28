@@ -14,6 +14,13 @@ On a database this small the planner would rather read a table from end to
 end, so the plan is asked for with sequential scans switched off. That shows
 whether the expressions in the statement match the indexes, which is the part
 a careless edit would break.
+
+The planner also chooses between indexes from the table statistics, and those
+outlive the truncation between tests, so they would otherwise describe
+whatever an earlier test left behind when autovacuum last sampled it. That
+test therefore holds a fleet shaped like a real one, with most units out of
+service, and analyses the tables before it asks for the plan. The answer then
+depends on this test's own rows and nothing else.
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ from sqlmodel import Session, select
 
 from app.application.availability.read_models import AvailabilitySearch
 from app.application.catalogue.read_models import ModelSearch
+from app.domain.enums import AssetStatus
 from app.domain.period import BookingPeriod
 from app.infrastructure.availability_search import availability_page_statement
 from app.infrastructure.models import Branch
@@ -55,10 +63,24 @@ SEARCH_FINISHED: Final[str] = "availability.search_finished"
 # The four parts of the sweep, which lapse expired holds, mark no shows, mark
 # hires overdue and prune old throttle counters, then the count and the page
 # (BR-13, BR-17, BR-52, C-17).
-STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 6
-# A category and a branch each add one lookup.
-MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = STATEMENTS_OF_A_PLAIN_SEARCH + 2
+# Then the branches with their trading hours and closure days, three statements,
+# so a day no branch trades on is refused before the page is read.
+STATEMENTS_OF_A_PLAIN_SEARCH: Final[int] = 9
+# A category adds one lookup. A branch is read with the others and adds none.
+MOST_STATEMENTS_A_SEARCH_MAY_ISSUE: Final[int] = STATEMENTS_OF_A_PLAIN_SEARCH + 1
 LARGEST_PAGE: Final[int] = 50
+# Units out of service for the index test. The partial index only pays when a
+# good share of the fleet is not hireable, as it is in trading, where units are
+# on hire, quarantined or in the workshop.
+UNITS_OUT_OF_SERVICE: Final[int] = 48
+OUT_OF_SERVICE_STATUSES: Final[tuple[AssetStatus, ...]] = (
+    AssetStatus.ON_HIRE,
+    AssetStatus.QUARANTINED,
+    AssetStatus.UNDER_REPAIR,
+    AssetStatus.INTAKE,
+)
+# Every table the availability statement reads, analysed before the plan.
+TABLES_THE_SEARCH_READS: Final[str] = "asset, asset_allocation, product_model, branch, category"
 
 
 @pytest.fixture
@@ -119,6 +141,28 @@ def yard(postgres_session: Session, postgres_factory: Factory) -> None:
     postgres_factory.asset(product_model=draft, branch=bellville)
     hold_unit(postgres_factory, held_ladder, HIRE)
     hold_unit(postgres_factory, held_rammer, HIRE)
+    postgres_session.commit()
+
+
+@pytest.fixture
+def fleet_mostly_out(yard: None, postgres_session: Session, postgres_factory: Factory) -> None:
+    """Add units that are out of service to an unpublished model at both branches.
+
+    The model is never listed, so every answer in the yard stays as it is. Only
+    the share of hireable units changes, which is what the planner weighs when
+    it chooses the partial index.
+    """
+    branches = postgres_session.exec(select(Branch).order_by(Branch.code)).all()
+    workshop = a_category(postgres_factory, name="Workshop", sort_order=90)
+    stored = a_model(
+        postgres_factory, name="Stored Generator", category=workshop, is_published=False
+    )
+    for index in range(UNITS_OUT_OF_SERVICE):
+        postgres_factory.asset(
+            product_model=stored,
+            branch=branches[index % len(branches)],
+            status=OUT_OF_SERVICE_STATUSES[index % len(OUT_OF_SERVICE_STATUSES)],
+        )
     postgres_session.commit()
 
 
@@ -279,7 +323,7 @@ class TestAPageCostsAFixedNumberOfStatements:
 
         assert len(many_models) == len(few_models) == STATEMENTS_OF_A_PLAIN_SEARCH
 
-    def test_a_category_and_a_branch_add_one_lookup_each_and_nothing_per_model(
+    def test_a_category_adds_one_lookup_and_a_branch_none_and_nothing_per_model(
         self, visitor: TestClient, postgres_engine: Engine
     ) -> None:
         slug = visitor.get("/api/catalogue/categories").json()["items"][0]["slug"]
@@ -288,7 +332,7 @@ class TestAPageCostsAFixedNumberOfStatements:
         assert len(statements) == MOST_STATEMENTS_A_SEARCH_MAY_ISSUE
 
 
-@pytest.mark.usefixtures("yard")
+@pytest.mark.usefixtures("fleet_mostly_out")
 class TestTheStatementMatchesItsIndexes:
     """The partial index on available units and the GiST index of the constraint."""
 
@@ -303,6 +347,8 @@ class TestTheStatementMatchesItsIndexes:
             )
         )
         connection = postgres_session.connection()
+        # Statistics from this test's rows, not from an earlier test's.
+        connection.execute(text(f"ANALYZE {TABLES_THE_SEARCH_READS}"))
         connection.execute(text("SET LOCAL enable_seqscan = off"))
         # The statement text is the application's own, compiled with its values
         # written in. Nothing in it came from a request.

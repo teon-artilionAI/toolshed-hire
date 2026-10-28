@@ -14,6 +14,18 @@
 # setting. The address is not committed and is not part of the bundle the
 # browser downloads. It lives only in the routing configuration on Vercel.
 #
+# API_ROUTE chooses how /api reaches the API (C-02, #96).
+#   rewrite   the default. The rewrite forwards /api to the API's public
+#             address, and frontend/api is removed before the build, so the
+#             deployment carries no function.
+#   function  the rewrite sends /api to the function in frontend/api, which
+#             calls an API that requires IAM authentication with an ID token
+#             it gets through Workload Identity Federation. The function runs
+#             in London beside the API, and is given the API's address, the
+#             Workload Identity provider and the invoker account as runtime
+#             settings of this deployment. GCP_WORKLOAD_AUDIENCE and
+#             GCP_INVOKER_ACCOUNT are required in this mode.
+#
 # Output, written to GITHUB_OUTPUT:
 #   deployment_url  the unique URL of this deployment
 
@@ -28,9 +40,36 @@ set -euo pipefail
 # Pinned, so a new major version of the CLI cannot change the deployment.
 VERCEL_CLI_VERSION="62.1.0"
 VERCEL_TARGET="production"
+API_ROUTE="${API_ROUTE:-rewrite}"
+# London, beside the API. From Vercel's default region in the United States the
+# function added about 160 ms to every request (#96).
+FUNCTION_REGION="lhr1"
+
+case "${API_ROUTE}" in
+  rewrite) ;;
+  function)
+    : "${GCP_WORKLOAD_AUDIENCE:?GCP_WORKLOAD_AUDIENCE is not set. The /api function cannot get an identity.}"
+    : "${GCP_INVOKER_ACCOUNT:?GCP_INVOKER_ACCOUNT is not set. The /api function has no account to invoke the API as.}"
+    ;;
+  *)
+    echo "::error title=Unknown API_ROUTE::API_ROUTE is '${API_ROUTE}'. It must be rewrite or function."
+    exit 1
+    ;;
+esac
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPOSITORY_ROOT}/frontend"
+
+# The Help link reads one build setting. It stays hidden when the setting is
+# empty, so production shows no broken link until its own publication decision.
+# The staging deployment sets a public guide address; the value is inlined into
+# the bundle, not treated as a secret.
+rm -f .env.production.local
+if [ -n "${VITE_USER_GUIDE_URL:-}" ]; then
+  printf 'VITE_USER_GUIDE_URL=%s\n' "${VITE_USER_GUIDE_URL}" > .env.production.local
+  echo "The Help link will point at ${VITE_USER_GUIDE_URL}."
+  trap 'rm -f .env.production.local' EXIT
+fi
 
 vercel() {
   npx --yes "vercel@${VERCEL_CLI_VERSION}" "$@" --token="${VERCEL_TOKEN}"
@@ -39,10 +78,11 @@ vercel() {
 echo "Pulling the ${VERCEL_TARGET} settings for the Vercel project."
 vercel pull --yes --environment="${VERCEL_TARGET}"
 
-echo "Pointing the /api rewrite at the API deployed by this run."
-API_ORIGIN="${API_ORIGIN}" python3 - <<'PYTHON'
+echo "Routing /api through the ${API_ROUTE}."
+API_ORIGIN="${API_ORIGIN}" API_ROUTE="${API_ROUTE}" python3 - <<'PYTHON'
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -52,11 +92,19 @@ path = Path("vercel.json")
 config = json.loads(path.read_text(encoding="utf-8"))
 
 replaced = 0
-for rewrite in config.get("rewrites", []):
+# The function's rewrite names the path parameter __path, so Vercel adds only
+# that one to the query, and the function takes it out again.
+FUNCTION_REWRITE = {"source": "/api/:__path*", "destination": "/api/proxy"}
+use_function = os.environ["API_ROUTE"] == "function"
+rewrites = config.get("rewrites", [])
+for index, rewrite in enumerate(rewrites):
     destination = rewrite.get("destination", "")
     if PLACEHOLDER in destination:
-        rewrite["destination"] = destination.replace(PLACEHOLDER, origin)
-        rewrite.pop("env", None)
+        if use_function:
+            rewrites[index] = dict(FUNCTION_REWRITE)
+        else:
+            rewrite["destination"] = destination.replace(PLACEHOLDER, origin)
+            rewrite.pop("env", None)
         replaced += 1
 
 if replaced != 1:
@@ -66,14 +114,31 @@ if replaced != 1:
     )
 
 path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-print("The /api rewrite now targets the deployed API.")
+if use_function:
+    print("The /api rewrite now sends requests to the function.")
+else:
+    # Without this the deployment would carry a function nothing routes to,
+    # which still answers on its own path.
+    shutil.rmtree("api", ignore_errors=True)
+    print("The /api rewrite now targets the deployed API, and the deployment carries no function.")
 PYTHON
 
 echo "Building."
 vercel build --prod
 
 echo "Deploying the built output."
-deployment_url="$(vercel deploy --prebuilt --prod)"
+deploy_flags=(--prebuilt --prod)
+if [ "${API_ROUTE}" = "function" ]; then
+  # Runtime settings of this deployment only. None of them is a secret, and the
+  # API's address is masked in the log by deploy-api.sh.
+  deploy_flags+=(
+    --regions "${FUNCTION_REGION}"
+    --env "API_SERVICE_URL=${API_ORIGIN}"
+    --env "GCP_WORKLOAD_AUDIENCE=${GCP_WORKLOAD_AUDIENCE}"
+    --env "GCP_INVOKER_ACCOUNT=${GCP_INVOKER_ACCOUNT}"
+  )
+fi
+deployment_url="$(vercel deploy "${deploy_flags[@]}")"
 
 if [ -z "${deployment_url}" ]; then
   echo "::error title=No deployment URL::Vercel accepted the deployment but returned no URL."

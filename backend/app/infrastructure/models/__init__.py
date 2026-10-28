@@ -1,11 +1,13 @@
 """SQLModel table classes, one module per subject area.
 
-All seventeen tables of the documented schema are modelled. The modules follow
-the subject areas of the entity relationship diagrams. `identity` holds the
-branch, the account, the customer profile and the refresh session. `catalogue`
-holds the category, the product model and the asset. `booking` holds the
-reservation, its lines and the allocations. `hire` holds the rental, its items,
-the damage reports and the charges. `evidence` holds the audit log, the
+All seventeen tables of the documented schema are modelled, the two the
+trading calendar added in revision 0013 and the damage photographs of revision
+0014. The modules follow the subject areas of the entity relationship diagrams.
+`identity` holds the branch, its trading hours and closure days, the account,
+the customer profile and the refresh session. `catalogue` holds the category,
+the product model and the asset. `booking` holds the reservation, its lines and
+the allocations. `hire` holds the rental, its items, the damage reports and
+their photographs, and the charges. `evidence` holds the audit log, the
 notifications and the rate limit counters.
 
 Every class is re-exported here, so `from app.infrastructure.models import
@@ -28,9 +30,11 @@ from __future__ import annotations
 from app.infrastructure.models.booking import AssetAllocation, Reservation, ReservationLine
 from app.infrastructure.models.catalogue import Asset, Category, ProductModel
 from app.infrastructure.models.evidence import AuditEvent, Notification, RateLimitCounter
-from app.infrastructure.models.hire import Charge, DamageReport, Rental, RentalItem
+from app.infrastructure.models.hire import Charge, DamagePhoto, DamageReport, Rental, RentalItem
 from app.infrastructure.models.identity import (
     Branch,
+    BranchTradingHours,
+    ClosureDay,
     CustomerProfile,
     RefreshSession,
     UserAccount,
@@ -41,9 +45,12 @@ __all__ = [
     "AssetAllocation",
     "AuditEvent",
     "Branch",
+    "BranchTradingHours",
     "Category",
     "Charge",
+    "ClosureDay",
     "CustomerProfile",
+    "DamagePhoto",
     "DamageReport",
     "Notification",
     "ProductModel",

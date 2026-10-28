@@ -4,7 +4,8 @@
  * Every report says its reference, its status in words beside its colour, how
  * bad the damage was, who filed it and when, what is broken, the estimate and
  * whether the customer was charged. A closed report says when, what the repair
- * cost and the notes.
+ * cost and the notes. Under that are the photographs of the damage, and on an
+ * open report the control that adds one, in SC16-Report-Photos.tsx.
  *
  * An open report offers the owner's two moves to a signed in administrator and
  * to nobody else. "Send for repair" sends one request at once, because it only
@@ -22,6 +23,7 @@ import { money } from '../../shared/format'
 import { branchDateTime } from '../../shared/today'
 import { Notice, StatusPill } from '../../shared/ui'
 import { DAMAGE_SEVERITY_LABEL, DAMAGE_STATUS_LABEL, DAMAGE_STATUS_PILL } from './counter-labels'
+import { ReportPhotos } from './SC16-Report-Photos'
 import { ResolveForm } from './SC16-Resolve-Form'
 import { useDamageWrite } from './use-damage-write'
 
@@ -118,20 +120,21 @@ export function ReportEntry({
         </h3>
         <StatusPill status={DAMAGE_STATUS_PILL[report.status]} label={DAMAGE_STATUS_LABEL[report.status]} />
       </div>
-      <p className="mt-xs break-words text-sm text-slate-soft">
+      <p className="mt-xs wrap-break-word text-sm text-slate-soft">
         {DAMAGE_SEVERITY_LABEL[report.severity]}. Reported {branchDateTime(report.reportedAt)} by {report.reportedByName}
         {report.rentalReference === null ? '' : `, from hire ${report.rentalReference}`}.
       </p>
-      <p className="mt-xs break-words text-sm text-ink">{report.description}</p>
+      <p className="mt-xs wrap-break-word text-sm text-ink">{report.description}</p>
       <p className="tabular mt-xs text-sm text-slate-soft">
         Repair estimated at {money(report.repairEstimate)}. {chargedInWords(report)}
       </p>
       {!open && (
-        <p className="tabular mt-xs break-words text-sm text-slate-soft">
+        <p className="tabular mt-xs wrap-break-word text-sm text-slate-soft">
           {closedInWords(report)}
           {report.resolutionNotes === null ? '' : ` ${report.resolutionNotes}`}
         </p>
       )}
+      <ReportPhotos report={report} canAdd={open} />
       {open && ownerSignedIn && <OwnerActions report={report} onWritten={onWritten} />}
       {open && !ownerSignedIn && <p className="mt-sm text-sm text-ink">{OWNER_RESOLVES}</p>}
     </article>

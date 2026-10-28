@@ -53,7 +53,7 @@ function AccountRow({
   return (
     <tr role="row" className="block px-md py-sm lg:table-row">
       <th role="rowheader" scope="row" className={`${CELL_BASE} block font-medium text-ink`}>
-        <span className="block break-words">
+        <span className="block wrap-break-word">
           {user.fullName}
           {isYou && <span className="ml-sm text-xs font-normal text-slate-soft">(you)</span>}
         </span>
@@ -61,7 +61,7 @@ function AccountRow({
       </th>
       <Labelled column="Role">{STAFF_ROLE_LABEL[user.role]}</Labelled>
       <Labelled column="Branch">
-        <span className="break-words">{branchWords(user.branchCode, branchName)}</span>
+        <span className="wrap-break-word">{branchWords(user.branchCode, branchName)}</span>
       </Labelled>
       <Labelled column="Signing in">
         <StatusPill status={pill.status} label={pill.label} />

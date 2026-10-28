@@ -20,6 +20,7 @@ import { DAMAGE_ANSWERS, DAMAGE_PATH } from './damage-answers.ts'
 import { dateFromToday } from './hire-dates.ts'
 import { OVERVIEW_ANSWERS } from './overview-answers.ts'
 import { RETURN_ANSWERS, RETURN_RENTAL_ID } from './return-answers.ts'
+import { STANDARD_WEEK } from './branch-week.ts'
 
 /** What the session leaves in web storage once somebody has signed in. Without
  *  it the application does not ask whether there is a session. */
@@ -45,8 +46,8 @@ const ASSISTANT = {
 
 const BRANCHES = {
   items: [
-    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', opensAt: '07:00', closesAt: '17:00' },
-    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', opensAt: '07:00', closesAt: '17:00' },
+    { code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021 555 0142', weeklyHours: STANDARD_WEEK, closedDays: [] },
+    { code: 'BLV', name: 'Bellville', suburb: 'Stikland', city: 'Cape Town', phone: '021 555 0157', weeklyHours: STANDARD_WEEK, closedDays: [] },
   ],
 }
 
@@ -67,6 +68,7 @@ const CUSTOMER = {
   tradeDiscountPercent: '10.00',
   noShowCount: 1,
   homeBranchCode: 'CBD',
+  anonymisedAt: null,
 }
 
 const MODEL = {

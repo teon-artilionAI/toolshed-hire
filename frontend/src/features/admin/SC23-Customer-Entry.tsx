@@ -7,8 +7,14 @@
  * are the moves of the customer's standing, which are the standings the
  * customer is not in. "Release the hold" moves a customer on hold back to good
  * standing, "Put on hold" stops new bookings, and "Blacklist" stops them at
- * every branch. Each opens its question in place of the buttons, and putting
- * the question away gives focus back to the button that opened it.
+ * every branch. After them "Anonymise" removes the customer's personal details
+ * when they ask for it (#113). Each opens its question in place of the
+ * buttons, and putting the question away gives focus back to the button that
+ * opened it.
+ *
+ * A customer whose details were removed has nothing left to move, so the
+ * entry says on which day that was and that their hires, charges and deposits
+ * are kept, in place of the buttons.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -16,14 +22,23 @@ import type { ReactNode } from 'react'
 import type { AccountStatus, CustomerSummary } from '../../shared/api/contract'
 import { StatusPill } from '../../shared/ui'
 import { ACCOUNT_STANDING_LABEL, ACCOUNT_STANDING_PILL, CUSTOMER_TYPE_LABEL } from '../counter/counter-labels'
+import { AnonymiseQuestion } from './SC23-Anonymise-Question'
 import { StandingQuestion } from './SC23-Standing-Question'
-import { noShowWords, standingMoveWords, standingMoves } from './staff-words'
+import { TradeDiscountQuestion } from './SC23-Trade-Discount-Question'
+import { anonymiseWords, anonymisedWords, customerEmailWords, noShowWords, standingMoveWords, standingMoves } from './staff-words'
+
+/** What the anonymise button asks, beside the standings a customer can be moved to. */
+const ANONYMISE = 'ANONYMISE'
+const TRADE_DISCOUNT = 'TRADE_DISCOUNT'
+
+/** A question an entry can open in place of its buttons. */
+type Question = AccountStatus | typeof ANONYMISE | typeof TRADE_DISCOUNT
 
 function Fact({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-soft">{term}</dt>
-      <dd className="mt-xs break-words text-sm text-ink">{children}</dd>
+      <dd className="mt-xs wrap-break-word text-sm text-ink">{children}</dd>
     </div>
   )
 }
@@ -32,18 +47,36 @@ export function CustomerEntry({
   customer,
   branchName,
   onMoved,
+  onAnonymised,
+  onDiscountChanged,
 }: {
   customer: CustomerSummary
   branchName: (code: string) => string
   /** Called with the customer the server answered with, and the standing asked for. */
   onMoved: (customer: CustomerSummary, to: AccountStatus) => void
+  /** Called with the customer the server answered with, and the name they had before. */
+  onAnonymised: (customer: CustomerSummary, formerName: string) => void
+  onDiscountChanged: (customer: CustomerSummary) => void
 }) {
-  const [asking, setAsking] = useState<AccountStatus | null>(null)
-  const buttons = useRef(new Map<AccountStatus, HTMLButtonElement>())
-  // The move whose question was put away unanswered, so focus can go back to
-  // its button once that button is on the page again.
-  const putAway = useRef<AccountStatus | null>(null)
+  const [asking, setAsking] = useState<Question | null>(null)
+  const buttons = useRef(new Map<Question, HTMLButtonElement>())
+  // The question that was put away unanswered, so focus can go back to its
+  // button once that button is on the page again.
+  const putAway = useRef<Question | null>(null)
   const headingId = `customer-${customer.id}-name`
+  const removed = anonymisedWords(customer)
+
+  function rememberButton(question: Question) {
+    return (button: HTMLButtonElement | null) => {
+      if (button === null) buttons.current.delete(question)
+      else buttons.current.set(question, button)
+    }
+  }
+
+  function putQuestionAway() {
+    putAway.current = asking
+    setAsking(null)
+  }
 
   useEffect(() => {
     if (asking !== null || putAway.current === null) return
@@ -53,10 +86,12 @@ export function CustomerEntry({
 
   return (
     <article aria-labelledby={headingId} className="card min-w-0 p-lg">
-      <h3 id={headingId} className="break-words text-base font-semibold text-ink">
+      <h3 id={headingId} className="wrap-break-word text-base font-semibold text-ink">
         {customer.displayName}
       </h3>
-      {customer.companyName !== null && <p className="break-words text-sm text-slate-soft">{customer.companyName}</p>}
+      {customer.companyName !== null && removed === null && (
+        <p className="wrap-break-word text-sm text-slate-soft">{customer.companyName}</p>
+      )}
       <dl className="mt-md grid gap-md sm:grid-cols-2 lg:grid-cols-3">
         <Fact term="Standing">
           <StatusPill status={ACCOUNT_STANDING_PILL[customer.accountStatus]} label={ACCOUNT_STANDING_LABEL[customer.accountStatus]} />
@@ -64,13 +99,36 @@ export function CustomerEntry({
         <Fact term="Bookings not collected">{noShowWords(customer)}</Fact>
         <Fact term="Customer type">{CUSTOMER_TYPE_LABEL[customer.customerType]}</Fact>
         <Fact term="Email">
-          <span className="break-all">{customer.email ?? 'No online account'}</span>
+          <span className="break-all">{customerEmailWords(customer)}</span>
         </Fact>
         <Fact term="Phone">{customer.phone}</Fact>
         <Fact term="Home branch">{branchName(customer.homeBranchCode)}</Fact>
+        {customer.customerType === 'TRADE' && (
+          <Fact term="Trade discount">{customer.tradeDiscountPercent}% from the next booking</Fact>
+        )}
       </dl>
       <div className="mt-md">
-        {asking !== null ? (
+        {removed !== null ? (
+          <p className="wrap-break-word text-sm text-ink">{removed}</p>
+        ) : asking === ANONYMISE ? (
+          <AnonymiseQuestion
+            customer={customer}
+            onAnonymised={(anonymised) => {
+              setAsking(null)
+              onAnonymised(anonymised, customer.displayName)
+            }}
+            onCancel={putQuestionAway}
+          />
+        ) : asking === TRADE_DISCOUNT ? (
+          <TradeDiscountQuestion
+            customer={customer}
+            onChanged={(changed) => {
+              setAsking(null)
+              onDiscountChanged(changed)
+            }}
+            onCancel={putQuestionAway}
+          />
+        ) : asking !== null ? (
           <StandingQuestion
             key={asking}
             customer={customer}
@@ -80,20 +138,14 @@ export function CustomerEntry({
               setAsking(null)
               onMoved(moved, to)
             }}
-            onCancel={() => {
-              putAway.current = asking
-              setAsking(null)
-            }}
+            onCancel={putQuestionAway}
           />
         ) : (
           <ul className="flex flex-wrap gap-sm" aria-label={`What can be done with the account of ${customer.displayName}`}>
             {standingMoves(customer).map((to) => (
               <li key={to}>
                 <button
-                  ref={(button) => {
-                    if (button === null) buttons.current.delete(to)
-                    else buttons.current.set(to, button)
-                  }}
+                  ref={rememberButton(to)}
                   type="button"
                   className={to === 'BLACKLISTED' ? 'btn-danger px-md' : 'btn-secondary px-md'}
                   onClick={() => setAsking(to)}
@@ -103,6 +155,20 @@ export function CustomerEntry({
                 </button>
               </li>
             ))}
+            {customer.customerType === 'TRADE' && (
+              <li>
+                <button ref={rememberButton(TRADE_DISCOUNT)} type="button" className="btn-secondary px-md" onClick={() => setAsking(TRADE_DISCOUNT)}>
+                  Set trade discount
+                  <span className="sr-only"> for {customer.displayName}</span>
+                </button>
+              </li>
+            )}
+            <li>
+              <button ref={rememberButton(ANONYMISE)} type="button" className="btn-danger px-md" onClick={() => setAsking(ANONYMISE)}>
+                {anonymiseWords(customer).action}
+                <span className="sr-only"> for {customer.displayName}</span>
+              </button>
+            </li>
           </ul>
         )}
       </div>

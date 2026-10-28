@@ -1,0 +1,258 @@
+# B4.6 signed-in staging browser network-loss.
+#
+# This workflow is the no-deploy route for the remaining B4.6 browser drill.
+# It is triggered only by a push to develop that changes the request file. The
+# staging deployment workflow ignores that exact path, so the request commit
+# does not build, migrate, seed or deploy anything.
+#
+# The drill runs only the existing B4.6 staging spec, uses the protected
+# staging environment and its existing E2E passwords, and proves before and
+# after the run that the deployed staging revision did not change. A separate
+# server-side transaction-termination drill remains blocked by its own
+# privilege and secret-scope gate.
+
+name: B4.6 staging browser network-loss
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/b46-drill/trigger.json
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  TRIGGER_PATH: .github/b46-drill/trigger.json
+
+jobs:
+  b46-drill:
+    name: B4.6 signed-in staging browser network-loss
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: ${{ vars.FRONTEND_ORIGIN }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 2
+
+      - name: Prove this route has no deployment step
+        run: python3 infra/scripts/check_staging_b46_route.py
+
+      - name: Prove this commit only changes the drill request
+        run: |
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          test "${changed}" = "${TRIGGER_PATH}" || {
+            echo "::error title=Drill request changed other files::The B4.6 route must not run with code or deployment changes."
+            exit 1
+          }
+
+      - name: Verify the drill request and deployed revision
+        id: staging
+        env:
+          STAGING_URL: ${{ vars.FRONTEND_ORIGIN }}
+        run: |
+          body="$(curl -fsS "${STAGING_URL}/api/health")"
+          BODY="${body}" python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from datetime import datetime
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          try:
+              request = json.loads(Path(os.environ["TRIGGER_PATH"]).read_text(encoding="utf-8"))
+              health = json.loads(os.environ["BODY"])
+          except (OSError, json.JSONDecodeError) as error:
+              print(f"::error title=B4.6 drill preflight::cannot read request or health JSON: {error}")
+              sys.exit(1)
+
+          expected_sha = request.get("expected_sha", "")
+          expected_revision = request.get("expected_revision", "")
+          window_date = request.get("window_date", "")
+          purpose = request.get("purpose", "")
+          errors = []
+
+          if purpose != "B4.6 signed-in browser network-loss":
+              errors.append("request purpose is not the B4.6 drill")
+          if not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
+              errors.append("expected_sha must be 40 lowercase hex characters")
+          if health.get("environment") != "staging":
+              errors.append(f"staging environment is {health.get('environment')!r}")
+          if health.get("databaseReachable") is not True:
+              errors.append("staging database is not reachable")
+
+          revision = health.get("revision", "")
+          match = re.fullmatch(r"toolshed-api-staging-([0-9a-f]{7})-\d+(?:-\d+)*", revision)
+          if match is None:
+              errors.append(f"staging revision {revision!r} is not a staging revision")
+          elif expected_sha[:7] != match.group(1):
+              errors.append(f"staging revision {revision!r} does not match expected SHA {expected_sha}")
+          if revision != expected_revision:
+              errors.append(f"staging revision {revision!r} does not match request {expected_revision!r}")
+
+          now = datetime.now(ZoneInfo("Africa/Johannesburg"))
+          if window_date != now.date().isoformat():
+              errors.append(f"request date {window_date!r} is not the current SAST date {now.date().isoformat()}")
+          if now.weekday() != 0:
+              errors.append("the drill window is Monday only")
+          minutes = now.hour * 60 + now.minute
+          if not (7 * 60 <= minutes < 16 * 60 + 55):
+              errors.append(f"current SAST time {now:%H:%M} is outside 07:00-16:55")
+
+          if errors:
+              for error in errors:
+                  print(f"::error title=B4.6 drill preflight::{error}")
+              sys.exit(1)
+
+          print(f"revision={revision}")
+          print(f"expected_sha={expected_sha}")
+          print(f"window={window_date} {now:%H:%M} SAST")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"revision={revision}\n")
+              output.write(f"expected_sha={expected_sha}\n")
+          PY
+
+      - name: Install gitleaks for the failure scan
+        run: bash infra/scripts/install-gitleaks.sh
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install the browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the B4.6 signed-in browser network-loss drill
+        working-directory: frontend
+        env:
+          STAGING_URL: ${{ vars.FRONTEND_ORIGIN }}
+          E2E_CUSTOMER_PASSWORD: ${{ secrets.E2E_CUSTOMER_PASSWORD }}
+          E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/b46-results.json
+        run: npx playwright test --project=staging e2e/b46-network-loss.spec.ts --reporter=list,json --retries=0
+
+      - name: Require the B4.6 test to run and pass
+        if: always()
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report_path = Path("test-results/b46-results.json")
+          if not report_path.is_file():
+              print("::error title=B4.6 result missing::The B4.6 JSON result was not written.")
+              sys.exit(1)
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+
+          def suites(node):
+              for suite in node.get("suites", []):
+                  yield suite
+                  yield from suites(suite)
+
+          specs = [
+              spec
+              for suite in suites(report)
+              for spec in suite.get("specs", [])
+              if spec.get("title") == "a signed-in counter checkout and return survive a browser network loss"
+          ]
+          results = [
+              result
+              for spec in specs
+              for test in spec.get("tests", [])
+              for result in test.get("results", [])
+          ]
+          statuses = [result.get("status") for result in results]
+          notes = [
+              annotation.get("description", "")
+              for spec in specs
+              for test in spec.get("tests", [])
+              for annotation in test.get("annotations", [])
+              if annotation.get("type") == "note"
+          ]
+          errors = []
+          if len(specs) != 1:
+              errors.append(f"expected exactly one B4.6 spec, found {len(specs)}")
+          if statuses != ["passed"]:
+              errors.append(f"expected one passed result, found {statuses!r}")
+          if not any("B4.6 staging drill passed" in note for note in notes):
+              errors.append("the B4.6 pass note is missing")
+          if not any("The session survived both losses without a second sign-in." in note for note in notes):
+              errors.append("the no-second-sign-in note is missing")
+
+          if errors:
+              for error in errors:
+                  print(f"::error title=B4.6 result check::{error}")
+              sys.exit(1)
+          for note in notes:
+              if note.startswith("B4.6 staging drill"):
+                  print(note)
+          PY
+
+      - name: Scan the failure screenshots for personal information
+        id: drill_scan
+        if: failure()
+        working-directory: frontend
+        run: python3 ../infra/scripts/scan_artifacts.py --gitleaks --allow-missing test-results
+
+      - name: Keep the failure screenshots when the drill fails
+        if: failure() && steps.drill_scan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: b46-staging-failure
+          path: frontend/test-results
+          retention-days: 7
+
+      - name: Prove the staging revision did not change
+        if: always() && steps.staging.outputs.revision != ''
+        env:
+          STAGING_URL: ${{ vars.FRONTEND_ORIGIN }}
+          BEFORE_REVISION: ${{ steps.staging.outputs.revision }}
+        run: |
+          body="$(curl -fsS "${STAGING_URL}/api/health")"
+          after="$(printf '%s' "${body}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["revision"])')"
+          test "${after}" = "${BEFORE_REVISION}" || {
+            echo "::error title=Staging revision changed::The B4.6 drill route changed the staging revision."
+            exit 1
+          }
+          echo "Staging revision unchanged: ${after}"
+
+      - name: Record the drill in the run summary
+        if: always()
+        env:
+          STAGING_REVISION: ${{ steps.staging.outputs.revision }}
+          EXPECTED_SHA: ${{ steps.staging.outputs.expected_sha }}
+        run: |
+          {
+            echo "### B4.6 no-deploy staging drill"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Expected deployed SHA | \`${EXPECTED_SHA:-not verified}\` |"
+            echo "| Staging revision | \`${STAGING_REVISION:-not read}\` |"
+            echo "| Workflow | \`${GITHUB_WORKFLOW}\` |"
+            echo "| Run | ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} |"
+          } >> "${GITHUB_STEP_SUMMARY}"

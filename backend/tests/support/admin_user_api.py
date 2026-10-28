@@ -45,6 +45,7 @@ CUSTOMER_MEMBERS: Final[frozenset[str]] = frozenset(
         "id", "displayName", "email", "phone", "hasLogin", "emailVerified", "customerType",
         "companyName", "idDocumentType", "idDocumentLast4", "billingSuburb", "billingCity",
         "accountStatus", "tradeDiscountPercent", "noShowCount", "homeBranchCode",
+        "anonymisedAt",
     }
 )  # fmt: skip
 

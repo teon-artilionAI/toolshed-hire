@@ -158,7 +158,7 @@ describe('when the report cannot be read', () => {
     const { user, network } = await openReport({ 'GET /api/branches': () => problemResponse(500) })
     await findRows()
 
-    network.setRoute('GET /api/branches', () => jsonResponse({ items: [{ code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021', opensAt: '07:00', closesAt: '17:00' }] }))
+    network.setRoute('GET /api/branches', () => jsonResponse({ items: [{ code: 'CBD', name: 'Cape Town CBD', suburb: 'Woodstock', city: 'Cape Town', phone: '021', weeklyHours: [], closedDays: [] }] }))
     await user.click(screen.getByRole('button', { name: 'Load the branches again' }))
 
     expect(await screen.findByRole('option', { name: 'Cape Town CBD' }, SCREEN_WAIT)).toBeInTheDocument()

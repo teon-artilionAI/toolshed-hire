@@ -37,6 +37,17 @@ describe('the hire period', () => {
     expect(defaultPeriod(TODAY)).toEqual({ startIso: '2026-03-12', endIso: '2026-03-16' })
   })
 
+  it('names a closed day the hire would start or end on, and the next open day', () => {
+    const closed = new Map([
+      ['2026-03-15', { day: '2026-03-15', reason: 'is closed on Sundays', kind: 'weekly' as const }],
+    ])
+    expect(validatePeriod('2026-03-15', '2026-03-17', TODAY, closed)).toBe(
+      'The branch is closed on Sundays, so you cannot collect on 15 Mar 2026. The next open day is 16 Mar 2026.',
+    )
+    expect(validatePeriod('2026-03-12', '2026-03-15', TODAY, closed)).toMatch(/cannot bring equipment back on 15 Mar 2026/)
+    expect(validatePeriod('2026-03-12', '2026-03-16', TODAY, closed)).toBeNull()
+  })
+
   it('counts the days half open, and never fewer than one', () => {
     expect(hireDays('2026-03-06', '2026-03-10')).toBe(4)
     expect(hireDays('2026-03-06', '2026-03-06')).toBe(1)

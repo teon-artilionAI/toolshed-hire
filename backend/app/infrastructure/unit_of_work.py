@@ -28,9 +28,12 @@ from app.application.booking.ports import ReservationRepository
 from app.application.catalogue.admin_ports import CatalogueEntryRepository, CategoryRepository
 from app.application.catalogue.asset_ports import AssetRegisterRepository
 from app.application.catalogue.ports import ProductModelRepository
+from app.application.hire.damage_photo_ports import DamagePhotoRepository
 from app.application.hire.damage_ports import DamageReportRepository
 from app.application.hire.ports import RentalRepository
+from app.application.identity.anonymisation_ports import PersonalDataEraser
 from app.application.identity.customer_directory import CustomerDirectory
+from app.application.identity.export_ports import PersonalDataExporter
 from app.application.identity.ports import (
     AccountRepository,
     BranchRepository,
@@ -40,6 +43,7 @@ from app.application.identity.ports import (
 from app.application.identity.staff_ports import StaffRepository
 from app.application.notification.ports import NotificationOutbox
 from app.application.throttle import RateLimitStore
+from app.application.trading.closure_ports import ClosureDayRepository
 from app.infrastructure.admin_catalogue_entries import SqlCatalogueEntryRepository
 from app.infrastructure.admin_categories import SqlCategoryRepository
 from app.infrastructure.asset_register import SqlAssetRegisterRepository
@@ -48,12 +52,16 @@ from app.infrastructure.availability import SqlAssetRepository
 from app.infrastructure.booking import SqlReservationRepository
 from app.infrastructure.branch_repository import SqlBranchRepository
 from app.infrastructure.catalogue import SqlProductModelRepository
+from app.infrastructure.closure_days import SqlClosureDayRepository
 from app.infrastructure.customer_search import SqlCustomerDirectory
+from app.infrastructure.damage_photos import SqlDamagePhotoRepository
 from app.infrastructure.damage_reports import SqlDamageReportRepository
 from app.infrastructure.identity import SqlCustomerRepository
 from app.infrastructure.identity_accounts import SqlAccountRepository
 from app.infrastructure.identity_sessions import SqlSessionRepository
 from app.infrastructure.notification.outbox import SqlNotificationOutbox
+from app.infrastructure.personal_data import SqlPersonalDataEraser
+from app.infrastructure.personal_data_export import SqlPersonalDataExporter
 from app.infrastructure.rate_limit import SqlRateLimitStore
 from app.infrastructure.rentals import SqlRentalRepository
 from app.infrastructure.staff_accounts import SqlStaffRepository
@@ -68,13 +76,17 @@ class SqlAlchemyUnitOfWork:
     assets: AssetRepository
     rentals: RentalRepository
     damage_reports: DamageReportRepository
+    damage_photos: DamagePhotoRepository
     branches: BranchRepository
+    closure_days: ClosureDayRepository
     product_models: ProductModelRepository
     categories: CategoryRepository
     catalogue_entries: CatalogueEntryRepository
     asset_register: AssetRegisterRepository
     customers: CustomerRepository
     customer_directory: CustomerDirectory
+    personal_data: PersonalDataEraser
+    personal_data_export: PersonalDataExporter
     accounts: AccountRepository
     staff: StaffRepository
     sessions: SessionRepository
@@ -117,13 +129,17 @@ class SqlAlchemyUnitOfWork:
         self.assets = SqlAssetRepository(session)
         self.rentals = SqlRentalRepository(session)
         self.damage_reports = SqlDamageReportRepository(session)
+        self.damage_photos = SqlDamagePhotoRepository(session)
         self.branches = SqlBranchRepository(session)
+        self.closure_days = SqlClosureDayRepository(session)
         self.product_models = SqlProductModelRepository(session)
         self.categories = SqlCategoryRepository(session)
         self.catalogue_entries = SqlCatalogueEntryRepository(session)
         self.asset_register = SqlAssetRegisterRepository(session)
         self.customers = SqlCustomerRepository(session)
         self.customer_directory = SqlCustomerDirectory(session)
+        self.personal_data = SqlPersonalDataEraser(session)
+        self.personal_data_export = SqlPersonalDataExporter(session)
         self.accounts = SqlAccountRepository(session)
         self.staff = SqlStaffRepository(session)
         self.sessions = SqlSessionRepository(session)

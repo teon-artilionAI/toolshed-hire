@@ -55,7 +55,7 @@ export default function BasketLine({
             <>
               <Link
                 to={modelDetailHref(line.modelSlug, { from: terms.from, to: terms.to }, terms.branchCode)}
-                className="inline-flex min-h-[2.75rem] cursor-pointer items-center text-base font-semibold text-ink underline decoration-line underline-offset-4 transition-colors duration-200 hover:decoration-accent"
+                className="inline-flex min-h-11 cursor-pointer items-center text-base font-semibold text-ink underline decoration-line underline-offset-4 transition-colors duration-200 hover:decoration-accent"
               >
                 {model.data.name}
               </Link>

@@ -13,7 +13,7 @@ it, so the booking window runs from that day to ninety days after it.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Final
 from uuid import uuid4
 
@@ -29,10 +29,16 @@ from app.domain.errors import (
     AccountOnHoldError,
     AuthorisationFailure,
     BranchScopeError,
+    CustomerAnonymisedError,
     ValidationFailure,
 )
 from app.domain.identity import Actor
 from app.domain.period import BookingPeriod
+from app.domain.trading_calendar import (
+    CLOSED_DAY_RULE,
+    BranchCalendar,
+    OpeningHours,
+)
 from tests.support.clock import FixedClock
 from tests.support.memory_world import (
     FIRST_HIRE,
@@ -40,10 +46,14 @@ from tests.support.memory_world import (
     MemoryWorld,
     build_memory_world,
     open_desk,
+    with_branch_calendar,
 )
 
 TODAY: Final[date] = date(2026, 3, 2)
 LAST_BOOKABLE_START: Final[date] = TODAY + timedelta(days=90)
+EVERY_DAY: Final[BranchCalendar] = BranchCalendar(
+    weekly={weekday: OpeningHours(time(7, 0), time(17, 0)) for weekday in range(1, 8)}
+)
 FORBIDDEN_IN_A_SENTENCE: Final[tuple[str, ...]] = ("BR-", "NFR-", "start=", "end=", "Attempted")
 
 
@@ -55,6 +65,15 @@ def refusal_of(world: MemoryWorld, command: CreateReservationCommand) -> Validat
     assert world.store.committed.reservations == []
     assert world.store.committed.audit_events == []
     return refusal.value
+
+
+def anonymised(world: MemoryWorld) -> MemoryWorld:
+    """Return the world with its customer's personal details removed (#113)."""
+    world.store.profiles = {
+        account: replace(profile, anonymised=True)
+        for account, profile in world.store.profiles.items()
+    }
+    return world
 
 
 def with_lines(world: MemoryWorld, *lines: RequestedLine) -> CreateReservationCommand:
@@ -89,10 +108,30 @@ class TestThePeriod:
         assert refusal.value.rule == "BR-04"
 
     def test_a_hire_starting_ninety_days_ahead_is_accepted(self) -> None:
-        world = build_memory_world()
+        # The ninetieth day is a Sunday, so the branch trades every day here
+        # and only the horizon is being tested.
+        world = with_branch_calendar(build_memory_world(), EVERY_DAY)
         horizon = BookingPeriod(LAST_BOOKABLE_START, LAST_BOOKABLE_START + timedelta(days=3))
         draft = open_desk(world).drafted(world.draft_command(horizon))
         assert draft.detail.start_date == LAST_BOOKABLE_START
+
+    def test_a_hire_starting_on_a_sunday_names_the_start_and_the_monday(self) -> None:
+        world = build_memory_world()
+        sunday = date(2026, 3, 8)
+        period = BookingPeriod(sunday, sunday + timedelta(days=2))
+        refusal = refusal_of(world, world.draft_command(period))
+        assert refused_parameter_of(refusal) == "from"
+        assert refusal.rule == CLOSED_DAY_RULE
+        assert "Monday 9 March" in refusal.message
+
+    def test_a_hire_returning_on_good_friday_names_the_return(self) -> None:
+        world = build_memory_world()
+        good_friday = date(2026, 4, 3)
+        refusal = refusal_of(
+            world, world.draft_command(BookingPeriod(date(2026, 3, 31), good_friday))
+        )
+        assert refused_parameter_of(refusal) == "to"
+        assert "Good Friday" in refusal.message
 
     def test_a_hire_starting_ninety_one_days_ahead_names_the_start(self) -> None:
         world = build_memory_world()
@@ -248,6 +287,26 @@ class TestTheBranchAndTheCustomer:
         assert refusal.value.rule == "BR-18"
         assert refusal.value.detail == {"account_status": standing.value}
         assert world.store.committed.reservations == []
+
+    def test_a_customer_whose_details_were_removed_cannot_create_a_draft(self) -> None:
+        world = anonymised(build_memory_world())
+        with pytest.raises(CustomerAnonymisedError) as refusal:
+            open_desk(world).drafted()
+        assert refusal.value.rule == "NFR-16"
+        assert refusal.value.message == (
+            "This customer's personal details were removed, so no reservation can be made "
+            "for them."
+        )
+        assert world.store.committed.reservations == []
+
+    def test_staff_cannot_book_for_a_customer_whose_details_were_removed(self) -> None:
+        world = anonymised(build_memory_world(account_status=AccountStatus.ON_HOLD))
+        with pytest.raises(CustomerAnonymisedError):
+            open_desk(world).drafted(
+                world.draft_command(actor=world.assistant(), customer_profile_id=world.profile.id)
+            )
+        assert world.store.committed.reservations == []
+        assert world.store.committed.audit_events == []
 
     def test_staff_cannot_book_for_a_customer_who_is_on_hold_either(self) -> None:
         world = build_memory_world(account_status=AccountStatus.ON_HOLD)

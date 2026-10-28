@@ -22,7 +22,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.api.deps import ClockDependency, NotificationDispatcherDependency, UnitOfWorkDependency
+from app.api.account_deps import ThrottleDependency
+from app.api.deps import (
+    ClockDependency,
+    NotificationDispatcherDependency,
+    NotificationGatewayDependency,
+    UnitOfWorkDependency,
+)
 from app.api.pricing_deps import PricingPolicyDependency
 from app.api.sweep_deps import HoldSweepDependency
 from app.application.booking.cancel_reservation import CancelReservationUseCase
@@ -32,6 +38,7 @@ from app.application.booking.hold_reservation import HoldReservationUseCase
 from app.application.booking.mark_no_show import MarkNoShowUseCase
 from app.application.booking.read_reservation import ReadReservations
 from app.application.booking.reallocate import ReallocateUseCase
+from app.application.notification.booking_resend import ResendBookingConfirmation
 from app.domain.identity import Actor
 from app.infrastructure.models import UserAccount
 
@@ -93,6 +100,20 @@ def get_read_reservations(
     return ReadReservations(uow, clock, sweep)
 
 
+def get_resend_booking_confirmation(
+    uow: UnitOfWorkDependency,
+    clock: ClockDependency,
+    throttle: ThrottleDependency,
+    dispatcher: NotificationDispatcherDependency,
+    gateway: NotificationGatewayDependency,
+) -> ResendBookingConfirmation:
+    """Return the use case that sends a booking's confirmation again."""
+    return ResendBookingConfirmation(uow, clock, throttle, dispatcher, gateway)
+
+
+ResendConfirmation = Annotated[
+    ResendBookingConfirmation, Depends(get_resend_booking_confirmation)
+]
 CreateReservation = Annotated[CreateReservationUseCase, Depends(get_create_reservation_use_case)]
 HoldReservation = Annotated[HoldReservationUseCase, Depends(get_hold_reservation_use_case)]
 ConfirmReservation = Annotated[

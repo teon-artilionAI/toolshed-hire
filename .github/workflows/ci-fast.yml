@@ -57,10 +57,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements-dev.txt
 
+      # Every package, direct or indirect, comes from the hashed lock (C-37).
+      # The project itself is installed on top with no dependencies of its own.
       - name: Install the backend and its development dependencies
-        run: pip install --editable ".[dev]"
+        run: |
+          pip install --require-hashes --requirement requirements-dev.txt
+          pip install --no-deps --no-build-isolation --editable .
 
       - name: Lint
         run: ruff check .
@@ -82,6 +86,49 @@ jobs:
         env:
           ENVIRONMENT: test
 
+      # Every step above runs on an editable install, which reads the source
+      # folders and so finds a package the build would leave out. This installs
+      # the project into a clean environment the way the Dockerfile does and
+      # imports the application from outside the source tree, so a missing
+      # package fails here and not as a revision that will not start (#126).
+      - name: Install the project the way the image does and import it
+        run: |
+          python -m venv "${RUNNER_TEMP}/image-like"
+          "${RUNNER_TEMP}/image-like/bin/pip" install --quiet --require-hashes --no-deps --requirement requirements.txt
+          "${RUNNER_TEMP}/image-like/bin/pip" install --quiet --no-deps --no-build-isolation .
+          cd "${RUNNER_TEMP}"
+          ENVIRONMENT=test JWT_SECRET=ci_only_import_check_secret_value \
+            "${RUNNER_TEMP}/image-like/bin/python" -c "import app.main"
+
+  # The lockfiles are compiled from pyproject.toml in the same base image the
+  # Dockerfile pins, read from the Dockerfile so the two cannot drift apart.
+  # A pin changed in pyproject.toml without the lockfiles compiled again, or a
+  # lockfile edited by hand, fails here.
+  lockfiles:
+    name: Backend lockfiles match pyproject.toml
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Compile the lockfiles again
+        run: |
+          base_image="$(grep -m 1 -oE 'python:3\.12-slim-bookworm@sha256:[0-9a-f]{64}' Dockerfile)"
+          test -n "${base_image}" || { echo "No pinned base image found in the Dockerfile"; exit 1; }
+          docker run --rm --volume "${PWD}:/src" --workdir /src "${base_image}" \
+            sh scripts/compile-lockfiles.sh
+
+      - name: Fail if they differ from what is committed
+        run: |
+          git diff --exit-code -- requirements.txt requirements-dev.txt || {
+            echo "The lockfiles are out of date. Run scripts/compile-lockfiles.sh as its header describes and commit the result."
+            exit 1
+          }
+
   frontend:
     name: Frontend lint, types and unit tests
     runs-on: ubuntu-latest
@@ -94,7 +141,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -117,6 +164,20 @@ jobs:
       - name: Check the generated API types are current
         run: npm run api:types:check
 
+  # The B4.6 staging drill must be a no-deploy route. This job checks the two
+  # workflow files that make that true, so a future edit cannot quietly add a
+  # deployment job, dependency, action, script, secret or write permission.
+  staging-route:
+    name: Staging no-deploy route guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check the B4.6 route cannot deploy
+        run: python3 infra/scripts/check_staging_b46_route.py
+
   # One job that always runs and reports a single result. Branch protection
   # requires this job, so a skipped or cancelled job above can never leave a
   # required check waiting forever.
@@ -125,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: always()
-    needs: [secrets, backend, frontend]
+    needs: [secrets, backend, lockfiles, frontend, staging-route]
     steps:
       - name: Fail unless every job passed
         env:

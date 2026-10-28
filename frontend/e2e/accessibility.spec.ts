@@ -19,8 +19,9 @@
  * the no show question, the return with its question, the overdue worklist
  * with the loss question, and the damage report with its problems, its amount
  * and its question. The sign in, registration, empty and error states are in
- * accessibility-states.spec.ts, and the forms of SC-23 in
- * user-management.spec.ts.
+ * accessibility-states.spec.ts, the forms of SC-23 in
+ * user-management.spec.ts, and the photographs of damage reports, listed,
+ * refused and switched off, in damage-photos.spec.ts.
  *
  * Every scan writes how many findings of each impact it had to the output of
  * the run, through axe.ts, and fails on any that is serious or critical.

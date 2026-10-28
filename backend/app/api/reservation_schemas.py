@@ -63,7 +63,8 @@ NOT_PERMITTED_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": (
         "The caller may not do this. The problem type says why, which is the role, the "
-        "branch, an account on hold or an email address that is not verified."
+        "branch, an account on hold, a customer whose personal details were removed or an "
+        "email address that is not verified."
     ),
 }
 UNKNOWN_RESERVATION_RESPONSE: Final[dict[str, object]] = {
@@ -180,6 +181,12 @@ class ReservationResponse(CamelModel):
     can_cancel: bool = Field(serialization_alias="canCancel")
     customer_name: str = Field(serialization_alias="customerName")
     created_at: Timestamp = Field(serialization_alias="createdAt")
+
+
+class ConfirmationResendResponse(CamelModel):
+    """Whether the re-sent confirmation can reach the customer's address."""
+
+    email_deliverable: bool = Field(serialization_alias="emailDeliverable")
 
 
 class ReservationPageResponse(CamelModel):

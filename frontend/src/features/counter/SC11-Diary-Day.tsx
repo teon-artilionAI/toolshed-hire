@@ -20,6 +20,7 @@ import { CounterEntry, EntryLink } from './counter-entry'
 import { DIARY_COLLECTION_LABEL, RENTAL_STATUS_LABEL, countOf } from './counter-labels'
 import { checkoutHref, rentalHref } from './counter-links'
 import { dayName } from './diary-dates'
+import { closedText, openingHoursText } from './trading-day'
 import NoShowAction from './SC11-No-Show-Action'
 
 function CollectionActions({ collection, today }: { collection: DiaryCollection; today: string }) {
@@ -98,6 +99,8 @@ export function DiaryDaySection({
 }) {
   const name = dayName(day.date)
   const headingId = `diary-day-${day.date}`
+  const closed = closedText(day.trading)
+  const hours = openingHoursText(day.trading)
   return (
     <section aria-labelledby={headingId} className="card p-lg">
       <div className="flex flex-wrap items-center justify-between gap-sm">
@@ -106,6 +109,8 @@ export function DiaryDaySection({
           {day.date === today && (
             <span className="rounded bg-accent px-sm py-xs text-xs font-semibold text-accent-ink">Today</span>
           )}
+          {closed !== null && <StatusPill status="inactive" label={closed} />}
+          {hours !== null && <span className="tabular text-sm font-normal text-slate-soft">{hours}</span>}
         </h2>
         {onOpenDay && (
           <button type="button" className="btn-ghost px-md" onClick={() => onOpenDay(day.date)}>

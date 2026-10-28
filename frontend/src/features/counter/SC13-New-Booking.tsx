@@ -20,23 +20,24 @@
  * polite status says what the last request did.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import type { CustomerSummary, Reservation } from '../../shared/api/contract'
+import { catalogueQueries } from '../../shared/api/catalogue-queries'
 import { customerQueries } from '../../shared/api/counter-queries'
 import { queryPhase } from '../../shared/api/query-phase'
 import { ErrorState, LoadingState } from '../../shared/async-states'
 import { branchClockTime, todayInBranchTime } from '../../shared/today'
+import { closedDaysAt } from '../../shared/trading-days'
 import { Card, EmptyState, Notice, PageHeader, StatusPill } from '../../shared/ui'
 import { emptyDraft } from './booking-draft'
 import type { BookingDraft } from './booking-draft'
 import {
   ACCOUNT_STANDING_LABEL,
   ACCOUNT_STANDING_PILL,
-  NO_BOOKING_BECAUSE,
-  canBookFor,
+  noBookingReason,
 } from './counter-labels'
 import { CUSTOMERS_PATH, CUSTOMER_PARAMETER, customerHref } from './counter-links'
 import { isNotOnFile } from './counter-refusal'
@@ -72,7 +73,7 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
   const status = customer.accountStatus
   return (
     <div className="mb-lg flex flex-wrap items-center gap-sm rounded border border-line bg-surface px-md py-sm">
-      <p className="min-w-0 break-words text-sm text-ink">
+      <p className="min-w-0 wrap-break-word text-sm text-ink">
         Booking for <span className="font-semibold">{customer.displayName}</span>,{' '}
         <span className="tabular">{customer.phone}</span>
       </p>
@@ -86,7 +87,25 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
 
 function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: CounterBranch }) {
   const [today] = useState(() => todayInBranchTime())
+  const branches = useQuery(catalogueQueries.branches())
+  const closed = useMemo(
+    () => closedDaysAt(branches.data?.items.find((known) => known.code === branch.code)),
+    [branches.data, branch.code],
+  )
   const [draft, setDraft] = useState<BookingDraft>(() => emptyDraft(today))
+  // The draft opens before the branch's closed days arrive. Once they do, dates
+  // nobody chose that fall on a closed day move to the next open days, once.
+  const datesChosen = useRef(false)
+  useEffect(() => {
+    if (datesChosen.current || closed.size === 0) return
+    datesChosen.current = true
+    setDraft((current) => ({ ...emptyDraft(today, closed), lines: current.lines }))
+  }, [closed, today])
+
+  function chooseDraft(next: BookingDraft) {
+    datesChosen.current = true
+    setDraft(next)
+  }
   const booking = useCounterBooking(customer.id, branch.code)
   const { view, reservation } = booking
 
@@ -101,7 +120,7 @@ function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: 
   }, [view])
 
   function startAgain() {
-    setDraft(emptyDraft(today))
+    setDraft(emptyDraft(today, closed))
     booking.startAgain()
   }
 
@@ -130,9 +149,10 @@ function BookingFlow({ customer, branch }: { customer: CustomerSummary; branch: 
       ) : (
         <BookingLinesStep
           draft={draft}
-          onDraft={setDraft}
+          onDraft={chooseDraft}
           branch={branch}
           today={today}
+          closed={closed}
           booking={booking}
           headingRef={heading}
         />
@@ -181,12 +201,13 @@ function BookingDesk({ customerId, branch }: { customerId: string; branch: Count
   if (!customer.data) return <LoadingState label="Loading the customer" shape="detail" count={1} />
 
   const chosen = customer.data
-  if (!canBookFor(chosen.accountStatus)) {
+  const noBooking = noBookingReason(chosen)
+  if (noBooking !== null) {
     return (
       <>
         <CustomerCard customer={chosen} />
         <Card title="No booking can be made">
-          <p className="text-sm text-ink">{NO_BOOKING_BECAUSE[chosen.accountStatus]}</p>
+          <p className="text-sm text-ink">{noBooking}</p>
         </Card>
       </>
     )

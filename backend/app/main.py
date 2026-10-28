@@ -27,6 +27,10 @@ The email gateway is chosen here as well, from the configuration. With no API
 key the application still starts. It logs one warning, and every booking
 confirmation is then recorded as not sent.
 
+Damage photographs are switched on the same way, by PHOTO_BUCKET. Without it
+the application starts, logs one warning, and every photograph route answers
+503 while everything else works.
+
 The account messages link to the frontend, so the origin they point at is read
 from the configuration here as well and kept on the application state.
 
@@ -50,6 +54,7 @@ from sqlmodel import Session
 
 from app.api.access_policy import enforce_declared_policies
 from app.api.account_deps import FRONTEND_ORIGIN_STATE_KEY
+from app.api.damage_photo_deps import PHOTO_STORE_STATE_KEY
 from app.api.deps import NOTIFICATION_GATEWAY_STATE_KEY
 from app.api.errors import register_exception_handlers
 from app.api.identity_deps import ALLOWED_ORIGINS_STATE_KEY, normalise_origin
@@ -65,12 +70,13 @@ from app.infrastructure.database import (
     engine,
 )
 from app.infrastructure.notification import build_notification_gateway
+from app.infrastructure.photo_store import build_photo_store
 from app.logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
 
 APPLICATION_TITLE = "Toolshed Hire API"
-APPLICATION_VERSION = "0.4.2"
+APPLICATION_VERSION = "1.0.0"
 APPLICATION_DESCRIPTION = (
     "Rental system for Toolshed Hire. Availability is the allocation of specific "
     "tagged assets over half open date periods, enforced by a PostgreSQL GiST "
@@ -195,6 +201,9 @@ def create_app(configuration: Settings = settings) -> FastAPI:
             allowed_recipient=configuration.email_allowed_recipient,
         ),
     )
+    # Chosen once as well. Without a bucket every photograph route answers 503,
+    # one warning says so at start-up, and the rest of the service is untouched.
+    setattr(app.state, PHOTO_STORE_STATE_KEY, build_photo_store(configuration.photo_bucket))
     logger.info(
         "startup.application_built",
         extra={

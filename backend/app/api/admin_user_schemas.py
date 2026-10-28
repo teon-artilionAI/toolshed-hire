@@ -38,6 +38,14 @@ FullNameText = Annotated[TrimmedText, Field(max_length=EDITABLE_FIELDS[FULL_NAME
 PhoneText = Annotated[str, Field(max_length=EDITABLE_FIELDS[PHONE].max_length)]
 BranchCodeText = Annotated[TrimmedText, Field(max_length=BRANCH_CODE_MAX_LENGTH)]
 
+class TradeDiscountRequest(StrictRequest):
+    """A trade discount as a percentage with at most two decimals."""
+
+    trade_discount_percent: str = Field(
+        validation_alias="tradeDiscountPercent", pattern=r"^\d{1,2}(\.\d{1,2})?$"
+    )
+
+
 UNKNOWN_STAFF_RESPONSE: Final[dict[str, object]] = {
     "model": ProblemDetail,
     "description": "No staff account has this key. A customer's account is not one.",
@@ -48,6 +56,13 @@ STAFF_CHANGE_REFUSED_RESPONSE: Final[dict[str, object]] = {
         "The account is the last active administrator, which can never be deactivated or "
         "given another role, or it is the caller's own account, which the caller cannot "
         "deactivate. `detail` says which."
+    ),
+}
+ANONYMISATION_REFUSED_RESPONSE: Final[dict[str, object]] = {
+    "model": ProblemDetail,
+    "description": (
+        "The customer was anonymised already, or still has a booking open, a hire not yet "
+        "settled or money owing. `detail` says which."
     ),
 }
 NO_LONGER_ADMINISTRATOR_RESPONSE: Final[dict[str, object]] = {
@@ -100,6 +115,12 @@ class CustomerStatusRequest(StrictRequest):
     reason: ReasonText
 
 
+class AnonymisationRequest(StrictRequest):
+    """Why a customer's personal details are being removed. The audit event keeps the reason."""
+
+    reason: ReasonText
+
+
 class AdminUserResponse(CamelModel):
     """One staff account as the administrator sees it, never with anything about a password.
 
@@ -143,11 +164,13 @@ class AdminUserPageResponse(CamelModel):
 
 
 __all__ = [
+    "ANONYMISATION_REFUSED_RESPONSE",
     "NO_LONGER_ADMINISTRATOR_RESPONSE",
     "STAFF_CHANGE_REFUSED_RESPONSE",
     "UNKNOWN_STAFF_RESPONSE",
     "AdminUserPageResponse",
     "AdminUserResponse",
+    "AnonymisationRequest",
     "CustomerStatusRequest",
     "DeactivationRequest",
     "StaffCreateRequest",

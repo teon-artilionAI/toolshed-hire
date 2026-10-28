@@ -16,6 +16,7 @@ import { jsonResponse, neverAnswers, problemResponse } from '../../test/api-mock
 import type { RouteHandler } from '../../test/api-mock'
 import { TEST_NOW } from '../../test/catalogue-samples'
 import {
+  ANONYMISED,
   COUNTER_CONFIRMED,
   CUSTOMERS_ROUTE,
   CUSTOMER_ID,
@@ -152,6 +153,20 @@ describe('the customers found', () => {
     expect(within(results()).getByText(/no new booking can be made until an administrator lifts the hold/)).toBeVisible()
     expect(within(results()).queryByRole('link', { name: /New booking/ })).not.toBeInTheDocument()
   })
+
+  it('lists a customer whose details were removed, says why, and offers them no booking', async () => {
+    await openLookup(
+      { [CUSTOMERS_ROUTE]: () => jsonResponse(customerPage([ANONYMISED, THANDI])) },
+      undefined,
+      '/counter/customers?q=former',
+    )
+
+    const former = within(await rowOf(ANONYMISED.displayName))
+    expect(former.getByText(/personal details were removed, so no new booking can be made/)).toBeVisible()
+    expect(former.queryByRole('link', { name: /New booking/ })).not.toBeInTheDocument()
+    expect(former.getByRole('button', { name: /Show bookings/ })).toBeVisible()
+    expect(within(await rowOf(THANDI.displayName)).getByRole('link', { name: /New booking/ })).toBeVisible()
+  })
 })
 
 describe('paging', () => {
@@ -239,6 +254,18 @@ describe('choosing a customer', () => {
     expect(heading).not.toHaveFocus()
     expect(screen.getByRole('link', { name: `New booking for ${THANDI.displayName}` })).toBeVisible()
     expect(await screen.findByText('No bookings at Bellville yet.')).toBeVisible()
+  })
+
+  it('offers no booking for a chosen customer whose details were removed, and says why', async () => {
+    await openLookup(
+      { [customerRoute()]: () => jsonResponse(ANONYMISED), [LIST_ROUTE]: () => jsonResponse(pageOf([])) },
+      undefined,
+      `/counter/customers?customer=${CUSTOMER_ID}`,
+    )
+
+    expect(await screen.findByRole('heading', { level: 2, name: ANONYMISED.displayName }, SCREEN_WAIT)).toBeVisible()
+    expect(screen.getByText(`No booking can be made for ${ANONYMISED.displayName}`)).toBeVisible()
+    expect(screen.queryByRole('link', { name: /New booking/ })).not.toBeInTheDocument()
   })
 
   it('says so when the customer in the address is not on file', async () => {

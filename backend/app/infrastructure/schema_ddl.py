@@ -24,10 +24,14 @@ from app.domain.enums import ENUMS_BY_TYPE_NAME
 # customer lookup by part of a name.
 REQUIRED_EXTENSIONS: Final[tuple[str, ...]] = ("btree_gist", "citext", "pg_trgm")
 
-# The seventeen tables of the documented schema, parents before children.
+# The seventeen tables of the documented schema, the two of the trading
+# calendar (revision 0013) and the damage photographs (revision 0014), parents
+# before children.
 TABLE_NAMES: Final[tuple[str, ...]] = (
     "branch",
+    "branch_trading_hours",
     "user_account",
+    "closure_day",
     "customer_profile",
     "refresh_session",
     "category",
@@ -39,6 +43,7 @@ TABLE_NAMES: Final[tuple[str, ...]] = (
     "rental",
     "rental_item",
     "damage_report",
+    "damage_photo",
     "charge",
     "audit_event",
     "notification",
@@ -98,6 +103,7 @@ PARTIAL_INDEX_NAMES: Final[tuple[str, ...]] = (
     "ix_asset_allocation_released",
     "ix_user_account_staff",
     "ix_customer_profile_standing",
+    "ix_customer_profile_identified",
 )
 
 REFERENCE_SEQUENCE: Final[str] = "reservation_reference_seq"
@@ -138,6 +144,18 @@ RENTAL_BRANCH_DUE_INDEX: Final[str] = "ix_rental_branch_due_back"
 DAMAGE_REPORT_RENTAL_ITEM_INDEX: Final[str] = "ix_damage_report_rental_item"
 DAMAGE_REPORT_ASSET_INDEX: Final[str] = "ix_damage_report_asset"
 
+# The index of revision 0014, through which a report's photographs are listed
+# and counted before another is attached.
+DAMAGE_PHOTO_TABLE: Final[str] = "damage_photo"
+DAMAGE_PHOTO_REPORT_INDEX: Final[str] = "ix_damage_photo_report"
+
+# The two indexes of revision 0015, which the maintenance jobs stand on. The
+# monthly anonymisation reads the customers not yet anonymised in the order of
+# their key through the first, which is partial on that. The weekly pruning
+# finds the refresh sessions that expired long ago through the second.
+CUSTOMER_IDENTIFIED_INDEX: Final[str] = "ix_customer_profile_identified"
+REFRESH_SESSION_EXPIRY_INDEX: Final[str] = "ix_refresh_session_expires_at"
+
 # The five indexes of revision 0007, which the utilisation report reads a
 # period through. The charges raised in a period, the hires still out or back
 # since it began, the losses recorded, the damage reports open or resolved in
@@ -171,6 +189,11 @@ CATEGORY_CODE_CONSTRAINT_NAME: Final[str] = "category_code_key"
 CATEGORY_SLUG_CONSTRAINT_NAME: Final[str] = "category_slug_key"
 PRODUCT_MODEL_SKU_CONSTRAINT_NAME: Final[str] = "product_model_sku_key"
 PRODUCT_MODEL_SLUG_CONSTRAINT_NAME: Final[str] = "product_model_slug_key"
+
+# One live closure per branch and day, a closure for every branch keyed on the
+# nil UUID (revision 0013). The closure repository recognises it when two
+# owners close the same day at once.
+CLOSURE_DAY_LIVE_INDEX_NAME: Final[str] = "uq_closure_day_live"
 
 # The index of revision 0009, through which the administrator's list finds the
 # models of one category, published or not, by name. The partial index of the

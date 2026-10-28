@@ -5,10 +5,10 @@ refusal it can give and pins the status, the problem type and the words, the
 way tests/api/test_reservation_refusals.py does for the reservation routes. A
 route added under the rentals without a case here fails the guard below.
 
-The cases are in tests/api/rental_return_refusals.py and
-tests/api/rental_settlement_refusals.py. They run against the in memory
-database, and the clock stands still on Monday the second of March 2026 until
-a case moves it.
+The cases are in tests/api/rental_return_refusals.py,
+tests/api/rental_settlement_refusals.py and tests/api/rental_photo_refusals.py.
+They run against the in memory database, and the clock stands still on Monday
+the second of March 2026 until a case moves it.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from app.api.access_policy import declared_routes
 from app.domain.enums import UserRole
 from app.main import FRAMEWORK_ROUTE_PATHS
 from app.main import app as production_app
+from tests.api.rental_photo_refusals import PHOTO_REFUSALS
 from tests.api.rental_refusal_cases import RentalRefusal, RentalStage
 from tests.api.rental_return_refusals import RETURN_REFUSALS
 from tests.api.rental_settlement_refusals import SETTLEMENT_REFUSALS
@@ -33,7 +34,7 @@ from tests.support.http import problem_code, problem_of
 from tests.support.rental_api import worked_example_world
 
 RENTAL_PATHS: Final[tuple[str, ...]] = ("/api/rentals", "/api/me/rentals")
-REFUSALS: Final[list[RentalRefusal]] = [*RETURN_REFUSALS, *SETTLEMENT_REFUSALS]
+REFUSALS: Final[list[RentalRefusal]] = [*RETURN_REFUSALS, *SETTLEMENT_REFUSALS, *PHOTO_REFUSALS]
 CASE_IDS: Final[list[str]] = [refusal.name for refusal in REFUSALS]
 
 

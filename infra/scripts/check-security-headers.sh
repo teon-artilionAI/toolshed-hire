@@ -13,11 +13,15 @@
 # passes through the /api rewrite:
 #   Strict-Transport-Security with a max-age of at least half a year
 #   Content-Security-Policy with default-src 'none' and frame-ancestors 'none'
+#   and, on the page only, Trusted Types required with no policy allowed
 #   X-Content-Type-Options: nosniff
 #   Referrer-Policy and Permissions-Policy present
 # And on the connection:
 #   plain http redirects to https
 #   TLS 1.1 and older are refused
+# And, when IAM_ONLY_SERVICE_URL is set, on the API service's own address:
+#   a call with no Google identity is refused with 403 (C-02, #96), so the
+#   frontend is the only way in. The address is never printed.
 #
 # Required environment:
 #   SITE_URL   Origin of the deployed frontend, no trailing slash
@@ -25,6 +29,7 @@
 # Optional environment:
 #   API_PATH                    default /api/health
 #   HEADER_CHECK_TIMEOUT_SECONDS default 20
+#   IAM_ONLY_SERVICE_URL         the service's own address, when it requires IAM
 
 set -uo pipefail
 
@@ -32,6 +37,9 @@ set -uo pipefail
 
 API_PATH="${API_PATH:-/api/health}"
 HEADER_CHECK_TIMEOUT_SECONDS="${HEADER_CHECK_TIMEOUT_SECONDS:-20}"
+IAM_ONLY_SERVICE_URL="${IAM_ONLY_SERVICE_URL:-}"
+# What Cloud Run answers a caller with no identity when IAM is required.
+REFUSED_STATUS="403"
 # Half a year, the max-age NFR-07 asks for and the site sends.
 HSTS_MINIMUM_SECONDS=15768000
 
@@ -95,6 +103,19 @@ check_headers() {
   done
 }
 
+# The page's policy requires Trusted Types for every script sink and allows no
+# policy to be created (C-09). The API answers JSON and is not checked for it.
+check_trusted_types() {
+  local url="$1"
+  local csp
+  csp="$(headers_of "${url}" | awk -F': ' '$1 == "content-security-policy" { print $2 }')"
+  if [[ "${csp}" == *"require-trusted-types-for 'script'"* && "${csp}" == *"trusted-types 'none'"* ]]; then
+    pass "${url} Content-Security-Policy requires Trusted Types and allows no policy"
+  else
+    fail "${url} Content-Security-Policy does not require Trusted Types with trusted-types 'none' (got '${csp}')"
+  fi
+}
+
 check_redirect_to_https() {
   local plain="http://${SITE_URL#https://}/"
   local location
@@ -139,11 +160,26 @@ check_old_tls_refused() {
   fi
 }
 
+# A direct call to the service with no identity has to be refused. Anything
+# else, a 200 above all, means the frontend is not the only way in.
+check_service_refuses_strangers() {
+  [ -n "${IAM_ONLY_SERVICE_URL}" ] || return 0
+  local status
+  status="$(curl --silent --output /dev/null --write-out '%{http_code}'     --max-time "${HEADER_CHECK_TIMEOUT_SECONDS}" "${IAM_ONLY_SERVICE_URL}${API_PATH}" || echo "000")"
+  if [ "${status}" = "${REFUSED_STATUS}" ]; then
+    pass "the service's own address refuses a call with no identity (${status})"
+  else
+    fail "The service's own address answered ${status} to a call with no identity. It must answer ${REFUSED_STATUS}, or anyone can skip the frontend."
+  fi
+}
+
 echo "Checking the security headers and TLS of ${SITE_URL}"
 check_headers "${SITE_URL}/"
+check_trusted_types "${SITE_URL}/"
 check_headers "${SITE_URL}${API_PATH}"
 check_redirect_to_https
 check_old_tls_refused
+check_service_refuses_strangers
 
 if [ "${failures}" -gt 0 ]; then
   echo "${failures} security check(s) failed for ${SITE_URL}."

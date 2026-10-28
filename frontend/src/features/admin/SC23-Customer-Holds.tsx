@@ -7,17 +7,17 @@
  * users-address.ts. A change of standing is one request, so it applies as it
  * is chosen, and the search asks a moment after the last key.
  *
- * Each customer can be moved to either standing they are not in, with a
- * reason, from CustomerEntry. Once the server has answered, a notice above the
- * list says what was done and takes focus, because the customer may no longer
- * match the filter and leave the list. The list has the shared loading,
+ * Each customer can be moved to either standing they are not in, or have their
+ * personal details removed, with a reason, from CustomerEntry. Once the server
+ * has answered, a notice above the list says what was done and takes focus,
+ * because the customer may no longer match the filter and leave the list. The list has the shared loading,
  * failed and empty states, and a refused filter shows its message under the
  * control.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ACCOUNT_STATUSES } from '../../shared/api/account'
 import { adminQueries } from '../../shared/api/admin-queries'
 import type { AccountStatus, CustomerPage, CustomerSummary } from '../../shared/api/contract'
@@ -30,7 +30,7 @@ import { ACCOUNT_STANDING_LABEL, countOf } from '../counter/counter-labels'
 import { SelectInput, TextInput } from '../counter/counter-fields'
 import { FIRST_PAGE } from './report-address'
 import { CustomerEntry } from './SC23-Customer-Entry'
-import { standingMoveWords } from './staff-words'
+import { anonymisedOutcome, standingMoveWords } from './staff-words'
 import { HOLD_FILTER_FIELDS, holdQueryFor, readHoldFilters, writeHoldFilters } from './users-address'
 import type { HoldFilters } from './users-address'
 import { useBranchList } from './use-branch-list'
@@ -61,6 +61,8 @@ function Customers({
   onPage,
   onEvery,
   onMoved,
+  onAnonymised,
+  onDiscountChanged,
 }: {
   page: CustomerPage
   filters: HoldFilters
@@ -68,6 +70,8 @@ function Customers({
   onPage: (page: number) => void
   onEvery: () => void
   onMoved: (customer: CustomerSummary, to: AccountStatus) => void
+  onAnonymised: (customer: CustomerSummary, formerName: string) => void
+  onDiscountChanged: (customer: CustomerSummary) => void
 }) {
   if (page.items.length === 0) {
     const pastTheEnd = page.total > 0
@@ -105,7 +109,7 @@ function Customers({
       <ol className="flex flex-col gap-md" aria-label="Customers">
         {page.items.map((customer) => (
           <li key={customer.id}>
-            <CustomerEntry customer={customer} branchName={branchName} onMoved={onMoved} />
+            <CustomerEntry customer={customer} branchName={branchName} onMoved={onMoved} onAnonymised={onAnonymised} onDiscountChanged={onDiscountChanged} />
           </li>
         ))}
       </ol>
@@ -119,6 +123,7 @@ export default function CustomerHolds() {
   const filters = readHoldFilters(params)
   const branches = useBranchList()
   const list = useQuery(adminQueries.customerHolds(holdQueryFor(filters)))
+  const client = useQueryClient()
   const phase = queryPhase(list)
   const refused = phase === 'failed' && isRefusal(list.error)
   const fieldErrors = fieldErrorsFromProblem(list.error)
@@ -149,6 +154,25 @@ export default function CustomerHolds() {
   function moved(customer: CustomerSummary, to: AccountStatus) {
     const words = standingMoveWords(customer, to)
     setOutcome({ title: words.outcome, line: words.outcomeLine })
+  }
+
+  /** The server's answer no longer has the name, so the entry passes the one
+   *  it showed before the request. */
+  function anonymised(customer: CustomerSummary, formerName: string) {
+    setOutcome(anonymisedOutcome(formerName, customer))
+  }
+
+  function discountChanged(customer: CustomerSummary) {
+    const key = adminQueries.customerHolds(holdQueryFor(filters)).queryKey
+    client.setQueryData(key, (current: CustomerPage | undefined) =>
+      current === undefined
+        ? current
+        : { ...current, items: current.items.map((item) => (item.id === customer.id ? customer : item)) },
+    )
+    setOutcome({
+      title: `The trade discount for ${customer.displayName} is now ${customer.tradeDiscountPercent}%`,
+      line: 'Bookings made from now on use the new discount. Existing bookings keep the discount they were made with.',
+    })
   }
 
   return (
@@ -216,6 +240,8 @@ export default function CustomerHolds() {
               onPage={goToPage}
               onEvery={() => show({ status: null, q: null })}
               onMoved={moved}
+              onAnonymised={anonymised}
+              onDiscountChanged={discountChanged}
             />
           </div>
         )}

@@ -103,6 +103,18 @@ class SqlCustomerRepository:
             extra={"customer_profile_id": str(customer_profile_id), "status": status.value},
         )
 
+    def save_trade_discount(self, customer_profile_id: UUID, percent: Decimal) -> None:
+        """Write the trade discount of a customer (BR-21)."""
+        self._session.execute(
+            update(CustomerProfile)
+            .where(col(CustomerProfile.id) == customer_profile_id)
+            .values(trade_discount_percent=percent)
+        )
+        logger.info(
+            "identity.trade_discount_saved",
+            extra={"customer_profile_id": str(customer_profile_id), "percent": str(percent)},
+        )
+
     def add_registered(
         self, *, user_account_id: UUID, registered_branch_id: UUID, customer: NewCustomer
     ) -> UUID:
@@ -261,9 +273,11 @@ class SqlCustomerRepository:
             user_account_id=row.user_account_id,
             display_name=row.display_name,
             account_status=row.account_status,
+            customer_type=row.customer_type,
             email=email,
             trade_discount_percent=Decimal(row.trade_discount_percent),
             email_verified=email_verified_at is not None,
+            anonymised=row.anonymised_at is not None,
         )
 
 

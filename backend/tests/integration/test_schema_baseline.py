@@ -57,7 +57,9 @@ from tests.support.pg import (
 
 pytestmark = pytest.mark.postgres
 
-DOCUMENTED_TABLE_COUNT: Final[int] = 17
+# The seventeen tables of the design, the two of the trading calendar and the
+# damage photographs.
+DOCUMENTED_TABLE_COUNT: Final[int] = 20
 DOCUMENTED_ENUM_TYPE_COUNT: Final[int] = 17
 DOCUMENTED_EXTENSIONS: Final[frozenset[str]] = frozenset({"btree_gist", "citext", "pg_trgm"})
 
@@ -78,10 +80,10 @@ class TestTheExtensionsExist:
         )
 
 
-class TestTheSeventeenTablesExist:
-    """Sixteen domain tables and rate_limit_counter, under their singular names."""
+class TestEveryTableExists:
+    """The documented tables, the trading calendar's two and the photographs, singular names."""
 
-    def test_the_application_lists_seventeen_distinct_tables(self) -> None:
+    def test_the_application_lists_twenty_distinct_tables(self) -> None:
         assert len(TABLE_NAMES) == DOCUMENTED_TABLE_COUNT
         assert len(set(TABLE_NAMES)) == DOCUMENTED_TABLE_COUNT
 
@@ -162,7 +164,7 @@ class TestTheModelsMatchTheMigratedTables:
         assert set(SQLModel.metadata.tables) == set(TABLE_NAMES)
 
     def test_the_models_package_re_exports_every_model(self) -> None:
-        """`from app.infrastructure.models import X` has to work for all seventeen."""
+        """`from app.infrastructure.models import X` has to work for every table."""
         exported_tables = {getattr(models, name).__tablename__ for name in models.__all__}
         assert exported_tables == set(TABLE_NAMES)
 

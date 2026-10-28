@@ -41,6 +41,7 @@ from app.domain.identity import Actor
 from app.domain.no_show import standing_after_strikes, strike_window_opens_after
 from app.domain.states.base import NO_SHOW_MOVE
 from app.domain.states.guards import branch_has_closed
+from app.domain.trading_calendar import BranchCalendar, OpeningHours
 
 logger = logging.getLogger(__name__)
 
@@ -159,9 +160,13 @@ def mark_due_no_shows(uow: UnitOfWork, now: datetime, today: date, limit: int) -
     due = uow.reservations.lock_due_no_shows(now, limit)
     marked: list[str] = []
     held: list[UUID] = []
+    calendars: dict[UUID, BranchCalendar] = {}
     for found in due:
         reservation = found.reservation
-        closed_at = business_instant(reservation.period.start, found.branch_closes_at)
+        hours = _hours_on_first_day(uow, reservation, calendars)
+        if hours is None:
+            continue
+        closed_at = business_instant(reservation.period.start, hours.closes)
         if not (reservation.state.permits(NO_SHOW_MOVE) and branch_has_closed(now, closed_at)):
             continue
         outcome = mark_as_no_show(
@@ -225,3 +230,46 @@ def _count_the_strike(
         },
     )
     return strikes, True
+
+
+def _hours_on_first_day(
+    uow: UnitOfWork, reservation: Reservation, calendars: dict[UUID, BranchCalendar]
+) -> OpeningHours | None:
+    """Return the collection branch's hours on the booking's first day, or None if it was shut.
+
+    The closing time that day is when the booking became a no show (BR-17).
+
+    A booking can only be made for a day the branch trades, but the owner can
+    close a branch on a day after bookings for it were made. The customer could
+    not have collected then, so the sweep does not call it a no show. It leaves
+    the booking for the owner, who sees it when the closure is set, and logs it.
+
+    Raises:
+        LookupError: If the collection branch cannot be read. A reservation
+            carries a foreign key to its branch and nothing is ever deleted,
+            so this is a fault in the data.
+
+    """
+    calendar = calendars.get(reservation.branch_id)
+    if calendar is None:
+        branch = uow.branches.get(reservation.branch_id)
+        if branch is None:
+            raise LookupError(
+                f"Attempted to read collection branch {reservation.branch_id} of reservation "
+                f"{reservation.reference} for the no show sweep, and it could not be read."
+            )
+        calendar = branch.calendar
+        calendars[reservation.branch_id] = calendar
+    closed = calendar.closed_day(reservation.period.start)
+    if closed is None:
+        return calendar.hours_on(reservation.period.start)
+    logger.warning(
+        "booking.no_show_skipped_closed_day",
+        extra={
+            "reference": reservation.reference,
+            "start_date": reservation.period.start.isoformat(),
+            "closure": closed.kind,
+            "consequence": "the booking stays confirmed for the owner to deal with",
+        },
+    )
+    return None

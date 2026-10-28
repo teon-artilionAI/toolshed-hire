@@ -26,8 +26,19 @@ NO_SHOW_REASON: Final[str] = "Nobody came by closing time and the phone went una
 AFTER_CLOSING: Final[datetime] = datetime(2026, 3, 2, 15, 0, 1, tzinfo=UTC)
 
 DASHBOARD_MEMBERS: Final[frozenset[str]] = frozenset(
-    {"branchCode", "branchName", "date", "counts", "collectionsDue", "returnsDue", "overdue"}
-)
+    {
+        "branchCode", "branchName", "date", "trading", "counts", "collectionsDue",
+        "returnsDue", "overdue",
+    }
+)  # fmt: skip
+# Monday 2 March 2026, a weekday on the design's week.
+MONDAY_TRADING: Final[dict[str, object]] = {
+    "open": True,
+    "opensAt": "07:00",
+    "closesAt": "17:00",
+    "closedReason": None,
+    "closedKind": None,
+}
 COUNTS_MEMBERS: Final[frozenset[str]] = frozenset(
     {"collectionsDue", "returnsDue", "overdue", "onHire", "quarantined"}
 )
@@ -50,7 +61,9 @@ OVERDUE_MEMBERS: Final[frozenset[str]] = frozenset(
     }
 )  # fmt: skip
 DIARY_MEMBERS: Final[frozenset[str]] = frozenset({"branchCode", "branchName", "days"})
-DIARY_DAY_MEMBERS: Final[frozenset[str]] = frozenset({"date", "collections", "returns"})
+DIARY_DAY_MEMBERS: Final[frozenset[str]] = frozenset(
+    {"date", "trading", "collections", "returns"}
+)
 DIARY_COLLECTION_MEMBERS: Final[frozenset[str]] = frozenset(
     {
         "reservationId", "reference", "status", "customerName", "customerPhone", "from", "to",
@@ -106,6 +119,7 @@ __all__ = [
     "COLLECTION_DUE_MEMBERS",
     "COUNTS_MEMBERS",
     "DASHBOARD_MEMBERS",
+    "MONDAY_TRADING",
     "DASHBOARD_PATH",
     "DIARY_COLLECTION_MEMBERS",
     "DIARY_DAY_MEMBERS",

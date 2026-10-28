@@ -172,3 +172,16 @@ export function humanise(value: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+
+const BYTES_PER_KILOBYTE = 1024
+const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE
+
+/**
+ * The size of a file in words a person reads, for example "850 KB" or
+ * "3.2 MB". Counted in steps of 1024, the way the 4 MB limit on a photograph
+ * is, so a file shown as 4.0 MB is at the limit and not past it.
+ */
+export function fileSize(bytes: number): string {
+  if (bytes >= BYTES_PER_MEGABYTE) return `${(bytes / BYTES_PER_MEGABYTE).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / BYTES_PER_KILOBYTE))} KB`
+}

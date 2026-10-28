@@ -8,13 +8,14 @@ register a walk-in who does not want a login.
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from ipaddress import IPv4Address, IPv6Address
 from uuid import UUID, uuid4
 
-from sqlalchemy import CHAR, Column, Text, Time
+from sqlalchemy import CHAR, Column, Date, ForeignKey, SmallInteger, Text, Time
 from sqlalchemy.dialects.postgresql import CITEXT, INET
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
 from app.domain.enums import (
@@ -45,6 +46,7 @@ from app.infrastructure.models.columns import (
 )
 
 BRANCH_CODE_MAX_LENGTH = 4
+CLOSURE_REASON_MAX_LENGTH = 120
 ID_DOCUMENT_DIGITS_KEPT = 4
 NO_DISCOUNT = Decimal("0")
 
@@ -112,6 +114,10 @@ class CustomerProfile(SQLModel, table=True):
 
     `late_cancellation_count` is where BR-16 records a late cancellation. The
     design document states the rule and lists no column for it.
+
+    `anonymised_at` is set when the customer's identifying columns were
+    written over (#113). The row stays, because the hires it owns are
+    financial records.
     """
 
     __tablename__ = "customer_profile"
@@ -142,6 +148,8 @@ class CustomerProfile(SQLModel, table=True):
     no_show_count: int = Field(default=0, sa_column=small_int())
     late_cancellation_count: int = Field(default=0, sa_column=small_int())
     registered_branch_id: UUID = Field(sa_column=uuid_fk("branch.id"))
+    # Set once, when the identifying columns were written over (revision 0015).
+    anonymised_at: datetime | None = Field(default=None, sa_column=timestamp())
     created_at: datetime | None = Field(default=None, sa_column=created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=updated_at_column())
 
@@ -172,3 +180,49 @@ class RefreshSession(SQLModel, table=True):
     )
     created_at: datetime | None = Field(default=None, sa_column=created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=updated_at_column())
+
+
+class BranchTradingHours(SQLModel, table=True):
+    """A branch's opening hours on one ISO weekday, Monday 1 to Sunday 7.
+
+    A weekday with no row is a day the branch never opens. Revision 0013 keys
+    the table on the branch and the weekday and checks that the counter closes
+    after it opens. The application role may only read it.
+    """
+
+    __tablename__ = "branch_trading_hours"
+
+    branch_id: UUID = Field(
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("branch.id", ondelete="RESTRICT"),
+            primary_key=True,
+            nullable=False,
+        )
+    )
+    weekday: int = Field(sa_column=Column(SmallInteger, primary_key=True, nullable=False))
+    opens_at: time = Field(sa_column=Column(Time, nullable=False))
+    closes_at: time = Field(sa_column=Column(Time, nullable=False))
+    created_at: datetime | None = Field(default=None, sa_column=created_at_column())
+    updated_at: datetime | None = Field(default=None, sa_column=updated_at_column())
+
+
+class ClosureDay(SQLModel, table=True):
+    """A day a branch does not trade although its week says it would.
+
+    A null branch means every branch. A closure is cancelled, never deleted
+    (BR-51), and revision 0013 allows one live closure per branch and day.
+    """
+
+    __tablename__ = "closure_day"
+
+    id: UUID = Field(default_factory=uuid4, sa_column=uuid_pk())
+    branch_id: UUID | None = Field(default=None, sa_column=uuid_fk("branch.id", nullable=True))
+    day: date = Field(sa_column=Column(Date, nullable=False))
+    reason: str = Field(sa_column=varchar(CLOSURE_REASON_MAX_LENGTH))
+    created_by_user_id: UUID = Field(sa_column=uuid_fk("user_account.id"))
+    created_at: datetime | None = Field(default=None, sa_column=created_at_column())
+    cancelled_at: datetime | None = Field(default=None, sa_column=timestamp())
+    cancelled_by_user_id: UUID | None = Field(
+        default=None, sa_column=uuid_fk("user_account.id", nullable=True)
+    )

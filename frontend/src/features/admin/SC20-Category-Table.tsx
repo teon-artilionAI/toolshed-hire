@@ -38,7 +38,7 @@ function Value({ column, children }: { column: string; children: ReactNode }) {
   return (
     <td role="cell" className={LABELLED_CELL}>
       <span className="shrink-0 text-sm text-slate-soft lg:hidden">{column}</span>
-      <span className="tabular min-w-0 break-words text-right text-ink lg:text-left">{children}</span>
+      <span className="tabular min-w-0 wrap-break-word text-right text-ink lg:text-left">{children}</span>
     </td>
   )
 }
@@ -111,7 +111,7 @@ function CategoryRow({
     <>
       <tr role="row" className="block px-md py-sm lg:table-row">
         <th role="rowheader" scope="row" className={`${CELL_BASE} block font-medium text-ink ${child ? 'lg:pl-xl' : ''}`}>
-          <span className="block break-words">{category.name}</span>
+          <span className="block wrap-break-word">{category.name}</span>
           <span className="mt-xs block break-all font-mono text-xs font-normal text-slate-soft">{category.code}</span>
         </th>
         <Value column="Sits under">{category.parentName ?? 'Top level'}</Value>

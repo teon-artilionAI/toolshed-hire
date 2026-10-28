@@ -76,11 +76,21 @@ export function branchClockTime(timestamp: string): string {
 }
 
 /**
+ * The day at the branches for an instant the API sent, for example
+ * "2 Oct 2026", when the time of day does not matter.
+ *
+ * @throws RangeError when the string is not an instant.
+ */
+export function branchDay(timestamp: string): string {
+  return BRANCH_DAY.format(instantOf(timestamp))
+}
+
+/**
  * The day and the time of day at the branches for an instant the API sent,
  * for example "2 Oct 2026 at 15:30".
  *
  * @throws RangeError when the string is not an instant.
  */
 export function branchDateTime(timestamp: string): string {
-  return `${BRANCH_DAY.format(instantOf(timestamp))} at ${branchClockTime(timestamp)}`
+  return `${branchDay(timestamp)} at ${branchClockTime(timestamp)}`
 }

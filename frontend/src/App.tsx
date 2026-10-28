@@ -16,7 +16,8 @@
  * is the connectivity panel at /system. Keeping it in this table rather than
  * adding a second routing mechanism beside it is the whole reason the table
  * exists. INFO-01, the privacy notice at /privacy, is routed the same way and
- * is not one of the twenty four either.
+ * is not one of the twenty four either, and nor is VIEW-01, the owner's
+ * trading calendar at /admin/closure-days, which is a view of SC-19.
  *
  * Every screen renders inside an error boundary. A screen that throws shows the
  * shared error state in its place, and the shell and its navigation stay up.
@@ -79,6 +80,7 @@ const SCREEN_MODULE: Record<string, ScreenLoader> = {
   'SC-22': () => import('./features/admin/SC22-Utilisation-Report'),
   'SC-23': () => import('./features/admin/SC23-User-Management'),
   'SC-24': () => import('./features/admin/SC24-Audit-Log'),
+  'VIEW-01': () => import('./features/admin/SC19-Trading-Calendar'),
   'INFO-01': () => import('./features/customer/PrivacyNotice'),
   'DEV-01': () => import('./features/system/SystemStatus'),
 }
@@ -107,7 +109,7 @@ function ScreenSkeleton() {
       </p>
       <div className="animate-pulse" aria-hidden="true">
         <div className="mb-xs h-3 w-16 rounded bg-muted" />
-        <div className="mb-lg h-8 w-2/3 max-w-sm rounded bg-muted" />
+        <div className="mb-lg h-8 w-2/3 max-w-(--container-sm) rounded bg-muted" />
         <div className="mb-lg grid gap-md sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-28 rounded-lg border border-line bg-surface" />
@@ -117,7 +119,7 @@ function ScreenSkeleton() {
           <div className="h-10 rounded-t-lg bg-muted" />
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="border-t border-line px-md py-md">
-              <div className="h-4 w-full max-w-lg rounded bg-muted" />
+              <div className="h-4 w-full max-w-(--container-lg) rounded bg-muted" />
             </div>
           ))}
         </div>

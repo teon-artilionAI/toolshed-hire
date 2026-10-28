@@ -160,7 +160,7 @@ export function IdentificationCard({
             required
           />
         </div>
-        <div className="max-w-[12rem]">
+        <div className="max-w-48">
           <TextField
             {...control('billingPostalCode')}
             label="Postal code"
@@ -217,7 +217,7 @@ export function PasswordAndPrivacyCard({
             to={PRIVACY_PATH}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-[2.75rem] cursor-pointer items-center text-sm font-medium
+            className="inline-flex min-h-11 cursor-pointer items-center text-sm font-medium
                        text-ink underline transition-colors duration-200 hover:text-slate"
           >
             Read the privacy notice (opens in a new tab)

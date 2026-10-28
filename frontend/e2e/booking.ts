@@ -14,7 +14,7 @@
 
 import { expect } from '@playwright/test'
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
-import { dateFromToday } from './hire-dates.ts'
+import { openHireFromToday } from './hire-dates.ts'
 
 /** Rand as the screens write it, for example "R 1 360,00". */
 export const RAND = /R\s[\d\s]+[,.]\d{2}/
@@ -79,7 +79,7 @@ export interface ModelInBasket {
  * @param collectInDays How many days ahead the hire starts.
  */
 export function periodStarting(collectInDays: number): Period {
-  return { from: dateFromToday(collectInDays), to: dateFromToday(collectInDays + HIRE_DAYS) }
+  return openHireFromToday(collectInDays, HIRE_DAYS)
 }
 
 /** The first branch the API lists, through the same address the page uses. */

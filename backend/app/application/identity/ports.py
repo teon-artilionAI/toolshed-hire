@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
@@ -115,6 +116,10 @@ class CustomerRepository(Protocol):
 
     def save_account_status(self, customer_profile_id: UUID, status: AccountStatus) -> None:
         """Write the standing of a customer (BR-18)."""
+        ...
+
+    def save_trade_discount(self, customer_profile_id: UUID, percent: Decimal) -> None:
+        """Write the trade discount of a customer (BR-21)."""
         ...
 
     def add_registered(
@@ -240,6 +245,19 @@ class PasswordVerifier(Protocol):
                 amount of work either way and answers False for None, so the
                 time a refusal takes says nothing about why (BR-46).
 
+        """
+        ...
+
+
+class BreachedPasswordChecker(Protocol):
+    """Checks a chosen password against a service that lists breached passwords."""
+
+    def is_breached(self, plain_password: str) -> bool:
+        """Return True when the password is known to have appeared in a breach.
+
+        An implementation must never send the password itself anywhere. If the
+        service cannot be reached, it returns False and warns, because an
+        outage at a third party must not stop somebody opening an account.
         """
         ...
 

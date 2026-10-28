@@ -36,6 +36,8 @@ from app.domain.enums import (
     UserRole,
 )
 from app.domain.period import BookingPeriod
+from app.domain.trading_calendar import BranchCalendar
+from app.infrastructure.branch_calendars import hours_rows_for
 from app.infrastructure.models import (
     Asset,
     AssetAllocation,
@@ -144,6 +146,8 @@ class Factory:
         )
         self.session.add(branch)
         self.session.flush()
+        self.session.add_all(hours_rows_for(branch.id, BranchCalendar.standard()))
+        self.session.flush()
         return branch
 
     def category(self, *, name: str = "Drilling and Demolition") -> Category:
@@ -250,7 +254,11 @@ class Factory:
         return account
 
     def customer_profile(
-        self, *, branch: Branch, account: UserAccount | None = None
+        self,
+        *,
+        branch: Branch,
+        account: UserAccount | None = None,
+        customer_type: CustomerType = CustomerType.INDIVIDUAL,
     ) -> CustomerProfile:
         """Create the hire profile of a customer.
 
@@ -258,12 +266,15 @@ class Factory:
             branch: The branch that registered the customer.
             account: The sign in account the profile belongs to. Omit it to
                 build a walk-in, which has a profile and no login.
+            customer_type: Whether the customer hires as an individual or as
+                a trade account.
 
         """
         profile = CustomerProfile(
             user_account_id=account.id if account else None,
-            customer_type=CustomerType.INDIVIDUAL,
+            customer_type=customer_type,
             display_name=account.full_name if account else "Nomsa Dlamini",
+            company_name="Dlamini Plant Hire" if customer_type is CustomerType.TRADE else None,
             id_document_type=IdDocType.SA_ID,
             id_document_last4="4189",
             contact_phone="082 441 7719",

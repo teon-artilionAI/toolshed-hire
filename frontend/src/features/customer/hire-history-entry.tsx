@@ -8,6 +8,9 @@
  *
  * A deposit given back is a negative amount on the wire. It is written as
  * returned to the customer, never with a bare minus sign.
+ *
+ * A hire whose damage was reported ends with its damage photographs, opened
+ * on request, in hire-damage-photos.tsx.
  */
 
 import type { Rental, RentalCharge } from '../../shared/api/contract'
@@ -15,6 +18,7 @@ import { formatDate, isNegativeMoney, money, unsignedMoney } from '../../shared/
 import { branchDateTime } from '../../shared/today'
 import { StatusPill } from '../../shared/ui'
 import { HIRE_CHARGE_LABEL, HIRE_CHARGE_STATUS_LABEL, HIRE_STATUS_LABEL } from './customer-labels'
+import { HireDamagePhotos } from './hire-damage-photos'
 
 /** What was hired, by model, for example "2 x CP 100 Plate Compactor". */
 function modelsHired(rental: Rental): string {
@@ -37,7 +41,7 @@ function amountInWords(amount: string): string {
 function ChargeLine({ charge }: { charge: RentalCharge }) {
   return (
     <li className="flex flex-wrap justify-between gap-x-md gap-y-xs border-b border-line py-xs last:border-0">
-      <span className="min-w-0 break-words text-ink">
+      <span className="min-w-0 wrap-break-word text-ink">
         {HIRE_CHARGE_LABEL[charge.type]}. {charge.description}
         <span className="block text-xs text-slate-soft">{HIRE_CHARGE_STATUS_LABEL[charge.status]}</span>
       </span>
@@ -68,7 +72,7 @@ export function HireHistoryEntry({ rental }: { rental: Rental }) {
         </div>
         <p className="mt-xs text-sm text-ink">From {rental.branchName}</p>
         <p className="tabular text-sm text-slate-soft">{datesOf(rental)}</p>
-        <p className="mt-xs break-words text-sm text-ink">{modelsHired(rental)}</p>
+        <p className="mt-xs wrap-break-word text-sm text-ink">{modelsHired(rental)}</p>
 
         <h4 className="mt-md text-xs font-semibold uppercase tracking-wide text-slate-soft">Charges</h4>
         {rental.charges.length === 0 ? (
@@ -88,6 +92,7 @@ export function HireHistoryEntry({ rental }: { rental: Rental }) {
           <DepositLine term="Returned to you" amount={rental.depositRefunded} />
           <DepositLine term="Balance due" amount={rental.balanceDue} />
         </dl>
+        <HireDamagePhotos rental={rental} />
       </article>
     </li>
   )

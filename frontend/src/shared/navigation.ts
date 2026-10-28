@@ -54,6 +54,14 @@ export interface ScreenDef {
    * menu. The shell links to it from the footer of every screen.
    */
   supporting?: boolean
+  /**
+   * A view of a numbered screen that has an address of its own, named by the
+   * identifier of that screen, such as SC-19. It is routed, guarded and
+   * offered in the menu like any screen, and its page names the screen it
+   * belongs to. It is never counted among the twenty four, because it is
+   * part of one of them.
+   */
+  partOf?: string
 }
 
 export const SCREENS: ScreenDef[] = [
@@ -93,6 +101,13 @@ export const SCREENS: ScreenDef[] = [
   { id: 'SC-23', path: '/admin/users', name: 'User and Role Management', navLabel: 'Users', role: 'admin', live: true, inNav: true, icon: 'ShieldCheck' },
   { id: 'SC-24', path: '/admin/audit', name: 'Audit and Notification Log', navLabel: 'Audit', role: 'admin', live: true, inNav: true, icon: 'ScrollText' },
 
+  // Views of a numbered screen with an address of their own. Not among the
+  // twenty-four, because each is part of the screen it names in `partOf`.
+  //
+  // The trading calendar is reached from the owner's dashboard and from the
+  // menu. It is where the owner closes a branch, or every branch, on a day.
+  { id: 'VIEW-01', path: '/admin/closure-days', name: 'Trading Calendar', navLabel: 'Calendar', role: 'admin', live: true, inNav: true, icon: 'CalendarX', partOf: 'SC-19' },
+
   // Supporting pages. Not among the twenty-four numbered screens.
   // The identifier stays outside the SC series for the same reason the
   // development screen's does, so the numbered inventory still maps one-to-one
@@ -116,12 +131,12 @@ export const SCREENS: ScreenDef[] = [
 /**
  * The screens belonging to a role.
  *
- * Development screens and supporting pages are excluded. This function answers
+ * Development screens, supporting pages and the views of a screen are excluded. This function answers
  * a question about the numbered screens, and the count it returns is one of
  * the things the documentation is reconciled against.
  */
 export function screensForRole(role: Role): ScreenDef[] {
-  return SCREENS.filter((s) => s.role === role && !s.devOnly && !s.supporting)
+  return SCREENS.filter((s) => s.role === role && !s.devOnly && !s.supporting && !s.partOf)
 }
 
 export function screenById(id: string): ScreenDef | undefined {

@@ -8,7 +8,7 @@
  */
 
 import { screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screenById } from './navigation'
 import { NO_ACCESS_HEADING } from './no-access'
 import { SAMPLE_DATA_TITLE } from './sample-data-notice'
@@ -40,7 +40,7 @@ function menuLabels(): Set<string> {
 
 const CUSTOMER_MENU = new Set(['Catalogue', 'Search', 'Basket', 'My Hires', 'Account'])
 const COUNTER_MENU = ['Today', 'Diary', 'Customers', 'New Booking', 'Locator', 'Overdue']
-const ADMIN_MENU = ['Overview', 'Catalogue', 'Assets', 'Reports', 'Users', 'Audit']
+const ADMIN_MENU = ['Overview', 'Catalogue', 'Assets', 'Reports', 'Users', 'Audit', 'Calendar']
 
 describe('the menu and the layout', () => {
   it('offers a visitor the customer menu and a way to sign in', async () => {
@@ -241,5 +241,35 @@ describe('the sample data notice in the shell', () => {
     await findScreenHeading(NO_ACCESS_HEADING)
 
     expect(screen.queryByText(SAMPLE_DATA_TITLE)).not.toBeInTheDocument()
+  })
+})
+
+describe('the user guide link in the footer', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('is hidden while no address is configured', async () => {
+    vi.stubEnv('VITE_USER_GUIDE_URL', '')
+    mockApi(SIGNED_OUT)
+
+    renderApp('/privacy')
+    await findScreenHeading('Privacy notice')
+
+    expect(screen.queryByRole('link', { name: 'Help' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Privacy notice' })).toBeVisible()
+  })
+
+  it('opens the configured guide in a new tab', async () => {
+    vi.stubEnv('VITE_USER_GUIDE_URL', 'https://example.com/toolshed-guide.pdf')
+    mockApi(SIGNED_OUT)
+
+    renderApp('/privacy')
+    await findScreenHeading('Privacy notice')
+
+    const link = screen.getByRole('link', { name: 'Help' })
+    expect(link).toHaveAttribute('href', 'https://example.com/toolshed-guide.pdf')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noreferrer')
   })
 })

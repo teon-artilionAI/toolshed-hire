@@ -19,16 +19,17 @@
  * unit.
  */
 
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { REFERENCE } from './booking.ts'
+import { CLOSED_TODAY_REASON, todayIsTradingDay } from './hire-dates.ts'
 
 /** How many digits of the time go into a phone number, after its prefix. */
 const PHONE_TIME_DIGITS = 8
 
 /** What a booking is for. Each keeps its walk in and its model apart from
  *  every other journey's. */
-export type BookingPurpose = 'noShow' | 'damage' | 'correction'
+export type BookingPurpose = 'noShow' | 'damage' | 'correction' | 'b46'
 
 interface PurposeDetails {
   /** The word in the walk in's name. */
@@ -45,6 +46,7 @@ const PURPOSES: Record<BookingPurpose, PurposeDetails> = {
   noShow: { word: 'Noshow', mobileDigit: '5', desktopDigit: '6', modelsFromTheEnd: 2 },
   damage: { word: 'Damage', mobileDigit: '3', desktopDigit: '4', modelsFromTheEnd: 3 },
   correction: { word: 'Correction', mobileDigit: '1', desktopDigit: '2', modelsFromTheEnd: 4 },
+  b46: { word: 'B46', mobileDigit: '7', desktopDigit: '8', modelsFromTheEnd: 6 },
 }
 
 const CONFIRMED_STEP = 'Step 4 of 4. The booking is confirmed'
@@ -82,6 +84,7 @@ export async function bookForTodayAtTheCounter(
   projectName: string,
   purpose: BookingPurpose = 'noShow',
 ): Promise<CounterBooking> {
+  test.skip(!todayIsTradingDay(), CLOSED_TODAY_REASON)
   const details = PURPOSES[purpose]
   const { name, phone } = unusedWalkIn(projectName, details)
 

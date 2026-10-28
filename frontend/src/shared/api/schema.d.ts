@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/api/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report that the process is alive, without opening a session
+         * @description Answer from the process alone, so an uptime check never wakes the database.
+         *
+         *     The route has no session dependency on purpose. An uptime check calling it
+         *     every five minutes must not keep Neon's compute awake all month, and this is
+         *     the proof that it cannot.
+         */
+        get: operations["read_liveness_api_health_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -278,6 +302,73 @@ export interface paths {
         patch: operations["patch_profile_api_me_profile_patch"];
         trace?: never;
     };
+    "/api/me/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the signed in customer's own statement for a period
+         * @description Return the statement, showing the ledger's own rows.
+         *
+         *     Raises:
+         *         ValidationFailure: If the period is reversed or longer than ten
+         *             years. HTTP 422, naming `from` or `to`.
+         */
+        get: operations["read_statement_api_me_statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/statement.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the statement as a CSV file
+         * @description Return the same statement as a file a spreadsheet opens.
+         *
+         *     Raises:
+         *         ValidationFailure: As for the statement. HTTP 422.
+         */
+        get: operations["export_statement_api_me_statement_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return everything held about the signed in customer as a JSON file
+         * @description Return the customer's data as a download and record that it was exported.
+         */
+        get: operations["export_my_data_api_me_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/rentals": {
         parameters: {
             query?: never;
@@ -290,6 +381,54 @@ export interface paths {
          * @description Return one page of the caller's own rentals, with no asset tag on any item.
          */
         get: operations["list_my_rentals_api_me_rentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/rentals/{id}/damage-photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the damage photographs on the signed in customer's own hire
+         * @description Return the photographs of every damage report on the hire.
+         *
+         *     Raises:
+         *         NotFound: If the hire does not exist or is not the caller's. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["list_my_damage_photos_api_me_rentals__id__damage_photos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/rentals/{id}/damage-photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return a five minute link that opens one damage photograph on the customer's hire
+         * @description Return a signed link to the photograph, served as a download.
+         *
+         *     Raises:
+         *         NotFound: If the hire is not the caller's or holds no such photograph. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["read_my_damage_photo_link_api_me_rentals__id__damage_photos__photoId__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -377,6 +516,8 @@ export interface paths {
          *         AuthorisationFailure: If a customer names a customer profile. HTTP 403.
          *         BranchScopeError: If counter staff book at another branch. HTTP 403.
          *         AccountOnHoldError: If the customer's account is on hold. HTTP 403.
+         *         CustomerAnonymisedError: If the customer's personal details were
+         *             removed. HTTP 403.
          *         ValidationFailure: If a field is refused. HTTP 422, naming the field.
          */
         post: operations["post_reservation_api_reservations_post"];
@@ -533,6 +674,57 @@ export interface paths {
         get: operations["read_reservation_api_reservations__id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/reservations/{id}/confirmation/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the signed in customer's own booking confirmation again
+         * @description Queue and send the confirmation again for the caller's own booking.
+         *
+         *     Raises:
+         *         NotFound: If the booking is absent or not the caller's. HTTP 404.
+         *         StateTransitionError: If it is not confirmed or has no address. HTTP 409.
+         *         TooManyAttempts: If three re-sends happened this hour. HTTP 429.
+         */
+        post: operations["post_my_confirmation_resend_api_me_reservations__id__confirmation_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/counter/reservations/{id}/confirmation/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a booking confirmation again from the counter
+         * @description Queue and send the confirmation again for a booking at the caller's branch.
+         *
+         *     Raises:
+         *         NotFound: If the booking is absent. HTTP 404.
+         *         BranchScopeError: If it is at another branch. HTTP 403.
+         *         StateTransitionError: If it is not confirmed or has no address. HTTP 409.
+         *         TooManyAttempts: If three re-sends happened this hour. HTTP 429.
+         */
+        post: operations["post_counter_confirmation_resend_api_counter_reservations__id__confirmation_resend_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -810,6 +1002,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/damage-reports/{id}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the photographs of a damage report, oldest first
+         * @description Return every photograph of the report.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["list_damage_photos_api_damage_reports__id__photos_get"];
+        put?: never;
+        /**
+         * Attach a JPEG or PNG photograph to a damage report
+         * @description Check, re-encode, store and record one photograph.
+         *
+         *     Raises:
+         *         PhotoTooLarge: Past 4 MB. HTTP 413.
+         *         UnsupportedPhoto: Not a JPEG or a PNG. HTTP 415.
+         *         NotFound: If there is no such report. HTTP 404.
+         *         BranchScopeError: If counter staff attach it at another branch. HTTP 403.
+         *         PhotoLimitReached: If the report holds six already. HTTP 409.
+         *         ValidationFailure: If it cannot be decoded or holds too many pixels. HTTP 422.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        post: operations["post_damage_photo_api_damage_reports__id__photos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/damage-reports/{id}/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return a five minute link that opens one photograph of a damage report
+         * @description Return a signed link to the photograph, served as a download.
+         *
+         *     Raises:
+         *         NotFound: If there is no such report or photograph. HTTP 404.
+         *         FeatureSwitchedOff: If photographs are switched off. HTTP 503.
+         */
+        get: operations["read_damage_photo_link_api_damage_reports__id__photos__photoId__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/counter/dashboard": {
         parameters: {
             query?: never;
@@ -921,6 +1174,30 @@ export interface paths {
          *         ValidationFailure: As for the report. HTTP 422, naming the parameter.
          */
         get: operations["export_utilisation_report_api_admin_reports_utilisation_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/reports/charges.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return every charge raised in a calendar month as a CSV file
+         * @description Return the month's charges, streamed, with the totals at the end.
+         *
+         *     Raises:
+         *         ValidationFailure: If the month is not a real YYYY-MM month or the
+         *             branch is unknown. HTTP 422, naming the parameter.
+         */
+        get: operations["export_monthly_charges_api_admin_reports_charges_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1499,6 +1776,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/customers/{id}/trade-discount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a trade customer's discount from the next booking
+         * @description Set the discount and record the old and new value, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer with this key. HTTP 404.
+         *         ValidationFailure: If the customer is not a trade account, or the
+         *             value is out of range or has more than two decimals. HTTP 422,
+         *             naming `tradeDiscountPercent`.
+         */
+        post: operations["post_trade_discount_api_admin_customers__id__trade_discount_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/customers/{id}/anonymise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove a customer's personal details at their request, with the reason
+         * @description Anonymise the customer and record it with the reason, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no customer with this key. HTTP 404.
+         *         StateTransitionError: If the customer was anonymised already or still
+         *             has something open. HTTP 409.
+         *         ValidationFailure: If the reason is out of bounds. HTTP 422, naming `reason`.
+         */
+        post: operations["post_customer_anonymisation_api_admin_customers__id__anonymise_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/closure-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the public holidays and closure days in a span, by day
+         * @description Return every public holiday and live closure day in the span, by day.
+         *
+         *     Raises:
+         *         ValidationFailure: If `to` is before `from` or the span is longer than
+         *             a year. HTTP 422, naming `to`.
+         */
+        get: operations["read_closure_days_api_admin_closure_days_get"];
+        put?: never;
+        /**
+         * Close a branch, or every branch, on a day, with the reason
+         * @description Add the closure and record it, in one transaction.
+         *
+         *     Raises:
+         *         ValidationFailure: For a reason out of bounds, a day that has passed or
+         *             is more than a year ahead, or a branch that is not trading. HTTP
+         *             422, naming the field.
+         *         StateTransitionError: If the day is closed already. HTTP 409.
+         */
+        post: operations["post_closure_day_api_admin_closure_days_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/closure-days/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the bookings and hires out that fall on a day a closure would close
+         * @description Return the bookings that start or end on the day, and the hires due back.
+         *
+         *     Raises:
+         *         ValidationFailure: If no trading branch has the code. HTTP 422, naming
+         *             `branchCode`.
+         */
+        get: operations["read_closure_impact_api_admin_closure_days_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/closure-days/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a closure day, which opens the day again
+         * @description Cancel the closure and record it, in one transaction.
+         *
+         *     Raises:
+         *         NotFound: If there is no such closure. HTTP 404.
+         *         StateTransitionError: If it was cancelled already. HTTP 409.
+         */
+        post: operations["post_closure_cancel_api_admin_closure_days__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/branches": {
         parameters: {
             query?: never;
@@ -1508,7 +1919,7 @@ export interface paths {
         };
         /**
          * List the trading branches
-         * @description Return every active branch, ordered by name.
+         * @description Return every active branch, ordered by name, with its days and hours.
          */
         get: operations["list_branches_api_branches_get"];
         put?: never;
@@ -1986,6 +2397,14 @@ export interface components {
             createdAt: string;
         };
         /**
+         * AnonymisationRequest
+         * @description Why a customer's personal details are being removed. The audit event keeps the reason.
+         */
+        AnonymisationRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
          * AssetCreateRequest
          * @description A new unit. It starts at INTAKE, and its tag, model and branch never change.
          */
@@ -2141,9 +2560,13 @@ export interface components {
             /** Action */
             action: string;
             /** Beforestate */
-            beforeState: Record<string, unknown>;
+            beforeState: {
+                [key: string]: unknown;
+            };
             /** Afterstate */
-            afterState: Record<string, unknown>;
+            afterState: {
+                [key: string]: unknown;
+            };
             /** Requestid */
             requestId: string | null;
         };
@@ -2250,7 +2673,12 @@ export interface components {
         };
         /**
          * BranchResponse
-         * @description One trading branch.
+         * @description One trading branch, with the days and hours it trades.
+         *
+         *     `weeklyHours` lists the weekdays the counter opens. A weekday that is not
+         *     listed is a day it never opens. `closedDays` lists every day it is closed
+         *     from today to the last day a hire booked today could end, so a date picker
+         *     can steer a customer away from them before the server has to refuse.
          */
         BranchResponse: {
             /** Code */
@@ -2263,10 +2691,10 @@ export interface components {
             city: string;
             /** Phone */
             phone: string;
-            /** Opensat */
-            opensAt: string;
-            /** Closesat */
-            closesAt: string;
+            /** Weeklyhours */
+            weeklyHours: components["schemas"]["OpeningHoursResponse"][];
+            /** Closeddays */
+            closedDays: components["schemas"]["ClosedDayResponse"][];
         };
         /**
          * CancellationRequest
@@ -2510,6 +2938,100 @@ export interface components {
             depositPerUnit: string;
         };
         /**
+         * ClosedDayEntryResponse
+         * @description One day the owner's list shows as closed.
+         *
+         *     `branchCode` is null for a day every branch is closed. `closureId` is the
+         *     key to cancel a closure day by, and null for a public holiday, which
+         *     cannot be cancelled.
+         */
+        ClosedDayEntryResponse: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Branchcode */
+            branchCode: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "public_holiday" | "closure";
+            /** Closureid */
+            closureId: string | null;
+        };
+        /**
+         * ClosedDayListResponse
+         * @description Every public holiday and live closure day in the span, by day.
+         */
+        ClosedDayListResponse: {
+            /** Items */
+            items: components["schemas"]["ClosedDayEntryResponse"][];
+        };
+        /**
+         * ClosedDayResponse
+         * @description A day a branch does not trade, and why.
+         */
+        ClosedDayResponse: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Kind
+             * @description weekly, public_holiday or closure.
+             */
+            kind: string;
+        };
+        /**
+         * ClosureDayRequest
+         * @description A day to close, at one branch or at every branch, and why. Customers read the reason.
+         */
+        ClosureDayRequest: {
+            /** Branchcode */
+            branchCode?: string | null;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * ClosureDayResponse
+         * @description One closure day, as it was added or as it is once cancelled.
+         *
+         *     `branchCode` is null for a closure of every branch. `cancelledAt` is null
+         *     while the closure is live.
+         */
+        ClosureDayResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Branchcode */
+            branchCode: string | null;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Reason */
+            reason: string;
+            /** Createdat */
+            createdAt: string;
+            /** Cancelledat */
+            cancelledAt: string | null;
+        };
+        /**
          * CollectionDueResponse
          * @description A confirmed reservation due for collection.
          */
@@ -2546,6 +3068,14 @@ export interface components {
          * @enum {string}
          */
         ConditionGrade: "A" | "B" | "C";
+        /**
+         * ConfirmationResendResponse
+         * @description Whether the re-sent confirmation can reach the customer's address.
+         */
+        ConfirmationResendResponse: {
+            /** Emaildeliverable */
+            emailDeliverable: boolean;
+        };
         /**
          * CreateReservationRequest
          * @description A request for a draft reservation.
@@ -2602,6 +3132,9 @@ export interface components {
          * @description A customer as the counter sees one.
          *
          *     `email` is null and `hasLogin` is false for a walk-in, who has no account.
+         *     `anonymisedAt` is when the customer's identifying details were written
+         *     over, and null while they are still known. An anonymised customer is
+         *     called "Former customer" and holds no real contact details.
          */
         CustomerSummaryResponse: {
             /**
@@ -2636,6 +3169,8 @@ export interface components {
             noShowCount: number;
             /** Homebranchcode */
             homeBranchCode: string;
+            /** Anonymisedat */
+            anonymisedAt: string | null;
         };
         /**
          * CustomerType
@@ -2649,6 +3184,38 @@ export interface components {
          * @enum {string}
          */
         DamageAssessment: "NOT_NEEDED" | "REQUIRED" | "DONE";
+        /**
+         * DamagePhotoListResponse
+         * @description The photographs of one report, or of every report on one hire, oldest first.
+         */
+        DamagePhotoListResponse: {
+            /** Items */
+            items: components["schemas"]["DamagePhotoResponse"][];
+        };
+        /**
+         * DamagePhotoResponse
+         * @description One photograph of a damage report.
+         */
+        DamagePhotoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Damagereportid
+             * Format: uuid
+             */
+            damageReportId: string;
+            /** Damagereportreference */
+            damageReportReference: string;
+            /** Contenttype */
+            contentType: string;
+            /** Sizebytes */
+            sizeBytes: number;
+            /** Uploadedat */
+            uploadedAt: string;
+        };
         /**
          * DamageReportPageResponse
          * @description One page of damage reports, newest first.
@@ -2775,6 +3342,7 @@ export interface components {
              * Format: date
              */
             date: string;
+            trading: components["schemas"]["TradingDayResponse"];
             counts: components["schemas"]["DashboardCountsResponse"];
             /** Collectionsdue */
             collectionsDue: components["schemas"]["CollectionDueResponse"][];
@@ -2835,6 +3403,7 @@ export interface components {
              * Format: date
              */
             date: string;
+            trading: components["schemas"]["TradingDayResponse"];
             /** Collections */
             collections: components["schemas"]["DiaryCollectionResponse"][];
             /** Returns */
@@ -2925,6 +3494,18 @@ export interface components {
          * @enum {string}
          */
         IdDocType: "SA_ID" | "PASSPORT" | "DRIVING_LICENCE";
+        /**
+         * LiveHealthResponse
+         * @description What the liveness endpoint reports without touching a dependency.
+         */
+        LiveHealthResponse: {
+            /** Status */
+            status: string;
+            /** Environment */
+            environment: string;
+            /** Revision */
+            revision: string;
+        };
         /**
          * LoginRequest
          * @description Credentials posted to the sign in endpoint.
@@ -3244,6 +3825,21 @@ export interface components {
          */
         NotificationType: "BOOKING_CONFIRMATION";
         /**
+         * OpeningHoursResponse
+         * @description A branch's hours on one weekday.
+         */
+        OpeningHoursResponse: {
+            /**
+             * Weekday
+             * @description ISO weekday, Monday 1 to Sunday 7.
+             */
+            weekday: number;
+            /** Opensat */
+            opensAt: string;
+            /** Closesat */
+            closesAt: string;
+        };
+        /**
          * OverdueRentalResponse
          * @description A rental past its due date with a unit still out, and the late fee it has run up.
          */
@@ -3290,6 +3886,16 @@ export interface components {
             email: string;
         };
         /**
+         * PhotoLinkResponse
+         * @description A signed link that opens one photograph as a download, for five minutes.
+         */
+        PhotoLinkResponse: {
+            /** Url */
+            url: string;
+            /** Expiresat */
+            expiresAt: string;
+        };
+        /**
          * ProblemDetail
          * @description An RFC 9457 problem document.
          *
@@ -3313,7 +3919,9 @@ export interface components {
             /** Instance */
             instance?: string | null;
             /** Errors */
-            errors?: Record<string, unknown> | null;
+            errors?: {
+                [key: string]: unknown;
+            } | null;
             /** Requestid */
             requestId?: string | null;
         };
@@ -3936,6 +4544,174 @@ export interface components {
             branchCode?: string | null;
         };
         /**
+         * StatementChargeResponse
+         * @description One money line on a statement.
+         */
+        StatementChargeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            chargeType: components["schemas"]["ChargeType"];
+            /** Description */
+            description: string;
+            /** Amountexvat */
+            amountExVat: string;
+            /** Vatamount */
+            vatAmount: string;
+            /** Amountincvat */
+            amountIncVat: string;
+            status: components["schemas"]["ChargeStatus"];
+            /**
+             * Raisedat
+             * Format: date-time
+             */
+            raisedAt: string;
+            /** Reverseschargeid */
+            reversesChargeId: string | null;
+        };
+        /**
+         * StatementLineResponse
+         * @description One hire on a statement, with every charge raised on it.
+         */
+        StatementLineResponse: {
+            /**
+             * Rentalid
+             * Format: uuid
+             */
+            rentalId: string;
+            /** Reference */
+            reference: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Branchname */
+            branchName: string;
+            status: components["schemas"]["RentalStatus"];
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * Duebackon
+             * Format: date
+             */
+            dueBackOn: string;
+            /**
+             * Checkedoutat
+             * Format: date-time
+             */
+            checkedOutAt: string;
+            /** Returnedat */
+            returnedAt: string | null;
+            /** Depositheld */
+            depositHeld: string;
+            /** Depositwithheld */
+            depositWithheld: string;
+            /** Depositrefunded */
+            depositRefunded: string;
+            /** Balancedue */
+            balanceDue: string;
+            /** Chargestotalincvat */
+            chargesTotalIncVat: string;
+            /** Charges */
+            charges: components["schemas"]["StatementChargeResponse"][];
+        };
+        /**
+         * StatementResponse
+         * @description A customer's statement for one period.
+         */
+        StatementResponse: {
+            /** Customername */
+            customerName: string;
+            /** Customeremail */
+            customerEmail: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /**
+             * Generatedat
+             * Format: date-time
+             */
+            generatedAt: string;
+            totals: components["schemas"]["StatementTotalsResponse"];
+            /** Items */
+            items: components["schemas"]["StatementLineResponse"][];
+        };
+        /**
+         * StatementTotalsResponse
+         * @description The figures over every line of a statement.
+         */
+        StatementTotalsResponse: {
+            /** Hirecount */
+            hireCount: number;
+            /** Chargestotalincvat */
+            chargesTotalIncVat: string;
+            /** Depositheld */
+            depositHeld: string;
+            /** Depositwithheld */
+            depositWithheld: string;
+            /** Depositrefunded */
+            depositRefunded: string;
+            /** Balancedue */
+            balanceDue: string;
+        };
+        /**
+         * StrandedBookingListResponse
+         * @description The bookings and hires out a closure would strand, by start, and how many in all.
+         *
+         *     `items` holds at most two hundred. `total` counts every one of them.
+         */
+        StrandedBookingListResponse: {
+            /** Items */
+            items: components["schemas"]["StrandedBookingResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * StrandedBookingResponse
+         * @description A booking or a hire out that falls on the day about to close.
+         *
+         *     `hireDay` is `collection` when a held or confirmed booking starts that day,
+         *     `return` when it ends that day, and `due_back` when the equipment of a hire
+         *     still out is due back that day. A hire's `reference` is the hire's own, and
+         *     its `from` is the day it was collected. Nothing is changed. The owner rings
+         *     the customer.
+         */
+        StrandedBookingResponse: {
+            /** Reference */
+            reference: string;
+            /** Branchcode */
+            branchCode: string;
+            /** Customername */
+            customerName: string;
+            /** Customerphone */
+            customerPhone: string;
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            /**
+             * Hireday
+             * @enum {string}
+             */
+            hireDay: "collection" | "return" | "due_back";
+        };
+        /**
          * TokenRequest
          * @description The token of a verification link.
          */
@@ -3961,6 +4737,33 @@ export interface components {
             /** Expiresin */
             expiresIn: number;
             user: components["schemas"]["UserResponse"];
+        };
+        /**
+         * TradeDiscountRequest
+         * @description A trade discount as a percentage with at most two decimals.
+         */
+        TradeDiscountRequest: {
+            /** Tradediscountpercent */
+            tradeDiscountPercent: string;
+        };
+        /**
+         * TradingDayResponse
+         * @description Whether the branch trades on a day. Hours when it does, the reason when it does not.
+         */
+        TradingDayResponse: {
+            /** Open */
+            open: boolean;
+            /** Opensat */
+            opensAt: string | null;
+            /** Closesat */
+            closesAt: string | null;
+            /** Closedreason */
+            closedReason: string | null;
+            /**
+             * Closedkind
+             * @description weekly, public_holiday or closure.
+             */
+            closedKind: string | null;
         };
         /**
          * UnitQuoteResponse
@@ -4103,6 +4906,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    read_liveness_api_health_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveHealthResponse"];
+                };
+            };
+        };
+    };
     read_health_api_health_get: {
         parameters: {
             query?: never;
@@ -4531,6 +5354,92 @@ export interface operations {
             };
         };
     };
+    read_statement_api_me_statement_get: {
+        parameters: {
+            query: {
+                /** @description The first day, included. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementResponse"];
+                };
+            };
+            /** @description The period is reversed or longer than ten years, or the account has no profile. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_statement_api_me_statement_csv_get: {
+        parameters: {
+            query: {
+                /** @description The first day, included. */
+                from: string;
+                /** @description The day after the last day, so the period is [from, to). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The period is reversed or longer than ten years, or the account has no profile. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_my_data_api_me_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everything held about the signed in customer, as a JSON file. Credential columns are never included. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, unknown>;
+                };
+            };
+        };
+    };
     list_my_rentals_api_me_rentals_get: {
         parameters: {
             query?: {
@@ -4561,6 +5470,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_damage_photos_api_me_rentals__id__damage_photos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer's hire. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamagePhotoListResponse"];
+                };
+            };
+            /** @description There is no such hire of yours, or no such photograph on it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_my_damage_photo_link_api_me_rentals__id__damage_photos__photoId__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer's hire. */
+                id: string;
+                /** @description The key of the photograph. */
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoLinkResponse"];
+                };
+            };
+            /** @description There is no such hire of yours, or no such photograph on it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
         };
@@ -4727,7 +5738,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationPageResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4769,7 +5780,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4810,7 +5821,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4869,7 +5880,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4932,7 +5943,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4995,7 +6006,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5054,7 +6065,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5133,6 +6144,134 @@ export interface operations {
             };
         };
     };
+    post_my_confirmation_resend_api_me_reservations__id__confirmation_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationResendResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The booking is not confirmed, or the customer has no email address. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Three re-sends in the last hour. `Retry-After` carries the wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_counter_confirmation_resend_api_counter_reservations__id__confirmation_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the reservation, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationResendResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such reservation, or it is not the caller's. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The booking is not confirmed, or the customer has no email address. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Three re-sends in the last hour. `Retry-After` carries the wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     read_checkout_api_reservations__id__checkout_get: {
         parameters: {
             query?: never;
@@ -5208,7 +6347,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5354,7 +6493,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5415,7 +6554,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5478,7 +6617,7 @@ export interface operations {
                     "application/json": components["schemas"]["RentalResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5578,7 +6717,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamageReportResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5669,7 +6808,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamageReportResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5732,7 +6871,7 @@ export interface operations {
                     "application/json": components["schemas"]["DamageReportResponse"];
                 };
             };
-            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold or an email address that is not verified. */
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5761,6 +6900,209 @@ export interface operations {
             };
             /** @description A field was refused. `errors.fields` names it. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_damage_photos_api_damage_reports__id__photos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamagePhotoListResponse"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_damage_photo_api_damage_reports__id__photos_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The photograph itself, at most 4194304 bytes. Its first bytes decide whether it is a JPEG or a PNG. */
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DamagePhotoResponse"];
+                };
+            };
+            /** @description The caller may not do this. The problem type says why, which is the role, the branch, an account on hold, a customer whose personal details were removed or an email address that is not verified. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such damage report. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The report already holds 6 photographs. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The photograph is larger than 4 MB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The body is not a JPEG or a PNG, by its media type or by its first bytes. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The photograph could not be decoded, or holds more pixels than are kept. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Other photographs are being processed. Try again after `Retry-After`. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_damage_photo_link_api_damage_reports__id__photos__photoId__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the damage report, or its reference. */
+                id: string;
+                /** @description The key of the photograph. */
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoLinkResponse"];
+                };
+            };
+            /** @description There is no such report, or it has no such photograph. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Photographs are not switched on in this deployment. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5958,6 +7300,49 @@ export interface operations {
                 branchCode?: string | null;
                 /** @description Only the units of models in this category and its children. */
                 categorySlug?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every line of the report as CSV, streamed. The first line says the figures are gross contribution and not profit, and repeats the two definitions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_monthly_charges_api_admin_reports_charges_csv_get: {
+        parameters: {
+            query: {
+                /** @description The calendar month, as YYYY-MM. */
+                month: string;
+                /** @description Only the units held at this branch. */
+                branchCode?: string | null;
             };
             header?: never;
             path?: never;
@@ -7446,6 +8831,319 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_trade_discount_api_admin_customers__id__trade_discount_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeDiscountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_customer_anonymisation_api_admin_customers__id__anonymise_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the customer. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnonymisationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerSummaryResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no customer with this key. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The customer was anonymised already, or still has a booking open, a hire not yet settled or money owing. `detail` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_closure_days_api_admin_closure_days_get: {
+        parameters: {
+            query?: {
+                /** @description The first day. Today when left out. */
+                from?: string | null;
+                /** @description The last day, which is included. A year from the first when left out. */
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosedDayListResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_closure_day_api_admin_closure_days_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClosureDayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosureDayResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The day is closed already, at that branch or at every branch. `detail` names the closure to cancel first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A field was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_closure_impact_api_admin_closure_days_impact_get: {
+        parameters: {
+            query: {
+                /** @description The day the owner is thinking of closing. */
+                day: string;
+                /** @description The branch. Every branch when left out. */
+                branchCode?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrandedBookingListResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query parameter was refused. `errors.fields` names it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_closure_cancel_api_admin_closure_days__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key of the closure day. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosureDayResponse"];
+                };
+            };
+            /** @description The caller is not an administrator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description There is no such closure day. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The closure day was cancelled already. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

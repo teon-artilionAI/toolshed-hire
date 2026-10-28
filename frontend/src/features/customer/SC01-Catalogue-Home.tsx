@@ -23,7 +23,8 @@ import { catalogueQueries } from '../../shared/api/catalogue-queries'
 import { PageHeader } from '../../shared/ui'
 import { todayInBranchTime } from '../../shared/today'
 import { ANY_BRANCH, BranchSelect, PeriodFields } from './catalogue-ui'
-import { defaultPeriod, describePeriod, hireDays, validatePeriod } from './hire-period'
+import { describePeriod, hireDays, validatePeriod } from './hire-period'
+import { useClosedDays, useHirePeriod } from './use-hire-period'
 import { CatalogueStats, CategoryGrid, FeaturedModels } from './SC01-Catalogue-Sections'
 
 /** How many models the shop window puts up front before the customer
@@ -44,15 +45,15 @@ export default function CatalogueHome() {
   // Read once when the screen opens, so the dates do not shift under a
   // customer who leaves the page open past midnight.
   const [today] = useState(() => todayInBranchTime())
-  const [startIso, setStartIso] = useState(() => defaultPeriod(today).startIso)
-  const [endIso, setEndIso] = useState(() => defaultPeriod(today).endIso)
   const [branchCode, setBranchCode] = useState<string>(ANY_BRANCH)
 
   const branches = useQuery(catalogueQueries.branches())
   const categories = useQuery(catalogueQueries.categories())
   const featured = useQuery(catalogueQueries.models({ pageSize: FEATURED_COUNT }))
 
-  const periodError = validatePeriod(startIso, endIso, today)
+  const closed = useClosedDays(branches.data?.items, branchCode)
+  const { startIso, endIso, setStartIso, setEndIso } = useHirePeriod(today, closed)
+  const periodError = validatePeriod(startIso, endIso, today, closed)
   const usablePeriod = periodError === null
   const days = usablePeriod ? hireDays(startIso, endIso) : null
   const periodLabel = describePeriod(startIso, endIso)
@@ -74,7 +75,7 @@ export default function CatalogueHome() {
 
       <section className="card mb-lg overflow-hidden">
         <div className="grid lg:grid-cols-5">
-          <div className="bg-gradient-to-br from-ink to-slate p-lg text-white lg:col-span-2 lg:p-xl">
+          <div className="bg-linear-to-br from-ink to-slate p-lg text-white lg:col-span-2 lg:p-xl">
             <p className="font-mono text-xs uppercase tracking-wide text-accent">
               Booked, not promised
             </p>

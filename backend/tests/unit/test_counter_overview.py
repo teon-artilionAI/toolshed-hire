@@ -39,13 +39,17 @@ from app.domain.errors import AuthorisationFailure, BranchScopeError, Validation
 from app.domain.identity import Actor, Branch
 from app.domain.money import Money
 from app.domain.policies import FixedLateFeePolicy, LateFeePolicy, StandardLateFeePolicy
+from app.domain.trading_calendar import BranchCalendar
 from tests.support.clock import FixedClock
-from tests.support.factories import CLOSES_AT
 
 TODAY: Final[date] = date(2026, 3, 2)
 ONE_DAY: Final[timedelta] = timedelta(days=1)
-CBD: Final[Branch] = Branch(id=uuid4(), code="CBD", name="Cape Town CBD", closes_at=CLOSES_AT)
-BLV: Final[Branch] = Branch(id=uuid4(), code="BLV", name="Bellville", closes_at=CLOSES_AT)
+CBD: Final[Branch] = Branch(
+    id=uuid4(), code="CBD", name="Cape Town CBD", calendar=BranchCalendar.standard()
+)
+BLV: Final[Branch] = Branch(
+    id=uuid4(), code="BLV", name="Bellville", calendar=BranchCalendar.standard()
+)
 LATE_FEE: Final[Decimal] = Decimal("120.00")
 HAMMER: Final[str] = "Bosch GBH 2-26"
 MIXER: Final[str] = "Concrete Mixer 140L"

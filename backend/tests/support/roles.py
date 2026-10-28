@@ -46,6 +46,11 @@ MIGRATION_ROLE_PASSWORD: Final[str] = "local_only_throwaway_migrate_role_passwor
 
 # PostgreSQL insufficient_privilege.
 INSUFFICIENT_PRIVILEGE_SQLSTATE: Final[str] = "42501"
+# The tables revision 0013 added, which it grants on itself.
+TRADING_HOURS_TABLE: Final[str] = "branch_trading_hours"
+CLOSURE_DAY_TABLE: Final[str] = "closure_day"
+# The table revision 0014 added, which it grants select and insert on.
+DAMAGE_PHOTO_TABLE: Final[str] = "damage_photo"
 
 
 def provision_restricted_roles(owner_engine: Engine, owner_url: str) -> None:
@@ -69,6 +74,10 @@ def provision_restricted_roles(owner_engine: Engine, owner_url: str) -> None:
         )
     with owner_engine.begin() as connection:
         granted = role_grants.grant_application_privileges(connection)
+        # The grants of later revisions, as each of them applies its own.
+        role_grants.grant_on_new_tables(connection, role_grants.READ_ONLY, [TRADING_HOURS_TABLE])
+        role_grants.grant_on_new_tables(connection, role_grants.READ_WRITE, [CLOSURE_DAY_TABLE])
+        role_grants.grant_on_new_tables(connection, role_grants.APPEND_ONLY, [DAMAGE_PHOTO_TABLE])
     if not granted:
         raise RuntimeError(
             f"Attempted to grant privileges to {APPLICATION_ROLE} straight after provisioning "

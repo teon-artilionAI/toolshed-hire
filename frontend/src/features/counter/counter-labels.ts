@@ -17,6 +17,7 @@ import type {
   DamageSeverity,
   DamageStatus,
   DiaryCollectionStatus,
+  CustomerSummary,
   IdDocumentType,
   RentalStatus,
 } from '../../shared/api/contract'
@@ -159,4 +160,20 @@ export function countOf(count: number, one: string, many: string): string {
 /** Whether a customer may be booked for. Only good standing may. */
 export function canBookFor(status: AccountStatus): status is 'ACTIVE' {
   return status === 'ACTIVE'
+}
+
+/** Why no booking can be made for a customer whose personal details were removed (#113). */
+export const NO_BOOKING_ANONYMISED =
+  "This customer's personal details were removed, so no new booking can be made for them."
+
+/**
+ * Why no booking can be made for a customer, or null when one can.
+ *
+ * A customer whose personal details were removed is still found, because the
+ * owner has to be able to find them, but is never booked for, whatever their
+ * standing. The server refuses such a booking as well.
+ */
+export function noBookingReason(customer: CustomerSummary): string | null {
+  if (customer.anonymisedAt !== null) return NO_BOOKING_ANONYMISED
+  return canBookFor(customer.accountStatus) ? null : NO_BOOKING_BECAUSE[customer.accountStatus]
 }

@@ -37,6 +37,8 @@ REVISION_VARIABLE: Final[str] = "K_REVISION"
 # pydantic shortens the input it quotes and keeps its two ends, so a leak shows
 # as the head or the tail of the secret and never as the whole of it.
 SECRET_TAIL_LENGTH: Final[int] = 12
+PHOTO_BUCKET_VARIABLE: Final[str] = "PHOTO_BUCKET"
+PHOTO_BUCKET: Final[str] = "toolshed-staging-damage-photos"
 
 
 class TestTheEnvironmentValues:
@@ -184,3 +186,29 @@ class TestTheRedactedConfiguration:
         shown = settings_for(Environment.PRODUCTION, ACCESS_TOKEN_MINUTES="30").redacted()
         assert shown["jwt_signing_key"] == "set"
         assert shown["access_lifetime_minutes"] == 30
+
+
+class TestThePhotoBucket:
+    """`PHOTO_BUCKET` switches damage photographs on, and its absence switches them off."""
+
+    def test_unset_means_photographs_are_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(PHOTO_BUCKET_VARIABLE, raising=False)
+        configuration = settings_for(Environment.PRODUCTION)
+        assert configuration.photo_bucket is None
+        assert not configuration.photos_configured
+        assert configuration.redacted()["photo_storage"] == "not-configured"
+
+    @pytest.mark.parametrize("value", ["", "   "])
+    def test_a_blank_value_means_photographs_are_off(self, value: str) -> None:
+        assert settings_for(Environment.PRODUCTION, PHOTO_BUCKET=value).photo_bucket is None
+
+    def test_a_bucket_switches_them_on_and_the_log_does_not_name_it(self) -> None:
+        configuration = settings_for(Environment.PRODUCTION, PHOTO_BUCKET=f" {PHOTO_BUCKET} ")
+        assert configuration.photo_bucket == PHOTO_BUCKET
+        assert configuration.redacted()["photo_storage"] == "configured"
+        assert PHOTO_BUCKET not in str(configuration.redacted())
+
+    @pytest.mark.parametrize("value", ["Upper-Case", "gs://toolshed-photos", "a", "has space"])
+    def test_a_name_cloud_storage_would_refuse_stops_the_start(self, value: str) -> None:
+        with pytest.raises(ValidationError, match="PHOTO_BUCKET"):
+            settings_for(Environment.PRODUCTION, PHOTO_BUCKET=value)

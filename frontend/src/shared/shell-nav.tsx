@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   AlarmClock, BarChart3, Boxes, CalendarDays, CalendarPlus, CalendarRange,
-  Home, LayoutDashboard, MapPin, MoreHorizontal, ScrollText, Search,
+  CalendarX, Home, LayoutDashboard, MapPin, MoreHorizontal, ScrollText, Search,
   ShieldCheck, ShoppingCart, Tags, User, Users, Wrench, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -20,7 +20,7 @@ import { MAX_TAB_BAR_ITEMS, TAB_CLASS, navItemClass } from './shell-nav-style'
 
 const ICONS: Record<string, LucideIcon> = {
   AlarmClock, BarChart3, Boxes, CalendarDays, CalendarPlus, CalendarRange,
-  Home, LayoutDashboard, MapPin, ScrollText, Search, ShieldCheck,
+  CalendarX, Home, LayoutDashboard, MapPin, ScrollText, Search, ShieldCheck,
   ShoppingCart, Tags, User, Users,
 }
 
@@ -61,7 +61,7 @@ export function MobileTabBar({ items }: { items: ScreenDef[] }) {
       {sheetOpen && (
         <div
           id="more-nav-sheet"
-          className="fixed inset-x-0 bottom-[4.5rem] z-30 border-t border-line bg-surface p-md shadow-pop md:hidden"
+          className="fixed inset-x-0 bottom-18 z-30 border-t border-line bg-surface p-md shadow-pop md:hidden"
         >
           <div className="mb-sm flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">More</h2>

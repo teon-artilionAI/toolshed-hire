@@ -27,8 +27,9 @@ import { money } from '../../shared/format'
 import { Card, Notice, PageHeader } from '../../shared/ui'
 import { todayInBranchTime } from '../../shared/today'
 import { searchHref } from './catalogue-links'
-import { AvailabilityChip } from './catalogue-ui'
-import { defaultPeriod, describePeriod } from './hire-period'
+import { ANY_BRANCH, AvailabilityChip } from './catalogue-ui'
+import { describePeriod } from './hire-period'
+import { useClosedDays, useHirePeriod } from './use-hire-period'
 import { ModelBanner } from './model-picture'
 import BookingCard from './SC03-Booking-Card'
 
@@ -39,13 +40,20 @@ export default function ModelDetail() {
   const [params] = useSearchParams()
   const [today] = useState(() => todayInBranchTime())
 
-  const [startIso, setStartIso] = useState(() => params.get('from') ?? defaultPeriod(today).startIso)
-  const [endIso, setEndIso] = useState(() => params.get('to') ?? defaultPeriod(today).endIso)
   const [chosenBranch, setChosenBranch] = useState(() => params.get('branch') ?? '')
   const [quantity, setQuantity] = useState(MIN_QUANTITY)
 
   const model = useQuery({ ...catalogueQueries.model(slug), enabled: slug !== '' })
   const branches = useQuery(catalogueQueries.branches())
+  // The card answers for every branch at once, so a day is closed for these
+  // dates only when every branch is.
+  const closed = useClosedDays(branches.data?.items, ANY_BRANCH)
+  const [addressPeriod] = useState(() => {
+    const from = params.get('from')
+    const to = params.get('to')
+    return from !== null && to !== null ? { startIso: from, endIso: to } : undefined
+  })
+  const { startIso, endIso, setStartIso, setEndIso } = useHirePeriod(today, closed, addressPeriod)
   const availability = useQuery({
     ...catalogueQueries.modelAvailability(slug, { from: startIso, to: endIso, quantity }),
     enabled: slug !== '' && startIso !== '' && endIso !== '',

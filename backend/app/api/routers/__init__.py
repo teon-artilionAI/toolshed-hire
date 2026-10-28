@@ -14,6 +14,7 @@ from app.api.routers import (
     admin_assets,
     admin_audit,
     admin_categories,
+    admin_closure_days,
     admin_corrections,
     admin_customers,
     admin_models,
@@ -28,15 +29,19 @@ from app.api.routers import (
     checkout,
     counter,
     customers,
+    damage_photos,
     damage_reports,
     health,
     me,
+    my_damage_photos,
     my_rentals,
     profile,
     quote,
     rentals,
+    resend,
     reservation_reads,
     reservations,
+    statement,
 )
 
 API_PREFIX = "/api"
@@ -47,13 +52,17 @@ api_router.include_router(auth.router)
 api_router.include_router(account.router)
 api_router.include_router(me.router)
 api_router.include_router(profile.router)
+api_router.include_router(statement.router)
 api_router.include_router(my_rentals.router)
+api_router.include_router(my_damage_photos.router)
 api_router.include_router(customers.router)
 api_router.include_router(reservations.router)
 api_router.include_router(reservation_reads.router)
+api_router.include_router(resend.router)
 api_router.include_router(checkout.router)
 api_router.include_router(rentals.router)
 api_router.include_router(damage_reports.router)
+api_router.include_router(damage_photos.router)
 api_router.include_router(counter.router)
 api_router.include_router(assets.router)
 api_router.include_router(admin_reports.router)
@@ -65,6 +74,7 @@ api_router.include_router(admin_models.router)
 api_router.include_router(admin_assets.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(admin_customers.router)
+api_router.include_router(admin_closure_days.router)
 api_router.include_router(branches.router)
 api_router.include_router(catalogue.router)
 api_router.include_router(availability.router)

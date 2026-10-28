@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { branchClockTime, branchDateTime, todayInBranchTime } from './today'
+import { branchClockTime, branchDateTime, branchDay, todayInBranchTime } from './today'
 
 describe('todayInBranchTime', () => {
   it('writes the date as YYYY-MM-DD', () => {
@@ -66,8 +66,14 @@ describe('an instant written in branch time', () => {
     expect(branchDateTime('2026-10-02T22:30:00Z')).toMatch(/^0?3 Oct 2026 at 00:30$/)
   })
 
+  it('writes the day alone, in branch time', () => {
+    expect(branchDay('2026-10-02T15:30:00+02:00')).toMatch(/^0?2 Oct 2026$/)
+    expect(branchDay('2026-10-02T22:30:00Z')).toMatch(/^0?3 Oct 2026$/)
+  })
+
   it('refuses a string that is not an instant', () => {
     expect(() => branchClockTime('half past three')).toThrow(RangeError)
     expect(() => branchDateTime('')).toThrow(RangeError)
+    expect(() => branchDay('yesterday')).toThrow(RangeError)
   })
 })
