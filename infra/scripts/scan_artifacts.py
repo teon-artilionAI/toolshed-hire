@@ -86,8 +86,11 @@ EMAIL_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
     r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+"
 )
+TOP_LEVEL_DOMAIN: Final[re.Pattern[str]] = re.compile(r"[a-z]{2,63}")
 PHONE_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"(?<!\d)(?:\+27|0)[6-8]\d(?:[\s-]?\d){7}(?!\d)"
+    # A number inside a longer letter-and-digit token, such as a SHA-256 hash
+    # in a bill of materials, is not a phone number.
+    r"(?<![0-9A-Za-z])(?:\+27|0)[6-8]\d(?:[\s-]?\d){7}(?![0-9A-Za-z])"
 )
 SA_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?<!\d)\d{13}(?!\d)")
 SECRET_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
@@ -132,10 +135,22 @@ def scan_text(text: str, path: str) -> list[Finding]:
     return findings
 
 
+def _is_package_version(domain: str) -> bool:
+    """Say whether the part after @ is a version, as in an npm name@1.0.0.
+
+    Every real top-level domain is letters only. A bill of materials names
+    each package as name@version, and a version always ends in a digit or a
+    pre-release tag such as 0-beta, so its last label is never letters only.
+    """
+    return not TOP_LEVEL_DOMAIN.fullmatch(domain.rsplit(".", 1)[-1])
+
+
 def _email_findings(line: str, path: str, line_number: int) -> list[Finding]:
     found: list[Finding] = []
     for match in EMAIL_PATTERN.finditer(line):
         domain = match.group(0).rsplit("@", 1)[-1].lower()
+        if _is_package_version(domain):
+            continue
         if domain not in ALLOWED_EMAIL_DOMAINS:
             found.append(Finding(path, line_number, "email", _preview(match.group(0))))
     return found

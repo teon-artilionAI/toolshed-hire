@@ -112,3 +112,21 @@ def test_gitleaks_directory_scan_maps_a_redacted_hit(tmp_path: Path) -> None:
 def test_the_planted_example_self_test_passes() -> None:
     """The CLI's own planted-example check passes."""
     assert scanner.main(["--self-test"]) == 0
+
+
+def test_a_package_version_in_a_bill_of_materials_is_not_an_email() -> None:
+    """An SBOM names packages as name@1.0.0, which only looks like an address."""
+    for line in (
+        '"bom-ref": "toolshed-hire-frontend@1.0.0|@adobe/css-tools@4.5.0"',
+        '"purl": "pkg:npm/lightningcss@1.32.0"',
+        '"ref": "oxlint@1.78.0-beta.1"',
+    ):
+        assert scanner.scan_text(line, "sbom.json") == [], line
+    assert scanner.scan_text("contact maintainer@lightning.dev", "sbom.json")
+
+
+def test_digits_inside_a_hash_are_not_a_phone_number() -> None:
+    """A run of digits inside a hex hash only looks like a South African number."""
+    line = '"content": "304d5463e65a35d7bb0850550e0780395395f6fcf452f04db7d5ca7cecc425ac"'
+    assert scanner.scan_text(line, "sbom.json") == []
+    assert scanner.scan_text("call 0821234567 after five", "notes.txt")
