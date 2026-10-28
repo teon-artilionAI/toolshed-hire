@@ -16,6 +16,10 @@
 #
 # Optional environment:
 #   GITHUB_OUTPUT   When set, image_digest is written to it
+#   RELEASE_TAG     A release such as v1.0.0. When set, the image is also
+#                   pushed under that tag, which the repository's cleanup
+#                   policy keeps for good, so a rollback always has the
+#                   previous release's image to go back to
 #   GITHUB_SERVER_URL, GITHUB_REPOSITORY   Used for the source label only
 #
 # Prints the digest on stdout as its last line, so it is usable outside Actions.
@@ -46,6 +50,16 @@ docker build \
 
 echo "Pushing ${repository}:${tag}"
 docker push "${repository}:${tag}"
+
+if [ -n "${RELEASE_TAG:-}" ]; then
+  if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "::error title=Bad release tag::RELEASE_TAG is '${RELEASE_TAG}', which is not of the form vX.Y.Z, so it would not be kept by the cleanup policy."
+    exit 1
+  fi
+  echo "Pushing ${repository}:${RELEASE_TAG} so the cleanup policy keeps this release"
+  docker tag "${repository}:${tag}" "${repository}:${RELEASE_TAG}"
+  docker push "${repository}:${RELEASE_TAG}"
+fi
 
 digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${repository}:${tag}")"
 if [ -z "${digest}" ]; then
