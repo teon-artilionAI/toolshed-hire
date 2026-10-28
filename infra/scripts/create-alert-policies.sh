@@ -101,6 +101,8 @@ policy_name() {
   printf '%s\n' "$output" | head -n 1
 }
 
+# gcloud accepts only > and < in --if. The counts are whole numbers, so
+# "five or more" is written as "> 4".
 create_policy() {
   name="$1"
   metric_name="$2"
@@ -163,7 +165,7 @@ policy "Toolshed Hire: refresh token reuse" "auth_refresh_reuse" 300 ">" 0 \
 metric "auth_account_lockouts" \
   "Account lockouts" \
   'jsonPayload.message="auth.account_locked"'
-policy "Toolshed Hire: account lockouts" "auth_account_lockouts" 600 ">=" 5 \
+policy "Toolshed Hire: account lockouts" "auth_account_lockouts" 600 ">" 4 \
   "Five or more accounts locked in ten minutes. Check the source addresses and the sign-in log before changing anything."
 
 # The breach check fails open. One timeout is a transient provider problem.
@@ -179,7 +181,7 @@ policy "Toolshed Hire: breached-password check unavailable" "auth_breach_check_u
 metric "api_refusals" \
   "API refusals" \
   'jsonPayload.message="api.domain_error"'
-policy "Toolshed Hire: refusal rate" "api_refusals" 600 ">=" 20 \
+policy "Toolshed Hire: refusal rate" "api_refusals" 600 ">" 19 \
   "Twenty or more domain refusals in ten minutes. Read the codes and paths. A single client or a broken screen usually explains it."
 
 # A constraint violation is a write the database refused. One is a defect.
