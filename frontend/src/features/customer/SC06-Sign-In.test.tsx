@@ -132,6 +132,18 @@ describe('signing in', () => {
     expect(screen.getByText('Enter your password.')).toBeVisible()
     expect(network.requestsTo(LOGIN_ROUTE)).toHaveLength(0)
   })
+
+  it('moves to the first field in error, so a screen reader says what is wrong', async () => {
+    mockApi(signedOutWith({}))
+    const user = await openSignIn()
+
+    await user.click(submitButton())
+    expect(screen.getByLabelText('Email address')).toHaveFocus()
+
+    await user.type(screen.getByLabelText('Email address'), 'owner@toolshedhire.co.za')
+    await user.click(submitButton())
+    expect(screen.getByLabelText('Password')).toHaveFocus()
+  })
 })
 
 describe('while the request is in flight', () => {

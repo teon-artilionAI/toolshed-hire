@@ -70,6 +70,21 @@ describe('when the tool can be added', () => {
     expect(within(notice).getByRole('link', { name: 'Go to my basket' })).toHaveAttribute('href', '/basket')
   })
 
+  it('says so in a status region that was on the page before the press', async () => {
+    const user = userEvent.setup()
+    mockApi(WORKING)
+    openModel()
+    const button = await readyToAdd()
+    const regionsBefore = screen.getAllByRole('status')
+
+    await user.click(button)
+
+    const announced = regionsBefore.find((region) =>
+      region.textContent?.includes('Added to your hire basket. 1 unit of CP 100 Plate Compactor'),
+    )
+    expect(announced).toBeDefined()
+  })
+
   it('adds the quantity chosen, and says what the basket holds when it is added again', async () => {
     const user = userEvent.setup()
     mockApi({

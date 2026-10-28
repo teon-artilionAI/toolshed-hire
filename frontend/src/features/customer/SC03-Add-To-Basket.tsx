@@ -6,7 +6,8 @@
  * branch can supply that many for the whole period. Until then there is
  * nothing honest to add.
  *
- * A press that works says so, names what went in, and offers the basket.
+ * A press that works says so, names what went in, and offers the basket. The
+ * same words go to the status region, so a screen reader announces them.
  *
  * A basket is for one period at one branch. When the card is on other dates or
  * another branch than the basket, nothing is added. The person is asked which
@@ -179,6 +180,16 @@ export default function AddToBasket({
       )}
 
       <div role="status" className="mt-md">
+        {/* The notice below is a status region of its own, but it arrives
+            already holding its words, and a live region that appears filled
+            is not announced. This region is always on the page, so a screen
+            reader reads what changes in it. */}
+        {added && (
+          <p className="sr-only">
+            Added to your hire basket. {added.summary}
+            {added.nowHolds !== null && ` Your basket now holds ${added.nowHolds} of this tool.`}
+          </p>
+        )}
         {matched && !added && (
           <p className="text-sm text-slate-soft">
             The dates and the branch above now match your basket. Add the tool once it shows as
