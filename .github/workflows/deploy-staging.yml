@@ -153,7 +153,8 @@ jobs:
 
       # The scheduled jobs run from an image named by digest. Moving them to
       # the image now serving keeps them on the same code and on an image the
-      # cleanup policy keeps.
+      # cleanup policy keeps. It runs before the ID token step below, which
+      # changes the active gcloud credential.
       - name: Point the maintenance jobs at the deployed image
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}

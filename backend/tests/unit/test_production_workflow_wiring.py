@@ -69,3 +69,11 @@ def test_both_deploys_point_the_maintenance_jobs_at_the_deployed_image() -> None
         update = step(job, "Point the maintenance jobs at the deployed image")
         assert update["run"] == "bash infra/scripts/update-job-images.sh"
         assert update["env"]["IMAGE_DIGEST"] == "${{ steps.build.outputs.image_digest }}"
+
+
+def test_production_moves_the_jobs_only_after_the_frontend_is_on_the_new_path() -> None:
+    """A failure between the API and the frontend deploy leaves the site unreachable."""
+    names = [candidate.get("name") for candidate in deploy_job()["steps"]]
+    jobs = names.index("Point the maintenance jobs at the deployed image")
+    assert jobs > names.index("Build and deploy the frontend")
+    assert jobs > names.index("Check the security headers and TLS of the deployed site")
