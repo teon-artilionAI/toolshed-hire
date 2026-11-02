@@ -17,8 +17,8 @@ itself refuses to promise one unit to two hires. The owner keeps the catalogue,
 the prices, the fleet and the staff accounts, and sees which equipment earns
 its keep.
 
-This repository holds Task 2 of my INSY7315 Work Integrated Learning project,
-which is the built system. I am Teon Kleynhans, ST10434209, and I work on it
+This repository holds the built system for my INSY7315 Work Integrated Learning
+project. Release 1.0.2 is in production. I am Teon Kleynhans, ST10434209, and I work on it
 alone.
 
 ## Links
@@ -39,7 +39,7 @@ alone.
 | Customer | `w.adonis@buildright.co.za` | `Hire-UQdzV8RMo50z` |
 
 The counter staff and admin logins are never published in this repository. They
-are handed in on ARC with the recorded presentation.
+are handed in on ARC.
 
 ## Try it in five minutes
 
@@ -103,7 +103,7 @@ the wait.
 |---|---|---|
 | Task 1 | The design document, submitted on 16 August 2026, with the requirements, the design, security, the pipeline, the running costs and change management. A clickable prototype of all 24 screens on sample data, and a walking skeleton of the API. | [The Task 1 design document](docs/task1/INSY7315_Task1_ToolshedHire.pdf), and the baseline in [CHANGELOG.md](CHANGELOG.md) |
 | Task 2 | This system, released as `v0.4.0` with the fixes from testing it by hand in `v0.4.1` and `v0.4.2`, and marked by the tag `task2-v1.0`. All 24 screens on a real API and database, hosting in two environments, the GitHub workflow and pipeline, and the recorded presentation. | This README and [docs/task2](docs/task2/README.md) |
-| Task 3 | To come. The final release `v1.0.0`, the report and the user guide, and the work listed under [Known limitations](#known-limitations). | |
+| Task 3 | The final system, released as `v1.0.2` and marked by the tag `task3-v1.0`, with the statement and data export, damage photographs, the trading calendar, monitoring and the release checks. The report and the user guide are handed in on ARC. | [CHANGELOG.md](CHANGELOG.md), [docs/operations](docs/operations) |
 
 This table says where to find the evidence for each part of Task 2.
 
@@ -362,11 +362,6 @@ and [frontend/README.md](frontend/README.md) have every other command.
 - The first request after a quiet spell is slow, as described above.
 - A unit out on hire is not offered for a later period until it comes back,
   because only units on the shelf can be allocated.
-- Every day is a trading day from 07:00 to 17:00. The earlier close on a
-  Saturday and the Sunday closure are not modelled yet.
-- There is no damage photograph upload yet, and no statement download or data
-  export for a customer. Only the owner can send a failed confirmation again.
-  The retention period in the privacy notice is not fixed.
 - A six day hire costs more than a seven day one, because six days has no whole
   week to charge at the weekly rate. I built it as designed.
 - When several people ask for more than one of the last few units of a model at
@@ -380,18 +375,20 @@ and [frontend/README.md](frontend/README.md) have every other command.
   failed emails keeps a failure that was sent again. A unit's history shows the
   newest fifty entries of each kind, and a length refusal from a request schema
   still shows the framework's own wording.
-- Old `refresh_session` rows are never pruned, because the application's database role holds no DELETE on that table.
-  The lazy sweep prunes old `rate_limit_counter` rows, but the refresh sessions need the operator job that
-  [backend/README.md](backend/README.md#throttling) describes before real traffic.
 - At a hundred times the data, the report degrades first, because it reads
   every unit and dated fact of a period into memory on each request, and then
   the audit trail, which counts every match on each page. The way out of each
   is in [backend/README.md](backend/README.md).
-- From Dependabot I applied setuptools ([#32](https://github.com/teon-artilionAI/toolshed-hire/pull/32)), postcss ([#35](https://github.com/teon-artilionAI/toolshed-hire/pull/35)) and react-dom ([#36](https://github.com/teon-artilionAI/toolshed-hire/pull/36)).
-  The majors of the GitHub Actions ([#29](https://github.com/teon-artilionAI/toolshed-hire/pull/29), [#30](https://github.com/teon-artilionAI/toolshed-hire/pull/30), [#31](https://github.com/teon-artilionAI/toolshed-hire/pull/31)), uvicorn ([#33](https://github.com/teon-artilionAI/toolshed-hire/pull/33)) and pydantic ([#34](https://github.com/teon-artilionAI/toolshed-hire/pull/34)) are deferred, each with its reason on its pull request.
-  The Tailwind CSS 4 update ([#37](https://github.com/teon-artilionAI/toolshed-hire/pull/37)) is closed in favour of issue [#49](https://github.com/teon-artilionAI/toolshed-hire/issues/49), the planned move to Tailwind 4 that also retires the audit exception for `braces`.
-- The load test, the volume test and the restore drill have not been run
-  against the deployment yet.
+- The first request after idle misses its 8 second target, and at ten times the
+  fleet the report still scans the allocation table.
+- No moderated usability session has run, and one serious and the minor findings
+  from the NVDA pass stay open under issue
+  [#102](https://github.com/teon-artilionAI/toolshed-hire/issues/102).
+- No edge firewall rule is published, and no provider key has been rotated. Both
+  are recorded as deviations, and the rotation steps are in the
+  [incident procedure](docs/operations/incident-procedure.md).
+- A release on 28 October 2026 took production down for 6 hours 43 minutes, so
+  the availability target is not met for October. Release 1.0.2 fixes the cause.
 
 The full list of differences from the design, with the reason for each, is in
 [deviations.md](docs/task2/deviations.md).
@@ -409,6 +406,7 @@ frontend/       React application
 infra/          setup, operations and the deployment scripts
 docs/task1/     the submitted Task 1 design document and its images
 docs/task2/     the Task 2 evidence, the presentation outline and the slides
+docs/operations/ the incident procedure and the register of processing
 .github/        workflows, issue forms, pull request template, Dependabot
 ```
 
