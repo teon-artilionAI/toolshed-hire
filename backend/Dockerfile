@@ -55,7 +55,7 @@
 #   docker buildx imagetools inspect python:3.12-slim-bookworm
 
 # ---------------------------------------------------------------- build stage
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS builder
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS builder
 
 # Where the dependency tree is assembled. The whole directory is copied into
 # the final stage, so nothing pip leaves behind travels with it.
@@ -103,7 +103,7 @@ COPY app ./app
 RUN pip install --no-deps --no-build-isolation .
 
 # ---------------------------------------------------------------- final stage
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS runtime
 
 # libpq5 is the PostgreSQL client runtime library. It is a shared library and
 # not a build toolchain, so it does not violate the "no toolchain in the final
